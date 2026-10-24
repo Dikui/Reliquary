@@ -9,7 +9,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
-import { CONTENT_TYPES } from '../../types/entryClassification'
+
 import { buildSearchRequest, defaultSearchFilters, searchStateFromURL, searchStateToURL } from '../../utils/search'
 import { safeTextareaTestModule } from '../../components/__tests__/safeTextareaStub'
 
@@ -58,11 +58,11 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
 }
 const notifications = { MessagePlugin: { success() {} } }
 const topic = { id: 'topic-a', name: 'Space research', description: 'Space missions and research', entry_count: 3, created_at: '', updated_at: '' }
-const article = { id: 'article-a', content_type: 'event', processing_mode: 'full', starred: false, topics: [{ id: 'old-topic', name: 'Old topic' }], parse_status: 'completed' }
+const article = { id: 'article-a',  processing_mode: 'full', starred: false,  parse_status: 'completed' }
 function judgments(api: Record<string, unknown>, details?: unknown, notificationModule: { MessagePlugin: { success: (message: string) => unknown } } = notifications) {
   return component('../../components/EntryArticleJudgments.vue', {
-    '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-judgments': api,
-    '@/api/topics': { listTopics: async () => ({ success: true, data: [topic] }) },
+    '@/types/entryClassification': { }, '@/api/entry-judgments': api,
+
     '@/api/library': { getEntryDetails: async () => ({ success: true, data: details }) },
     './EntryStarToggle.vue': empty, 'tdesign-vue-next': notificationModule,
   })
@@ -91,76 +91,14 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.match(html, /aria-pressed="false"/)
   })
 
-  test(`${locale}: article type guidance preserves full text and images`, async () => {
-    const html = await render(judgments({}), { entry: { ...article } }, locale)
-    const expected = locale === 'zh-CN'
-      ? '用户修正的类型将在重新处理时保留。修改内容类型不会删除正文或图片。'
-      : 'Your corrected type is preserved when reprocessing. Changing the type preserves the full text and images.'
-    assert.equal(messages[locale].articleJudgments.contentTypeHint, expected)
-    assert.ok(html.includes(expected))
-    assert.doesNotMatch(html, /重新抓取|fetches the original URL again/)
-  })
 
 
 
 
 
-  test(`${locale}: topic corrections submit selected IDs and reload the article after a success-only response`, async () => {
-    const calls: unknown[] = [], updates: any[] = []
-    const view = judgments({ correctEntryTopics: async (...input: unknown[]) => { calls.push(input); return { success: true } } }, { ...article, topics: [topic] })
-    await render(view, { entry: { ...article }, onUpdated: (value: any) => updates.push(value) }, locale, async state => {
-      await state.loadTopics()
-      state.topicDraft.value = ['topic-a']
-      await state.saveTopics()
-      state.topicDraft.value = []
-      await state.saveTopics()
-    })
-    assert.deepEqual(calls, [['article-a', ['topic-a']], ['article-a', []]])
-    assert.equal(updates[0].topics[0].id, 'topic-a')
-  })
-  test(`${locale}: topic management renders counts and failed batches, retries, creates, edits and deletes`, async () => {
-    const calls: unknown[] = []
-    let run = { id: 'run-a', topic_id: topic.id, status: 'failed', total: 31, processed: 31, failed_entries: 1, failed_batches: 1, batches: [{ id: 'batch-a', ordinal: 2, entry_count: 1, status: 'failed', attempts: 1, error: 'Model timeout' }] }
-    const view = component('./TopicManagement.vue', {
-      '@/components/SafeTextarea.vue': safeTextareaTestModule, 'tdesign-vue-next': notifications,
-      '@/api/topics': {
-        listTopics: async () => ({ success: true, data: [topic] }), getTopicBackfill: async () => ({ success: true, data: run }),
-        createTopic: async (input: any) => { calls.push(['create', input]); return { success: true, data: topic } },
-        updateTopic: async (id: string, input: any) => { calls.push(['update', id, input]); return { success: true, data: topic } },
-        deleteTopic: async (id: string) => { calls.push(['delete', id]); return { success: true } },
-        retryTopicBackfill: async (id: string) => { calls.push(['retry', id]); run = { ...run, status: 'completed', failed_entries: 0, failed_batches: 0, batches: [] }; return { success: true, data: run } },
-      },
-    })
-    const html = await render(view, {}, locale, async state => { await state.load() })
-    assert.ok(html.includes(topic.name))
-    assert.ok(html.includes('31 / 31'))
-    assert.ok(html.includes('Model timeout'))
-    assert.ok(html.includes(messages[locale].topicManagement.retryFailedBatches))
-    const fresh = component('./TopicManagement.vue', {
-      '@/components/SafeTextarea.vue': safeTextareaTestModule, 'tdesign-vue-next': notifications,
-      '@/api/topics': {
-        listTopics: async () => ({ success: true, data: [topic] }), getTopicBackfill: async () => ({ success: true, data: run }),
-        createTopic: async (input: any) => { calls.push(['create', input]); return { success: true, data: topic } },
-        updateTopic: async (id: string, input: any) => { calls.push(['update', id, input]); return { success: true, data: topic } },
-        deleteTopic: async (id: string) => { calls.push(['delete', id]); return { success: true } },
-        retryTopicBackfill: async (id: string) => { calls.push(['retry', id]); run = { ...run, status: 'completed', failed_entries: 0, failed_batches: 0, batches: [] }; return { success: true, data: run } },
-      },
-    })
-    await render(fresh, {}, locale, async state => {
-      await state.load()
-      await state.retry(topic.id)
-      state.openEditor()
-      state.draft.value = { name: ' New topic ', description: ' New description ', library_ids: ['lib-a'] }
-      await state.save()
-      state.openEditor(topic)
-      assert.deepEqual(state.draft.value.library_ids, [])
-      state.draft.value.description = 'Changed description'
-      await state.save()
-      state.requestDelete(topic)
-      await state.remove()
-    })
-    assert.deepEqual(calls, [['retry', topic.id], ['create', { name: 'New topic', description: 'New description', library_ids: ['lib-a'] }], ['update', topic.id, { name: topic.name, description: 'Changed description', library_ids: [] }], ['delete', topic.id]])
-  })
+
+
+
   test(`${locale}: operation log displays before and after, time and type filters`, async () => {
     const calls: unknown[] = [], urls: unknown[] = [], route = { path: '/platform/settings', query: { section: 'operation-logs', operation_type: 'star', page: '2' } }
     const view = component('./OperationLogs.vue', {
@@ -200,20 +138,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     ])
   })
 
-  test(`${locale}: a duplicate topic name keeps the editor and entered text`, async () => {
-    const view = component('./TopicManagement.vue', {
-      '@/components/SafeTextarea.vue': safeTextareaTestModule, 'tdesign-vue-next': notifications,
-      '@/api/topics': { createTopic: async () => { throw { status: 409 } } },
-    })
-    const html = await render(view, {}, locale, async state => {
-      state.openEditor()
-      state.draft.value = { name: topic.name, description: 'My description' }
-      await state.save()
-      assert.equal(state.editorVisible.value, true)
-      assert.equal(state.draft.value.description, 'My description')
-    })
-    assert.ok(html.includes(messages[locale].topicManagement.nameExists))
-  })
+
 }
 test('star filters preserve all, starred and unstarred through requests and URL state', () => {
   for (const starred of [undefined, true, false]) {
@@ -225,32 +150,4 @@ test('star filters preserve all, starred and unstarred through requests and URL 
     assert.equal(restored.filters.starred, starred)
     assert.equal('starred' in request, starred !== undefined)
   }
-})
-test('topic, judgment and operation log API wrappers use the supported routes and payloads', async () => {
-  const calls: unknown[] = []
-  const request = Object.fromEntries(['get', 'post', 'put', 'del'].map(method => [method, (url: string, body?: unknown) => { calls.push({ method, url, ...(body === undefined ? {} : { body }) }); return Promise.resolve({ success: true }) }]))
-  const api = (path: string) => evaluate(readFileSync(new URL(path, import.meta.url), 'utf8'), { '@/utils/request': request })
-  const topics = api('../../api/topics.ts'), judgments = api('../../api/entry-judgments.ts'), logs = api('../../api/operation-logs.ts')
-  await topics.listTopics()
-  await topics.createTopic({ name: 'Name', description: 'Description' })
-  await topics.updateTopic('t/a', { name: 'Name 2', description: 'Description 2' })
-  await topics.deleteTopic('t/a')
-  await topics.getTopicBackfill('t/a')
-  await topics.retryTopicBackfill('t/a')
-  await judgments.setEntryStar('k/a', false)
-  await judgments.correctEntryContentType('k/a', 'tutorial')
-  await judgments.correctEntryTopics('k/a', [])
-  await logs.listOperationLogs({ operation_type: 'unstar', page: 2, page_size: 30 })
-  assert.deepEqual(calls, [
-    { method: 'get', url: '/api/v1/topics' },
-    { method: 'post', url: '/api/v1/topics', body: { name: 'Name', description: 'Description' } },
-    { method: 'put', url: '/api/v1/topics/t%2Fa', body: { name: 'Name 2', description: 'Description 2' } },
-    { method: 'del', url: '/api/v1/topics/t%2Fa' },
-    { method: 'get', url: '/api/v1/topics/t%2Fa/backfill' },
-    { method: 'post', url: '/api/v1/topics/t%2Fa/backfill/retry', body: {} },
-    { method: 'put', url: '/api/v1/entries/k%2Fa/star', body: { starred: false } },
-    { method: 'put', url: '/api/v1/entries/k%2Fa/content-type', body: { content_type: 'tutorial' } },
-    { method: 'put', url: '/api/v1/entries/k%2Fa/topics', body: { topic_ids: [] } },
-    { method: 'get', url: '/api/v1/operation-logs?operation_type=unstar&page=2&page_size=30' },
-  ])
 })

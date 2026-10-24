@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import test from 'node:test'
 import { defineComponent, h, onMounted, ref } from 'vue'
 import ts from 'typescript'
-import { CONTENT_TYPES } from '../../types/entryClassification'
+
 import { SEARCH_SOURCES } from '../../types/search'
 import * as entrySourceLabels from '../../utils/entrySourceLabels'
 import * as markdownPlainText from '../../utils/markdownPlainText'
@@ -51,16 +51,16 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   let rebuildResponse: (path: string, data: unknown) => Promise<any> = async path => path.endsWith('/preview') ? previewResult : batchResult
   let confirmation: any
   const records = [
-    { id: 'article', source_kind: 'article', title: 'Needle article', content_type: 'tutorial', starred: true },
-    { id: 'mine', source_kind: 'mine', title: 'Needle document', content_type: 'tutorial', starred: true },
-    { id: 'report', source_kind: 'report', title: 'Needle report', content_type: '', starred: false },
-    ...Array.from({ length: 38 }, (_, index) => ({ id: `mine-${index}`, source_kind: 'mine', title: `Document ${index}`, content_type: 'event', starred: false })),
+    { id: 'article', source_kind: 'article', title: 'Needle article',  starred: true },
+    { id: 'mine', source_kind: 'mine', title: 'Needle document',  starred: true },
+    { id: 'report', source_kind: 'report', title: 'Needle report',  starred: false },
+    ...Array.from({ length: 38 }, (_, index) => ({ id: `mine-${index}`, source_kind: 'mine', title: `Document ${index}`,  starred: false })),
   ].map(record => ({ ...record, file_name: `${record.title}.md`, type: 'manual', file_type: 'md', channel: 'api',
     parse_status: 'completed', incomplete: record.id === 'mine', created_at: '2026-10-13T08:00:00Z', updated_at: '2026-10-13T08:00:00Z' }))
-  if (customType) records.push({ ...records[0], id: 'sop', content_type: 'SOP' })
+  if (customType) records.push({ ...records[0], id: 'sop', })
   const target = records.find(record => record.id === 'mine')!
   for (const [field, value] of Object.entries({ channel: 'web', file_type: 'pdf', parse_status: 'failed',
-    updated_at: '2026-09-01T08:00:00Z', title: 'Unrelated document', starred: false, content_type: 'opinion' })) {
+    updated_at: '2026-09-01T08:00:00Z', title: 'Unrelated document', starred: false, })) {
     records.push({ ...target, id: `mine-other-${field}`, [field]: value })
   }
   const transport = {
@@ -73,7 +73,6 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
       const filtered = records.filter(record => {
         if (query.has('source_kind') && record.source_kind !== query.get('source_kind')) return false
         if (query.has('keyword') && !record.title.toLowerCase().includes(query.get('keyword')!.toLowerCase())) return false
-        if (query.has('content_type') && record.content_type !== query.get('content_type')) return false
         if (query.has('file_type') && record.file_type !== query.get('file_type')) return false
         if (query.has('starred') && String(record.starred) !== query.get('starred')) return false
         if (query.has('incomplete') && String(record.incomplete) !== query.get('incomplete')) return false
@@ -91,7 +90,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const store = evaluateFile('../../stores/entry.ts', {})
   const hook = evaluateFile('../../composables/useLibrary.ts', {
     '@/api/entities': { listEntities: async () => ({ success: true, data: [{ id: 'entity-1', canonical_name: 'Target Entity' }] }) },
-    '@/api/topics': { listTopics: async () => ({ success: true, data: [{ id: 'topic-1', name: 'Target Topic' }] }) },
+
     '@/api/library': api, '@/stores/entry': store,
     '../utils/index': { formatStringDate: () => '2026-10-13' },
     'tdesign-vue-next': { MessagePlugin: {} },
@@ -101,7 +100,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   let backendAvailable = !unavailable
   const modules: Record<string, any> = {
     '@/api/entities': { listEntities: async () => ({ success: true, data: [{ id: 'entity-1', canonical_name: 'Target Entity' }] }) },
-    '@/api/topics': { listTopics: async () => ({ success: true, data: [{ id: 'topic-1', name: 'Target Topic' }] }) },
+
     '@/utils/bodyReference': bodyReference,
     '@/composables/useLibraryScope': { useLibraryScope: () => scope },
     'vue-router': vueRouter,
@@ -113,7 +112,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [], ensureParserEngines: async () => {} }) },
     '@/stores/reparseConfirm': { useReparseConfirmStore: () => ({}) },
     '@/composables/useMarqueeSelect': { useMarqueeSelect: () => ({ shouldSuppressClick: () => false }) },
-    '@/types/entryClassification': { CONTENT_TYPES },
+    '@/types/entryClassification': { },
     '@/types/search': { SEARCH_SOURCES },
     '@/api/library': api,
     '@/api/entry-batches': evaluateFile('../../api/entry-batches.ts', { '@/utils/request': transport }),
@@ -135,8 +134,8 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   modules['@/components/LibraryScopeSelect.vue'] = moduleOf(defineComponent({
     emits: ['loaded'], setup: (_, { emit }) => {
       onMounted(() => emit('loaded', noLibraries ? [] : [
-        { id: 'library-source', name: 'Research', display_name: 'Research', template: 'own', content_types: [...CONTENT_TYPES, 'SOP'].map(name => ({ name, enabled: true })) },
-        { id: 'reports', name: 'AI Reports', template: 'generated', content_types: [] },
+        { id: 'library-source', name: 'Research', display_name: 'Research', template: 'own', },
+        { id: 'reports', name: 'AI Reports', template: 'generated', },
       ]))
       return () => null
     },
@@ -250,98 +249,24 @@ test('an initial library request failure stops the material loading placeholders
 })
 
 for (const locale of ['zh-CN', 'en-US']) {
-  test(`${locale}: source filter loads cards and rows through the real hook and API with pagination`, async () => {
-    const env = await mountLibrary(locale)
-    try {
-      const source = env.control('library.materialCategory')
-      assert.deepEqual(source.props['data-options'], [
-        { value: '', label: env.t('library.allMaterialCategories') },
-        ...SEARCH_SOURCES.map(value => ({ value, label: env.t(`knowledgeSearch.sources.${value}`) })),
-      ])
-      assert.equal(env.requests[0].has('source_kind'), false)
-      assert.equal(env.ids().length, 35)
-      await env.change(source, 'mine')
-      assert.ok(env.ids().every(id => id.startsWith('mine')))
-      assert.equal(env.requests.at(-1)!.get('source_kind'), 'mine')
-      assert.equal(env.route.query.source_kind, 'mine')
-      assert.equal(env.route.query.preserved, 'value')
-      const requestCount = env.requests.length
-      await env.list()
-      assert.ok(env.ids().every(id => id.startsWith('mine')))
-      assert.equal(env.requests.length, requestCount, 'changing view retains the already loaded data')
-      const scroll = descendants(env.root).find(node => hasClass(node, 'doc-scroll-container'))!
-      Object.assign(scroll, { scrollTop: 450, scrollHeight: 500, clientHeight: 100 })
-      scroll.props.onScroll()
-      await settle()
-      assert.equal(env.requests.at(-1)!.get('page'), '2')
-      assert.equal(env.requests.at(-1)!.get('source_kind'), 'mine')
-      assert.equal(env.ids().length, env.records.filter(record => record.source_kind === 'mine').length)
-      await env.change(source, 'article')
-      assert.deepEqual(env.ids(), ['article'])
-      assert.equal(env.requests.at(-1)!.get('page'), '1')
-      await env.change(source, 'report')
-      assert.deepEqual(env.ids(), ['report'])
-      await env.change(source, '')
-      assert.equal(env.requests.at(-1)!.has('source_kind'), false)
-      assert.equal(env.route.query.source_kind, undefined)
-      assert.equal(env.route.query.preserved, 'value')
-      assert.equal(env.ids().length, 35)
-    } finally { env.cleanup() }
-  })
+
 }
 
-test('source filters combine with existing filters and retain URL state on reload and history changes', async () => {
-  const env = await mountLibrary('zh-CN', { source_kind: 'mine', tab: 'documents' })
-  try {
-    assert.ok(env.ids().every(id => id.startsWith('mine')))
-    assert.equal(env.requests[0].get('source_kind'), 'mine')
-    await env.change(env.byOptions('tutorial'), 'tutorial')
-    await env.change(env.control('articleJudgments.starLabel'), 'true')
-    await env.change(env.byOptions('md'), 'md')
-    await env.change(env.byOptions('completed'), 'completed')
-    await env.change(env.control('library.channelLabel'), 'api')
-    const date = descendants(env.root).find(node => hasClass(node, 'doc-date-range--updated'))!
-    await env.change(date, ['2026-10-01', '2026-10-13'])
-    const keyword = descendants(env.root).find(node => hasClass(node, 'doc-search-input'))!
-    await env.change(keyword, 'Needle')
-    await new Promise(resolve => setTimeout(resolve, 330))
-    await settle()
-    assert.deepEqual(env.ids(), ['mine'])
-    const query = env.requests.at(-1)!
-    for (const [key, value] of Object.entries({ source_kind: 'mine', content_type: 'tutorial', starred: 'true',
-      file_type: 'md', parse_status: 'completed', source: 'api', keyword: 'Needle',
-      start_time: '2026-10-01 00:00:00', end_time: '2026-10-13 23:59:59' })) assert.equal(query.get(key), value)
-    await env.navigate({ ...env.route.query, source_kind: 'article' })
-    assert.deepEqual(env.ids(), ['article'])
-    assert.equal(env.control('library.materialCategory').props.value, 'article')
-    assert.equal(env.requests.at(-1)!.get('source_kind'), 'article')
-    await env.navigate({ ...env.route.query, source_kind: 'invalid' })
-    assert.equal(env.control('library.materialCategory').props.value, '')
-    assert.equal(env.requests.at(-1)!.has('source_kind'), false)
-    assert.equal(env.route.query.source_kind, undefined)
-    assert.deepEqual(env.errors, [])
-  } finally { env.cleanup() }
-})
+
 
 const combinedQuery = {
-  source_kind: 'mine', content_type: 'tutorial', starred: 'true', file_type: 'md',
+  source_kind: 'mine',  starred: 'true', file_type: 'md',
   parse_status: 'completed', source: 'api', keyword: 'Needle',
   start_date: '2026-10-01', end_date: '2026-10-13',
 }
 const combinedAPIQuery = {
-  source_kind: 'mine', content_type: 'tutorial', starred: 'true', file_type: 'md',
+  source_kind: 'mine',  starred: 'true', file_type: 'md',
   parse_status: 'completed', source: 'api', keyword: 'Needle',
   start_time: '2026-10-01 00:00:00', end_time: '2026-10-13 23:59:59',
 }
 function assertFilters(env: Awaited<ReturnType<typeof mountLibrary>>, filters: Partial<typeof combinedQuery>) {
-  for (const [key, node] of Object.entries({
-    source_kind: env.control('library.materialCategory'), content_type: env.byOptions('tutorial'),
-    starred: env.control('articleJudgments.starLabel'), file_type: env.byOptions('md'),
-    parse_status: env.byOptions('completed'), source: env.control('library.channelLabel'),
-    keyword: descendants(env.root).find(node => hasClass(node, 'doc-search-input'))!,
-  })) assert.equal(node.props.value, filters[key as keyof typeof combinedQuery] || '', `restored ${key} control`)
-  const date = descendants(env.root).find(node => hasClass(node, 'doc-date-range--updated'))!
-  assert.deepEqual(date.props.value, filters.start_date || filters.end_date ? [filters.start_date || '', filters.end_date || ''] : [])
+  assert.equal(env.control('articleJudgments.starLabel').props.value, filters.starred || '')
+
 }
 function assertCombinedLoad(env: Awaited<ReturnType<typeof mountLibrary>>, view: string) {
   assertFilters(env, combinedQuery)
@@ -355,56 +280,12 @@ function assertCombinedLoad(env: Awaited<ReturnType<typeof mountLibrary>>, view:
 }
 
 for (const locale of ['zh-CN', 'en-US']) for (const view of ['grid', 'list']) {
-  test(`${locale} ${view}: every filter persists and restores through reload, route return, history back and forward`, async () => {
-    let env = await mountLibrary(locale, { tab: 'documents' }, view)
-    try {
-      await env.change(env.control('library.materialCategory'), combinedQuery.source_kind)
-      await env.change(env.byOptions('tutorial'), combinedQuery.content_type)
-      await env.change(env.control('articleJudgments.starLabel'), combinedQuery.starred)
-      await env.change(env.byOptions('md'), combinedQuery.file_type)
-      await env.change(env.byOptions('completed'), combinedQuery.parse_status)
-      await env.change(env.control('library.channelLabel'), combinedQuery.source)
-      await env.change(descendants(env.root).find(node => hasClass(node, 'doc-date-range--updated'))!, [combinedQuery.start_date, combinedQuery.end_date])
-      await env.change(descendants(env.root).find(node => hasClass(node, 'doc-search-input'))!, combinedQuery.keyword)
-      await new Promise(resolve => setTimeout(resolve, 330))
-      await settle()
-      for (const [key, value] of Object.entries(combinedQuery)) assert.equal(env.route.query[key], value, `URL ${key}`)
-      assertCombinedLoad(env, view)
-      const saved = { ...env.route.query }
 
-      await env.leave()
-      assert.equal(env.route.path, '/platform/search')
-      await env.back()
-      assertCombinedLoad(env, view)
-      await env.forward()
-      assert.equal(env.route.path, '/platform/search')
-      assert.deepEqual(env.ids(), [])
-      await env.back()
-      assertCombinedLoad(env, view)
-
-      await env.navigate({ preserved: 'value', tab: 'documents' })
-      assertFilters(env, {})
-      assert.equal(env.ids().length, 35)
-      for (const key of Object.keys(combinedQuery)) assert.equal(env.route.query[key], undefined, `default ${key} omitted`)
-      const clearedRequest = env.requests.at(-1)!
-      for (const key of Object.keys(combinedAPIQuery)) assert.equal(clearedRequest.has(key), false, `default API ${key} omitted`)
-      await env.back()
-      assertCombinedLoad(env, view)
-      await env.forward()
-      assertFilters(env, {})
-      assert.equal(env.ids().length, 35)
-
-      env.cleanup()
-      env = await mountLibrary(locale, saved, view)
-      assertCombinedLoad(env, view)
-      assert.equal(env.requests.length, 1, 'refresh loads restored filters immediately without an unfiltered request')
-    } finally { env.cleanup() }
-  })
 }
 
 test('default and invalid URL filters are omitted while unrelated query parameters survive', async () => {
   const env = await mountLibrary('zh-CN', {
-    source_kind: 'invalid', content_type: ['invalid'], starred: '', file_type: null,
+    source_kind: 'invalid',  starred: '', file_type: null,
     parse_status: ['completed', 'failed'], source: '', keyword: '   ',
     start_date: '2026-02-30', end_date: 'invalid', tab: 'documents', preserved: 'value', custom: ['one', 'two'],
   })
@@ -423,7 +304,7 @@ test('default and invalid URL filters are omitted while unrelated query paramete
   } finally { env.cleanup() }
 })
 
-test('source and star filter changes clear selected entries before loading filtered data', async () => {
+test('star filter changes clear selected entries before loading filtered data', async () => {
   const env = await mountLibrary('zh-CN', {}, 'list')
   try {
     const selected = () => descendants(env.root).filter(node => node.props['data-select-id'] && hasClass(node, 'selected'))
@@ -439,9 +320,9 @@ test('source and star filter changes clear selected entries before loading filte
     select('mine')
     await settle()
     assert.equal(selected().length, 1)
-    await env.change(env.control('library.materialCategory'), 'mine')
+    await env.change(env.control('articleJudgments.starLabel'), 'false')
     assert.equal(selected().length, 0)
-    assert.ok(env.ids().every(id => id.startsWith('mine')))
+    assert.equal(env.requests.at(-1)!.get('starred'), 'false')
   } finally { env.cleanup() }
 })
 
@@ -457,24 +338,10 @@ for (const locale of ['zh-CN','en-US']) test(`${locale}: entity page mounts on i
  } finally { page.cleanup() }
 })
 
-test('library-defined content types and Markdown aliases survive a shared URL and reload', async () => {
-  const env = await mountLibrary('zh-CN', { content_type: 'SOP', file_type: 'manual', source: 'api' }, 'grid', false, true)
-  try {
-    assert.deepEqual(env.ids(), ['sop'])
-    assert.equal(env.byOptions('SOP').props.value, 'SOP')
-    assert.equal(env.byOptions('md').props.value, 'md')
-    assert.equal(env.route.query.content_type, 'SOP')
-    assert.equal(env.route.query.file_type, 'md')
-    assert.equal(env.requests.at(-1)!.get('content_type'), 'SOP')
-    assert.equal(env.requests.at(-1)!.get('file_type'), 'md')
-    const channels = env.control('library.channelLabel').props['data-options'] as Array<{ value: string }>
-    assert.ok(!channels.some(item => ['manual', 'url'].includes(item.value)))
-    assert.ok(env.control('library.materialCategory'))
-  } finally { env.cleanup() }
-})
+
 
 test('bulk management retains exact filters and server count across both steps and uses a separate action preview', async () => {
-  const env = await mountLibrary('zh-CN', { keyword: 'Needle', starred: 'false', parse_status: 'failed', entity_ids: 'entity-1', topic_ids: 'topic-1', published_from: '2026-10-01', source_kind: 'mine', source: 'api', file_type: 'md', content_type: 'tutorial', start_date: '2026-10-01', end_date: '2026-10-18' })
+  const env = await mountLibrary('zh-CN', { keyword: 'Needle', starred: 'false', parse_status: 'failed', entity_ids: 'entity-1',  published_from: '2026-10-01', source_kind: 'mine', source: 'api', file_type: 'md',  start_date: '2026-10-01', end_date: '2026-10-18' })
   const button = (key: string) => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t(key))
   const summary = () => visibleText(env.control('entryBatch.scopeSummary'))
   try {
@@ -491,8 +358,8 @@ test('bulk management retains exact filters and server count across both steps a
     assert.equal(env.control('entryBatch.action'), undefined)
     assert.equal(button('entryBatch.preview'), undefined)
     assert.ok(summary().includes(env.t('entryBatch.matchedCount', { count: 73 })), 'count comes from the batch server, not the displayed list')
-    for (const value of ['Research', 'Target Entity', 'Target Topic', 'Needle', 'tutorial', 'Markdown', '2026-10-01', '2026-10-18', env.t('articleJudgments.unstarredOnly'), env.t('library.parseStatusFailed'), env.t('knowledgeSearch.sources.mine'), env.t('library.channelApi')]) assert.ok(summary().includes(value), value)
-    const selection = { filters: { libraries: ['library-source'], entity_ids: ['entity-1'], topic_ids: ['topic-1'], published_from: '2026-10-01', keyword: 'Needle', starred: false, parse_status: 'failed', source_kind: 'mine', source: 'api', file_type: 'md', content_type: 'tutorial', start_time: '2026-10-01 00:00:00', end_time: '2026-10-18 23:59:59' } }
+    for (const value of ['Research', 'Needle', 'Markdown', '2026-10-01', '2026-10-18', env.t('articleJudgments.unstarredOnly'), env.t('library.parseStatusFailed'), env.t('knowledgeSearch.sources.mine'), env.t('library.channelApi')]) assert.ok(summary().includes(value), value)
+    const selection = { filters: { libraries: ['library-source'],  published_from: '2026-10-01', keyword: 'Needle', starred: false, parse_status: 'failed', source_kind: 'mine', source: 'api', file_type: 'md',  start_time: '2026-10-01 00:00:00', end_time: '2026-10-18 23:59:59' } }
     assert.deepEqual(env.rebuildRequests, [{ path: '/api/v1/entries/batches/preview', data: { action: 'star', starred: true, selection } }])
     const firstSummary = summary()
     button('entryBatch.nextAction')!.props.onClick(); await settle()

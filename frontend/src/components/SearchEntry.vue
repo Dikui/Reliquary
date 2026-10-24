@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { SourceLocation, SearchEntry } from '@/types/search'
 import type { FollowFeedEntry } from '@/types/follows'
@@ -9,10 +9,9 @@ import SearchImage from './SearchImage.vue'
 import { highlightText } from './GlobalCommandPalette/useHighlight'
 import { markdownToPlainText } from '@/utils/markdownPlainText'
 
-const props = withDefaults(defineProps<{ article: SearchEntry; query: string; nested?: boolean; followFeed?: boolean }>(), { nested: false, followFeed: false })
+const props = withDefaults(defineProps<{ article: SearchEntry; query: string; followFeed?: boolean }>(), { followFeed: false })
 const emit = defineEmits<{ 'open-article': [article: SearchEntry, location?: SourceLocation]; 'open-entity': [id: string] }>()
 const { t, locale } = useI18n()
-const expanded = ref(false)
 const plainText = (text: string | undefined) => markdownToPlainText(text, `[${t('ingestStatus.missingTypes.image')}]`)
 const classification = computed(() => ({
   ...props.article,
@@ -23,12 +22,11 @@ const classification = computed(() => ({
 const published = computed(() => props.article.published_at
   ? new Date(props.article.published_at).toLocaleDateString(locale.value)
   : t('knowledgeSearch.missingPublishedAt'))
-const similarRegionID = computed(() => `similar-reports-${props.article.entry_id}`)
 const feedArticle = computed(() => props.article as FollowFeedEntry)
 </script>
 
 <template>
-  <article class="search-article" :class="{ nested }" :data-article-id="article.entry_id">
+  <article class="search-article" :data-article-id="article.entry_id">
     <div class="article-heading">
       <button type="button" class="article-title" @click="emit('open-article', article)">{{ article.title }}</button>
       <t-tag v-if="followFeed && feedArticle.is_new" class="feed-new" size="small" theme="primary">{{ t('follows.new') }}</t-tag>
@@ -37,7 +35,7 @@ const feedArticle = computed(() => props.article as FollowFeedEntry)
     <p class="article-meta"><span v-if="article.library_name" class="article-library">{{ article.library_name }}</span><span>{{ t(`knowledgeSearch.sources.${article.source}`) }}</span><span>{{ published }}</span><code v-if="article.vault_path">{{ article.vault_path }}</code></p>
     <div v-if="followFeed" class="feed-attribution"><time :datetime="feedArticle.collected_at">{{ t('follows.collectedAt', { time: new Date(feedArticle.collected_at).toLocaleString(locale) }) }}</time><div class="feed-matches"><strong>{{ t('follows.matchedTargets') }}</strong><t-tag v-for="target in feedArticle.matched_follows" :key="`${target.target_type}:${target.target_id}`" size="small" variant="light-outline">{{ t('follows.targetLabel', { name: target.name, type: t(`follows.targetTypes.${target.target_type}`), count: target.recent_entry_count }) }}</t-tag></div></div>
     <EntryClassification :entry="classification" compact @open-entity="emit('open-entity', $event)" />
-        <EntryUpdateNotice :has-update="article.has_update" :latest-entry-id="article.latest_entry_id" />
+    <EntryUpdateNotice :has-update="article.has_update" :latest-entry-id="article.latest_entry_id" />
     <div v-if="article.snippets?.length" class="article-snippets">
       <strong>{{ t('knowledgeSearch.snippets') }}</strong>
       <div v-for="(snippet, index) in article.snippets.slice(0, 3)" :key="snippet.chunk_id || snippet.image_path || index" class="article-snippet">
@@ -46,15 +44,7 @@ const feedArticle = computed(() => props.article as FollowFeedEntry)
         <button v-if="snippet.content" type="button" class="snippet-reference" @click="emit('open-article', article, snippet.locations?.[0])"><span v-html="highlightText(plainText(snippet.content), query)" /></button>
       </div>
     </div>
-    <template v-if="!nested && article.similar_reports?.length">
-      <button type="button" class="similar-toggle" :aria-expanded="expanded" :aria-controls="similarRegionID" @click="expanded = !expanded">
-        <t-icon :name="expanded ? 'chevron-up' : 'chevron-down'" />
-        {{ t(expanded ? 'knowledgeSearch.hideSimilar' : 'knowledgeSearch.showSimilar', { count: article.similar_reports.length }) }}
-      </button>
-      <div v-if="expanded" :id="similarRegionID" class="similar-reports">
-        <SearchEntry v-for="similar in article.similar_reports" :key="similar.entry_id" :article="similar" :query="query" :follow-feed="followFeed" nested @open-article="(entry, location) => emit('open-article', entry, location)" @open-entity="emit('open-entity', $event)" />
-      </div>
-    </template>
+
   </article>
 </template>
 
@@ -78,10 +68,6 @@ const feedArticle = computed(() => props.article as FollowFeedEntry)
 .article-snippets p { margin: 0; white-space: pre-wrap; }
 .article-snippet { display: grid; gap: 8px; }
 .article-snippets :deep(.search-highlight) { color: var(--td-brand-color); background: var(--td-brand-color-light); border-radius: var(--td-radius-small); }
-.similar-toggle { display: inline-flex; gap: 6px; align-items: center; border: 0; border-radius: var(--td-radius-small); background: transparent; color: var(--td-brand-color); padding: 6px 0; margin-top: 12px; font: inherit; font-size: 13px; cursor: pointer; }
-.similar-toggle:hover { text-decoration: underline; }
 button:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 3px; }
-.similar-reports { display: grid; gap: 12px; margin-top: 10px; }
-.nested { background: var(--td-bg-color-secondarycontainer); }
 @media (max-width: 560px) { .search-article { padding: 14px; } .article-heading { flex-direction: column; gap: 4px; } }
 </style>

@@ -6,16 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reliquary/internal/types"
 	"sort"
 	"strings"
 	"time"
 
+	apperrors "reliquary/internal/errors"
+	taskqueue "reliquary/internal/queue"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	apperrors "reliquary/internal/errors"
-	taskqueue "reliquary/internal/queue"
-	"reliquary/internal/types"
 )
 
 // EntryBatchService is optional so existing narrow entry service clients remain unchanged.
@@ -37,12 +38,23 @@ func batchSpace(ctx context.Context) (uint64, error) {
 	}
 	return id, nil
 }
+
 func batchFilter(f *types.EntryBatchFilters) (types.EntryListFilter, error) {
 	out := types.EntryListFilter{}
 	if f == nil {
 		return out, nil
 	}
-	out = types.EntryListFilter{LibraryIDs: f.Libraries, EntityIDs: f.EntityIDs, TopicIDs: f.TopicIDs, IncludeRejected: f.IncludeRejected, Keyword: f.Keyword, FileType: f.FileType, ContentType: f.ContentType, Starred: f.Starred, ParseStatus: f.ParseStatus, Source: f.Source, SourceKind: f.SourceKind}
+	out = types.EntryListFilter{
+		LibraryIDs:      f.Libraries,
+		EntityIDs:       f.EntityIDs,
+		IncludeRejected: f.IncludeRejected,
+		Keyword:         f.Keyword,
+		FileType:        f.FileType,
+		Starred:         f.Starred,
+		ParseStatus:     f.ParseStatus,
+		Source:          f.Source,
+		SourceKind:      f.SourceKind,
+	}
 	for _, v := range []struct {
 		raw       string
 		target    *time.Time
@@ -84,6 +96,7 @@ func batchFilter(f *types.EntryBatchFilters) (types.EntryListFilter, error) {
 	}
 	return out, nil
 }
+
 func validateBatchRequest(req types.EntryBatchRequest) error {
 	if (len(req.Selection.IDs) > 0) == (req.Selection.Filters != nil) {
 		return apperrors.NewBadRequestError("select either ids or filters")
@@ -93,14 +106,6 @@ func validateBatchRequest(req types.EntryBatchRequest) error {
 	case "star":
 		if req.Starred == nil {
 			return apperrors.NewBadRequestError("starred is required")
-		}
-	case "content_type":
-		if strings.TrimSpace(req.ContentType) == "" {
-			return apperrors.NewBadRequestError("content_type is required")
-		}
-	case "topics":
-		if len(req.TopicIDs) == 0 || (req.TopicMode != "add" && req.TopicMode != "remove") {
-			return apperrors.NewBadRequestError("topic_ids and add/remove topic_mode are required")
 		}
 	default:
 		return apperrors.NewBadRequestError("unsupported batch action")
@@ -135,7 +140,7 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 		return nil, nil, err
 	}
 	var entries []*types.Entry
-	ids := uniqueTopicIDs(req.Selection.IDs)
+	ids := uniqueEntryIDs(req.Selection.IDs)
 	if req.Selection.Filters != nil {
 		f, err := batchFilter(req.Selection.Filters)
 		if err != nil {
@@ -170,9 +175,6 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 		libraryIDs = append(libraryIDs, id)
 	}
 	sort.Strings(libraryIDs)
-	if req.Action == "content_type" && len(libraryIDs) > 1 {
-		return nil, nil, apperrors.NewBadRequestError("content type batch requires one library")
-	}
 	busy := map[string]bool{}
 	for _, id := range libraryIDs {
 		if lock {
@@ -183,15 +185,6 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 		busy[id], err = s.libraryBatchBusy(ctx, spaceID, id, "")
 		if err != nil {
 			return nil, nil, err
-		}
-	}
-	topics := []types.Topic{}
-	if req.Action == "topics" {
-		if err := s.db.WithContext(ctx).Where("space_id=? AND id IN ?", spaceID, uniqueTopicIDs(req.TopicIDs)).Find(&topics).Error; err != nil {
-			return nil, nil, err
-		}
-		if len(topics) != len(uniqueTopicIDs(req.TopicIDs)) {
-			return nil, nil, apperrors.NewBadRequestError("topic is unavailable in this space")
 		}
 	}
 	preview := &types.EntryBatchPreview{Reasons: []types.EntryBatchReason{}, Samples: []types.EntryBatchSample{}}
@@ -206,10 +199,12 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 		blocked := false
 		if entry.ParseStatus == types.ParseStatusDeleting {
 			reason = "deleting"
-		} else if busy[entry.LibraryID] && (req.Action == "review" || req.Action == "reprocess" || req.Action == "content_type") {
+		} else if busy[entry.LibraryID] && (req.Action == "review" || req.Action == "reprocess") {
 			reason = "library_busy"
 			blocked = true
-		} else if (req.Action == "review" || req.Action == "reprocess" || req.Action == "content_type" || req.Action == "topics") && (entry.ParseStatus == types.ParseStatusPending || entry.ParseStatus == types.ParseStatusProcessing || entry.ParseStatus == types.ParseStatusFinalizing) {
+		} else if (req.Action == "review" || req.Action == "reprocess") &&
+			(entry.ParseStatus == types.ParseStatusPending || entry.ParseStatus == types.ParseStatusProcessing ||
+				entry.ParseStatus == types.ParseStatusFinalizing) {
 			reason = "processing"
 			blocked = true
 		}
@@ -239,45 +234,11 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 						reason = "body_unavailable"
 					}
 				}
-			case "content_type":
-				library, err := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
-				if err != nil {
-					return nil, nil, err
-				}
-				if library.Template == types.TemplateGenerated {
-					reason = "generated_library"
-					break
-				}
-				if !isIngestArticle(entry) || entry.ParseStatus != types.ParseStatusCompleted {
-					reason = "requires_completed_article"
-				} else {
-					var n int64
-					if err := s.db.WithContext(ctx).Model(&types.LibraryContentType{}).Where("library_id=? AND name=? AND enabled=true", entry.LibraryID, req.ContentType).Count(&n).Error; err != nil {
-						return nil, nil, err
-					}
-					if n == 0 {
-						return nil, nil, apperrors.NewBadRequestError("content type must belong to this library")
-					}
-				}
 			case "star":
 				if !isIngestArticle(entry) && entry.SourceKind != "report" {
 					reason = "unsupported_material"
 				}
-			case "topics":
-				if !isIngestArticle(entry) {
-					reason = "unsupported_material"
-				}
-				for _, topic := range topics {
-					if len(topic.LibraryIDs) > 0 {
-						applicable := false
-						for _, id := range topic.LibraryIDs {
-							applicable = applicable || id == entry.LibraryID
-						}
-						if !applicable {
-							reason = "topic_library_mismatch"
-						}
-					}
-				}
+
 			}
 		}
 		if reason == "" {
@@ -327,10 +288,12 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 	preview.Fingerprint = fmt.Sprintf("%x", sha256.Sum256(raw))
 	return preview, items, nil
 }
+
 func (s *entryService) PreviewEntryBatch(ctx context.Context, req types.EntryBatchRequest) (*types.EntryBatchPreview, error) {
 	p, _, err := s.prepareEntryBatch(ctx, req, false)
 	return p, err
 }
+
 func (s *entryService) SubmitEntryBatch(ctx context.Context, req types.EntryBatchRequest) (*types.EntryBatchResult, error) {
 	if req.PreviewFingerprint == "" {
 		return nil, apperrors.NewBadRequestError("preview_fingerprint is required")
@@ -388,6 +351,7 @@ func (s *entryService) batchHead(ctx context.Context, id string) (*taskqueue.Job
 	err = json.Unmarshal(job.Payload, &payload)
 	return &job, payload, err
 }
+
 func (s *entryService) GetEntryBatchResult(ctx context.Context, id string, page, pageSize int) (*types.EntryBatchResult, error) {
 	_, payload, err := s.batchHead(ctx, id)
 	if err != nil {
@@ -507,6 +471,7 @@ func (s *entryService) ProcessEntryBatch(ctx context.Context, t *taskqueue.Task)
 	}
 	return nil
 }
+
 func (s *entryService) reconcileBatchItem(ctx context.Context, item *types.EntryBatchItem) (bool, error) {
 	var job taskqueue.Job
 	err := s.db.WithContext(ctx).Where("id=?", item.TaskID).First(&job).Error
@@ -555,6 +520,7 @@ func (s *entryService) reconcileBatchItem(ctx context.Context, item *types.Entry
 	}
 	return true, s.db.WithContext(ctx).Save(item).Error
 }
+
 func (s *entryService) executeBatchItem(ctx context.Context, p types.EntryBatchPayload, item *types.EntryBatchItem) error {
 	req := p.Request
 	if req.Action == "review" || req.Action == "reprocess" {
@@ -602,37 +568,11 @@ func (s *entryService) executeBatchItem(ctx context.Context, p types.EntryBatchP
 			return nil
 		}
 	}
-	if req.Action == "content_type" {
-		library, err := s.libraryService.GetLibraryByID(ctx, current.LibraryID)
-		if err != nil {
-			return err
-		}
-		if library.Template == types.TemplateGenerated {
-			item.Status = "skipped"
-			item.Message = "generated_library"
-			return nil
-		}
-	}
-	if req.Action == "topics" && (current.ParseStatus == types.ParseStatusPending || current.ParseStatus == types.ParseStatusProcessing || current.ParseStatus == types.ParseStatusFinalizing) {
-		item.Status = "skipped"
-		item.Message = "processing"
-		return nil
-	}
-	resumeContentType := false
-	if req.Action == "content_type" && item.Attempt > 0 && current.ContentTypeCorrected && current.ContentType == req.ContentType {
-		switch current.ParseStatus {
-		case types.ParseStatusFailed, types.ParseStatusCancelled, types.ParseStatusPending, types.ParseStatusProcessing, types.ParseStatusFinalizing:
-			resumeContentType = true
-		}
-	}
-	if req.Action == "content_type" && current.ParseStatus != types.ParseStatusCompleted && !resumeContentType {
-		item.Status = "skipped"
-		item.Message = "requires_completed_article"
-		return nil
-	}
 	ctx = context.WithValue(ctx, entryBatchChildKey{}, func(tx *gorm.DB, info *taskqueue.TaskInfo) error {
 		item.TaskID = info.ID
-		return tx.Model(&types.EntryBatchItem{}).Where("batch_id=? AND entry_id=?", item.BatchID, item.EntryID).Updates(map[string]any{"task_id": info.ID, "status": "waiting"}).Error
+		return tx.Model(&types.EntryBatchItem{}).
+			Where("batch_id=? AND entry_id=?", item.BatchID, item.EntryID).
+			Updates(map[string]any{"task_id": info.ID, "status": "waiting"}).Error
 	})
 	switch req.Action {
 	case "delete":
@@ -642,16 +582,6 @@ func (s *entryService) executeBatchItem(ctx context.Context, p types.EntryBatchP
 		return err
 	case "star":
 		return s.withTaskObject(ctx, item.EntryID, func(ctx context.Context) error { _, err := s.SetStarred(ctx, item.EntryID, *req.Starred); return err })
-	case "content_type":
-		if resumeContentType {
-			// The classification committed before its extraction child failed.
-			_, err := s.ReparseEntry(ctx, item.EntryID, nil)
-			return err
-		}
-		_, err := s.CorrectContentType(ctx, item.EntryID, req.ContentType)
-		return err
-	case "topics":
-		return s.batchTopics(ctx, item, req)
 	case "reprocess", "review":
 		run := fmt.Sprintf("%s:%d", p.BatchID, item.Attempt)
 		child := types.EntryListReparsePayload{SpaceID: p.SpaceID, LibraryID: item.LibraryID, Initiator: p.Initiator}
@@ -681,52 +611,7 @@ func (s *entryService) executeBatchItem(ctx context.Context, p types.EntryBatchP
 	}
 	return errors.New("unsupported batch action")
 }
-func (s *entryService) batchTopics(ctx context.Context, item *types.EntryBatchItem, req types.EntryBatchRequest) error {
-	return s.withTaskObject(ctx, item.EntryID, func(ctx context.Context) error {
-		err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			var entry types.Entry
-			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", item.SpaceID, item.EntryID).First(&entry).Error; err != nil {
-				return err
-			}
-			if !isIngestArticle(&entry) {
-				return errors.New("only articles can have topics")
-			}
-			ids := uniqueTopicIDs(req.TopicIDs)
-			var topics []types.Topic
-			if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id IN ? AND (library_ids='[]'::jsonb OR library_ids @> ?::jsonb)", item.SpaceID, ids, topicLibrariesJSON([]string{entry.LibraryID})).Order("id").Find(&topics).Error; err != nil {
-				return err
-			}
-			if len(topics) != len(ids) {
-				return errors.New("topic unavailable for this library")
-			}
-			var before []types.EntryTopic
-			if err := tx.Where("space_id=? AND entry_id=?", item.SpaceID, item.EntryID).Order("topic_id").Find(&before).Error; err != nil {
-				return err
-			}
-			if req.TopicMode == "remove" {
-				if err := tx.Where("space_id=? AND entry_id=? AND topic_id IN ?", item.SpaceID, item.EntryID, ids).Delete(&types.EntryTopic{}).Error; err != nil {
-					return err
-				}
-			} else {
-				for _, id := range ids {
-					link := types.EntryTopic{SpaceID: item.SpaceID, EntryID: item.EntryID, TopicID: id, Source: types.TopicSourceUser}
-					if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "entry_id"}, {Name: "topic_id"}}, DoUpdates: clause.Assignments(map[string]any{"source": types.TopicSourceUser})}).Create(&link).Error; err != nil {
-						return err
-					}
-				}
-			}
-			var after []types.EntryTopic
-			if err := tx.Where("space_id=? AND entry_id=?", item.SpaceID, item.EntryID).Order("topic_id").Find(&after).Error; err != nil {
-				return err
-			}
-			return NewOperationLogService(tx).RecordTx(ctx, tx, "correct_topics", item.EntryID, before, after)
-		})
-		if err == nil && s.vault != nil {
-			s.vault.ScheduleRefresh(ctx, item.EntryID)
-		}
-		return err
-	})
-}
+
 func (s *entryService) RetryEntryBatch(ctx context.Context, id string) (*types.EntryBatchResult, error) {
 	_, payload, err := s.batchHead(ctx, id)
 	if err != nil {
@@ -770,7 +655,7 @@ func (s *entryService) RetryEntryBatch(ctx context.Context, id string) (*types.E
 				}
 				busy := false
 				var err error
-				if payload.Request.Action == "review" || payload.Request.Action == "reprocess" || payload.Request.Action == "content_type" {
+				if payload.Request.Action == "review" || payload.Request.Action == "reprocess" {
 					busy, err = copy.libraryBatchBusy(ctx, payload.SpaceID, item.LibraryID, id)
 				}
 				if err != nil {
@@ -840,6 +725,7 @@ func (s *entryService) recoverBatchItems(ctx context.Context, id string) error {
 		return nil
 	})
 }
+
 func batchReviewCompleted(entry *types.Entry, raw json.RawMessage) bool {
 	var child types.ManualProcessPayload
 	if json.Unmarshal(raw, &child) != nil || child.ReviewID == "" {

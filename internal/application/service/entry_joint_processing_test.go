@@ -30,7 +30,7 @@ func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *tes
 	company := "company"
 	product := "product"
 	person, project, other := "person", "project", "other"
-	result, err := parseArticleProcessingResult(validProcessingFixture("公告"))
+	result, err := parseArticleProcessingResult(validProcessingFixture())
 	require.NoError(t, err)
 	result.Entities = []articleProcessingEntity{
 		{Name: "Acme", Type: &company, Description: "Beta 的合作方。", Relevance: "central", EvidenceIDs: []int{2}},
@@ -43,7 +43,7 @@ func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *tes
 		{Name: "Concept", Type: &other, Description: "概念。", Relevance: "central", EvidenceIDs: []int{2}},
 		{Name: "Byline", Type: &company, Description: "署名。", Relevance: "attribution", EvidenceIDs: []int{2}},
 	}
-	library := &types.Library{ContentTypes: []types.LibraryContentType{{Name: "公告", Enabled: true}}}
+	library := &types.Library{}
 	qualifySegmentOutput(library, &types.Entry{}, body, types.ProcessingSegment{End: len([]rune(body))}, result)
 	require.Len(t, result.Entities, 3)
 	require.Empty(t, result.Entities[2].Description, "a supported identity does not require a description")
@@ -58,7 +58,7 @@ func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message,
 		return &types.ChatResponse{Content: `{"approved":true,"reason":"fixture"}`}, nil
 	}
 	if stage == "article_summary_merge" {
-		return &types.ChatResponse{Content: validProcessingFixture(m.kind)}, nil
+		return &types.ChatResponse{Content: validProcessingFixture()}, nil
 	}
 	if stage != "article_processing" {
 		return &types.ChatResponse{Content: `{"decision":"new","confidence":1}`}, nil
@@ -68,7 +68,7 @@ func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message,
 	if err := json.Unmarshal([]byte(messages[len(messages)-1].Content), &input); err != nil {
 		return nil, err
 	}
-	output, _ := parseArticleProcessingResult(validProcessingFixture(m.kind))
+	output, _ := parseArticleProcessingResult(validProcessingFixture())
 	company := "company"
 	person := "person"
 	output.Entities = []articleProcessingEntity{{Name: "Acme", Type: &company, Description: "A partner of Beta.", Relevance: "central", EvidenceIDs: []int{1}}, {Name: "Beta", Type: &company, Description: "A partner of Acme.", Relevance: "participant", EvidenceIDs: []int{1}}, {Name: "Alice", Type: &person, Description: "The speaker.", Relevance: "attribution", EvidenceIDs: []int{1}}}
@@ -133,24 +133,6 @@ func TestIKB11ImageBoundedSegmentsCoverEveryReference(t *testing.T) {
 	}
 	require.Equal(t, len([]rune(body)), end)
 	require.Equal(t, 19, total)
-}
-
-func TestIKB11CustomContentTypeAndCorrectionBelongToLibrary(t *testing.T) {
-	h, _ := newIngestHarness(t)
-	row := types.LibraryContentType{LibraryID: h.library.ID, Name: "实验记录", Position: 100, Enabled: true}
-	require.NoError(t, h.db.Create(&row).Error)
-	h.processor.output = validProcessingFixture("实验记录")
-	article := h.upload(t, "custom-content-type", "# 记录\n\n完整的实验步骤和观测数据。")
-	require.Equal(t, "实验记录", article.ContentType)
-	_, err := h.service.CorrectContentType(h.ctx, article.ID, "别的库类型")
-	require.ErrorContains(t, err, "belong to this library")
-	row.Enabled = false
-	require.NoError(t, h.db.Save(&row).Error)
-	_, err = h.service.CorrectContentType(h.ctx, article.ID, "实验记录")
-	require.ErrorContains(t, err, "belong to this library")
-	corrected, err := h.service.CorrectContentType(h.ctx, article.ID, "event")
-	require.NoError(t, err)
-	require.Equal(t, "event", corrected.ContentType)
 }
 
 func TestIKB11ImageCrossingTextSegmentBoundaryStillAttachedOnce(t *testing.T) {

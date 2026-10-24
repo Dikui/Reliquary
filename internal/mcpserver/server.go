@@ -40,7 +40,6 @@ type Services struct {
 	Libraries   interfaces.LibraryService
 	Entries     EntryService
 	Search      interfaces.SearchService
-	Topics      *service.TopicService
 	Entities    *service.EntityService
 	Follows     *service.FollowService
 }
@@ -222,23 +221,32 @@ func contractFields(value any) any {
 func registerTools(server *mcp.Server, services Services) {
 	registerIngestDiagnostics(server, services.Diagnostics)
 	if services.Libraries != nil {
-		addTool(server, "list_libraries", "列出全部库的 ID、目录、名称、模板、说明、该收与不该收的内容、审核标准、去重规则、内容类型和关注动态配置。"+externalContentNotice, map[string]any{"type": "object", "properties": map[string]any{}}, func(ctx context.Context, _ struct{}) (any, error) {
-			libraries, err := services.Libraries.ListLibraries(ctx)
-			return map[string]any{"libraries": libraries}, err
-		})
+		addTool(
+			server,
+			"list_libraries",
+			"列出全部库的 ID、目录、名称、模板、说明、该收与不该收的内容、审核标准、去重规则和关注动态配置。"+externalContentNotice,
+			map[string]any{"type": "object", "properties": map[string]any{}},
+			func(ctx context.Context, _ struct{}) (any, error) {
+				libraries, err := services.Libraries.ListLibraries(ctx)
+				return map[string]any{"libraries": libraries}, err
+			},
+		)
 	}
-	addTool(server, "search", "按查询文本进行混合检索，返回文章结果、命中段落与相似报道。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
+	addTool(
+		server,
+		"search",
+		"按查询文本进行混合检索，返回文章结果、命中段落。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日"+
+			"期规则接受，或由用户确认。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
+
 		object(map[string]any{
-			"query":         text("查询文本，必填"),
-			"libraries":     stringArray("必填，库 ID 或目录名，可选多个"),
-			"content_types": stringArray("内容类型：event、opinion、research、tutorial、case、reference"),
-			"entity_ids":    stringArray("实体 ID 列表"), "topic_ids": stringArray("主题 ID 列表"),
-			"sources":          stringArray("来源类型：article、mine（用户文档）、report（整理结果）"),
-			"starred":          boolean("true 只查星标文章，false 只查未星标，省略查全部"),
-			"published_from":   text("发布时间下限，YYYY-MM-DD 或 RFC3339；缺少发布时间的文章会排除"),
-			"published_to":     text("发布时间上限，YYYY-MM-DD 或 RFC3339"),
-			"collapse_similar": boolean("是否折叠相似报道，省略使用检索服务默认值"),
-			"limit":            integer("最多返回的资料数，省略使用检索服务默认值", 1, 100),
+			"entity_ids":     stringArray("实体 ID 列表"),
+			"query":          text("查询文本，必填"),
+			"libraries":      stringArray("必填，库 ID 或目录名，可选多个"),
+			"sources":        stringArray("来源类型：article、mine（用户文档）、report（整理结果）"),
+			"starred":        boolean("true 只查星标文章，false 只查未星标，省略查全部"),
+			"published_from": text("发布时间下限，YYYY-MM-DD 或 RFC3339；缺少发布时间的文章会排除"),
+			"published_to":   text("发布时间上限，YYYY-MM-DD 或 RFC3339"),
+			"limit":          integer("最多返回的资料数，省略使用检索服务默认值", 1, 100),
 		}, "query", "libraries"), func(ctx context.Context, in types.EntrySearchRequest) (any, error) {
 			return services.Search.Search(types.WithSearchSource(ctx, "mcp"), in)
 		})
@@ -250,25 +258,6 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in entryInput) (any, error) {
 			return services.Entries.ReadEntry(ctx, in.ID, in.Offset, in.Length)
 		})
-	addTool(server, "list_topics", "列出用户定义的主题，返回 topics 数组，包含主题 ID、名称、说明、适用库 library_ids 和资料数。library_ids 为空表示全部库。", object(map[string]any{}),
-		func(ctx context.Context, _ struct{}) (any, error) {
-			items, err := services.Topics.ListTopics(ctx)
-			return map[string]any{"topics": items}, err
-		})
-	addTool(server, "create_topic", "创建主题，library_ids 为空或省略表示全部库。"+externalContentNotice, object(map[string]any{"name": text("主题名称"), "description": text("主题说明"), "library_ids": stringArray("适用库 ID；空数组表示全部库")}, "name"), func(ctx context.Context, in types.Topic) (any, error) { return services.Topics.CreateTopic(ctx, &in) })
-	addTool(server, "update_topic", "修改主题；省略 library_ids 保持原范围，空数组恢复全部库。已有范围外归入保留，但不进入关注动态。"+externalContentNotice, object(map[string]any{"id": text("主题 ID"), "name": text("主题名称"), "description": text("主题说明"), "library_ids": stringArray("适用库 ID")}, "id"), func(ctx context.Context, in struct {
-		ID          string    `json:"id"`
-		Name        *string   `json:"name"`
-		Description *string   `json:"description"`
-		LibraryIDs  *[]string `json:"library_ids"`
-	},
-	) (any, error) {
-		var scopes [][]string
-		if in.LibraryIDs != nil {
-			scopes = append(scopes, *in.LibraryIDs)
-		}
-		return services.Topics.UpdateTopic(ctx, in.ID, in.Name, in.Description, scopes...)
-	})
 
 	addTool(server, "list_entities", "查询个人空间的实体档案，名称和别名支持模糊查询，类型可选。返回 entities 数组及每个实体的别名。"+externalContentNotice,
 		object(map[string]any{
@@ -283,29 +272,57 @@ func registerTools(server *mcp.Server, services Services) {
 	addTool(server, "get_entity", "按 ID 读取实体档案和提及该实体的资料列表；已合并的实体 ID 自动解析到保留档案。"+externalContentNotice,
 		object(map[string]any{"id": text("实体 ID，必填")}, "id"),
 		func(ctx context.Context, in idInput) (any, error) { return services.Entities.EntityDetail(ctx, in.ID) })
-	addTool(server, "list_follows", "列出关注的实体与主题，返回 follows 数组，包含 target_type、target_id、名称、关注时间和近 7 天已完成资料数。只统计开启动态的库中已完成、已启用且已通过审核的资料；调用不更新上次查看时间。"+externalContentNotice,
-		object(map[string]any{}), func(ctx context.Context, _ struct{}) (any, error) {
+	addTool(
+		server,
+		"list_follows",
+		"列出关注的实体，返回 follows 数组，包含 target_type、target_id、名称、关注时间和近 7 天已完成资料数。只统计"+
+			"开启动态的库中已完成、已启用且已通过审核的资料；调用不更新上次查看时间。"+externalContentNotice,
+
+		object(map[string]any{}),
+		func(ctx context.Context, _ struct{}) (any, error) {
 			items, err := services.Follows.ListFollows(ctx)
 			return map[string]any{"follows": items}, err
-		})
-	addTool(server, "follow_feed", "读取开启动态的库中与关注实体或主题关联的已完成资料，按进入动态时间倒序。libraries 可选一个或多个库 ID 或目录名，省略查询全部开启动态的库。结果包含 library_id 和 library_name，libraries 返回各库的新动态数及上次查看时间。since 省略使用各库网页上次查看时间；调用不更新查看时间。相似报道只在库内折叠，历史归入不产生新动态。用 next_cursor 继续翻页。"+externalContentNotice,
+		},
+	)
+	addTool(
+		server,
+		"follow_feed",
+		"读取开启动态的库中与关注实体关联的已完成资料，按进入动态时间倒序。libraries 可选一个或多个库 ID 或目录名，省略查询全部开启动态"+
+			"的库。结果包含 library_id 和 library_name，libraries 返回各库的新动态数及上次查看时间。since 省略使"+
+			"用各库网页上次查看时间；调用不更新查看时间。用 next_cursor 继续翻页。"+externalContentNotice,
+
 		object(map[string]any{
-			"libraries":        stringArray("库 ID 或英文目录名，可选多个；省略为全部开启动态的库"),
-			"cursor":           text("上一页返回的 next_cursor；继续读取同一窗口，直到没有 next_cursor"),
-			"since":            text("进入动态时间下限，RFC3339 或 YYYY-MM-DD；省略使用网页上次查看时间，返回此时间之后的文章"),
-			"target_ids":       stringArray("关注对象 ID 列表，省略查询全部关注；多个对象取并集"),
-			"limit":            integer("最多返回的主资料数，默认 20，最大 100；折叠成员附在相似报道中", 1, 100),
-			"collapse_similar": boolean("是否按摘要向量相似度与发布时间窗口折叠相似报道，省略开启，规则与检索相同"),
+			"libraries":  stringArray("库 ID 或英文目录名，可选多个；省略为全部开启动态的库"),
+			"cursor":     text("上一页返回的 next_cursor；继续读取同一窗口，直到没有 next_cursor"),
+			"since":      text("进入动态时间下限，RFC3339 或 YYYY-MM-DD；省略使用网页上次查看时间，返回此时间之后的文章"),
+			"target_ids": stringArray("关注对象 ID 列表，省略查询全部关注；多个对象取并集"),
+			"limit":      integer("最多返回的资料数，默认 20，最大 100", 1, 100),
 		}), func(ctx context.Context, in types.FollowFeedRequest) (any, error) {
 			return services.Follows.Feed(ctx, in)
-		})
-	addTool(server, "follow", "关注指定实体或主题，重复关注幂等，实际新增关注时写入操作日志。实体已合并时关注最终保留档案。返回关注对象的类型、ID、名称、关注时间和近 7 天资料数。"+externalContentNotice,
-		object(map[string]any{"target_type": enum("关注对象类型，必填", "entity", "topic"), "target_id": text("关注对象 ID，必填")}, "target_type", "target_id"),
+		},
+	)
+	addTool(
+		server,
+		"follow",
+		"关注指定实体，重复关注幂等，实际新增关注时写入操作日志。实体已合并时关注最终保留档案。返回关注对象的类型、ID、名称、关注时间和近 7 天资料数。"+externalContentNotice,
+		object(
+			map[string]any{"target_type": enum("关注对象类型，必填", "entity"), "target_id": text("关注对象 ID，必填")},
+			"target_type",
+			"target_id",
+		),
 		func(ctx context.Context, in followInput) (any, error) {
 			return services.Follows.Follow(ctx, in.TargetType, in.TargetID)
-		})
-	addTool(server, "unfollow", "取消指定实体或主题的关注，重复取消幂等，实际删除关注时写入操作日志。实体已合并时取消最终保留档案的关注。返回请求对象和 following=false。"+externalContentNotice,
-		object(map[string]any{"target_type": enum("关注对象类型，必填", "entity", "topic"), "target_id": text("关注对象 ID，必填")}, "target_type", "target_id"),
+		},
+	)
+	addTool(
+		server,
+		"unfollow",
+		"取消指定实体的关注，重复取消幂等，实际删除关注时写入操作日志。实体已合并时取消最终保留档案的关注。返回请求对象和 following=false。"+externalContentNotice,
+		object(
+			map[string]any{"target_type": enum("关注对象类型，必填", "entity"), "target_id": text("关注对象 ID，必填")},
+			"target_type",
+			"target_id",
+		),
 		func(ctx context.Context, in followInput) (any, error) {
 			if err := services.Follows.Unfollow(ctx, in.TargetType, in.TargetID); err != nil {
 				return nil, err
@@ -487,11 +504,10 @@ func ingestSchema() map[string]any {
 		"quotes": map[string]any{"type": "array", "description": "按顺序追加的引用内容", "items": object(map[string]any{
 			"content": text("引用内容，必填"), "author": text("引用作者"), "url": text("引用来源 URL"),
 		}, "content")},
-		"collect_reason":    text("收藏理由，写入表头；重复命中时合并理由"),
-		"content_type_hint": text("调用方建议的所属库内容类型，仅作处理参考，不替代模型判定"),
-		"agent_summary":     text("调用方摘要，仅存数据库，不进入表头和处理调用"),
-		"agent_tags":        stringArray("调用方标签，仅存数据库，不进入表头和处理调用"),
-		"source_name":       text("调用方名称，仅存数据库，身份以经过验证的 API Key 为准"),
+		"collect_reason": text("收藏理由，写入表头；重复命中时合并理由"),
+		"agent_summary":  text("调用方摘要，仅存数据库，不进入表头和处理调用"),
+		"agent_tags":     stringArray("调用方标签，仅存数据库，不进入表头和处理调用"),
+		"source_name":    text("调用方名称，仅存数据库，身份以经过验证的 API Key 为准"),
 	}, "library")
 	return object(map[string]any{"items": boundedArray("收录条目，1 到 50 条；逐条返回结果", item, 1, types.MaxIngestBatchItems)}, "items")
 }

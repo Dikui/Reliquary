@@ -6,17 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"reliquary/internal/models/chat"
+	"reliquary/internal/models/embedding"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 	"strings"
 	"testing"
 
 	taskqueue "reliquary/internal/queue"
 
 	"github.com/stretchr/testify/require"
-
-	"reliquary/internal/models/chat"
-	"reliquary/internal/models/embedding"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
 )
 
 func TestIntakeXSourceEvidence(t *testing.T) {
@@ -52,8 +51,10 @@ func TestReviewMissingImagesDoNotReserveVisualTokens(t *testing.T) {
 	library := &types.Library{ModelTiers: types.ModelTierConfig{Light: "review-model"}}
 	capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: `{"approved":false,"reason":"Fixture review decision"}`}}
 	svc := &entryService{repo: &intakeRepo{entry: entry}, modelService: &summaryStateModelService{
-		model: capture, metadata: &types.Model{ID: "review-model", Type: types.ModelTypeGeneration,
-			Parameters: types.ModelParameters{SupportsVision: true, ContextWindow: 16384}},
+		model: capture, metadata: &types.Model{
+			ID: "review-model", Type: types.ModelTypeGeneration,
+			Parameters: types.ModelParameters{SupportsVision: true, ContextWindow: 16384},
+		},
 	}}
 	approved, _, err := svc.reviewSegments(context.Background(), library, entry, strings.Repeat("![图表](https://example.org/missing.png)\n\n", 8), types.SourceInfo{})
 	require.NoError(t, err)
@@ -116,8 +117,10 @@ func (intakeModelService) GetEmbeddingModel(context.Context, string) (embedding.
 }
 
 func TestReviewIntakeIgnoresObsoleteModelRejection(t *testing.T) {
-	entry := &types.Entry{ID: "qwen-article", SpaceID: 1, LibraryID: "library",
-		Metadata: types.JSON(`{"intake_reject_reason":"Qwen article missing publication date"}`)}
+	entry := &types.Entry{
+		ID: "qwen-article", SpaceID: 1, LibraryID: "library",
+		Metadata: types.JSON(`{"intake_reject_reason":"Qwen article missing publication date"}`),
+	}
 	require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
 		Source: "manual", Decision: "pending", OriginalPath: "stored-original",
 		SourceInfo: types.SourceInfo{Publisher: "Qwen", OriginalURL: "https://qwen.ai/blog?id=article", PublishedAt: "2026-09-20"},
@@ -152,18 +155,24 @@ func (s *intakeFileService) SaveBytes(_ context.Context, body []byte, _ uint64, 
 }
 
 func TestReviewEntryIntakeCorrectionClearsQwenRejection(t *testing.T) {
-	entry := &types.Entry{ID: "qwen-article", SpaceID: 1, LibraryID: "library", Type: "manual",
+	entry := &types.Entry{
+		ID: "qwen-article", SpaceID: 1, LibraryID: "library", Type: "manual",
 		ParseStatus: types.ParseStatusRejected,
-		Metadata:    types.JSON(`{"intake_reject_reason":"Qwen article missing publication date"}`)}
+		Metadata:    types.JSON(`{"intake_reject_reason":"Qwen article missing publication date"}`),
+	}
 	require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{
 		Source: "manual", Decision: "rejected", Reason: "Qwen article missing publication date", OriginalPath: "original",
 		SourceInfo: types.SourceInfo{Publisher: "Qwen", OriginalURL: "https://qwen.ai/blog?id=article"},
 	}))
 	repo := &intakeRepo{entry: entry}
 	task := &intakeTask{}
-	svc := &entryService{repo: repo, libraryService: intakeLibraryService{creatorID: "owner"},
-		fileSvc:      &intakeFileService{saved: map[string][]byte{"original": []byte("Complete original body")}},
-		modelService: intakeModelService{chat: intakeChat{response: `{"approved":true,"reason":"sourced article"}`}}, task: task}
+	svc := &entryService{
+		repo: repo, libraryService: intakeLibraryService{creatorID: "owner"},
+		fileSvc: &intakeFileService{saved: map[string][]byte{"original": []byte("Complete original body")}},
+		modelService: intakeModelService{
+			chat: intakeChat{response: `{"approved":true,"reason":"sourced article"}`},
+		}, task: task,
+	}
 	ctx := context.WithValue(context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1)), types.UserIDContextKey, "other-editor")
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
 	updated, err := svc.ReviewEntryIntake(ctx, entry.ID, "retry", types.SourceInfo{PublishedAt: "2026-09-20"})
@@ -245,7 +254,7 @@ func (m intakeChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.C
 	}
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
 	if stage == "article_processing" {
-		return &types.ChatResponse{Content: validProcessingFixture("event")}, nil
+		return &types.ChatResponse{Content: validProcessingFixture()}, nil
 	}
 	return &types.ChatResponse{Content: reviewFixtureContent(m.response, messages)}, nil
 }

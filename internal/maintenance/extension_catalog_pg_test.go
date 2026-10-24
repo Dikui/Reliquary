@@ -76,9 +76,18 @@ func TestCatalogGuardRejectsAlteredOwnershipAndApplicationMaterializedView(t *te
 	})
 	t.Run("same-column materialized view", func(t *testing.T) {
 		db := pgtest.Open(t)
-		require.NoError(t, db.Exec(`DROP TABLE topics CASCADE`).Error)
-		require.NoError(t, db.Exec(`CREATE MATERIALIZED VIEW topics AS SELECT 'topic'::text AS id,1::bigint AS space_id,'name'::text AS name,'description'::text AS description,now() AS created_at,now() AS updated_at`).Error)
-		require.ErrorContains(t, ValidateClassification(ctx, db), "unreviewed application relation kind for public.topics")
+		require.NoError(t, db.Exec(`DROP TABLE follow_feed_states CASCADE`).Error)
+		require.NoError(
+			t,
+			db.Exec(
+				`CREATE MATERIALIZED VIEW follow_feed_states AS SELECT 1::bigint AS space_id,now() AS last_viewed_at`,
+			).Error,
+		)
+		require.ErrorContains(
+			t,
+			ValidateClassification(ctx, db),
+			"unreviewed application relation kind for public.follow_feed_states",
+		)
 	})
 }
 

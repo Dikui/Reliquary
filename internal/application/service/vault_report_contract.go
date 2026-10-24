@@ -3,14 +3,15 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"reliquary/internal/types"
 	"sort"
 	"strings"
 	"unicode/utf8"
 
+	werrors "reliquary/internal/errors"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	werrors "reliquary/internal/errors"
-	"reliquary/internal/types"
 )
 
 // ReportInput supplies fields to the shared generated-material persistence path.
@@ -20,7 +21,6 @@ type ReportInput struct {
 	Markdown        string   `json:"markdown"`
 	RelatedEntryIDs []string `json:"related_entry_ids,omitempty"`
 	RelatedEntities []string `json:"related_entities,omitempty"`
-	Topics          []string `json:"topics,omitempty"`
 	RequestID       string   `json:"request_id,omitempty"`
 }
 
@@ -39,7 +39,6 @@ type ReportEntityReference struct {
 type reportMetadata struct {
 	RelatedEntryIDs []string                `json:"related_entry_ids"`
 	RelatedEntities []ReportEntityReference `json:"related_entities,omitempty"`
-	TopicIDs        []string                `json:"topic_ids,omitempty"`
 	Fingerprint     string                  `json:"report_fingerprint,omitempty"`
 	RequestID       string                  `json:"request_id,omitempty"`
 }
@@ -68,8 +67,16 @@ func reportInputFingerprint(input ReportInput, metadata reportMetadata) string {
 		Markdown string   `json:"markdown"`
 		Articles []string `json:"articles"`
 		Entities []string `json:"entities"`
-		Topics   []string `json:"topics"`
-	}{strings.TrimSpace(input.Title), strings.ReplaceAll(strings.ReplaceAll(input.Markdown, "\r\n", "\n"), "\r", "\n"), normalizedReportIDs(metadata.RelatedEntryIDs), normalizedReportIDs(entities), normalizedReportIDs(metadata.TopicIDs)})
+	}{
+		strings.TrimSpace(input.Title),
+		strings.ReplaceAll(strings.ReplaceAll(input.Markdown,
+			"\r\n",
+			"\n"),
+			"\r",
+			"\n"),
+		normalizedReportIDs(metadata.RelatedEntryIDs),
+		normalizedReportIDs(entities),
+	})
 	return vaultContentHash(string(data))
 }
 
@@ -141,26 +148,6 @@ func validateReport(tx *gorm.DB, library *types.Library, input ReportInput) (rep
 	for _, id := range ids {
 		metadata.RelatedEntities = append(metadata.RelatedEntities, resolved[id])
 	}
-	for i, ref := range input.Topics {
-		if !utf8.ValidString(ref) || strings.ContainsRune(ref, 0) {
-			add(fmt.Sprintf("topics[%d]", i), "reference must be valid UTF-8 without NUL")
-			continue
-		}
-		var topic types.Topic
-		ref = strings.TrimSpace(ref)
-		err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id=?", library.SpaceID, ref).First(&topic).Error
-		if err == gorm.ErrRecordNotFound {
-			err = tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND name=?", library.SpaceID, ref).First(&topic).Error
-		}
-		if err == gorm.ErrRecordNotFound || ref == "" {
-			add(fmt.Sprintf("topics[%d]", i), "topic does not exist: "+ref)
-		} else if err != nil {
-			return metadata, err
-		} else {
-			metadata.TopicIDs = append(metadata.TopicIDs, topic.ID)
-		}
-	}
-	metadata.TopicIDs = normalizedReportIDs(metadata.TopicIDs)
 	if len(issues) > 0 {
 		return metadata, reportValidationError(issues)
 	}

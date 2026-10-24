@@ -18,7 +18,7 @@ const libraryScope = useLibraryScope()
 const filtersExpanded = ref(false)
 const query = ref('')
 const filters = ref(defaultSearchFilters())
-const options = ref<SearchOptions>({ entities: [], topics: [] })
+const options = ref<SearchOptions>({ entities: [] })
 const optionsLoading = ref(false), optionsError = ref('')
 const results = ref<Article[]>([])
 const excludedMissingPublishedAt = ref(0)
@@ -93,7 +93,7 @@ function clearQuery() {
 }
 function finishComposition() { composing.value = false; scheduleSearch() }
 function openArticle(article: Article, location?: SourceLocation) { void router.push({ path: '/platform/entries', query: referenceQuery(article.entry_id, location) }) }
-function filterEntity(id: string) { filters.value.entity_ids = [id] }
+function openEntity(id: string) { void router.push({ path: '/platform/entries', query: { tab: 'entities', entity_id: id } }) }
 watch(libraryScope, scheduleSearch, { deep: true })
 watch(stateKey, () => { if (!synchronizing) scheduleSearch() })
 watch(() => route.query, incoming => {
@@ -134,7 +134,7 @@ onUnmounted(invalidate)
       <t-loading v-else-if="loading" :text="t('knowledgeSearch.searching')" />
       <template v-else-if="results.length">
         <p class="result-count" role="status">{{ t('knowledgeSearch.resultCount', { count: results.length }) }}</p>
-        <SearchEntry v-for="article in results" :key="article.entry_id" :article="article" :query="query" @open-article="openArticle" @open-entity="filterEntity" />
+        <SearchEntry v-for="article in results" :key="article.entry_id" :article="article" :query="query" @open-article="openArticle" @open-entity="openEntity" />
       </template>
       <t-empty v-else :description="t(hasSearched ? 'knowledgeSearch.noResults' : 'knowledgeSearch.idle')" />
     </section>

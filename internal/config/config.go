@@ -15,12 +15,11 @@ import (
 
 // Config 应用程序总配置
 type Config struct {
-	IngestDiagnostics      *IngestDiagnosticsConfig `yaml:"ingest_diagnostics" json:"ingest_diagnostics"`
-	Vault                  *VaultConfig             `yaml:"vault" json:"vault"`
-	ArticleProcessing      *ArticleProcessingConfig `yaml:"article_processing" json:"article_processing"`
-	TopicBackfillBatchSize int                      `yaml:"topic_backfill_batch_size" json:"topic_backfill_batch_size"`
-	Server                 *ServerConfig            `yaml:"server"           json:"server"`
-	Library                *LibraryConfig           `yaml:"library"   json:"library"`
+	IngestDiagnostics *IngestDiagnosticsConfig `yaml:"ingest_diagnostics" json:"ingest_diagnostics"`
+	Vault             *VaultConfig             `yaml:"vault" json:"vault"`
+	ArticleProcessing *ArticleProcessingConfig `yaml:"article_processing" json:"article_processing"`
+	Server            *ServerConfig            `yaml:"server"           json:"server"`
+	Library           *LibraryConfig           `yaml:"library"   json:"library"`
 
 	Models []ModelConfig `yaml:"models"           json:"models"`
 }
@@ -143,11 +142,6 @@ func LoadConfig() (*Config, error) {
 
 	// Validate configuration values
 	applyLibraryEnvOverrides(&cfg)
-	if raw := os.Getenv("TOPIC_BACKFILL_BATCH_SIZE"); raw != "" {
-		if _, err := fmt.Sscan(raw, &cfg.TopicBackfillBatchSize); err != nil {
-			return nil, fmt.Errorf("invalid TOPIC_BACKFILL_BATCH_SIZE: %w", err)
-		}
-	}
 	if err := applyVaultEnvOverrides(&cfg); err != nil {
 		return nil, err
 	}
@@ -168,9 +162,6 @@ func LoadConfig() (*Config, error) {
 // It checks for obviously invalid or missing values that would cause runtime failures.
 func ValidateConfig(cfg *Config) error {
 	var errs []string
-	if cfg.TopicBackfillBatchSize < 0 || cfg.TopicBackfillBatchSize > 1000 {
-		errs = append(errs, "topic_backfill_batch_size must be between 0 and 1000")
-	}
 	if cfg.ArticleProcessing != nil && (cfg.ArticleProcessing.MaxBodyChars < 0 || cfg.ArticleProcessing.MaxImages < 0 || cfg.ArticleProcessing.MaxCompletionTokens < 0 || cfg.ArticleProcessing.MaxSegments < 0 || cfg.ArticleProcessing.SegmentOverlapChars < 0 || cfg.ArticleProcessing.ContextReservePercent < 0 || cfg.ArticleProcessing.ContextReservePercent > 90) {
 		errs = append(errs, "article_processing limits must be nonnegative")
 	}

@@ -1,11 +1,9 @@
 {
   "association": {
-    "created_at": "0001-01-01T00:00:00Z",
-    "entry_id": "item",
-    "is_historical": false,
-    "source": "",
     "tenant_id": 1,
-    "topic_id": "topic"
+    "entry_id": "item",
+    "entity_id": "entity",
+    "created_at": "0001-01-01T00:00:00Z"
   },
   "entity_detail": {
     "entity": {
@@ -25,9 +23,6 @@
         "agent_tags": null,
         "channel": "",
         "collect_reason": "",
-        "content_type": "",
-        "content_type_corrected": false,
-        "content_type_hint": "",
         "created_at": "0001-01-01T00:00:00Z",
         "custom_metadata": null,
         "deleted_at": null,
@@ -64,7 +59,6 @@
         "summary_status": "",
         "tenant_id": 1,
         "title": "",
-        "topics": null,
         "type": "",
         "updated_at": "0001-01-01T00:00:00Z",
         "vault_path": ""
@@ -78,9 +72,6 @@
     "agent_tags": null,
     "channel": "",
     "collect_reason": "",
-    "content_type": "",
-    "content_type_corrected": false,
-    "content_type_hint": "",
     "created_at": "0001-01-01T00:00:00Z",
     "custom_metadata": null,
     "deleted_at": null,
@@ -120,7 +111,6 @@
     "summary_status": "",
     "tenant_id": 1,
     "title": "",
-    "topics": null,
     "type": "",
     "updated_at": "0001-01-01T00:00:00Z",
     "vault_path": ""
@@ -133,7 +123,6 @@
       "author": "",
       "collect_reason": "",
       "collected_at": "",
-      "content_type": "",
       "entities": null,
       "id": "item",
       "published_at": "",
@@ -142,7 +131,6 @@
       "starred": false,
       "summary": null,
       "title": "Original header",
-      "topics": null,
       "url": ""
     },
     "length": 13,
@@ -160,7 +148,6 @@
     "results": [
       {
         "acquisition": "",
-        "content_type": "",
         "entities": null,
         "entry_id": "item",
         "has_update": false,
@@ -170,7 +157,6 @@
         "original_url": "",
         "published_at": null,
         "score": 0,
-        "similar_reports": [],
         "snippets": [
           {
             "chunk_id": "chunk",
@@ -186,7 +172,6 @@
         "starred": false,
         "summary": null,
         "title": "",
-        "topics": null,
         "vault_path": ""
       }
     ],

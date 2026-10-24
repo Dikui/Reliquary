@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
-	"testing"
-	"time"
-
 	"reliquary/internal/application/service"
 	"reliquary/internal/handler"
 	"reliquary/internal/types"
+	"strings"
+	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -19,8 +18,8 @@ import (
 func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 	f := newMCPFixture(t)
 	client := f.connect(t, "2025-11-25")
-	entity, topic := mcpFollowTargets(t, f)
-	mcpCall(t, client, "follow", map[string]any{"target_type": "topic", "target_id": topic.ID}, nil)
+	entity := mcpFollowTargets(t, f)
+	mcpCall(t, client, "follow", map[string]any{"target_type": "entity", "target_id": entity.ID}, nil)
 	RegisterFollowRoutes(f.router.Group("/api/v1"), handler.NewFollowHandler(service.NewFollowService(f.db)))
 	systemLibrary := f.library
 	customLibrary := &types.Library{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, Name: "研究 / Custom library", Directory: "custom-library", SourceEvidenceRule: systemLibrary.SourceEvidenceRule, Template: systemLibrary.Template, Type: types.LibraryTypeDocument}
@@ -72,7 +71,7 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 	var articles []*types.Entry
 	for _, library := range []*types.Library{systemLibrary, customLibrary} {
 		f.library = library
-		article := mcpFollowArticle(t, f, "Librarynamefixture", time.Now().Add(-time.Hour), entity.ID, topic.ID)
+		article := mcpFollowArticle(t, f, "Librarynamefixture", time.Now().Add(-time.Hour), entity.ID, "")
 		articles = append(articles, article)
 		f.seedPending(t, "Librarynamefixture pending")
 		require.NoError(t, f.db.Model(article).Update("incomplete", true).Error)
@@ -93,7 +92,9 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 			} {
 				require.Greater(t, assertNames(request(http.MethodGet, path, "", language)), 0, path)
 			}
-			require.Greater(t, assertNames(request(http.MethodPost, "/api/v1/follows/feed", `{"include_seen":true,"collapse_similar":false}`, language)), 0)
+			require.Greater(t,
+				assertNames(request(http.MethodPost, "/api/v1/follows/feed", `{"include_seen":true}`, language)),
+				0)
 		})
 	}
 	// The catalog localizes a default system label separately from stored article metadata.
@@ -108,9 +109,6 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 	for _, tool := range []string{"list_pending", "follow_feed"} {
 		var wire any
 		args := map[string]any{}
-		if tool == "follow_feed" {
-			args["collapse_similar"] = false
-		}
 		mcpCall(t, client, tool, args, &wire)
 		require.Greater(t, assertNames(wire), 0, tool)
 	}
@@ -119,7 +117,6 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 	require.Greater(t, assertNames(detail), 0)
 	// Mutation responses reuse the same article metadata contract.
 	require.Greater(t, assertNames(request(http.MethodPut, "/api/v1/entries/"+articles[0].ID+"/star", `{"starred":true}`, "en-US")), 0)
-	require.Greater(t, assertNames(request(http.MethodPut, "/api/v1/entries/"+articles[0].ID+"/content-type", `{"content_type":"其他"}`, "en-US")), 0)
 	var starred any
 	mcpCall(t, client, "set_star", map[string]any{"id": articles[1].ID, "starred": true}, &starred)
 	require.Greater(t, assertNames(starred), 0)

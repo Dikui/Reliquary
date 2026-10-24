@@ -73,7 +73,6 @@ type EvaluationRunOptions struct {
 	K                            int    `json:"k"`
 	// active, candidate:<rebuild ID>, or archive:<switched rebuild ID>.
 	VectorSet       string           `json:"vector_set"`
-	CollapseSimilar *bool            `json:"collapse_similar,omitempty"`
 	RetrievalConfig *RetrievalConfig `json:"retrieval_config,omitempty"`
 	RerankModelID   *string          `json:"rerank_model_id,omitempty"`
 }
@@ -109,13 +108,16 @@ type EvaluationRunResult struct {
 	Error      string               `json:"error"`
 }
 
-type searchOriginKey struct{}
-type evaluationRunKey struct{}
-type searchExecutionKey struct{}
+type (
+	searchOriginKey    struct{}
+	evaluationRunKey   struct{}
+	searchExecutionKey struct{}
+)
 
 func WithSearchSource(ctx context.Context, source string) context.Context {
 	return context.WithValue(ctx, searchOriginKey{}, source)
 }
+
 func SearchSource(ctx context.Context) string {
 	if id := EvaluationRunID(ctx); id != "" {
 		return "evaluation"
@@ -128,16 +130,20 @@ func SearchSource(ctx context.Context) string {
 	}
 	return "http"
 }
+
 func WithEvaluationRun(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, evaluationRunKey{}, id)
 }
+
 func EvaluationRunID(ctx context.Context) string {
 	s, _ := ctx.Value(evaluationRunKey{}).(string)
 	return s
 }
+
 func WithSearchExecution(ctx context.Context, options EvaluationRunOptions) context.Context {
 	return context.WithValue(ctx, searchExecutionKey{}, options)
 }
+
 func SearchExecution(ctx context.Context) (EvaluationRunOptions, bool) {
 	v, ok := ctx.Value(searchExecutionKey{}).(EvaluationRunOptions)
 	return v, ok

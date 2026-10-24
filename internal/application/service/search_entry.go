@@ -45,7 +45,7 @@ func normalizeEntrySearch(request types.EntrySearchRequest) (entrySearchFilters,
 			return f, apperrors.NewBadRequestError("unsupported sources value: " + source)
 		}
 	}
-	for name, ids := range map[string][]string{"entity_ids": request.EntityIDs, "topic_ids": request.TopicIDs} {
+	for name, ids := range map[string][]string{"entity_ids": request.EntityIDs} {
 		if len(ids) > 100 {
 			return f, apperrors.NewBadRequestError(name + " accepts at most 100 IDs")
 		}
@@ -292,22 +292,11 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	execution.RerankModelID = &rerankID
 	ctx = types.WithSearchExecution(ctx, execution)
 	merged, response.RerankStatus = s.rerankEntryResults(ctx, library, f.request.Query, merged)
-	if f.request.CollapseSimilar == nil || *f.request.CollapseSimilar {
-		set.ModelID = modelID
-		merged, err = s.collapseArticleReports(ctx, spaceID, merged, config, set)
-		if err != nil {
-			return nil, err
-		}
-	}
 	if len(merged) > limit {
 		merged = merged[:limit]
 	}
 	response.Results = merged
 	f.request.Limit = limit
-	if f.request.CollapseSimilar == nil {
-		enabled := true
-		f.request.CollapseSimilar = &enabled
-	}
 	if set.Selector == "active" {
 		set.ModelID = modelID
 		set.ProfileHash = queryProfileHash
@@ -330,19 +319,12 @@ func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, lib
 	if f.request.Starred != nil {
 		query = query.Where("k.source_kind IN ('article','mine') AND k.starred=?", *f.request.Starred)
 	}
-	if len(f.request.ContentTypes) > 0 {
-		query = query.Where("k.content_type IN ?", f.request.ContentTypes)
-	}
 	if len(f.request.Sources) > 0 {
 		query = query.Where("k.source_kind IN ?", f.request.Sources)
 	}
 	if len(f.request.EntityIDs) > 0 {
 		query = query.Where(`EXISTS (SELECT 1 FROM entry_entities ke WHERE ke.space_id=k.space_id
 			AND ke.entry_id=k.id AND ke.entity_id IN ?)`, f.request.EntityIDs)
-	}
-	if len(f.request.TopicIDs) > 0 {
-		query = query.Where(`EXISTS (SELECT 1 FROM entry_topics kt WHERE kt.space_id=k.space_id
-			AND kt.entry_id=k.id AND kt.topic_id IN ?)`, f.request.TopicIDs)
 	}
 	if dates {
 		if f.from != nil || f.to != nil {

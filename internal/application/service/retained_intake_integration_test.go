@@ -2,23 +2,18 @@ package service
 
 import (
 	"context"
-
 	"io"
 	"mime/multipart"
-
+	"reliquary/internal/application/repository"
+	"reliquary/internal/config"
+	"reliquary/internal/models/chat"
+	"reliquary/internal/testutil/pgtest"
+	"reliquary/internal/types"
 	"strings"
 	"testing"
 
-	"reliquary/internal/application/repository"
-	"reliquary/internal/config"
-
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-
-	"reliquary/internal/models/chat"
-
-	"reliquary/internal/testutil/pgtest"
-	"reliquary/internal/types"
 )
 
 type retainedIntakeFiles struct{ intakeFileService }
@@ -47,7 +42,7 @@ func (m *retainedIntakeModel) Chat(ctx context.Context, messages []chat.Message,
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
 	m.stages = append(m.stages, stage)
 	if stage != "intake_review" {
-		return &types.ChatResponse{Content: validProcessingFixture("event")}, nil
+		return &types.ChatResponse{Content: validProcessingFixture()}, nil
 	}
 	m.prompts = append(m.prompts, messages[0].Content)
 	if m.malformed {
@@ -75,8 +70,19 @@ func newRetainedIntakeHarness(t *testing.T) *retainedIntakeHarness {
 	db := pgtest.Open(t)
 	space := &types.Space{ID: types.SingleSpaceID, Name: "Personal space"}
 	require.NoError(t, db.Create(space).Error)
-	library := &types.Library{ID: "library", SpaceID: space.ID, SystemRole: "official", FeedEnabled: true, Template: types.TemplateExternalTimely, Directory: "official", SourceEvidenceRule: "link_required", Name: "Articles", Type: types.LibraryTypeDocument,
-		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 1024}}
+	library := &types.Library{
+		ID:                 "library",
+		SpaceID:            space.ID,
+		SystemRole:         "official",
+		FeedEnabled:        true,
+		Template:           types.TemplateExternalTimely,
+		Directory:          "official",
+		SourceEvidenceRule: "link_required",
+		Name:               "Articles",
+		Type:               types.LibraryTypeDocument,
+
+		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 1024},
+	}
 	require.NoError(t, db.Create(library).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, space.ID)
 	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
@@ -88,10 +94,12 @@ func newRetainedIntakeHarness(t *testing.T) *retainedIntakeHarness {
 	queue := &retainedProcessingQueue{}
 	model := &retainedIntakeModel{}
 	bases := retainedProcessingLibrary{library: library}
-	svc := &entryService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
+	svc := &entryService{
+		db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
 		libraryService: bases, modelService: &summaryStateModelService{model: model}, task: queue,
 		spaceRepo: repository.NewSpaceRepository(db), fileSvc: &retainedIntakeFiles{},
-		config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}}}
+		config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}},
+	}
 	return &retainedIntakeHarness{db: db, ctx: ctx, library: library, service: svc, queue: queue, model: model}
 }
 

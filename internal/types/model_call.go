@@ -22,16 +22,25 @@ const (
 	CallPurposeBodyEmbedding     ModelCallPurpose = "body_embedding"
 	CallPurposeRerank            ModelCallPurpose = "rerank"
 	CallPurposeEvaluation        ModelCallPurpose = "evaluation_generation"
-	CallPurposeContentCheck      ModelCallPurpose = "content_check"
 	CallPurposeOther             ModelCallPurpose = "other"
 )
 
-var ModelCallPurposes = []ModelCallPurpose{CallPurposeIntakeReview, CallPurposeArticleProcessing, CallPurposeSegmentMerge, CallPurposeImageDescription, CallPurposeEntityResolution, CallPurposeEntityEmbedding, CallPurposeBodyEmbedding, CallPurposeRerank, CallPurposeEvaluation, CallPurposeContentCheck, CallPurposeOther}
+// ModelCallPurposes lists the supported purposes for new model calls.
+var ModelCallPurposes = []ModelCallPurpose{
+	CallPurposeIntakeReview,
+	CallPurposeArticleProcessing,
+	CallPurposeSegmentMerge,
+	CallPurposeImageDescription,
+	CallPurposeEntityResolution,
+	CallPurposeEntityEmbedding,
+	CallPurposeBodyEmbedding,
+	CallPurposeRerank,
+	CallPurposeEvaluation,
+	CallPurposeOther,
+}
 
 func NormalizeModelCallPurpose(stage string, tier ModelTier) ModelCallPurpose {
 	switch stage {
-	case "content_check":
-		return CallPurposeContentCheck
 	case "intake_review":
 		return CallPurposeIntakeReview
 	case "article_processing":
@@ -110,13 +119,16 @@ type ModelCallAccounting struct {
 	Model *Model
 	Write func(context.Context, *ModelCall) error
 }
-type callAccountingKey struct{}
-type callEntryKey struct{}
-type callRetryKey struct{}
-type ModelCallSession struct {
-	Accounting *ModelCallAccounting
-	Attempts   atomic.Int32
-}
+type (
+	callAccountingKey struct{}
+	callEntryKey      struct{}
+	callRetryKey      struct{}
+	// ModelCallSession shares accounting attempts within one operation.
+	ModelCallSession struct {
+		Accounting *ModelCallAccounting
+		Attempts   atomic.Int32
+	}
+)
 
 func WithModelCallAccounting(ctx context.Context, a *ModelCallAccounting) context.Context {
 	if a == nil {
@@ -124,13 +136,16 @@ func WithModelCallAccounting(ctx context.Context, a *ModelCallAccounting) contex
 	}
 	return context.WithValue(ctx, callAccountingKey{}, &ModelCallSession{Accounting: a})
 }
+
 func ModelCallSessionFromContext(ctx context.Context) *ModelCallSession {
 	s, _ := ctx.Value(callAccountingKey{}).(*ModelCallSession)
 	return s
 }
+
 func WithModelCallEntry(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, callEntryKey{}, id)
 }
+
 func ModelCallEntryFromContext(ctx context.Context) *string {
 	id, _ := ctx.Value(callEntryKey{}).(string)
 	if id == "" {
@@ -143,6 +158,7 @@ func ModelCallEntryFromContext(ctx context.Context) *string {
 func WithModelCallRetry(ctx context.Context, n int) context.Context {
 	return context.WithValue(ctx, callRetryKey{}, n)
 }
+
 func ModelCallRetryFromContext(ctx context.Context) int {
 	n, _ := ctx.Value(callRetryKey{}).(int)
 	return n
@@ -159,29 +175,37 @@ type ModelCallContent struct {
 	HTTPStatus    int    `json:"http_status"`
 	Complete      bool   `json:"complete"`
 }
-type modelCallTraceKey struct{}
-type ModelCallTrace struct {
-	Attempt int
-	SpanID  string
-}
+type (
+	modelCallTraceKey struct{}
+	// ModelCallTrace identifies the processing attempt and span.
+	ModelCallTrace struct {
+		Attempt int
+		SpanID  string
+	}
+)
 
 func WithModelCallTrace(ctx context.Context, attempt int, spanID string) context.Context {
 	return context.WithValue(ctx, modelCallTraceKey{}, ModelCallTrace{attempt, spanID})
 }
+
 func ModelCallTraceFromContext(ctx context.Context) ModelCallTrace {
 	trace, _ := ctx.Value(modelCallTraceKey{}).(ModelCallTrace)
 	return trace
 }
 
-type modelCallImageKey struct{}
-type ModelCallImageReference struct {
-	Path   string `json:"path"`
-	SHA256 string `json:"sha256"`
-}
+type (
+	modelCallImageKey struct{}
+	// ModelCallImageReference identifies an image attached to a call.
+	ModelCallImageReference struct {
+		Path   string `json:"path"`
+		SHA256 string `json:"sha256"`
+	}
+)
 
 func WithModelCallImages(ctx context.Context, images []ModelCallImageReference) context.Context {
 	return context.WithValue(ctx, modelCallImageKey{}, images)
 }
+
 func ModelCallImagesFromContext(ctx context.Context) []ModelCallImageReference {
 	images, _ := ctx.Value(modelCallImageKey{}).([]ModelCallImageReference)
 	return images

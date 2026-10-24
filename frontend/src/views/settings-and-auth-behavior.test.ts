@@ -31,7 +31,7 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
     '@/components/SafeTextarea.vue': safeTextareaTestModule,
     '@/components/SearchFilters.vue': { default: stub, __esModule: true },
     '@/utils/search': searchHelpers,
-    '@/api/search': { getSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
+    '@/api/search': { getSearchOptions: async () => ({ success: true, data: { entities: [], } }) },
     'vue-i18n': { useI18n: () => ({ t, tm: () => [], locale: ref(locale) }) },
     '@/utils/personalServerError': personalError,
     '@/stores/auth': { useAuthStore: () => ({ currentSpaceId: '1', isLoggedIn: false }) },

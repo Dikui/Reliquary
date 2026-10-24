@@ -87,7 +87,7 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 	h := VaultArticleHeader{
 		ID: k.ID, URL: url, Title: k.Title, Publisher: source.Publisher, Author: source.Author,
 		PublishedAt: canonicalVaultDate(source.PublishedAt), CollectedAt: k.CreatedAt.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano),
-		ContentType: k.ContentType, Summary: k.StructuredSummary, Starred: k.Starred, CollectReason: k.CollectReason,
+		Summary: k.StructuredSummary, Starred: k.Starred, CollectReason: k.CollectReason,
 	}
 	var library types.Library
 	if err := v.db.WithContext(ctx).First(&library, "id=?", k.LibraryID).Error; err != nil {
@@ -104,7 +104,6 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 		h.RelatedEntryIDs = metadata.RelatedEntryIDs
 		if k.SourceKind == "report" {
 			h.RelatedEntities = metadata.RelatedEntities
-			h.TopicIDs = metadata.TopicIDs
 			h.ReportFingerprint = metadata.Fingerprint
 			h.RequestID = metadata.RequestID
 		}
@@ -126,11 +125,6 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 	}
 	for _, name := range names {
 		h.Entities = append(h.Entities, "[["+name+"]]")
-	}
-	if err = v.db.WithContext(ctx).Table("topics t").Select("t.name").
-		Joins("JOIN entry_topics links ON links.topic_id=t.id AND links.space_id=t.space_id").
-		Where("links.entry_id=? AND links.space_id=?", k.ID, k.SpaceID).Pluck("t.name", &h.Topics).Error; err != nil {
-		return h, err
 	}
 	return h, nil
 }

@@ -52,11 +52,9 @@ var omitFieldsOnUpdate = []string{
 	"PendingSubtasksCount",
 	"Starred",
 	"CollectReason",
-	"ContentTypeCorrected",
 	"SourceUnverified",
 
 	"Acquisition",
-	"ContentTypeHint",
 	"RelatedEntryID",
 	"IngestAPIKeyID",
 	"IngestAPIKeyName",
@@ -131,9 +129,6 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	if len(filter.EntityIDs) > 0 {
 		query = query.Where("EXISTS (SELECT 1 FROM entry_entities links WHERE links.space_id=entries.space_id AND links.entry_id=entries.id AND links.entity_id IN ?)", filter.EntityIDs)
 	}
-	if len(filter.TopicIDs) > 0 {
-		query = query.Where("EXISTS (SELECT 1 FROM entry_topics links WHERE links.space_id=entries.space_id AND links.entry_id=entries.id AND links.topic_id IN ?)", filter.TopicIDs)
-	}
 	if !filter.PublishedFrom.IsZero() {
 		query = query.Where("search_published_at >= ?", filter.PublishedFrom)
 	}
@@ -145,9 +140,6 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	}
 	if filter.Starred != nil {
 		query = query.Where("source_kind IN ('article','mine','report') AND starred=?", *filter.Starred)
-	}
-	if filter.ContentType != "" {
-		query = query.Where("content_type = ?", filter.ContentType)
 	}
 	if filter.Keyword != "" {
 		// Case-insensitive (LOWER … LIKE LOWER) so keyword search matches
@@ -287,9 +279,6 @@ func (r *entryRepository) DeleteEntryList(ctx context.Context, spaceID uint64, i
 			return err
 		}
 		if err := tx.Where("space_id=? AND entry_id IN ?", spaceID, ids).Delete(&types.EntryEntity{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("space_id=? AND entry_id IN ?", spaceID, ids).Delete(&types.EntryTopic{}).Error; err != nil {
 			return err
 		}
 		return tx.Where("space_id=? AND id IN ?", spaceID, ids).Delete(&types.Entry{}).Error

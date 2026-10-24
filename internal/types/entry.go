@@ -88,16 +88,12 @@ const (
 type EntryListFilter struct {
 	LibraryIDs      []string
 	EntityIDs       []string
-	TopicIDs        []string
 	PublishedFrom   time.Time
 	PublishedTo     time.Time // Exclusive end of the selected publication day.
 	IncludeRejected bool
-	CollapseSimilar *bool
 
 	// SourceKind selects article, mine or report independently of ingestion channel.
 	SourceKind string
-	// ContentType filters the article purpose.
-	ContentType string
 	// Starred filters the user's article marker when supplied.
 	Starred *bool
 	// Keyword performs a LIKE match on file_name / title when non-empty.
@@ -121,9 +117,7 @@ type EntryListFilter struct {
 // It contains metadata about the entry source, its processing status,
 // and references to the physical file if applicable.
 type Entry struct {
-	ImageDescriptions   []ProcessingImage    `json:"image_descriptions,omitempty" gorm:"-"`
-	LibraryContentTypes []LibraryContentType `json:"library_content_types,omitempty" gorm:"-"`
-	SimilarReports      []*Entry             `json:"similar_reports,omitempty" gorm:"-"`
+	ImageDescriptions []ProcessingImage `json:"image_descriptions,omitempty" gorm:"-"`
 
 	SourceRef      string `json:"source_ref,omitempty" gorm:"not null;default:''"`
 	SourceBodyHash string `json:"-" gorm:"not null;default:''"`
@@ -142,8 +136,6 @@ type Entry struct {
 	Title string `json:"title"`
 	// Description of the entry
 	Description          string        `json:"description"`
-	ContentType          string        `json:"content_type" gorm:"type:varchar(16)"`
-	ContentTypeCorrected bool          `json:"content_type_corrected" gorm:"not null;default:false"`
 	CannotBeFact         bool          `json:"cannot_be_fact,omitempty" gorm:"-"`
 	SourceUnverified     bool          `json:"source_unverified" gorm:"not null;default:false"`
 	ReviewKind           string        `json:"review_kind,omitempty" gorm:"-"`
@@ -160,11 +152,9 @@ type Entry struct {
 	IngestAPIKeyName     string        `json:"ingest_api_key_name" gorm:"type:text;not null;default:''"`
 	LastIngestAPIKeyID   uint64        `json:"last_ingest_api_key_id" gorm:"not null;default:0"`
 	LastIngestAPIKeyName string        `json:"last_ingest_api_key_name" gorm:"type:text;not null;default:''"`
-	ContentTypeHint      string        `json:"content_type_hint" gorm:"type:varchar(16);not null;default:''"`
 	RelatedEntryID       string        `json:"related_entry_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
 	StructuredSummary    *EntrySummary `json:"structured_summary" gorm:"type:jsonb"`
 	Entities             []Entity      `json:"entities" gorm:"-"`
-	Topics               []Topic       `json:"topics" gorm:"-"`
 	// DescriptionSpecified distinguishes an explicitly supplied empty description
 	// from an omitted field in partial update requests.
 	DescriptionSpecified bool `json:"-" gorm:"-"`

@@ -1,6 +1,6 @@
 import type { SearchEntry } from './search'
 
-export type FollowTargetType = 'entity' | 'topic'
+export type FollowTargetType = 'entity'
 export interface FollowTarget {
   target_type: FollowTargetType
   target_id: string
@@ -16,7 +16,6 @@ export interface FollowFeedRequest {
   since?: string
   target_ids?: string[]
   limit?: number
-  collapse_similar?: boolean
   include_seen?: boolean
 }
 export interface FollowFeedEntry extends SearchEntry {
@@ -24,6 +23,5 @@ export interface FollowFeedEntry extends SearchEntry {
   collected_at: string
   is_new: boolean
   matched_follows: FollowTarget[]
-  similar_reports: FollowFeedEntry[]
 }
 export interface FollowFeedData extends FollowState { results: FollowFeedEntry[]; next_cursor?: string; viewed_at: string; total: number }

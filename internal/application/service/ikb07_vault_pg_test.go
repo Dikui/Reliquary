@@ -40,7 +40,17 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 			require.NoError(t, err)
 			entry = result.Entry
 		} else {
-			entry = &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: library.ID, Title: "测试 / " + library.Name, SourceKind: "article", Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted, Acquisition: "verbatim", ContentType: "other", CreatedAt: time.Now().UTC()}
+			entry = &types.Entry{
+				ID:          uuid.NewString(),
+				SpaceID:     1,
+				LibraryID:   library.ID,
+				Title:       "测试 / " + library.Name,
+				SourceKind:  "article",
+				Type:        types.EntryTypeManual,
+				ParseStatus: types.ParseStatusCompleted,
+				Acquisition: "verbatim",
+				CreatedAt:   time.Now().UTC(),
+			}
 			if library.Template == types.TemplateOwn {
 				entry.SourceKind = "mine"
 				entry.SourceRef = "project/source"
@@ -77,9 +87,6 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 		}
 		headers[library.Directory] = keys
 		expected := []string{"id", "library_id", "library", "title", "collected_at"}
-		if entry.ContentType != "" {
-			expected = append(expected, "content_type")
-		}
 		expected = append(expected, "starred", "acquisition")
 		if entry.SourceRef != "" {
 			expected = append(expected, "source_ref")

@@ -33,13 +33,11 @@ import DocumentCardView from './components/DocumentCardView.vue';
 import EntryBatchDialog from '@/components/EntryBatchDialog.vue';
 import type { EntryBatchSelection } from '@/api/entry-batches';
 import { listEntities, type Entity } from '@/api/entities';
-import { listTopics, type Topic } from '@/api/topics';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import EntryWorkbench from './components/EntryWorkbench.vue';
 import PendingReviews from './components/PendingReviews.vue';
 import PendingCountBadge from '@/components/PendingCountBadge.vue';
 import { usePendingCountsStore } from '@/stores/pendingCounts';
-import type { LibraryContentType } from '@/api/library';
 import { SEARCH_SOURCES } from '@/types/search';
 import {
   documentListFiltersFromQuery,
@@ -147,42 +145,13 @@ let docSearchDebounce: number | null = null;
 const initialDocumentFilters = documentListFiltersFromQuery(route.query);
 const docSearchKeyword = ref(initialDocumentFilters.keyword);
 const selectedFileType = ref(initialDocumentFilters.fileType);
-const selectedContentType = ref(initialDocumentFilters.contentType);
 const selectedStarred = ref(initialDocumentFilters.starred);
-const selectedEntityIds = ref(initialDocumentFilters.entityIds);
-const selectedTopicIds = ref(initialDocumentFilters.topicIds);
 const publishedRange = ref<string[]>(initialDocumentFilters.publishedFrom || initialDocumentFilters.publishedTo ? [initialDocumentFilters.publishedFrom, initialDocumentFilters.publishedTo] : []);
-const entityChoices = ref<Entity[]>([]), topicChoices = ref<Topic[]>([]), choicesError = ref(''), choicesLoading = ref(false), moreEntityChoices = ref(true);
-let choicesGeneration = 0, choicesDisposed = false;
-async function loadFilterChoices(more = false) {
-  const current = ++choicesGeneration; choicesLoading.value = true; choicesError.value = '';
-  try {
-    const [entities, topics] = await Promise.all([listEntities({ limit: 50, offset: more ? entityChoices.value.length : 0 }), listTopics()]);
-    if (choicesDisposed || current !== choicesGeneration) return;
-    if (!entities.success || !topics.success) throw new Error(t('entryBatch.choicesFailed'));
-    entityChoices.value = more ? [...entityChoices.value, ...entities.data] : entities.data;
-    moreEntityChoices.value = entities.data.length === 50; topicChoices.value = topics.data;
-  } catch { if (!choicesDisposed && current === choicesGeneration) choicesError.value = t('entryBatch.choicesFailed'); }
-  finally { if (!choicesDisposed && current === choicesGeneration) choicesLoading.value = false; }
-}
-onMounted(() => loadFilterChoices());
-onUnmounted(() => { choicesDisposed = true; choicesGeneration++; });
-const entityFilterValues = computed({ get: () => selectedEntityIds.value.split(',').filter(Boolean), set: (ids: string[]) => { selectedEntityIds.value = ids.join(','); } });
-const topicFilterValues = computed({ get: () => selectedTopicIds.value.split(',').filter(Boolean), set: (ids: string[]) => { selectedTopicIds.value = ids.join(','); } });
-const entityFilterOptions = computed(() => [...new Map([...entityFilterValues.value.map(id => ({ value: id, label: id })), ...entityChoices.value.map(item => ({ value: item.id, label: item.canonical_name }))].map(item => [item.value, item])).values()]);
-const topicFilterOptions = computed(() => [...new Map([...topicFilterValues.value.map(id => ({ value: id, label: id })), ...topicChoices.value.map(item => ({ value: item.id, label: item.name }))].map(item => [item.value, item])).values()]);
 const starredOptions = computed(() => [
   { value: '', label: t('articleJudgments.allStars') },
   { value: 'true', label: t('articleJudgments.starredOnly') },
   { value: 'false', label: t('articleJudgments.unstarredOnly') },
 ]);
-const contentTypeOptions = computed(() => {
-  if (libraryCatalog.value.length) {
-    const names = new Set(libraryCatalog.value.filter(item => !libraryScope.value.length || libraryScope.value.includes(item.id)).flatMap(item => (item.content_types || []).filter(row => row.enabled).map(row => row.name)));
-    return [...names].map(value => ({ value, label: value }));
-  }
-  return libraryInfo.value?.content_types?.filter((row: LibraryContentType) => row.enabled).map((row: LibraryContentType) => ({ value: row.name, label: row.name })) || [];
-});
 const selectedEntityId = ref('');
 watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
 const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeLibraryTab.value = 'entities'; closeDoc(); };
@@ -236,14 +205,13 @@ const updatedTimeRange = ref<string[]>(
 const documentFilters = computed<DocumentListFilters>(() => ({
   keyword: docSearchKeyword.value.trim(),
   fileType: selectedFileType.value || '',
-  contentType: selectedContentType.value || '',
   starred: selectedStarred.value || '',
   parseStatus: selectedParseStatus.value || '',
   source: selectedSource.value || '',
   sourceKind: selectedSourceKind.value || '',
   startDate: updatedTimeRange.value?.[0] || '',
   endDate: updatedTimeRange.value?.[1] || '',
-  entityIds: selectedEntityIds.value, topicIds: selectedTopicIds.value, publishedFrom: publishedRange.value?.[0] || '', publishedTo: publishedRange.value?.[1] || '',
+  publishedFrom: publishedRange.value?.[0] || '', publishedTo: publishedRange.value?.[1] || '',
 }));
 // Disable any date after today so users cannot filter into the future.
 const disableFutureDate = { after: new Date(new Date().setHours(23, 59, 59, 999)) };
@@ -252,11 +220,9 @@ const filterParams = computed(() => {
   const [start, end] = updatedTimeRange.value || [];
   return {
     libraries: libraryScope.value,
-    entity_ids: entityFilterValues.value, topic_ids: topicFilterValues.value,
     published_from: publishedRange.value?.[0] || undefined, published_to: publishedRange.value?.[1] || undefined,
     keyword: docSearchKeyword.value ? docSearchKeyword.value.trim() : undefined,
     file_type: selectedFileType.value || undefined,
-    content_type: selectedContentType.value || undefined,
     starred: selectedStarred.value === '' ? undefined : selectedStarred.value === 'true',
     parse_status: selectedParseStatus.value || undefined,
     source: selectedSource.value || undefined,
@@ -370,9 +336,7 @@ watch(() => route.query, query => {
     documentFiltersRestoredFromRoute = true;
     docSearchKeyword.value = restored.keyword;
     selectedFileType.value = restored.fileType;
-    selectedContentType.value = restored.contentType;
     selectedStarred.value = restored.starred;
-    selectedEntityIds.value = restored.entityIds; selectedTopicIds.value = restored.topicIds;
     publishedRange.value = restored.publishedFrom || restored.publishedTo ? [restored.publishedFrom, restored.publishedTo] : [];
     selectedParseStatus.value = restored.parseStatus;
     selectedSource.value = restored.source;
@@ -605,10 +569,6 @@ const openSourceDoc = (entryId: string, location?: SourceLocation) => {
   getCardDetails({ id: entryId });
 };
 
-const openReportTopic = (topicId: string) => {
-  closeDoc();
-  void router.push({ path: '/platform/topics', query: { topic_id: topicId } });
-};
 
 const closeCardMoreMenu = (index: number) => {
   if (cardList.value?.[index]) {
@@ -925,7 +885,7 @@ const handleListAction = (
 
 // Clear selection on filter/library change to avoid acting on hidden items.
 watch(
-  [docSearchKeyword, selectedFileType, selectedContentType, selectedStarred, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, selectedEntityIds, selectedTopicIds, publishedRange, libraryId],
+  [docSearchKeyword, selectedFileType, selectedStarred, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, publishedRange, libraryId],
   () => {
     clearSelection();
   },
@@ -1008,64 +968,17 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 <div class="doc-filter-bar__filters">
                 <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
 
-                <div class="doc-filter-field">
-                  <t-select v-model="selectedParseStatus" :options="parseStatusOptions"
-                    :placeholder="$t('library.parseStatusFilter')" class="doc-type-select doc-filter-field__control"
-                    clearable>
-                    <template #prefixIcon>
-                      <t-icon name="check-circle" size="16px" />
-                    </template>
-                  </t-select>
-                </div>
-                <div class="doc-filter-field">
-                  <t-select v-model="selectedContentType" :options="contentTypeOptions" clearable :placeholder="$t('library.contentTypeFilter')" :aria-label="$t('library.contentTypeFilter')" class="doc-type-select doc-filter-field__control" />
-                </div>
+
+
                 <div class="doc-filter-field">
                   <t-select v-model="selectedStarred" :options="starredOptions" :aria-label="$t('articleJudgments.starLabel')" class="doc-type-select doc-filter-field__control" />
                 </div>
-                <div class="doc-filter-field">
-                  <t-select v-model="selectedSourceKind" :options="sourceKindOptions"
-                    :placeholder="$t('library.materialCategory')" :aria-label="$t('library.materialCategory')"
-                    class="doc-type-select doc-filter-field__control" clearable />
-                </div>
-                <div class="doc-filter-field">
-                  <t-select v-model="selectedSource" :options="sourceOptions"
-                    :placeholder="$t('library.channelLabel')" :aria-label="$t('library.channelLabel')" class="doc-type-select doc-filter-field__control"
-                    clearable>
-                    <template #prefixIcon>
-                      <t-icon name="link" size="16px" />
-                    </template>
-                  </t-select>
-                </div>
-                <div class="doc-filter-field">
-                  <t-select v-model="selectedFileType" :options="fileTypeOptions"
-                    :placeholder="$t('library.fileTypeFilter')" :aria-label="$t('library.fileTypeFilter')" class="doc-type-select doc-filter-field__control"
-                    clearable>
-                    <template #prefixIcon>
-                      <t-icon name="file" size="16px" />
-                    </template>
-                  </t-select>
-                </div>
-                <div class="doc-filter-field doc-filter-field--wide">
-                  <t-select v-model="entityFilterValues" multiple filterable clearable :options="entityFilterOptions" :loading="choicesLoading" :placeholder="t('entryBatch.entities')" :aria-label="t('entryBatch.entities')" class="doc-filter-field__control">
-                    <template v-if="moreEntityChoices" #panelBottomContent>
-                      <t-button block size="small" variant="text" :loading="choicesLoading" @click.stop="loadFilterChoices(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
-                    </template>
-                  </t-select>
-                </div>
-                <div class="doc-filter-field doc-filter-field--wide"><t-select v-model="topicFilterValues" multiple filterable clearable :options="topicFilterOptions" :placeholder="t('entryBatch.topics')" :aria-label="t('entryBatch.topics')" class="doc-filter-field__control" /></div>
+
+
+
+
                 <div class="doc-filter-field doc-filter-field--wide"><t-date-range-picker v-model="publishedRange" allow-input clearable :placeholder="[t('entryBatch.publishedFrom'), t('entryBatch.publishedTo')]" :aria-label="t('entryBatch.publishedDates')" class="doc-date-range doc-filter-field__control" /><small v-if="publishedRange.length">{{ t('entryBatch.publishedHint') }}</small></div>
-                <p v-if="choicesError" class="doc-filter-error" role="alert">{{ choicesError }} <t-button variant="text" @click="loadFilterChoices()">{{ t('common.retry') }}</t-button></p>
-                <div class="doc-filter-field doc-filter-field--wide">
-                  <t-date-range-picker v-model="updatedTimeRange"
-                    :placeholder="[t('entryBatch.updatedFrom'), t('entryBatch.updatedTo')]" :aria-label="t('entryBatch.updatedDates')"
-                    :disable-date="disableFutureDate" class="doc-date-range doc-date-range--updated doc-filter-field__control" clearable
-                    allow-input>
-                    <template #prefixIcon>
-                      <t-icon name="time" size="16px" />
-                    </template>
-                  </t-date-range-picker>
-                </div>
+
                 </div>
                 <div class="doc-filter-bar__trailing">
                   <t-button theme="primary" size="small" @click="openBatch">{{ t('entryBatch.title') }}</t-button>
@@ -1162,10 +1075,9 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </template>
 
       <!-- Document content drawer -->
-      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" :entity-options="entityFilterOptions" :topic-options="topicFilterOptions" @changed="batchChanged" />
+      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
     <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
-        :libraryId="libraryId"
-        @openEntry="openSourceDoc" @openEntity="openArticleEntity" @openTopic="openReportTopic"
+        :libraryId="libraryId" @openEntry="openSourceDoc" @openEntity="openArticleEntity"
         @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @review-changed="handleReviewChanged">
       </DocContent>
     </div>

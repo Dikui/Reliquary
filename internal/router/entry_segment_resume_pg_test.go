@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
-	"testing"
-
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"strings"
+	"testing"
 
 	"github.com/stretchr/testify/require"
 )
@@ -40,9 +39,6 @@ func (m *resumeHTTPChat) Chat(ctx context.Context, messages []chat.Message, opti
 	}
 	n := input.Segment.Number
 	m.calls[n]++
-	for _, topic := range input.Topics {
-		m.candidates[n] = append(m.candidates[n], topic.ID)
-	}
 	if n == m.fail {
 		return nil, fmt.Errorf("fixture failure at segment %d", n)
 	}
@@ -55,9 +51,6 @@ func (m *resumeHTTPChat) Chat(ctx context.Context, messages []chat.Message, opti
 		return nil, err
 	}
 	ids := []string{}
-	for _, topic := range input.Topics {
-		ids = append(ids, topic.ID)
-	}
 	result["topics"] = ids
 	encoded, err := json.Marshal(result)
 	response.Content = string(encoded)
@@ -72,8 +65,6 @@ func TestHTTPProcessingEntrypointsResumeFailedAndCancelledSegments(t *testing.T)
 				f := newMCPFixture(t, mcpProcessingFixture{chat: model, maxBodyChars: 140})
 				f.seedProcessingModels(t)
 				router := ingestAuthHTTPRouter(f)
-				oldTopic := &types.Topic{ID: "old-global-topic", SpaceID: types.SingleSpaceID, Name: "Old measurements"}
-				require.NoError(t, f.db.Create(oldTopic).Error)
 				body, _ := json.Marshal(map[string]any{"items": []any{map[string]any{"library": "personal", "title": "HTTP segmented original", "acquisition": "verbatim", "content": "# Measurements\n\n" + strings.Repeat("Complete original measurements. ", 30)}}})
 				response := personalRequest(t, router, http.MethodPost, "/api/v1/ingest", string(body), f.key, true)
 				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -93,9 +84,6 @@ func TestHTTPProcessingEntrypointsResumeFailedAndCancelledSegments(t *testing.T)
 				require.NoError(t, f.db.Table("entry_segment_runs").Select("id").Where("entry_id=? AND phase='processing'", id).Scan(&runID).Error)
 				require.NotEmpty(t, runID)
 				// A live topic catalog update must not invalidate completed document work.
-				require.NoError(t, f.db.Model(oldTopic).Update("library_ids", `["another-library"]`).Error)
-				topic := &types.Topic{ID: "new-global-topic", SpaceID: types.SingleSpaceID, Name: "Measurements"}
-				require.NoError(t, f.db.Create(topic).Error)
 				request := func(path string) {
 					response := personalRequest(t, router, http.MethodPost, "/api/v1/entries/"+id+"/"+path, `{}`, f.key, true)
 					require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -113,16 +101,12 @@ func TestHTTPProcessingEntrypointsResumeFailedAndCancelledSegments(t *testing.T)
 					require.Equal(t, 1, model.calls[n], "completed segment %d repeated", n)
 				}
 				require.Equal(t, 2, model.calls[4])
-				require.Contains(t, model.candidates[4], topic.ID)
 				var runs int64
 				require.NoError(t, f.db.Table("entry_segment_runs").Where("entry_id=? AND phase='processing'", id).Count(&runs).Error)
 				require.EqualValues(t, 1, runs)
 				var status string
 				require.NoError(t, f.db.Table("entry_segment_runs").Select("status").Where("id=?", runID).Scan(&status).Error)
 				require.Equal(t, "completed", status)
-				var topicIDs []string
-				require.NoError(t, f.db.Table("entry_topics").Where("entry_id=?", id).Pluck("topic_id", &topicIDs).Error)
-				require.ElementsMatch(t, []string{topic.ID}, topicIDs, "cached topics must pass current library validation")
 				// Explicit processing of an already completed document starts a fresh run.
 				request(endpoint)
 				require.NoError(t, process())

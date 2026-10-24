@@ -48,20 +48,19 @@ func (p *DocumentProcessPayload) UnmarshalJSON(data []byte) error {
 	type plain DocumentProcessPayload
 	return UnmarshalSpacePayload(data, (*plain)(p))
 }
+
 func (p *ManualProcessPayload) UnmarshalJSON(data []byte) error {
 	type plain ManualProcessPayload
 	return UnmarshalSpacePayload(data, (*plain)(p))
 }
+
 func (p *EntryListDeletePayload) UnmarshalJSON(data []byte) error {
 	type plain EntryListDeletePayload
 	return UnmarshalSpacePayload(data, (*plain)(p))
 }
+
 func (p *EntryListReparsePayload) UnmarshalJSON(data []byte) error {
 	type plain EntryListReparsePayload
-	return UnmarshalSpacePayload(data, (*plain)(p))
-}
-func (p *TopicBackfillPayload) UnmarshalJSON(data []byte) error {
-	type plain TopicBackfillPayload
 	return UnmarshalSpacePayload(data, (*plain)(p))
 }
 
@@ -69,6 +68,7 @@ func (p *EmbeddingRebuildPayload) UnmarshalJSON(data []byte) error {
 	type plain EmbeddingRebuildPayload
 	return UnmarshalSpacePayload(data, (*plain)(p))
 }
+
 func (p *EntityNameEmbeddingRebuildPayload) UnmarshalJSON(data []byte) error {
 	type plain EntityNameEmbeddingRebuildPayload
 	return UnmarshalSpacePayload(data, (*plain)(p))

@@ -36,7 +36,6 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 			"processing_model_tiers",
 			"model_tiers",
 			"deduplication_rule",
-			"content_types",
 			"feed_enabled",
 			"system_role",
 			"template_rules",
@@ -60,7 +59,18 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 	mcpCall(t, client, "list_libraries", map[string]any{}, &result)
 	require.Len(t, result.Libraries, 5)
 	for i, library := range result.Libraries {
-		for _, field := range []string{"id", "directory", "name", "template", "description", "collect_content", "exclude_content", "review_criteria", "deduplication_rule", "content_types", "feed_enabled"} {
+		for _, field := range []string{
+			"id",
+			"directory",
+			"name",
+			"template",
+			"description",
+			"collect_content",
+			"exclude_content",
+			"review_criteria",
+			"deduplication_rule",
+			"feed_enabled",
+		} {
 			require.Equal(t, body.Data[i][field], library[field], field)
 		}
 	}
@@ -102,9 +112,7 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 		"/api/v1/libraries/"+custom.Data.ID,
 		`{"name":"Renamed",
 "description":"Collect notes",
-"feed_enabled":true,
-"content_types":[{"name":"Note",
-"enabled":true}]}`,
+"feed_enabled":true}`,
 		f.key,
 		true,
 	)
@@ -170,8 +178,22 @@ func TestMultipleLibraryReadSearchAndFeed(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(all.Body.Bytes(), &page))
 	require.Equal(t, 5, page.Total)
-	noCollapse := false
-	search, err := service.NewSearchService(f.params.LibraryService, f.params.SpaceService, nil, f.db).Search(f.ctx, types.EntrySearchRequest{Libraries: []string{"personal", "ai-output", "official", "media", "references"}, Query: "catalogneedle", Limit: 10, CollapseSimilar: &noCollapse})
+	search,
+		err := service.NewSearchService(f.params.LibraryService,
+		f.params.SpaceService,
+		nil,
+		f.db).Search(f.ctx,
+		types.EntrySearchRequest{
+			Libraries: []string{
+				"personal",
+				"ai-output",
+				"official",
+				"media",
+				"references",
+			},
+			Query: "catalogneedle",
+			Limit: 10,
+		})
 	require.NoError(t, err)
 	require.Len(t, search.Results, 5)
 	feed, err := follows.Feed(f.ctx, types.FollowFeedRequest{})

@@ -10,7 +10,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
-import { CONTENT_TYPES } from '../../types/entryClassification'
+
 import { ENTITY_TYPES } from '../../api/entity-types'
 import * as highlight from '../../components/GlobalCommandPalette/useHighlight'
 import * as markdownPlainText from '../../utils/markdownPlainText'
@@ -22,11 +22,11 @@ async function settle() { await settleNodes(); await new Promise<void>(resolve =
 async function click(node: Element) { await clickNode(node); await settle() }
 const empty = moduleOf(defineComponent({ setup: () => () => null }))
 const entity = { id: 'entity-a', canonical_name: 'Aurora', entity_type: 'company', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }
-const topic = { id: 'topic-a', name: 'Space research', description: 'Space missions', entry_count: 2, created_at: '', updated_at: '' }
-const follow = (type: 'entity' | 'topic', id: string, name: string) => ({ target_type: type, target_id: id, name, created_at: '2026-10-01T00:00:00Z', recent_entry_count: 2 })
-const entityFollow = follow('entity', entity.id, entity.canonical_name), topicFollow = follow('topic', topic.id, topic.name)
+const secondEntity = { id: 'entity-b', name: 'Space Labs', description: 'Space missions', entry_count: 2, created_at: '', updated_at: '' }
+const follow = (type: 'entity', id: string, name: string) => ({ target_type: type, target_id: id, name, created_at: '2026-10-01T00:00:00Z', recent_entry_count: 2 })
+const entityFollow = follow('entity', entity.id, entity.canonical_name), secondEntityFollow = follow('entity', secondEntity.id, secondEntity.name)
 const previous = '2026-10-10T08:00:00Z', openedAt = '2026-10-11T12:00:00Z', markedAt = '2026-10-11T14:00:00Z'
-const article = (id: string, collected: string, matches = [entityFollow, topicFollow]) => ({ entry_id: id, title: `Article ${id}`, source: 'article', published_at: collected, collected_at: collected, entered_at: collected as string | null, is_new: true, matched_follows: matches, content_type: 'research', processing_mode: 'summary_only', summary: { overview: `Overview ${id}`, points: ['A useful point'], key_terms: ['Aurora'] }, entities: [entity], topics: [topic], snippets: [], score: 0, similar_reports: [], vault_path: `articles/2026-10/${id}.md`, original_url: `https://example.com/${id}` })
+const article = (id: string, collected: string, matches = [entityFollow, secondEntityFollow]) => ({ entry_id: id, title: `Article ${id}`, source: 'article', published_at: collected, collected_at: collected, entered_at: collected as string | null, is_new: true, matched_follows: matches,  processing_mode: 'summary_only', summary: { overview: `Overview ${id}`, points: ['A useful point'], key_terms: ['Aurora'] }, entities: [entity],  snippets: [], score: 0,  vault_path: `articles/2026-10/${id}.md`, original_url: `https://example.com/${id}` })
 function evaluateFile(path: string, modules: Record<string, unknown>) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
@@ -40,7 +40,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const calls: { method: string; url: string; body?: any }[] = [], warnings: string[] = [], errors: unknown[] = []
   const transport = {
     targets: structuredClone(initialTargets), checkpoint: previous as string | null,
-    articles: [article('new', '2026-10-11T10:00:00Z'), article('similar', '2026-10-11T09:00:00Z', [topicFollow]), article('old', '2026-10-09T07:00:00Z', [entityFollow])],
+    articles: [article('new', '2026-10-11T10:00:00Z'), article('similar', '2026-10-11T09:00:00Z', [secondEntityFollow]), article('old', '2026-10-09T07:00:00Z', [entityFollow])],
     fail: (_method: string, _url: string, _body?: any) => false,
     intercept: (_method: string, _url: string, _body?: any): Promise<any> | undefined => undefined,
   }
@@ -58,24 +58,21 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
       const selected = transport.articles.filter(item => item.matched_follows.some(target => transport.targets.some((actual: any) => actual.target_type === target.target_type && actual.target_id === target.target_id)) && (!body.target_ids?.length || item.matched_follows.some(target => body.target_ids.includes(target.target_id))))
       let results: any[] = structuredClone(selected)
       for (const item of results) item.is_new = item.entered_at !== null && (!transport.checkpoint || item.entered_at > transport.checkpoint)
-      if (body.collapse_similar && results.length > 1 && results[0].entry_id === 'new' && results[1].entry_id === 'similar') { results[0].similar_reports = [results[1]]; results.splice(1, 1) }
       const offset = body.cursor ? Number(String(body.cursor).replace('cursor:', '')) : 0
       const end = Math.min(offset + body.limit, results.length)
       const nextCursor = end < results.length ? `cursor:${end}` : undefined
       results = results.slice(offset, end)
       return envelope({ ...state(), results, total: selected.length, viewed_at: openedAt, ...(nextCursor ? { next_cursor: nextCursor } : {}) })
     }
-    const target = url.match(/^\/api\/v1\/follows\/(entity|topic)\/(.+)$/)
+    const target = url.match(/^\/api\/v1\/follows\/(entity)\/(.+)$/)
     if (target && ['put', 'del'].includes(method)) {
       const [type, id] = [target[1], decodeURIComponent(target[2])]
-      const value = follow(type as any, id, type === 'entity' ? entity.canonical_name : topic.name)
+      const value = follow(type as any, id, type === 'entity' ? entity.canonical_name : secondEntity.name)
       transport.targets = transport.targets.filter((entry: any) => entry.target_type !== type || entry.target_id !== id)
       if (method === 'put') transport.targets.push(value)
       return envelope(method === 'put' ? value : null)
     }
-    if (method === 'get' && url === '/api/v1/topics') return envelope([topic])
     if (method === 'get' && url.endsWith('/backfill')) return envelope(null)
-    if (method === 'del' && url === `/api/v1/topics/${topic.id}`) { transport.targets = transport.targets.filter((value: any) => value.target_id !== topic.id); return envelope(null) }
     if (method === 'get' && url.includes('/name-embeddings/rebuild')) return envelope({ pending_count: 0, latest_run: null })
     if (method === 'get' && url.startsWith('/api/v1/entities?')) return envelope([entity])
     if (method === 'get' && url === `/api/v1/entities/${entity.id}`) return envelope({ entity, entry: [{ id: 'new', title: 'Article new', created_at: openedAt }] })
@@ -88,7 +85,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const requestModule = Object.fromEntries(['get', 'post', 'put', 'del'].map(method => [method, (url: string, body?: any) => request(method, url, body)]))
   const precision = evaluateFile('../../utils/rfc3339.ts', {})
   const followsAPI = evaluateFile('../../api/follows.ts', { '@/utils/request': requestModule })
-  const topicsAPI = evaluateFile('../../api/topics.ts', { '@/utils/request': requestModule })
+
   const entitiesAPI = evaluateFile('../../api/entities.ts', { '@/utils/request': requestModule, './entity-types': { ENTITY_TYPES } })
   const entryAPI = evaluateFile('../../api/library.ts', { '../utils/request': requestModule })
   const storeModule = evaluateFile('../../stores/follows.ts', { '@/api/follows': followsAPI, '@/utils/rfc3339': precision })
@@ -98,7 +95,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const urls: any[] = []
   const router = { replace: async (value: any) => { urls.push(value); route.query = value.query || {} }, push: async (value: any) => { urls.push(value) } }
   const i18n = createI18n({ legacy: false, locale, messages })
-  const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
+  const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI,  '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { }, '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
   modules['@/components/EntryUpdateNotice.vue'] = modules['./EntryUpdateNotice.vue'] = empty
   modules['./BodyReference.vue'] = empty
   modules['@/utils/entrySourceLabels'] = entrySourceLabels
@@ -125,14 +122,14 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   }
   const component = (path: string) => loadComponent(new URL(path, import.meta.url), modules)
   const button = (root: Element, text: string) => descendants(root).find(node => node.tag === 'button' && visibleText(node).trim() === text)!
-  const followButton = (root: Element, type: 'entity' | 'topic', following = false) => descendants(root).find(node => node.tag === 'button' && node.props['aria-label'] === i18n.global.t(following ? 'follows.unfollowNamed' : 'follows.followNamed', { name: type === 'entity' ? entity.canonical_name : topic.name }))!
+  const followButton = (root: Element, type: 'entity', following = false) => descendants(root).find(node => node.tag === 'button' && node.props['aria-label'] === i18n.global.t(following ? 'follows.unfollowNamed' : 'follows.followNamed', { name: type === 'entity' ? entity.canonical_name : secondEntity.name }))!
   const change = async (node: Element, value: any) => { node.props['onUpdate:modelValue'](value); node.props.onChange(value); await settle() }
   return { transport, state, calls, envelope, store, modules, route, urls, component, mount, button, followButton, change, i18n, errors, warnings }
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: actual follow feed API loading renders summaries and snippets as localized plain text`, async () => {
-    const env = environment(locale, [entityFollow, topicFollow])
+    const env = environment(locale, [entityFollow, secondEntityFollow])
     const source = '# Feed heading\n\n- **bold** [read](https://example.com/private)\n\n> _quote_\n\n`code` ![chart](https://example.com/chart.png) <img src="../../attachments/a/photo.png"> <b>HTML</b>'
     Object.assign(env.transport.articles[0], {
       summary: { overview: '**Overview** ![chart](chart.png)', points: ['- _Point_'], key_terms: ['`Term`'] },
@@ -157,7 +154,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     } finally { mounted.close() }
   })
   test(`${locale}: follow feed markers use API response fields and refresh without article-state requests`, async () => {
-    const env = environment(locale, [entityFollow, topicFollow])
+    const env = environment(locale, [entityFollow, secondEntityFollow])
     const markedArticles = env.transport.articles.slice(0, 2)
     for (const item of markedArticles) Object.assign(item, { acquisition: 'model_written', incomplete: true })
     const mounted = env.mount(env.component('./FollowFeed.vue'))
@@ -171,8 +168,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
           }
           await click(env.button(mounted.root, messages[locale].follows.refresh))
         }
-        const disclosure = descendants(mounted.root).find(node => node.tag === 'button' && hasClass(node, 'similar-toggle'))!
-        if (!disclosure.props['aria-expanded']) await click(disclosure)
         for (const id of ['new', 'similar', 'old']) {
           const result = descendants(mounted.root).find(node => node.props['data-article-id'] === id)!
           assert.ok(result, `loaded feed article: ${id}`)
@@ -190,7 +185,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.deepEqual(env.errors, [])
     } finally { mounted.close() }
   })
-  test(`${locale}: entity and topic follow buttons load through their actual APIs and shared store`, async () => {
+  test(`${locale}: entity follow buttons load through their actual APIs and shared store`, async () => {
     const env = environment(locale)
     const workbench = env.mount(env.component('./components/EntryWorkbench.vue'))
     try {
@@ -204,17 +199,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(env.store.isFollowing('entity', entity.id), false)
       assert.ok(env.calls.some(call => call.url === `/api/v1/entities/${entity.id}`))
     } finally { workbench.close() }
-    const topics = env.mount(env.component('./TopicManagement.vue'))
-    try {
-      await settle()
-      await click(env.followButton(topics.root, 'topic'))
-      assert.equal(env.store.isFollowing('topic', topic.id), true)
-      await click(env.followButton(topics.root, 'topic', true))
-      assert.equal(env.store.isFollowing('topic', topic.id), false)
-      assert.ok(env.calls.some(call => call.url === '/api/v1/topics'))
-      assert.deepEqual(env.calls.filter(call => ['put', 'del'].includes(call.method) && call.url.startsWith('/api/v1/follows/')).map(call => [call.method, call.url]), [['put', `/api/v1/follows/entity/${entity.id}`], ['del', `/api/v1/follows/entity/${entity.id}`], ['put', `/api/v1/follows/topic/${topic.id}`], ['del', `/api/v1/follows/topic/${topic.id}`]])
-      assert.deepEqual(env.errors, [])
-    } finally { topics.close() }
+
   })
   test(`${locale}: article detail labels expose both follow buttons after an actual article load`, async () => {
     const env = environment(locale)
@@ -236,40 +221,34 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(env.calls.some(call => call.url.startsWith('/api/v1/chunks/new?')))
       assert.equal(entryStoreModule.entryStore().cardList[0].id, 'new')
       await click(env.followButton(mounted.root, 'entity'))
-      await click(env.followButton(mounted.root, 'topic'))
       assert.equal(env.store.isFollowing('entity', entity.id), true)
-      assert.equal(env.store.isFollowing('topic', topic.id), true)
       await click(env.followButton(mounted.root, 'entity', true))
-      await click(env.followButton(mounted.root, 'topic', true))
       assert.equal(env.store.targets.length, 0)
       assert.deepEqual(env.errors, [])
     } finally { mounted.close(); globalThis.window = oldWindow; globalThis.document = oldDocument; if (oldStorage) Object.defineProperty(globalThis, 'localStorage', oldStorage); else delete (globalThis as any).localStorage }
   })
-  test(`${locale}: feed loads history, preserves new markers across filters and refresh, unfolds matches and marks all seen`, async () => {
-    const env = environment(locale, [entityFollow, topicFollow]), mounted = env.mount(env.component('./FollowFeed.vue'))
+  test(`${locale}: feed loads history, preserves new markers across filters and refresh, shows individual matches and marks all seen`, async () => {
+    const env = environment(locale, [entityFollow, secondEntityFollow]), mounted = env.mount(env.component('./FollowFeed.vue'))
     try {
       await settle()
       assert.ok(visibleText(mounted.root).includes('Article old'))
-      assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-new')).length, 1)
+      assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-new')).length, 2)
       assert.equal(env.store.newCount, 0)
       assert.deepEqual(env.calls.filter(call => call.url.endsWith('/follows/view')).map(call => call.body), [{ viewed_at: openedAt }])
-      await click(descendants(mounted.root).find(node => node.tag === 'button' && hasClass(node, 'similar-toggle'))!)
       assert.ok(visibleText(mounted.root).includes('Article similar'))
       assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-new')).length, 2)
-      assert.ok(visibleText(mounted.root).includes(env.i18n.global.t('follows.targetLabel', { name: topic.name, type: messages[locale].follows.targetTypes.topic, count: 2 })))
+      assert.ok(visibleText(mounted.root).includes(env.i18n.global.t('follows.targetLabel', { name: secondEntity.name, type: messages[locale].follows.targetTypes.entity, count: 2 })))
       await click(env.button(mounted.root, messages[locale].follows.refresh))
-      await click(descendants(mounted.root).find(node => node.tag === 'button' && hasClass(node, 'similar-toggle'))!)
       assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-new')).length, 2)
-      await env.change(descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === messages[locale].follows.filterTarget)!, [topic.id])
+      await env.change(descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === messages[locale].follows.filterTarget)!, [secondEntity.id])
       assert.ok(visibleText(mounted.root).includes('Article new'))
       assert.ok(!visibleText(mounted.root).includes('Article old'))
-      await env.change(descendants(mounted.root).find(node => node.tag === 't-switch')!, false)
       assert.ok(visibleText(mounted.root).includes('Article similar'))
       assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-new')).length, 2)
       const feedCalls = env.calls.filter(call => call.url.endsWith('/follows/feed'))
       assert.ok(feedCalls.every(call => call.body.include_seen === true && call.body.since === undefined))
-      assert.equal(feedCalls.at(-1)!.body.collapse_similar, false)
-      assert.deepEqual(feedCalls.at(-1)!.body.target_ids, [topic.id])
+
+      assert.deepEqual(feedCalls.at(-1)!.body.target_ids, [secondEntity.id])
       assert.equal(env.calls.filter(call => call.url.endsWith('/follows/view')).length, 1)
       await click(env.button(mounted.root, messages[locale].follows.markAllViewed))
       assert.deepEqual(env.calls.filter(call => call.url.endsWith('/follows/view')).at(-1)!.body, {})
@@ -279,7 +258,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     } finally { mounted.close() }
   })
   test(`${locale}: sidebar badge follows the actual state API and shared viewing state`, async () => {
-    const env = environment(locale, [entityFollow, topicFollow])
+    const env = environment(locale, [entityFollow, secondEntityFollow])
     const menuStore = evaluateFile('../../stores/menu.ts', { '@/i18n': moduleOf(env.i18n) })
     env.modules['@/stores/menu'] = menuStore
     env.modules['@/stores/ui'] = { useUIStore: () => reactive({ sidebarCollapsed: false, toggleSidebar() {}, openSettings() {} }) }
@@ -289,7 +268,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     try {
       await settle()
       const navigation = descendants(mounted.root).filter(node => node.tag === 'button' && hasClass(node, 'menu_item'))
-      assert.deepEqual(navigation.map(visibleText), [messages[locale].menu.library, messages[locale].menu.search, messages[locale].knowledgeWorkbench.title, messages[locale].topicManagement.title, `${messages[locale].follows.title}2`, messages[locale].ingestDiagnostics.pending, messages[locale].ingestDiagnostics.diagnostics, messages[locale].contentCheck.title, messages[locale].ikb19.evaluationTitle, messages[locale].ikb19.callsTitle, messages[locale].menu.settings])
+      assert.deepEqual(navigation.map(visibleText), [messages[locale].menu.library, messages[locale].menu.search, messages[locale].knowledgeWorkbench.title, `${messages[locale].follows.title}2`, messages[locale].ingestDiagnostics.pending, messages[locale].ingestDiagnostics.diagnostics, messages[locale].ikb19.evaluationTitle, messages[locale].ikb19.callsTitle, messages[locale].menu.settings])
       assert.ok(env.calls.some(call => call.url === '/api/v1/follows/state'))
       assert.equal(descendants(mounted.root).find(node => hasClass(node, 'follow-badge'))!.text, '2')
       await env.store.markViewed(openedAt); await settle()
@@ -348,19 +327,19 @@ test('failed feed loads keep the viewing checkpoint, and retry uses the actual l
   } finally { mounted.close() }
 })
 
-test('no follows shows entity and topic destinations after the real feed load', async () => {
+test('no follows shows entity destination after the real feed load', async () => {
   const env = environment('zh-CN'), mounted = env.mount(env.component('./FollowFeed.vue'))
   try {
     await settle()
     assert.ok(visibleText(mounted.root).includes(messages['zh-CN'].follows.emptyTargets))
-    assert.deepEqual(descendants(mounted.root).filter(node => node.tag === 'a').map(node => node.props.href), ['/platform/entries?tab=entities', '/platform/topics'])
+    assert.deepEqual(descendants(mounted.root).filter(node => node.tag === 'a').map(node => node.props.href), ['/platform/entries?tab=entities'])
     assert.ok(env.calls.some(call => call.url.endsWith('/follows/feed')))
     assert.deepEqual(env.errors, [])
   } finally { mounted.close() }
 })
 
 test('mark all retry preserves its action after new articles arrive', async () => {
-  const env = environment('en-US', [entityFollow, topicFollow]), mounted = env.mount(env.component('./FollowFeed.vue'))
+  const env = environment('en-US', [entityFollow, secondEntityFollow]), mounted = env.mount(env.component('./FollowFeed.vue'))
   try {
     await settle()
     env.transport.articles.unshift(article('arriving', '2026-10-11T13:00:00Z'))
@@ -381,13 +360,13 @@ test('mark all retry preserves its action after new articles arrive', async () =
 })
 
 test('a query change during initial loading invalidates the older feed response', async () => {
-  const env = environment('en-US', [entityFollow, topicFollow]), stale = deferred<any>()
+  const env = environment('en-US', [entityFollow, secondEntityFollow]), stale = deferred<any>()
   let first = true
   env.transport.intercept = (_method, url) => { if (url.endsWith('/follows/feed') && first) { first = false; return stale.promise }; return undefined }
   const mounted = env.mount(env.component('./FollowFeed.vue'))
   try {
     await settle()
-    env.route.query = { target_ids: topic.id }
+    env.route.query = { target_ids: secondEntity.id }
     await settle()
     assert.ok(visibleText(mounted.root).includes('Article new'))
     assert.ok(!visibleText(mounted.root).includes('Article old'))
@@ -417,7 +396,7 @@ test('bounded feed lists report the current page and offer supported limits', as
 
 test('feed pagination passes cursors, returns through history, disables the last page and resets when the limit changes', async () => {
   const env = environment('en-US', [entityFollow])
-  env.route.query = { collapse_similar: 'false' }
+  env.route.query = { }
   env.transport.articles = Array.from({ length: 45 }, (_, index) => article(`page-${index}`, '2026-10-11T10:00:00Z', [entityFollow]))
   const secondPage = deferred<any>()
   let delaySecondPage = true
@@ -484,25 +463,10 @@ test('same millisecond timestamps retain precise new markers after refresh', asy
   } finally { mounted.close() }
 })
 
-test('topic deletion refreshes shared follows and unread count immediately', async () => {
-  const env = environment('en-US', [entityFollow, topicFollow]), mounted = env.mount(env.component('./TopicManagement.vue'))
-  try {
-    await settle(); await env.store.refreshState()
-    assert.equal(env.store.newCount, 2)
-    await click(env.button(mounted.root, messages['en-US'].common.delete))
-    const confirmation = descendants(mounted.root).find(node => typeof node.props.onConfirm === 'function')!
-    assert.ok(confirmation)
-    confirmation.props.onConfirm(); await settle()
-    assert.equal(env.store.isFollowing('topic', topic.id), false)
-    assert.equal(env.store.isFollowing('entity', entity.id), true)
-    assert.equal(env.store.newCount, 1)
-    assert.ok(env.calls.some(call => call.method === 'del' && call.url === `/api/v1/topics/${topic.id}`))
-    assert.deepEqual(env.errors, [])
-  } finally { mounted.close() }
-})
+
 
 test('entity merge refreshes the shared target list with the retained entity', async () => {
-  const env = environment('en-US', [entityFollow, topicFollow]), mounted = env.mount(env.component('./components/EntryWorkbench.vue'))
+  const env = environment('en-US', [entityFollow, secondEntityFollow]), mounted = env.mount(env.component('./components/EntryWorkbench.vue'))
   try {
     await settle()
     await click(descendants(mounted.root).find(node => node.tag === 'button' && hasClass(node, 'entity-list__item'))!)
@@ -512,17 +476,16 @@ test('entity merge refreshes the shared target list with the retained entity', a
     await click(descendants(mounted.root).filter(node => node.tag === 'button' && visibleText(node).trim() === messages['en-US'].knowledgeWorkbench.entities.merge).at(-1)!)
     assert.equal(env.store.isFollowing('entity', entity.id), false)
     assert.equal(env.store.isFollowing('entity', 'entity-retained'), true)
-    assert.equal(env.store.isFollowing('topic', topic.id), true)
     assert.ok(env.calls.some(call => call.method === 'post' && call.url === '/api/v1/entities/merge'))
     assert.deepEqual(env.errors, [])
   } finally { mounted.close() }
 })
 
-test('late completed and newly related old articles load as new while topic history stays seen', async () => {
-  const env = environment('en-US', [entityFollow, topicFollow])
+test('late completed and newly related old articles load as new while previously seen articles stay seen', async () => {
+  const env = environment('en-US', [entityFollow, secondEntityFollow])
   const completed = article('late-completed', '2026-10-09T00:00:00Z', [entityFollow])
   const recognized = article('late-recognized', '2026-10-08T00:00:00Z', [entityFollow])
-  const historical = article('topic-history', '2026-10-07T00:00:00Z', [topicFollow])
+  const historical = article('seen-history', '2026-10-07T00:00:00Z', [secondEntityFollow])
   completed.entered_at = '2026-10-11T10:00:00Z'
   recognized.entered_at = '2026-10-11T11:00:00Z'
   historical.entered_at = null
@@ -532,7 +495,7 @@ test('late completed and newly related old articles load as new while topic hist
   const mounted = env.mount(env.component('./FollowFeed.vue'))
   try {
     await settle()
-    assert.ok(visibleText(mounted.root).includes('Article topic-history'))
+    assert.ok(visibleText(mounted.root).includes('Article seen-history'))
     assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-new')).length, 2)
     await click(env.button(mounted.root, messages['en-US'].follows.refresh))
     assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-new')).length, 2)
@@ -545,15 +508,15 @@ test('late completed and newly related old articles load as new while topic hist
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: feed toolbar loads controls in separate fields with complete labels`, async () => {
-    const env = environment(locale, [entityFollow, topicFollow])
+    const env = environment(locale, [entityFollow, secondEntityFollow])
     const mounted = env.mount(env.component('./FollowFeed.vue'))
     try {
       await settle()
       const toolbar = descendants(mounted.root).find(node => hasClass(node, 'feed-toolbar'))!
       const fields = toolbar.children.filter(node => hasClass(node, 'feed-filter-field'))
-      assert.equal(fields.length, 4)
-      const labels = [messages[locale].follows.library, messages[locale].follows.filterTarget, messages[locale].follows.limit, messages[locale].knowledgeSearch.collapseSimilar]
-      const tags = ['t-select', 't-select', 't-select', 't-switch']
+      assert.equal(fields.length, 3)
+      const labels = [messages[locale].follows.library, messages[locale].follows.filterTarget, messages[locale].follows.limit]
+      const tags = ['t-select', 't-select', 't-select']
       fields.forEach((field, index) => {
         assert.equal(field.tag, 'label')
         assert.equal(field.parent, toolbar)

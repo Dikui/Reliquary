@@ -10,7 +10,7 @@ import { Marked, Renderer } from 'marked'
 import ts from 'typescript'
 import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
-import { CONTENT_TYPES } from '../types/entryClassification'
+
 import * as markdownPlainText from '../utils/markdownPlainText'
 import * as entrySourceLabels from '../utils/entrySourceLabels'
 import * as rfc3339 from '../utils/rfc3339'
@@ -24,7 +24,7 @@ const empty = moduleOf(defineComponent({ setup: () => () => null }))
 const summary = '# Summary heading\n\n**bold** [read](https://example.com/summary-link)\n\n![chart](https://example.com/summary-chart.png) <img src="https://example.com/summary-photo.png">\n\n\\*literal\\* `**literal**`'
 const structuredSummary = { overview: summary, points: ['- _Point_ [point link](https://example.com/point)'], key_terms: ['`**Term**`', '![term](https://example.com/term.png)'] }
 const body = '# Article body\n\n**Body bold** [Body link](https://example.com/body-link)\n\n![body image](https://example.com/body-image.png)'
-const sourceRecord = { id: 'summary-article', title: 'Summary article', file_name: 'Summary article.md', type: 'manual', file_type: 'md', source_kind: 'article', content_type: 'research', processing_mode: 'full', parse_status: 'completed', description: summary, structured_summary: structuredSummary, updated_at: '2026-10-13T00:00:00Z', metadata: {}, entities: [], topics: [] }
+const sourceRecord = { id: 'summary-article', title: 'Summary article', file_name: 'Summary article.md', type: 'manual', file_type: 'md', source_kind: 'article',  processing_mode: 'full', parse_status: 'completed', description: summary, structured_summary: structuredSummary, updated_at: '2026-10-13T00:00:00Z', metadata: {}, entities: [], }
 
 function evaluate(code: string, modules: Record<string, unknown>) {
   const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
@@ -56,7 +56,7 @@ function environment(locale: keyof typeof messages) {
   const calls: { method: string; url: string; body?: unknown }[] = []
   const received: any[] = []
   const record = structuredClone(sourceRecord)
-  const feedArticle = { entry_id: record.id, title: record.title, source: 'article', published_at: record.updated_at, collected_at: record.updated_at, entered_at: record.updated_at, is_new: true, matched_follows: [], content_type: record.content_type, processing_mode: record.processing_mode, summary: record.structured_summary, entities: [], topics: [], snippets: [], score: 1, similar_reports: [], original_url: '' }
+  const feedArticle = { entry_id: record.id, title: record.title, source: 'article', published_at: record.updated_at, collected_at: record.updated_at, entered_at: record.updated_at, is_new: true, matched_follows: [],  processing_mode: record.processing_mode, summary: record.structured_summary, entities: [],  snippets: [], score: 1,  original_url: '' }
   async function request(method: string, url: string, requestBody?: unknown) {
     calls.push({ method, url, ...(requestBody === undefined ? {} : { body: requestBody }) })
     let response: any
@@ -77,7 +77,7 @@ function environment(locale: keyof typeof messages) {
   const modules: Record<string, unknown> = {
     pinia: piniaModule,
     '@/utils/markdownPlainText': markdownPlainText, '@/utils/entrySourceLabels': entrySourceLabels, '@/utils/rfc3339': rfc3339,
-    '@/types/entryClassification': { CONTENT_TYPES }, '@/api/library': api, '@/stores/entry': storeModule,
+    '@/types/entryClassification': { }, '@/api/library': api, '@/stores/entry': storeModule,
     '../utils/index': { formatStringDate: () => '2026-10-13' },
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => 'file' },
     '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: () => true, isValidImageURL: () => true, safeMarkdownToHTML: identity, sanitizeHTML: identity, hydrateProtectedFileImages: async () => {}, createSafeImage: (url: string, alt: string) => `<img src="${url}" alt="${alt}">` },
@@ -208,9 +208,9 @@ test('initial detail mount, document switch and refreshed mount render API image
   let hook: any
   const mounts: ReturnType<typeof env.mount>[] = []
   const setRecord = (id: string, caption: string, type: string) => Object.assign(env.record, {
-    id, content_type: type,
+    id,
     image_descriptions: [{ ordinal: 1, url: 'chart.png', description: caption, locations: [{ paragraph: 3, start: 0, end: 1 }] }],
-    library_content_types: [{ name: type, enabled: true, extract_graph: true, position: 0 }, { name: '停用类型', enabled: false, extract_graph: false, position: 1 }],
+
   })
   const mount = () => {
     const mounted = env.mount(defineComponent({ setup() {
@@ -225,9 +225,7 @@ test('initial detail mount, document switch and refreshed mount render API image
     const section = descendants(root).find(node => hasClass(node, 'image-descriptions'))
     assert.ok(section, 'initial API response reaches the image description component')
     assert.ok(visibleText(section).includes(caption))
-    assert.deepEqual(hook.details.library_content_types.filter((row: any) => row.enabled).map((row: any) => row.name), [type])
-    assert.ok(descendants(root).some(node => node.tag === 'option' && visibleText(node) === type))
-    assert.ok(!descendants(root).some(node => node.tag === 'option' && visibleText(node) === '停用类型'))
+
     assert.ok(visibleText(root).includes('图片说明'))
     assert.equal(hook.details.md[0].content, body)
   }
@@ -237,7 +235,7 @@ test('initial detail mount, document switch and refreshed mount render API image
     setRecord('second', '第二张图的图表说明', '研究论文')
     hook.getCardDetails({ id: 'second' })
     assert.deepEqual(hook.details.image_descriptions, [])
-    assert.deepEqual(hook.details.library_content_types, [])
+
     await settle(); check(first.root, '第二张图的图表说明', '研究论文')
     assert.ok(!visibleText(first.root).includes('第一张图的数字说明'))
     first.close()

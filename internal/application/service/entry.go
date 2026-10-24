@@ -6,19 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
-
-	"strings"
-
-	"gorm.io/gorm"
-
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
 	"reliquary/internal/diagnostics"
-	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"strings"
+
+	"gorm.io/gorm"
+
+	werrors "reliquary/internal/errors"
 )
 
 // Error definitions for entry service operations
@@ -89,7 +88,6 @@ func NewEntryService(
 	retrieveEngine interfaces.RetrievalService,
 	imageResolver *docparser.ImageResolver,
 	spanTracker SpanTracker,
-
 ) (interfaces.EntryService, error) {
 	return &entryService{
 		db:              db,
@@ -272,9 +270,6 @@ func (s *entryService) GetEntryByID(ctx context.Context, id string) (*types.Entr
 		if output != nil {
 			entry.ImageDescriptions = output.Images
 		}
-		if err := s.db.WithContext(ctx).Where("library_id=? AND enabled=true", entry.LibraryID).Order("position,name").Find(&entry.LibraryContentTypes).Error; err != nil {
-			return nil, err
-		}
 	}
 	if err := s.loadEntryAssociations(ctx, spaceID, []*types.Entry{entry}); err != nil {
 		return nil, err
@@ -304,31 +299,17 @@ func (s *entryService) ListEntryByLibraryID(ctx context.Context,
 func (s *entryService) ListPagedEntryByLibraryID(ctx context.Context,
 	libraryID string, page *types.Pagination, filter types.EntryListFilter,
 ) (*types.PageResult, error) {
-	queryPage := page
-	collapse := s.db != nil && (filter.CollapseSimilar == nil || *filter.CollapseSimilar)
-	if collapse {
-		queryPage = nil
-	}
-	entries, total, err := s.repo.ListPagedEntryByLibraryID(ctx, types.MustSpaceIDFromContext(ctx), libraryID, queryPage, filter)
+	entries, total, err := s.repo.ListPagedEntryByLibraryID(
+		ctx,
+		types.MustSpaceIDFromContext(ctx),
+		libraryID,
+		page,
+		filter,
+	)
 	if err != nil {
 		return nil, err
 	}
-	if collapse {
-		entries, err = s.collapseListedEntries(ctx, entries)
-		if err != nil {
-			return nil, err
-		}
-		total = int64(len(entries))
-		start := min(page.Offset(), len(entries))
-		end := min(start+page.Limit(), len(entries))
-		entries = entries[start:end]
-	}
-	flattened := []*types.Entry{}
-	for _, entry := range entries {
-		flattened = append(flattened, entry)
-		flattened = append(flattened, entry.SimilarReports...)
-	}
-	if err := s.loadEntryAssociations(ctx, types.MustSpaceIDFromContext(ctx), flattened); err != nil {
+	if err := s.loadEntryAssociations(ctx, types.MustSpaceIDFromContext(ctx), entries); err != nil {
 		return nil, err
 	}
 
@@ -346,7 +327,6 @@ func (s *entryService) GetEntryBody(ctx context.Context, id string) (io.ReadClos
 }
 
 func (s *entryService) getEntryBody(ctx context.Context, entry *types.Entry) (io.ReadCloser, string, error) {
-
 	if entry.VaultBody != "" {
 		return io.NopCloser(strings.NewReader(entry.VaultBody)), sanitizeManualDownloadFilename(entry.Title), nil
 	}

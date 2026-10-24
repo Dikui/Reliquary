@@ -54,11 +54,7 @@ func (s *entryService) ReadEntry(ctx context.Context, id string, offset, length 
 	if header.Entities == nil {
 		header.Entities = []string{}
 	}
-	if header.Topics == nil {
-		header.Topics = []string{}
-	}
 	sort.Strings(header.Entities)
-	sort.Strings(header.Topics)
 	result := &EntryReadResult{
 		LibraryID:        entry.LibraryID,
 		LibraryName:      entry.LibraryName,

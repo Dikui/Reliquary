@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reliquary/internal/types"
 	"runtime/debug"
 	"strings"
 
+	apperrors "reliquary/internal/errors"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	apperrors "reliquary/internal/errors"
-	"reliquary/internal/types"
 )
 
 type searchVectorSet struct {
@@ -133,8 +134,7 @@ func searchSnapshot(config *types.RetrievalConfig, libraries []types.Library, se
 			"embedding_top_k": config.GetEffectiveEmbeddingTopK(), "vector_threshold": config.GetEffectiveVectorThreshold(),
 			"keyword_threshold": config.GetEffectiveKeywordThreshold(), "rrf_k": config.GetEffectiveRRFK(),
 			"vector_weight": vectorWeight, "keyword_weight": keywordWeight, "image_weight": config.GetEffectiveRRFImageWeight(),
-			"similar_reports_threshold": config.GetEffectiveSimilarReportsThreshold(), "similar_reports_window_days": config.GetEffectiveSimilarReportsWindowDays(),
-		}, "folded_member_rule": "representatives_only",
+		},
 	})
 	return data
 }

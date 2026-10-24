@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reliquary/internal/application/service/file"
+	"reliquary/internal/types"
 	"testing"
 	"time"
 
@@ -12,9 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
-	"reliquary/internal/application/service/file"
 	taskqueue "reliquary/internal/queue"
-	"reliquary/internal/types"
 )
 
 func TestEntryBatchRejectsNewReviewRequests(t *testing.T) {
@@ -30,27 +30,50 @@ func TestEntryBatchRejectsNewReviewRequests(t *testing.T) {
 	require.Zero(t, count)
 }
 
-func TestEntryBatchFreezesFilteredMembershipAndPreservesOtherTopics(t *testing.T) {
+func TestEntryBatchFreezesFilteredMembership(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
 	h.service.task = &libraryRebuildQueue{db: h.db}
 	entity := types.Entity{ID: uuid.NewString(), SpaceID: 1, CanonicalName: "Batch target", NormalizedName: "batch target", EntityType: "company"}
 	require.NoError(t, h.db.Create(&entity).Error)
-	topic := types.Topic{ID: uuid.NewString(), SpaceID: 1, Name: "Existing topic", LibraryIDs: []string{h.library.ID}}
-	extra := types.Topic{ID: uuid.NewString(), SpaceID: 1, Name: "Added topic", LibraryIDs: []string{h.library.ID}}
-	require.NoError(t, h.db.Create(&topic).Error)
-	require.NoError(t, h.db.Create(&extra).Error)
 	seed := func(name string) string {
-		entry := types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: h.library.ID, SourceKind: "article", Type: types.EntryTypeManual, Title: name, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", ContentType: "event"}
-		require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "approved", SourceInfo: types.SourceInfo{PublishedAt: "2026-10-18T23:59:59Z"}}))
+		entry := types.Entry{
+			ID:           uuid.NewString(),
+			SpaceID:      1,
+			LibraryID:    h.library.ID,
+			SourceKind:   "article",
+			Type:         types.EntryTypeManual,
+			Title:        name,
+			ParseStatus:  types.ParseStatusCompleted,
+			EnableStatus: "enabled",
+		}
+		require.NoError(
+			t,
+			entry.SetIntakeMetadata(
+				&types.EntryIntakeMetadata{
+					Decision:   "approved",
+					SourceInfo: types.SourceInfo{PublishedAt: "2026-10-18T23:59:59Z"},
+				},
+			),
+		)
 		require.NoError(t, h.db.Create(&entry).Error)
 		require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: entry.ID, EntityID: entity.ID}).Error)
-		require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: entry.ID, TopicID: topic.ID, Source: types.TopicSourceModel, IsHistorical: true}).Error)
 		return entry.ID
 	}
 	first, second := seed("First"), seed("Second")
 	starred := true
-	request := types.EntryBatchRequest{Action: "star", Starred: &starred, Selection: types.EntryBatchSelection{Filters: &types.EntryBatchFilters{Libraries: []string{h.library.ID}, EntityIDs: []string{entity.ID}, TopicIDs: []string{topic.ID}, PublishedFrom: "2026-10-18", PublishedTo: "2026-10-18"}}}
+	request := types.EntryBatchRequest{
+		Action:  "star",
+		Starred: &starred,
+		Selection: types.EntryBatchSelection{
+			Filters: &types.EntryBatchFilters{
+				Libraries:     []string{h.library.ID},
+				EntityIDs:     []string{entity.ID},
+				PublishedFrom: "2026-10-18",
+				PublishedTo:   "2026-10-18",
+			},
+		},
+	}
 	preview, err := h.service.PreviewEntryBatch(h.ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, 2, preview.Eligible, "preview: %+v", preview)
@@ -72,36 +95,6 @@ func TestEntryBatchFreezesFilteredMembershipAndPreservesOtherTopics(t *testing.T
 	require.True(t, h.article(t, first).Starred)
 	require.True(t, h.article(t, second).Starred)
 	require.False(t, h.article(t, later).Starred)
-
-	// Explicitly adding an existing model topic must protect the user's choice.
-	request = types.EntryBatchRequest{Action: "topics", TopicMode: "add", TopicIDs: []string{topic.ID, extra.ID}, Selection: types.EntryBatchSelection{IDs: []string{first}}}
-	preview, err = h.service.PreviewEntryBatch(h.ctx, request)
-	require.NoError(t, err)
-	request.PreviewFingerprint = preview.Fingerprint
-	batch, err = h.service.SubmitEntryBatch(h.ctx, request)
-	require.NoError(t, err)
-	require.NoError(t, h.service.ProcessEntryBatch(h.ctx, rebuildTask(t, h.db, batch.BatchID)))
-	var links []types.EntryTopic
-	require.NoError(t, h.db.Where("entry_id=?", first).Find(&links).Error)
-	require.Len(t, links, 2)
-	for _, link := range links {
-		require.Equal(t, types.TopicSourceUser, link.Source)
-		if link.TopicID == topic.ID {
-			require.True(t, link.IsHistorical)
-		}
-	}
-	request.TopicMode = "remove"
-	request.TopicIDs = []string{extra.ID}
-	preview, err = h.service.PreviewEntryBatch(h.ctx, request)
-	require.NoError(t, err)
-	request.PreviewFingerprint = preview.Fingerprint
-	batch, err = h.service.SubmitEntryBatch(h.ctx, request)
-	require.NoError(t, err)
-	require.NoError(t, h.service.ProcessEntryBatch(h.ctx, rebuildTask(t, h.db, batch.BatchID)))
-	links = nil
-	require.NoError(t, h.db.Where("entry_id=?", first).Find(&links).Error)
-	require.Len(t, links, 1)
-	require.Equal(t, topic.ID, links[0].TopicID)
 
 	report := types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: h.library.ID, SourceKind: "report", Title: "Batch AI output", ParseStatus: types.ParseStatusCompleted}
 	require.NoError(t, h.db.Create(&report).Error)
@@ -257,8 +250,6 @@ func TestEntryBatchRetriesProcessingChildrenAndRecoversMissingTask(t *testing.T)
 	h, _ := newVaultArticleHarness(t)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
 	entry := h.upload(t, "Type retry", "# Acme\n\nA complete original technical announcement with measurements.")
-	_, err := h.service.CorrectContentType(h.ctx, entry.ID, "other")
-	require.NoError(t, err)
 	h.service.task = &libraryRebuildQueue{db: h.db}
 	request := types.EntryBatchRequest{Action: "reprocess", Selection: types.EntryBatchSelection{IDs: []string{entry.ID}}}
 	preview, err := h.service.PreviewEntryBatch(h.ctx, request)

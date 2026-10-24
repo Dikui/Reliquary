@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/config"
+	"reliquary/internal/types"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/application/repository"
-	"reliquary/internal/config"
-	"reliquary/internal/types"
 )
 
 func TestArticleStarPersistsHeaderLogsAndListFilter(t *testing.T) {
@@ -66,7 +66,15 @@ func TestEntrySearchStarredFiltersAndMissingCount(t *testing.T) {
 	require.NoError(t, h.db.Model(a).Update("starred", true).Error)
 	require.NoError(t, h.db.Model(missing).Update("starred", true).Error)
 	starred := true
-	result, err := h.svc.Search(h.ctx, types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch", Starred: &starred, CollapseSimilar: boolPointer(false), Limit: 100})
+	result, err := h.svc.Search(
+		h.ctx,
+		types.EntrySearchRequest{
+			Libraries: []string{h.library.ID},
+			Query:     "semanticlaunch",
+			Starred:   &starred,
+			Limit:     100,
+		},
+	)
 	require.NoError(t, err)
 	require.Len(t, result.Results, 2)
 	for _, r := range result.Results {
@@ -236,8 +244,10 @@ func TestUserRejectedIntakeRequiresConfirmationAndDeletesOriginal(t *testing.T) 
 
 func TestIntakePublicationNormalizationMatchesSearchFormat(t *testing.T) {
 	for _, tt := range []struct{ raw, want string }{
-		{" 2026-10-01 ", "2026-10-01"}, {"2026-10-01 08:00:00", "2026-10-01T08:00:00Z"},
-		{"2026-10-01T08:00:00+08:00", "2026-10-01T00:00:00Z"}, {"unknown", ""},
+		{" 2026-10-01 ", "2026-10-01"},
+		{"2026-10-01 08:00:00", "2026-10-01T08:00:00Z"},
+		{"2026-10-01T08:00:00+08:00", "2026-10-01T00:00:00Z"},
+		{"unknown", ""},
 	} {
 		require.Equal(t, tt.want, normalizeIntakePublicationDate(tt.raw))
 	}

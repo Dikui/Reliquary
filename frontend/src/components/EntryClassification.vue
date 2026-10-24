@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { CONTENT_TYPES, type ContentType, type ClassifiedEntry } from '@/types/entryClassification'
+import { type ClassifiedEntry } from '@/types/entryClassification'
 import { isValidURL } from '@/utils/security'
 import { markdownToPlainText } from '@/utils/markdownPlainText'
 import FollowToggle from './FollowToggle.vue'
@@ -10,8 +10,6 @@ const props = withDefaults(defineProps<{ entry: ClassifiedEntry; compact?: boole
 const emit = defineEmits<{ 'open-entity': [id: string] }>()
 const { t } = useI18n()
 const plainText = (value: string) => markdownToPlainText(value, `[${t('ingestStatus.missingTypes.image')}]`)
-const type = computed(() => CONTENT_TYPES.includes(props.entry.content_type as ContentType) ? props.entry.content_type : 'other')
-const customType = computed(() => props.entry.content_type && !CONTENT_TYPES.includes(props.entry.content_type as ContentType) ? props.entry.content_type : '')
 const originalURL = computed(() => {
   const url = props.entry.metadata?.intake?.source_info?.original_url || props.entry.source || ''
   return /^https?:\/\//i.test(url) && isValidURL(url) ? url : ''
@@ -23,8 +21,6 @@ const originalURL = computed(() => {
   <div class="entry-classification" :class="{ compact }">
     <div class="classification-tags">
       <t-tag v-if="entry.library_name" size="small" variant="light-outline">{{ entry.library_name }}</t-tag>
-      <t-tag v-if="customType && !entry.cannot_be_fact && entry.source_kind !== 'report'" size="small" variant="light-outline">{{ customType }}</t-tag>
-      <t-tag v-else-if="!entry.cannot_be_fact && entry.source_kind !== 'report'" size="small" variant="light-outline">{{ t(`library.contentTypes.${type}`) }}</t-tag>
       <t-tag v-if="entry.cannot_be_fact || entry.source_kind === 'report'" size="small" theme="warning" variant="light-outline">{{ t('ingestStatus.cannotBeFact') }}</t-tag>
       <t-tag v-if="entry.source_unverified" size="small" theme="warning" variant="light-outline">{{ t('knowledgeReview.sourceUnverified') }}</t-tag>
       <t-tag v-if="entry.acquisition === 'model_written'" size="small" variant="light-outline" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</t-tag>
@@ -37,7 +33,6 @@ const originalURL = computed(() => {
     </div>
     <p v-else-if="entry.description" class="summary-description">{{ plainText(entry.description) }}</p>
     <div v-if="!hideRelations && entry.entities?.length" class="classification-relations entity-relations"><strong>{{ t('library.articleEntities') }}</strong><span v-for="entity in entry.entities" :key="entity.id" class="relation-target"><button type="button" @click.stop="emit('open-entity', entity.id)">{{ entity.canonical_name }}</button><FollowToggle v-if="followable" target-type="entity" :target-id="entity.id" :name="entity.canonical_name" compact /></span></div>
-    <div v-if="!hideRelations && entry.topics?.length" class="classification-relations topic-relations"><strong>{{ t('library.articleTopics') }}</strong><span v-for="topic in entry.topics" :key="topic.id" class="relation-target"><span class="topic-label" :title="topic.description">{{ topic.name }}</span><FollowToggle v-if="followable" target-type="topic" :target-id="topic.id" :name="topic.name" compact /></span></div>
   </div>
 </template>
 
@@ -53,7 +48,6 @@ ul { padding-left: 20px; }
 .entity-relations button:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 .entity-relations button:hover, .original-link:hover { text-decoration: underline; }
 .relation-target { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.topic-label { padding: 2px 6px; background: var(--td-bg-color-secondarycontainer); border-radius: var(--td-radius-small); }
 .original-link { display: block; color: var(--td-brand-color); }
 .compact { font-size: 11px; line-height: 1.5; }
 .compact .structured-summary { gap: 6px; margin: 8px 0; }

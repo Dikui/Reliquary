@@ -6,6 +6,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reliquary/internal/application/service/retriever"
+	"reliquary/internal/infrastructure/chunker"
+	"reliquary/internal/models/embedding"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
+	"reliquary/internal/vaultpath"
 	"sort"
 	"strings"
 	"sync"
@@ -13,12 +19,6 @@ import (
 	"time"
 
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
-	"reliquary/internal/application/service/retriever"
-	"reliquary/internal/infrastructure/chunker"
-	"reliquary/internal/models/embedding"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
-	"reliquary/internal/vaultpath"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -101,8 +101,10 @@ func (h *vaultDocumentHarness) assertSearch(t *testing.T, id, term string) {
 	t.Helper()
 	var entry types.Entry
 	require.NoError(t, h.db.First(&entry, "id=?", id).Error)
-	hits, err := h.documents.retrieval.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.KeywordsRetrieverType,
-		LibraryIDs: []string{entry.LibraryID}, EntryIDs: []string{id}, Query: term, TopK: 10}})
+	hits, err := h.documents.retrieval.Retrieve(h.ctx, []types.RetrieveParams{{
+		RetrieverType: types.KeywordsRetrieverType,
+		LibraryIDs:    []string{entry.LibraryID}, EntryIDs: []string{id}, Query: term, TopK: 10,
+	}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
 }
@@ -114,7 +116,12 @@ func TestVaultMineFileChangesAreNeverObserved(t *testing.T) {
 	own.ChunkingConfig = h.library.ChunkingConfig
 	own.IndexingStrategy = h.library.IndexingStrategy
 	h.library = &own
-	header := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "Imported personal document", CollectedAt: time.Now().UTC().Format(time.RFC3339Nano), ContentType: "tutorial"}
+	header := VaultArticleHeader{
+		ID:          uuid.NewString(),
+		SourceKind:  "mine",
+		Title:       "Imported personal document",
+		CollectedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
 	body := "# Imported personal document\n\noriginalminefixture remains indexed from import"
 	document, err := h.documents.restoreVaultArticle(h.ctx, h.library, "personal/imported.md", header, []byte(body))
 	require.NoError(t, err)
@@ -124,7 +131,7 @@ func TestVaultMineFileChangesAreNeverObserved(t *testing.T) {
 	calls := h.embedder.inputCount()
 	require.NoError(t, h.documents.Start(h.ctx))
 	h.write(t, "personal/hand-placed.md", "# Hand placed\n\nmanualminefixture must stay unindexed")
-	require.NoError(t, os.WriteFile(path, []byte("# Modified\n\nmodifiedminefixture must stay unindexed"), 0644))
+	require.NoError(t, os.WriteFile(path, []byte("# Modified\n\nmodifiedminefixture must stay unindexed"), 0o644))
 	time.Sleep(120 * time.Millisecond)
 	require.NoError(t, h.documents.Scan(h.ctx, true))
 	var count int64
@@ -227,7 +234,10 @@ func TestVaultCancelledReportScanPreservesLastCompletedStatus(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, vaultStatusLibrary(t, before, "ai-output").LastScanAt)
 			calls := h.embedder.inputCount()
-			require.NoError(t, os.WriteFile(path, []byte("# Changed report\n\nInterrupt this scan during shutdown."), 0644))
+			require.NoError(
+				t,
+				os.WriteFile(path, []byte("# Changed report\n\nInterrupt this scan during shutdown."), 0o644),
+			)
 			ctx, cancel := context.WithCancel(h.ctx)
 			defer cancel()
 			callback := "reliquary:test_cancel_report_scan"
@@ -309,7 +319,7 @@ func TestVaultRebuildKeywordOnlyNeedsNoModelAndSkipsInvalidArticles(t *testing.T
 	require.NoError(t, h.db.Model(&types.Library{}).Where("space_id=1").Updates(map[string]any{"chunking_config": h.library.ChunkingConfig, "indexing_strategy": h.library.IndexingStrategy}).Error)
 	h.documents.models = nil
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	valid := VaultArticleHeader{LibraryID: h.library.ID, ID: uuid.NewString(), Title: "无模型重建", CollectedAt: now, ContentType: "event"}
+	valid := VaultArticleHeader{LibraryID: h.library.ID, ID: uuid.NewString(), Title: "无模型重建", CollectedAt: now}
 	body := append(RenderVaultArticleHeader(valid), []byte("# 无模型重建\n\nkeywordfixture survives without embedding setup")...)
 	h.write(t, "official/2026-10/valid.md", string(body))
 	h.write(t, "official/2026-10/zz-duplicate.md", string(body))
@@ -324,8 +334,18 @@ func TestVaultRebuildKeywordOnlyNeedsNoModelAndSkipsInvalidArticles(t *testing.T
 	h.write(t, "personal/first.md", "# 第一手\n\nindependentfixture legacy note")
 	var mine types.Library
 	require.NoError(t, h.db.Where("system_role=?", "personal").First(&mine).Error)
-	personal := VaultArticleHeader{LibraryID: mine.ID, ID: uuid.NewString(), SourceKind: "mine", Title: "Imported tutorial", CollectedAt: now, ContentType: "tutorial"}
-	h.write(t, "personal/imported.md", string(RenderVaultArticleHeader(personal))+"# Imported tutorial\n\npersonaltutorialfixture full text")
+	personal := VaultArticleHeader{
+		LibraryID:   mine.ID,
+		ID:          uuid.NewString(),
+		SourceKind:  "mine",
+		Title:       "Imported tutorial",
+		CollectedAt: now,
+	}
+	h.write(
+		t,
+		"personal/imported.md",
+		string(RenderVaultArticleHeader(personal))+"# Imported tutorial\n\npersonaltutorialfixture full text",
+	)
 	h.write(t, "personal/bad-utf8.md", string([]byte{0xff, 0xfe}))
 	h.write(t, "ai-output/bad-utf8.md", string([]byte{0xff, 0xfe}))
 	for relative, data := range map[string]string{

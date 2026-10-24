@@ -16,9 +16,8 @@ export function updateEntryContent(id: string, data: { content: string; base_bod
 }
 
 export type LibraryTemplate = 'external_timely' | 'external_durable' | 'own' | 'generated';
-export interface LibraryContentType { name: string; position: number; enabled: boolean }
 export interface LibraryCatalogItem {
-  content_types: LibraryContentType[]; feed_enabled: boolean;
+  feed_enabled: boolean;
   id: string; directory: string; name: string; display_name: string; system_role: string;
   entry_count?: number; template: LibraryTemplate; description: string; review_criteria: string;
   default_review_criteria: string; model_tiers: ModelTierConfig; summary_model_id?: string;
@@ -26,7 +25,7 @@ export interface LibraryCatalogItem {
   chunking_config: { chunk_size: number; chunk_overlap: number; separators: string[]; enable_parent_child: boolean; parent_chunk_size: number; child_chunk_size: number; strategy?: string; token_limit?: number; languages?: string[] };
   source_evidence_rule: '' | 'link_required' | 'link_or_publisher_date';
   collect_content: string; exclude_content: string; deduplication_rule: string;
-  template_rules: { deduplication: string; source_evidence: string; review: boolean; process: boolean; merge_reposts: boolean; collapse_similar: boolean; fact_source: boolean };
+  template_rules: { deduplication: string; source_evidence: string; review: boolean; process: boolean; merge_reposts: boolean; fact_source: boolean };
 }
 export function listLibraries() { return get<{ success: boolean; data: LibraryCatalogItem[]; message?: string }>('/api/v1/libraries'); }
 export const getCatalogLibrary = (id: string) => get<{ success: boolean; data: LibraryCatalogItem; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
@@ -52,10 +51,9 @@ export function listEntryFiles(
     page: number;
     page_size: number;
     libraries?: string[];
-    entity_ids?: string[]; topic_ids?: string[]; published_from?: string; published_to?: string;
+    entity_ids?: string[]; published_from?: string; published_to?: string;
     keyword?: string;
     file_type?: string;
-    content_type?: string;
     starred?: boolean;
     parse_status?: string;
     source?: string;
@@ -69,12 +67,10 @@ export function listEntryFiles(
   query.append('page_size', String(params.page_size));
   if (params.libraries?.length) query.set('libraries', params.libraries.join(','));
   if (params.entity_ids?.length) query.set('entity_ids', params.entity_ids.join(','));
-  if (params.topic_ids?.length) query.set('topic_ids', params.topic_ids.join(','));
   if (params.published_from) query.set('published_from', params.published_from);
   if (params.published_to) query.set('published_to', params.published_to);
   if (params.keyword) query.append('keyword', params.keyword);
   if (params.file_type) query.append('file_type', params.file_type);
-  if (params.content_type) query.append('content_type', params.content_type);
   if (typeof params.starred === 'boolean') query.append('starred', String(params.starred));
   if (params.parse_status) query.append('parse_status', params.parse_status);
   if (params.source) query.append('source', params.source);

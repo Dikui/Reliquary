@@ -28,7 +28,7 @@ export default {
     countLoading: 'Counting matching materials…',
     countFailed: 'Could not load the matching count. Try again.',
     retryCount: 'Retry matching count',
-    matchedCount: '{count} matching materials (including unloaded materials and similar reports)',
+    matchedCount: '{count} matching materials (including unloaded materials)',
     selectedCount: '{selected} selected · {found} found · {unavailable} unavailable',
     checkedHint: 'Only the checked material IDs are included. Other materials matching the filters below are excluded.',
     countHint: 'This count reflects the current query. Membership is fixed at submission; new materials will not join. Action eligibility is checked in the action preview.',
@@ -40,7 +40,7 @@ export default {
     nextAction: 'Next: Choose action',
     changeScope: 'Back: Change scope',
     filterScopeHint: 'Uses the current list filters, including unloaded materials. Close this dialog to change those filters.',
-    topics: 'Topics',
+
     fixedScope: 'Submitted batch; its material set is fixed.',
     resultLink: 'Open this batch result',
     warningCount: '{count} warnings; see item results for details.',
@@ -55,15 +55,13 @@ export default {
     "reprocess": "Reprocess",
     "review": "Historical review",
     "star": "Set stars",
-    "content_type": "Change content type",
-    "topics": "Change topics"
-  },
+
+    },
   "star": "Add star",
   "unstar": "Remove star",
-  "topicMode": "Topic action",
-  "addTopics": "Add topics",
-  "removeTopics": "Remove topics",
-  "singleLibrary": "Limit the selection to one library to use its content type catalogue.",
+
+
+
   "deleteHint": "Deletes materials, indexes and exclusively owned attachments. This cannot be undone. Rejected intake also retains a blocked-source record.",
   "reprocessHint": "Reprocess all material types, including AI output, with the current library settings. Keep the body, images and manual decisions, rebuild the index and run background processing. Model costs may apply.",
   "preview": "Preview impact",
@@ -82,7 +80,7 @@ export default {
   "publishedTo": "Published through",
   "publishedDates": "Publication date range",
   "publishedHint": "Publication date filters exclude materials with no publication date.",
-  "choicesFailed": "Entity or topic options could not load. Try again.",
+  "choicesFailed": "Entity options could not load. Try again.",
   "manageRelated": "Manage related materials",
   "wholeLibrary": "Entire library, independent of current list filters",
   "wholeLibraryFailed": "Failed materials in the entire library, independent of current list filters",
@@ -109,53 +107,9 @@ export default {
     "body_unavailable": "Original text unavailable",
     "requires_completed_article": "Only completed materials are supported",
     "unsupported_material": "Material does not support this action",
-    "topic_library_mismatch": "Topic does not apply to the material library"
   }
 },
-  contentCheck: {
-  "unfinishedMaterials": 'Unfinished materials',
-  "notice": "Content check failed. Open the check record.",
-  "title": "Check records",
-  "description": "Check new and updated materials each week. Report problems and source evidence only.",
-  "settings": "Weekly check settings",
-  "model": "Check model",
-  "day": "Day of week",
-  "time": "Time (Beijing, UTC+8)",
-  "enable": "Enable weekly checks",
-  "save": "Save settings",
-  "hint": "Select an existing model and schedule before enabling. Quota, rate-limit and context errors stop the entire check.",
-  "next": "Next check:",
-  "saved": "Settings saved",
-  "loadFailed": "Could not load. Try again.",
-  "back": "Back to check records",
-  "refresh": "Refresh",
-  "details": "View results",
-  "empty": "No checks yet. Enable the schedule to check new or updated materials.",
-  "original": "View original check",
-  "unfinished": "{count} materials remain unchecked. Fix the cause, then recheck.",
-  "recheck": "Recheck unfinished materials",
-  "problem": "Problem",
-  "materials": "Materials",
-  "evidence": "Source evidence",
-  "current": "Current result:",
-  "openSource": "Open source",
-  "none": "No issues found in this check",
-  "incomplete": "Check not completed",
-  "duplicate": "Possible duplicates",
-  "conflict": "Possible conflicts",
-  "result_error": "Existing result errors",
-  "pending": "Pending",
-  "running": "Checking",
-  "completed": "Completed",
-  "failed": "Failed",
-  "day0": "Sunday",
-  "day1": "Monday",
-  "day2": "Tuesday",
-  "day3": "Wednesday",
-  "day4": "Thursday",
-  "day5": "Friday",
-  "day6": "Saturday"
-},
+
   ingestDiagnostics: {
     "materialManagement": "Materials",
     "pending": "Needs attention",
@@ -283,7 +237,7 @@ export default {
     "grade": "Relevance grade",
     "gradeHint": "Grades range from 0 to 10; 0 means irrelevant. Questions may have no reference answers.",
     "answerDeleted": "A reference material was deleted. Edit the question and remove or replace the missing material before running.",
-    "collapse": "Collapse similar materials",
+
     "searchEntries": "Search materials",
     "search": "Search",
     "pickerHint": "Select libraries, then search and select materials. Results show materials in selected libraries.",
@@ -406,7 +360,7 @@ export default {
     "reviseRetry": "Your input is retained. Check it and retry the action; refresh to reload data.",
     "invalidRange": "The To date must be later than the From date.",
     "purposes": {
-      content_check: 'Material self-check',
+
         "intakeReview": "Intake review",
         "processing": "Material processing",
         "segmentMerge": "Segment merge",
@@ -512,7 +466,7 @@ export default {
     library: 'Library',
     allLibraries: 'All libraries',
     title: 'Following',
-    description: 'Read material about entities and topics you follow. Each library tracks its own viewing time; later feed arrivals are marked new.',
+    description: 'Read material about entities you follow. Each library tracks its own viewing time; later feed arrivals are marked new.',
     follow: 'Follow',
     unfollow: 'Unfollow',
     followNamed: 'Follow {name}',
@@ -536,7 +490,7 @@ export default {
     previousPage: 'Previous',
     nextPage: 'Next',
     pageNumber: 'Page {page}',
-    emptyTargets: 'You do not follow any targets yet. Follow an entity or topic from its page.',
+    emptyTargets: 'You do not follow any targets yet. Follow an entity from its page.',
     emptyFeed: 'No materials match these followed targets.',
     new: 'New',
     collectedAt: 'Collected {time}',
@@ -544,7 +498,7 @@ export default {
     markAllViewed: 'Mark all as seen',
     markFailed: 'Could not save your viewing time. Try again.',
     navCount: 'Following, {count} new materials',
-    targetTypes: { entity: 'Entity', topic: 'Topic' },
+    targetTypes: { entity: 'Entity' },
   },
   ingestStatus: {
   "navCount": "Pending, {count} items",
@@ -596,7 +550,6 @@ export default {
   "sourceUnverified": "Source unverified",
   "missingLinkHint": "The source URL is optional. Add it before collecting, or confirm collection without a URL and retain the source-unverified marker.",
   "invalidLink": "Enter a valid HTTP or HTTPS original URL.",
-  "chooseType": "Choose a content type.",
   "failed": "Could not save your decision. Try again.",
   "loadFailed": "Pending items could not load. Try again.",
   "saved": "Decision saved",
@@ -635,58 +588,18 @@ export default {
   "allStars": "All star states",
   "starredOnly": "Starred materials",
   "unstarredOnly": "Unstarred materials",
-  "contentType": "Content type",
-  "saveContentType": "Save content type",
-  "contentTypeHint": "Your corrected type is preserved when reprocessing. Changing the type preserves the full text and images.",
-  "contentTypeSaved": "Content type saved",
-  "contentTypeQueued": "Content type saved. Reprocessing the material",
-  "contentTypeFailed": "The content type was not saved. Try again.",
-  "topics": "Topics",
-  "saveTopics": "Save topics",
-  "noTopics": "No topics selected",
-  "topicsLoadFailed": "Could not load topics. Try again.",
-  "topicsSaved": "Topics saved",
-  "topicsFailed": "Topics were not saved. Try again."
-},
-  topicManagement: {
-    libraries: 'Applicable libraries',
-    libraryHint: 'Leave empty for all libraries. Existing matches outside a narrowed scope are retained and excluded from this topic’s feed.',
-    libraryLoadFailed: 'Could not load libraries',
-  "title": "Topics",
-  "description": "Manage interests and assign past materials to their topics.",
-  "create": "Create topic",
-  "edit": "Edit topic",
-  "name": "Topic name",
-  "topicDescription": "Topic description",
-  "nameRequired": "Enter a topic name.",
-  "nameExists": "This name already exists. Choose another name.",
-  "noDescription": "No description yet.",
-  "descriptionHint": "Changing the description reassesses past materials and preserves manually added associations.",
-  "historyHint": "Historical assignment uses titles and summaries of completed materials in the applicable libraries. With no library selection, all libraries apply. Creating a topic or changing its description starts assignment.",
-  "articleCount": "{count} materials",
-  "progress": "Processed {processed} / {total}",
-  "failures": "Failed: {materials} materials in {batches} batches",
-  "historyProgress": "Historical assignment progress",
-  "retryFailedBatches": "Retry failed batches",
-  "retryFailed": "Could not retry failed batches. Try again.",
-  "progressFailed": "Could not load assignment progress. Try again.",
-  "loadFailed": "Could not load topics. Try again.",
-  "saveFailed": "The topic was not saved. Try again.",
-  "deleteFailed": "The topic was not deleted. Try again.",
-  "created": "Topic created. Historical assignment started.",
-  "updated": "Topic updated",
-  "deleted": "Topic deleted",
-  "empty": "No topics yet. Create one to assign past materials.",
-  "deleteTitle": "Delete topic",
-  "deleteDescription": "Delete “{name}” and its material associations? Materials are retained and their headers are updated.",
-  "batchFailure": "Batch {ordinal}, {count} materials, {attempts} attempts: {reason}",
-  "status": {
-    "pending": "Waiting for historical assignment",
-    "running": "Assigning past materials",
-    "completed": "Historical assignment complete",
-    "failed": "Historical assignment has failed batches"
-  }
-},
+
+
+
+
+
+
+
+
+
+
+  },
+
   operationLogs: {
   "title": "Operation log",
   "description": "User actions in newest-first order, including web and API Key calls.",
@@ -718,12 +631,12 @@ export default {
     "ingest_conflict": "Intake conflict",
     "accept_incomplete": "Accept missing images",
     "ingest_discard": "Discard material",
-    "correct_content_type": "Correct content type",
-    "correct_topics": "Correct topics",
+
+
     "merge_entities": "Merge entities",
-    "create_topic": "Create topic",
-    "update_topic": "Update topic",
-    "delete_topic": "Delete topic",
+
+
+
     "ingest": "Ingest",
     "write_report": "Write report"
   }
@@ -762,7 +675,7 @@ export default {
   },
   "uses": {
     "light": "Review material against this library’s admission criteria",
-    "generation": "Summaries, classification, topics, entity processing",
+    "generation": "Summaries, entity processing",
     "embedding": "Document retrieval and entity name similarity",
     "rerank": "Rank retrieved results",
     "entity_resolution": "Determine whether entity candidates belong to existing entities"
@@ -926,14 +839,14 @@ export default {
     collectReason: 'Collection reason',
     vaultPath: 'Vault path',
     copyVaultPath: 'Copy vault path',
-    contentTypes: {"event":"Event","opinion":"Opinion","research":"Research","tutorial":"Tutorial","case":"Case","reference":"Reference","other":"Other"},
 
-    contentTypeFilter: "Content type",
+
+
     summaryOverview: "Overview",
     summaryPoints: "Key points",
     summaryKeyTerms: "Key terms",
     articleEntities: "Entities",
-    articleTopics: "Topics",
+
     reportAssociations: "Related content",
     relatedEntries: "Related materials",
     relatedEntryUnavailable: "Deleted or unavailable material",
@@ -1023,7 +936,7 @@ export default {
     deleteFailed: 'Delete failed. Please try again later!',
     uploadTime: 'Upload Time',
     rebuildDocument: 'Reprocess material',
-    rebuildConfirm: 'Reprocess material “{fileName}”? Preserve the body and update its summary, classification and index.',
+    rebuildConfirm: 'Reprocess material “{fileName}”? Preserve the body and update its summary and index.',
     rebuildSubmitted: 'Rebuild task submitted',
     rebuildFailed: 'Rebuild failed. Please try again later',
     rebuildInProgress: 'This material is currently being processed. Please try again later',
@@ -1329,15 +1242,14 @@ export default {
     imageWeightLabel: 'Image retrieval weight',
     imageWeightHint: 'Defaults to 0.2 so images supplement body and material matches. A value of 0 uses the default weight of 0.2. The current model must support images.',
     title: 'Search Settings',
-    description: 'Configure global retrieval parameters and similar report folding rules',
+    description: 'Configure global retrieval parameters',
     embeddingTopKLabel: 'Vector Search Top K',
     vectorThresholdLabel: 'Vector Similarity Threshold',
     keywordThresholdLabel: 'Keyword Match Threshold',
     rerankTopKLabel: 'Rerank Top K',
     rerankThresholdLabel: 'Rerank Threshold',
-    similarReportsThresholdLabel: 'Similar report cosine similarity threshold',
-    similarReportsWindowDaysLabel: 'Similar report publication window (days)',
-    similarReportsHint: 'Default similarity is 0.85 with a 3 day window. Only materials in the same external timely library that meet both thresholds are folded. Other library templates do not participate.',
+
+
 
     toasts: {
       saveSuccess: 'Retrieval configuration saved',
@@ -1411,8 +1323,7 @@ export default {
     copyFailed: 'Copy failed',
     retry: 'Retry',
     expand: 'Expand',
-    collapse: 'Collapse'
-  ,
+
     discardTitle: "Discard unsaved changes",
     discardHint: "Your changes are not saved. Leaving will discard them.",
     discard: "Discard changes"
@@ -1878,7 +1789,6 @@ export default {
             entityNameEmbeddingRebuild: 'Entity name embedding rebuild',
             embeddingRebuild: 'Rebuild all embeddings',
             reportIndex: 'Report indexing',
-            topicBackfill: 'Assign historical materials to a topic',
           }
         },
         models: {
@@ -1907,7 +1817,7 @@ export default {
         },
         poolDescriptions: {
           core: 'Guaranteed document and manual processing capacity',
-          enrichment: "Rebuild entity name embeddings or all embeddings, or assign historical materials to topics",
+          enrichment: "Rebuild entity name embeddings or all embeddings,",
           maintenance: "Batch work and deletion cleanup",
           shared: 'Borrowed by core or enrichment according to backlog',
         },
@@ -1919,7 +1829,7 @@ export default {
         queueDescriptions: {
           default: 'Body processing, manual reprocess',
           low: "Batch reprocess and cleanup",
-          entity: "Rebuild entity name embeddings or all embeddings, or assign historical materials to topics",
+          entity: "Rebuild entity name embeddings or all embeddings,",
         }
       },
       keyLabels: {
@@ -1946,7 +1856,7 @@ export default {
         },
         queue: {
           core_concurrency: 'Guaranteed per-process concurrency for document and manual processing. Core may also borrow the shared elastic pool. Minimum 1; requires a service restart.',
-          enrichment_concurrency: "Reserved concurrency per instance for rebuilding entity name embeddings or all embeddings and assigning historical materials to topics, with shared capacity available. Restart after changing.",
+          enrichment_concurrency: "Reserved concurrency per instance for rebuilding entity name embeddings or all embeddings, with shared capacity available. Restart after changing.",
           maintenance_concurrency: "Per-process concurrency for batch work and cleanup, isolated from material processing. Minimum 1; requires a service restart.",
           shared_concurrency: 'Per-process elastic concurrency shared by core processing and enrichment; whichever side has backlog borrows it automatically. Minimum 1; requires a service restart.',
         },
@@ -2468,14 +2378,14 @@ export default {
     clearQuery: 'Clear search query',
     search: 'Search',
     searching: 'Searching',
-    contentTypes: 'Content types',
+
     entities: 'Entities',
-    topics: 'Topics',
+
     source: 'Source',
     sources: { article: 'Materials', mine: 'Personal output', report: 'AI output' },
     publishedFrom: 'Published from',
     publishedTo: 'Published through',
-    collapseSimilar: 'Collapse similar reports',
+
     limit: 'Maximum materials',
     all: 'All',
     filterHint: 'Selections within each filter match any value; different filters must all match. Date ranges include both dates and exclude materials without a publication date.',
@@ -2486,8 +2396,8 @@ export default {
     missingPublishedAt: 'Publication date missing',
     snippets: 'Matching snippets',
     score: 'Score',
-    showSimilar: 'Show {count} similar report | Show {count} similar reports',
-    hideSimilar: 'Hide {count} similar report | Hide {count} similar reports',
+
+
     noResults: 'No matching content. Change the query or filters.',
     idle: 'Enter a query to start searching.',
     searchFailed: 'Search failed. Try again.',
@@ -2584,7 +2494,7 @@ export default {
       baseUrl: 'API Base URL',
       baseUrlDesc: 'Use this base URL with REST API paths.',
       ingestUrl: 'External Agent ingest endpoint',
-      ingestUrlDesc: "External tools submit complete content through the HTTP and MCP ingest interfaces. Reliquary does not fetch source pages or download remote files and images. Content is saved after technical validation. Body indexing, summaries, classification run in the background. An unchanged source returns the existing entry; changed content updates it. Background failures do not undo the saved body. Use Authorization: Bearer API_KEY over the intranet.",
+      ingestUrlDesc: "External tools submit complete content through the HTTP and MCP ingest interfaces. Reliquary does not fetch source pages or download remote files and images. Content is saved after technical validation. Body indexing and summaries run in the background. An unchanged source returns the existing entry; changed content updates it. Background failures do not undo the saved body. Use Authorization: Bearer API_KEY over the intranet.",
       copyIngestUrl: 'Copy ingest endpoint',
       mcpUrl: 'MCP server URL',
       mcpUrlDesc: 'Connect via Streamable HTTP to search, read materials, ingest, review pending materials, set stars and write reports. Access over the intranet with the same API key: Authorization: Bearer API_KEY.',

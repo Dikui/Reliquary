@@ -3,7 +3,7 @@ import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin } from 'tdesign-vue-next'
 import { listLibraries, getCatalogLibrary, createCatalogLibrary, saveCatalogLibrary, deleteCatalogLibrary, type LibraryCatalogItem, type LibraryTemplate } from '@/api/library'
-import { LIBRARY_TEMPLATES, validDirectory, validLibraryName, validTypes, librarySettingsPayload, moveType, catalogDescription } from '@/utils/libraryCatalogForm'
+import { LIBRARY_TEMPLATES, validDirectory, validLibraryName, librarySettingsPayload, catalogDescription } from '@/utils/libraryCatalogForm'
 import SafeTextarea from '@/components/SafeTextarea.vue'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
 import { copyModelTiers } from '@/utils/modelTiers'
@@ -26,7 +26,6 @@ const systemRoleName = computed(() => {
   }
 })
 const modelTiers = computed<ModelTier[]>(() => [...(draft.value?.processing_model_tiers || []), 'rerank'])
-const typeSections = ['content_types'] as const
 const chunkingConfig = computed(() => {
   const c = draft.value?.chunking_config
   return c ? { chunkSize: c.chunk_size, chunkOverlap: c.chunk_overlap, separators: c.separators, enableParentChild: c.enable_parent_child, parentChunkSize: c.parent_chunk_size, childChunkSize: c.child_chunk_size, strategy: c.strategy, tokenLimit: c.token_limit, languages: c.languages } : null
@@ -45,7 +44,7 @@ async function load(id?: string) {
     if (!selected) { draft.value = null; return }
     const response = await getCatalogLibrary(selected); if (!response.success) throw new Error(response.message)
     if (current !== sequence) return
-    draft.value = { ...response.data, model_tiers: copyModelTiers({ ...response.data.model_tiers, generation: response.data.model_tiers?.generation || response.data.summary_model_id || '' }), description: catalogDescription(response.data, t('ikb18.systemMediaDescription')), content_types: response.data.content_types || [] }
+    draft.value = { ...response.data, model_tiers: copyModelTiers({ ...response.data.model_tiers, generation: response.data.model_tiers?.generation || response.data.summary_model_id || '' }), description: catalogDescription(response.data, t('ikb18.systemMediaDescription')) }
     saved.value = JSON.stringify(draft.value)
   } catch (cause: any) { if (current === sequence) error.value = cause.message || t('common.operationFailed') }
   finally { if (current === sequence) loading.value = false }
@@ -58,7 +57,6 @@ function switchLibrary(id: string) {
 async function save() {
   if (!draft.value || saving.value) return
   if (!validLibraryName(draft.value.name)) { error.value = t('ikb18.invalidName'); return }
-  if (!validTypes(draft.value.content_types)) { error.value = t('ikb18.invalidTypes'); return }
   saving.value = true; error.value = ''
   try { const response = await saveCatalogLibrary(draft.value.id, librarySettingsPayload(draft.value)); if (!response.success) throw new Error(response.message); await load(draft.value.id); emit('changed') }
   catch (cause: any) { error.value = cause.message || t('common.operationFailed') }
@@ -114,15 +112,7 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
           <ModelTierEditor v-model="draft.model_tiers" :tiers="modelTiers" :before-navigate="confirmLeave" :disabled="saving || loading" />
           <div v-if="chunkingConfig" :key="draft.id" :inert="saving || loading"><p>{{ t('ikb18.parentChildFixed') }}</p><LibraryChunkingSettings :config="chunkingConfig" embedded parent-child-locked @update:config="updateChunking" /></div>
           <label class="toggle-label">{{ t('ikb18.feed') }}<t-switch :disabled="saving || loading" v-model="draft.feed_enabled" :aria-label="t('ikb18.feed')" /></label>
-          <section v-for="kind in typeSections" :key="kind">
-            <h3>{{ t('ikb18.contentTypes') }}</h3>
-            <div v-for="(row, index) in draft[kind]" :key="index" class="type-row">
-              <t-input :disabled="saving || loading" v-model="row.name" :aria-label="t('ikb18.name')" :maxlength="100" />
-              <t-checkbox :disabled="saving || loading" v-model="row.enabled">{{ t('ikb18.enabled') }}</t-checkbox>
-              <div class="type-actions"><t-button variant="text" :disabled="index === 0" @click="moveType(draft![kind], index, -1)">{{ t('ikb18.up') }}</t-button><t-button variant="text" :disabled="index === draft[kind].length - 1" @click="moveType(draft![kind], index, 1)">{{ t('ikb18.down') }}</t-button><t-button variant="text" theme="danger" @click="draft![kind].splice(index, 1)">{{ t('ikb18.remove') }}</t-button></div>
-            </div>
-            <t-button variant="outline" @click="draft!.content_types.push({ name: '', position: draft!.content_types.length, enabled: true })">{{ t('ikb18.add') }}</t-button>
-          </section>
+
           <div class="catalog-actions"><t-button type="submit" :loading="saving" :disabled="!dirty">{{ t('common.save') }}</t-button><t-button variant="outline" :disabled="!dirty" @click="draft = JSON.parse(saved); error = ''">{{ t('common.cancel') }}</t-button></div>
           <p>{{ t('ikb18.deleteHint') }}</p><t-button theme="danger" variant="outline" :disabled="!!draft.entry_count" @click="removeLibrary">{{ t('ikb18.deleteLibrary') }}</t-button>
         </fieldset>

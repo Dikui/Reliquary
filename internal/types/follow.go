@@ -4,10 +4,9 @@ import "time"
 
 const (
 	FollowTargetEntity = "entity"
-	FollowTargetTopic  = "topic"
 )
 
-// Follow is a subscription to a canonical entity or a user-defined topic.
+// Follow is a subscription to a canonical entity.
 type Follow struct {
 	SpaceID    uint64    `json:"-" gorm:"primaryKey"`
 	TargetType string    `json:"target_type" gorm:"primaryKey"`
@@ -26,23 +25,21 @@ type FollowTarget struct {
 }
 
 type FollowFeedRequest struct {
-	Libraries       []string `json:"libraries,omitempty"`
-	Cursor          string   `json:"cursor,omitempty"`
-	Since           string   `json:"since,omitempty"`
-	TargetIDs       []string `json:"target_ids,omitempty"`
-	Limit           int      `json:"limit,omitempty"`
-	CollapseSimilar *bool    `json:"collapse_similar,omitempty"`
-	IncludeSeen     bool     `json:"include_seen,omitempty"`
+	Libraries   []string `json:"libraries,omitempty"`
+	Cursor      string   `json:"cursor,omitempty"`
+	Since       string   `json:"since,omitempty"`
+	TargetIDs   []string `json:"target_ids,omitempty"`
+	Limit       int      `json:"limit,omitempty"`
+	IncludeSeen bool     `json:"include_seen,omitempty"`
 }
 
-// FollowFeedArticle preserves the retrieval projection, including folded items.
+// FollowFeedArticle adds follow timing and matching targets to a search result.
 type FollowFeedArticle struct {
 	EntrySearchResult
-	EnteredAt      *time.Time           `json:"entered_at"`
-	CollectedAt    time.Time            `json:"collected_at"`
-	IsNew          bool                 `json:"is_new"`
-	MatchedFollows []FollowTarget       `json:"matched_follows"`
-	SimilarReports []*FollowFeedArticle `json:"similar_reports"`
+	EnteredAt      *time.Time     `json:"entered_at"`
+	CollectedAt    time.Time      `json:"collected_at"`
+	IsNew          bool           `json:"is_new"`
+	MatchedFollows []FollowTarget `json:"matched_follows"`
 }
 
 type FollowFeedResponse struct {

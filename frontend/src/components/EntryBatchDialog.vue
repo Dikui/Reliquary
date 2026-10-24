@@ -2,10 +2,9 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { previewEntryBatch, submitEntryBatch, getEntryBatch, retryFailedEntryBatch, type EntryBatchAction, type EntryBatchSelection, type EntryBatchRequest, type EntryBatchPreview, type EntryBatch } from '@/api/entry-batches'
-import { listTopics, type Topic } from '@/api/topics'
 import type { LibraryCatalogItem } from '@/api/library'
 import { entryChannelLabel, entryFileFormatLabel } from '@/utils/entrySourceLabels'
-const props = defineProps<{ visible: boolean; batchId?: string; ids?: string[]; selection?: EntryBatchSelection; scopeLabel?: string; libraries: LibraryCatalogItem[]; selectedLibraryIds?: string[]; initialAction?: EntryBatchAction; entityOptions?: { value: string; label: string }[]; topicOptions?: { value: string; label: string }[] }>()
+const props = defineProps<{ visible: boolean; batchId?: string; ids?: string[]; selection?: EntryBatchSelection; scopeLabel?: string; libraries: LibraryCatalogItem[]; selectedLibraryIds?: string[]; initialAction?: EntryBatchAction; entityOptions?: { value: string; label: string }[] }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean]; changed: []; created: [id: string] }>()
 const { t } = useI18n()
 const ready = ref(false), closeButton = ref<{ $el?: HTMLElement } | null>(null)
@@ -25,22 +24,12 @@ watch(() => props.visible, async (visible, _previous, onCleanup) => {
   }
 }, { immediate: true })
 const step = ref<'scope' | 'action'>('scope'), stepTitle = ref<HTMLElement>()
-const action = ref<EntryBatchAction>('star'), scope = ref('selected'), starred = ref(true), contentType = ref(''), topicIds = ref<string[]>([]), topicMode = ref<'add' | 'remove'>('add')
-const topicsError = ref(''), topicsLoading = ref(false)
-let topicsGeneration = 0
-async function loadTopics() {
-  const current = ++topicsGeneration; topicsLoading.value = true; topicsError.value = ''
-  try { const response = await listTopics(); if (disposed || current !== topicsGeneration || !props.visible) return; if (!response.success) throw new Error(); topics.value = response.data || [] }
-  catch { if (!disposed && current === topicsGeneration && props.visible) topicsError.value = t('entryBatch.choicesFailed') }
-  finally { if (!disposed && current === topicsGeneration) topicsLoading.value = false }
-}
-const preview = ref<EntryBatchPreview>(), batch = ref<EntryBatch>(), confirmed = ref(false), busy = ref(false), error = ref(''), topics = ref<Topic[]>([]), page = ref(1)
+const action = ref<EntryBatchAction>('star'), scope = ref('selected'), starred = ref(true)
+const preview = ref<EntryBatchPreview>(), batch = ref<EntryBatch>(), confirmed = ref(false), busy = ref(false), error = ref(''), page = ref(1)
 let generation = 0, timer: ReturnType<typeof setTimeout> | undefined, disposed = false, readGeneration = 0
-const actions: EntryBatchAction[] = ['star', 'content_type', 'topics', 'reprocess', 'delete']
+const actions: EntryBatchAction[] = ['star', 'reprocess', 'delete']
 const selection = computed<EntryBatchSelection>(() => scope.value === 'selected' && !props.scopeLabel ? { ids: [...(props.ids || [])] } : (props.selection || {}))
-const singleLibrary = computed(() => { const ids = selection.value.ids ? props.selectedLibraryIds : selection.value.filters?.libraries; return ids?.length === 1 ? props.libraries.find(lib => lib.id === ids[0]) : undefined })
-const contentTypes = computed(() => (singleLibrary.value?.content_types || []).filter(row => row.enabled).map(row => ({ value: row.name, label: row.name })))
-const request = computed<EntryBatchRequest>(() => ({ action: action.value, selection: selection.value, ...(action.value === 'star' ? { starred: starred.value } : {}), ...(action.value === 'content_type' ? { content_type: contentType.value } : {}), ...(action.value === 'topics' ? { topic_ids: topicIds.value, topic_mode: topicMode.value } : {}) }))
+const request = computed<EntryBatchRequest>(() => ({ action: action.value, selection: selection.value, ...(action.value === 'star' ? { starred: starred.value } : {}) }))
 const scopeValid = computed(() => Boolean(selection.value.filters || selection.value.ids?.length))
 const scopeCount = ref<{ matched: number; unavailable: number }>(), scopeLoading = ref(false), scopeError = ref('')
 let scopeGeneration = 0
@@ -68,9 +57,7 @@ const filterSummary = computed(() => {
   const range = (from?: string, to?: string) => from || to ? `${from || t('entryBatch.anyDate')} → ${to || t('entryBatch.anyDate')}` : ''
   add(t('ikb18.scope'), names(f.libraries, props.libraries.map(lib => ({ value: lib.id, label: lib.display_name || lib.name }))) || t('ikb18.all'))
   add(t('entryBatch.entities'), names(f.entity_ids, props.entityOptions))
-  add(t('entryBatch.topics'), names(f.topic_ids, props.topicOptions))
   add(t('entryBatch.keyword'), f.keyword)
-  add(t('library.contentTypeFilter'), f.content_type)
   if (f.starred !== undefined) add(t('articleJudgments.starLabel'), t(f.starred ? 'articleJudgments.starredOnly' : 'articleJudgments.unstarredOnly'))
   const statuses: Record<string, string> = { pending: t('library.parseStatusPending'), processing: t('library.parseStatusProcessing'), finalizing: t('library.parseStatusFinalizing'), completed: t('library.parseStatusCompleted'), failed: t('library.parseStatusFailed'), cancelled: t('library.parseStatusCancelled'), draft: t('library.parseStatusDraft'), rejected: t('library.intakeWaiting') }
   if (f.parse_status) add(t('library.parseStatusFilter'), statuses[f.parse_status] || f.parse_status)
@@ -83,7 +70,7 @@ const filterSummary = computed(() => {
   if (f.include_rejected) add(t('entryBatch.includeRejected'), t('common.yes'))
   return rows
 })
-const valid = computed(() => actions.includes(action.value) && scopeValid.value && scopeKnown.value && (action.value !== 'content_type' || Boolean(contentType.value)) && (action.value !== 'topics' || topicIds.value.length > 0))
+const valid = computed(() => actions.includes(action.value) && scopeValid.value && scopeKnown.value)
 const active = computed(() => Boolean(batch.value && ['pending', 'running'].includes(batch.value.status)))
 const scopeText = computed(() => props.batchId && !preview.value ? t('entryBatch.fixedScope') : props.scopeLabel || t(scope.value === 'selected' ? 'entryBatch.selectedScope' : 'entryBatch.matchedScope', { count: props.ids?.length || 0 }))
 async function changeStep(value: 'scope' | 'action') {
@@ -128,13 +115,12 @@ async function submit(retry = false) {
 watch(request, () => { if (!batch.value) { generation++; busy.value = false; preview.value = undefined; confirmed.value = false } }, { deep: true })
 watch(() => [props.visible, props.batchId] as const, async ([visible, batchId]) => {
   if (visible && batchId && batch.value?.batch_id === batchId) return
-  stop(); generation++; topicsGeneration++
+  stop(); generation++
   if (!visible) return
   batch.value = undefined; preview.value = undefined; confirmed.value = false; error.value = ''; busy.value = false; page.value = 1
   if (batchId) { void refresh(); return }
   step.value = props.scopeLabel ? 'action' : 'scope'
-  scope.value = props.scopeLabel || !props.ids?.length ? 'matched' : 'selected'; action.value = props.initialAction && actions.includes(props.initialAction) ? props.initialAction : 'star'; contentType.value = ''; topicIds.value = []
-  void loadTopics()
+  scope.value = props.scopeLabel || !props.ids?.length ? 'matched' : 'selected'; action.value = props.initialAction && actions.includes(props.initialAction) ? props.initialAction : 'star'
 }, { immediate: true })
 watch([() => props.visible, () => props.batchId, selection], ([visible, batchId]) => {
   scopeGeneration++; scopeLoading.value = false; scopeCount.value = undefined; scopeError.value = ''
@@ -170,9 +156,6 @@ onUnmounted(() => { disposed = true; trigger = null; generation++; readGeneratio
         <t-button v-if="!scopeLabel" variant="text" :disabled="busy" @click="changeStep('scope')">{{ t('entryBatch.changeScope') }}</t-button>
         <label><span>{{ t('entryBatch.action') }}</span><t-select v-model="action" :disabled="busy || !!scopeLabel" :aria-label="t('entryBatch.action')" :options="actions.map(value => ({ value, label: t(`entryBatch.actions.${value}`) }))" /></label>
         <label v-if="action === 'star'"><span>{{ t('entryBatch.actions.star') }}</span><t-select v-model="starred" :disabled="busy" :aria-label="t('entryBatch.actions.star')" :options="[{ value: true, label: t('entryBatch.star') }, { value: false, label: t('entryBatch.unstar') }]" /></label>
-        <label v-if="action === 'content_type'"><span>{{ t('entryBatch.actions.content_type') }}</span><t-select v-model="contentType" :disabled="busy" :aria-label="t('entryBatch.actions.content_type')" :options="contentTypes" /><small v-if="!singleLibrary">{{ t('entryBatch.singleLibrary') }}</small></label>
-        <template v-if="action === 'topics'"><label><span>{{ t('entryBatch.topicMode') }}</span><t-select v-model="topicMode" :disabled="busy" :aria-label="t('entryBatch.topicMode')" :options="[{ value: 'add', label: t('entryBatch.addTopics') }, { value: 'remove', label: t('entryBatch.removeTopics') }]" /></label><label><span>{{ t('entryBatch.actions.topics') }}</span><t-select v-model="topicIds" multiple filterable :loading="topicsLoading" :disabled="busy" :aria-label="t('entryBatch.actions.topics')" :options="topics.map(topic => ({ value: topic.id, label: topic.name }))" /></label></template>
-        <p v-if="action === 'topics' && topicsError" role="alert">{{ topicsError }} <t-button variant="text" :loading="topicsLoading" @click="loadTopics">{{ t('common.retry') }}</t-button></p>
         <t-alert v-if="action === 'delete'" theme="warning" :message="t('entryBatch.deleteHint')" />
         <t-alert v-if="action === 'reprocess'" theme="warning" :message="t('entryBatch.reprocessHint')" />
         <t-button :loading="busy" :disabled="busy || !valid" @click="showPreview">{{ t('entryBatch.preview') }}</t-button>

@@ -9,8 +9,6 @@ export interface RetrievalConfig {
   keyword_threshold: number
   rerank_top_k: number
   rerank_threshold: number
-  similar_reports_threshold: number
-  similar_reports_window_days: number
   rrf_k?: number
   rrf_vector_weight?: number
   rrf_keyword_weight?: number

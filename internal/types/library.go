@@ -21,14 +21,13 @@ const (
 
 // Library represents a library entity
 type Library struct {
-	SystemRole         string               `json:"system_role"`
-	Template           string               `json:"template" gorm:"default:own"`
-	Directory          string               `json:"directory"`
-	ReviewCriteria     string               `json:"review_criteria"`
-	SourceEvidenceRule string               `json:"source_evidence_rule"`
-	FeedEnabled        bool                 `json:"feed_enabled"`
-	ContentTypes       []LibraryContentType `json:"content_types" gorm:"foreignKey:LibraryID"`
-	ModelTiers         ModelTierConfig      `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
+	SystemRole         string          `json:"system_role"`
+	Template           string          `json:"template" gorm:"default:own"`
+	Directory          string          `json:"directory"`
+	ReviewCriteria     string          `json:"review_criteria"`
+	SourceEvidenceRule string          `json:"source_evidence_rule"`
+	FeedEnabled        bool            `json:"feed_enabled"`
+	ModelTiers         ModelTierConfig `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
 	// Unique identifier of the library
 	ID string `yaml:"id"                      json:"id"                      gorm:"type:varchar(36);primaryKey"`
 	// Name of the library

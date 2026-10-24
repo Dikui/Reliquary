@@ -24,8 +24,7 @@ var OperationTypes = []string{
 	"ingest_discard",
 	"review_approve", "review_reject", "review_retry", "review_discard",
 	"review_supplement_url", "review_admit_unverified",
-	"star", "unstar", "correct_content_type", "correct_topics", "merge_entities",
-	"create_topic", "update_topic", "delete_topic",
+	"star", "unstar", "merge_entities",
 	"follow", "unfollow",
 }
 

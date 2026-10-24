@@ -40,8 +40,14 @@ func TestIngestProcessingNeverFetchesRemoteImages(t *testing.T) {
 		t.Run(map[bool]string{false: "markdown", true: "image_original_address"}[structured], func(t *testing.T) {
 			h, v := newIngestHarness(t)
 			transport := forbidIngestNetwork(t, h)
-			request := &types.IngestRequest{Library: "official", URL: "https://example.org/no-network", Acquisition: "extracted", ContentTypeHint: "tutorial", Publisher: "Fixture Journal",
-				Content: "# Original observations\n\nThe original experiment measures atmospheric pressure and reports its instrument settings."}
+			request := &types.IngestRequest{
+				Library:     "official",
+				URL:         "https://example.org/no-network",
+				Acquisition: "extracted",
+				Publisher:   "Fixture Journal",
+				Content: "# Original observations\n\nThe original experiment measures atmospheri" +
+					"c pressure and reports its instrument settings.",
+			}
 			imageURL := "https://example.org/unprovided.png"
 			if structured {
 				request.Images = []types.IngestImage{{SourceURL: imageURL, Caption: "Original figure"}}
@@ -57,9 +63,9 @@ func TestIngestProcessingNeverFetchesRemoteImages(t *testing.T) {
 			_, _, body := readVaultArticle(t, v, article)
 			require.Contains(t, string(body), imageURL)
 			require.Empty(t, h.processor.requests[0][1].Images)
-			require.Contains(t, h.processor.requests[0][0].Content, "仅作参考输入，不替代你的判断")
-			require.Contains(t, h.processor.requests[0][1].Content, `"content_type_hint":"tutorial"`)
-			require.Equal(t, "event", article.ContentType, "the model still determines the content type")
+			require.NotContains(t, h.processor.requests[0][0].Content, "content_type")
+			require.NotContains(t, h.processor.requests[0][1].Content, "content_type_hint")
+
 			require.Zero(t, transport.calls.Load())
 		})
 	}

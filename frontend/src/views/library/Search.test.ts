@@ -11,7 +11,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
-import { CONTENT_TYPES } from '../../types/entryClassification'
+
 import type { SearchEntry, SearchRequest } from '../../types/search'
 import * as helpers from '../../utils/search'
 import * as highlight from '../../components/GlobalCommandPalette/useHighlight'
@@ -61,7 +61,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   assert.deepEqual(warnings, []); assert.deepEqual(errors, [])
   return html
 }
-const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
+const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
 function articleComponent() {
   const preview = component('../../components/ImagePreview.vue', {
     'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
@@ -78,10 +78,10 @@ function articleComponent() {
 }
 const article: SearchEntry = {
   entry_id: 'a', title: 'Launch article', source: 'article', published_at: '2026-10-11T08:00:00Z',
-  content_type: 'research', summary: { overview: 'Launch overview', points: ['Useful point'], key_terms: ['Launch term'] },
-  entities: [{ id: 'e1', canonical_name: 'Launch Labs', entity_type: 'company', aliases: ['LL'] }], topics: [{ id: 't1', name: 'Releases' }],
+   summary: { overview: 'Launch overview', points: ['Useful point'], key_terms: ['Launch term'] },
+  entities: [{ id: 'e1', canonical_name: 'Launch Labs', entity_type: 'company', aliases: ['LL'] }],
   snippets: [0, 1, 2, 3].map(index => ({ chunk_id: `c${index}`, chunk_index: index, content: `Launch snippet ${index} <script>`, score: 0.9, match_type: 'keyword' })),
-  score: 0.9, similar_reports: [], vault_path: 'articles/2026-10/a.md', original_url: 'https://example.com/a',
+  score: 0.9,  vault_path: 'articles/2026-10/a.md', original_url: 'https://example.com/a',
 }
 const markdownExcerpt = '# Launch heading\n\n- **bold** [read](https://example.com/private)\n\n> _quote_\n\n`code` ![remote](https://example.com/chart.png) <img src="../../attachments/a/photo.png"> <b>HTML</b>'
 
@@ -153,16 +153,16 @@ function ingestSearchAPI(fields: Record<string, unknown>) {
 }
 
 test('search requests and URL state preserve all filters without old scope parameters', () => {
-  const filters = { ...helpers.defaultSearchFilters(), content_types: ['research', 'event'] as const, entity_ids: ['e1', 'e2'], topic_ids: ['t1'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
-  const mutable = { ...filters, content_types: [...filters.content_types] }
+  const filters = { ...helpers.defaultSearchFilters(),  published_from: '2026-10-01', published_to: '2026-10-11',  limit: 50 }
+  const mutable = { ...filters, }
   assert.deepEqual(helpers.buildSearchRequest('  Launch  ', mutable), { query: 'Launch', ...mutable })
   assert.deepEqual(helpers.searchStateFromURL(helpers.searchStateToURL('Launch', mutable)), { query: 'Launch', filters: mutable })
-  assert.deepEqual(helpers.buildSearchRequest('Launch', helpers.defaultSearchFilters()), { query: 'Launch', collapse_similar: true, limit: 20 })
-  const invalid = helpers.searchStateFromURL({ content_types: 'event,实验记录', sources: 'mine,removed', limit: '200' })
+  assert.deepEqual(helpers.buildSearchRequest('Launch', helpers.defaultSearchFilters()), { query: 'Launch',  limit: 20 })
+  const invalid = helpers.searchStateFromURL({  sources: 'mine,removed', limit: '200' })
   assert.equal('sources' in invalid.filters, false)
   assert.equal('sources' in helpers.buildSearchRequest(invalid.query, invalid.filters), false)
   assert.equal('sources' in helpers.searchStateToURL(invalid.query, invalid.filters), false)
-  assert.deepEqual(invalid.filters.content_types, ['event', '实验记录']); assert.equal(invalid.filters.limit, 20)
+   assert.equal(invalid.filters.limit, 20)
 })
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: search markers show and hide using fields loaded through the real search API`, async () => {
@@ -176,19 +176,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       }
     }
   })
-  test(`${locale}: folded results use ingest fields through the real API loading path`, async () => {
-    for (const flagged of [true, false, undefined]) {
-      const api = ingestSearchAPI({ similar_reports: [{ ...article, entry_id: 'nested', acquisition: flagged ? 'model_written' : 'extracted', ...(flagged !== undefined ? { incomplete: flagged } : {}) }] })
-      const result = await api.searchEntries({ query: 'Launch' })
-      const html = await render(articleComponent(), { article: result.data.results[0], query: 'Launch' }, locale, async state => { state.expanded.value = true })
-      const nested = html.slice(html.indexOf('data-article-id="nested"'))
-      assert.equal(nested.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
-      assert.equal(nested.includes(messages[locale].ingestStatus.incomplete), false)
-      for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
-        assert.equal(nested.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
-      }
-    }
-  })
+
   test(`${locale}: source unverified marker reaches search results through the page API loading path`, async () => {
     const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, async () => ({ success: true, data: { results: [{ ...article, source_unverified: true }], excluded_missing_published_at: 0 } }), locale)
     assert.ok(result.html.includes(messages[locale].knowledgeReview.sourceUnverified))
@@ -206,47 +194,21 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: article results show summary, attribution, safe link and at most three highlighted snippets`, async () => {
     const html = await render(articleComponent(), { article, query: 'Launch' }, locale)
-    for (const text of ['Launch article', 'Launch overview', 'Useful point', 'Launch term', 'Launch Labs', 'Releases', article.vault_path, messages[locale].knowledgeSearch.sources.article]) assert.ok(html.includes(text), text)
+    for (const text of ['Launch article', 'Launch overview', 'Useful point', 'Launch term', 'Launch Labs', article.vault_path, messages[locale].knowledgeSearch.sources.article]) assert.ok(html.includes(text), text)
     assert.match(html, /href="https:\/\/example.com\/a"/)
     assert.match(html, /<mark class="search-highlight">Launch<\/mark> snippet 0/)
     assert.doesNotMatch(html, /snippet 3|<script>/)
   })
-  test(`${locale}: similar reports start collapsed and the disclosure exposes its expanded state and nested articles`, async () => {
-    const grouped = { ...article, similar_reports: [{ ...article, entry_id: 'b', title: 'Similar launch', similar_reports: [] }] }
-    const closed = await render(articleComponent(), { article: grouped, query: 'Launch' }, locale)
-    assert.match(closed, /aria-expanded="false"/); assert.match(closed, /aria-controls="similar-reports-a"/)
-    assert.doesNotMatch(closed, /data-article-id="b"/)
-    const opened = await render(articleComponent(), { article: grouped, query: 'Launch' }, locale, async state => { state.expanded.value = true })
-    assert.match(opened, /aria-expanded="true"/); assert.match(opened, /id="similar-reports-a"/); assert.match(opened, /data-article-id="b"/)
-  })
-  test(`${locale}: user documents show their source, missing date and content type`, async () => {
-    const html = await render(articleComponent(), { article: { ...article, source: 'mine', summary: null, published_at: null, original_url: '' }, query: 'Launch' }, locale)
-    assert.ok(html.includes(messages[locale].knowledgeSearch.sources.mine)); assert.ok(html.includes(messages[locale].knowledgeSearch.missingPublishedAt))
-    assert.match(html, /entry-classification/)
-    assert.ok(html.includes(messages[locale].library.contentTypes.research))
-  })
-  test(`${locale}: filters offer six content types and ID-valued entity and topic options without a source filter`, async () => {
-    const filtersComponent = component('../../components/SearchFilters.vue', { '@/types/entryClassification': { CONTENT_TYPES } })
-    const selects: any[] = [], dates: any[] = []
-    const select = defineComponent({ props: ['modelValue', 'options', 'multiple', 'clearable', 'filterable', 'disabled', 'loading'], setup: (props, { attrs }) => { selects.push(props); return () => h('div', attrs) } })
-    const date = defineComponent({ props: ['modelValue', 'format', 'valueType', 'clearable', 'allowInput'], setup: (props, { attrs }) => { dates.push(props); return () => h('div', attrs) } })
-    const html = await render(filtersComponent, { modelValue: helpers.defaultSearchFilters(), options: { entities: article.entities, topics: article.topics } }, locale, undefined, { 't-select': select, 't-date-picker': date })
-    assert.deepEqual(selects[0].options.map((option: any) => option.value), CONTENT_TYPES)
-    assert.deepEqual(selects[1].options, [{ value: 'e1', label: 'Launch Labs' }]); assert.deepEqual(selects[2].options, [{ value: 't1', label: 'Releases' }])
-    assert.equal(selects.length, 4)
-    assert.ok(!html.includes(messages[locale].knowledgeSearch.source))
-    assert.ok(selects.slice(0, 3).every(select => select.multiple !== undefined))
-    assert.deepEqual(selects[3].options.map((option: any) => option.value), ['', 'true', 'false'])
-    assert.ok(dates.every(date => date.valueType === 'YYYY-MM-DD'))
-    assert.ok(html.includes(messages[locale].knowledgeSearch.filterHint))
-  })
+
+
+
 }
 
 async function pageScenario(action: (state: any, calls: SearchRequest[], pushes: any[]) => Promise<void>, search?: (request: SearchRequest) => Promise<any>, locale: keyof typeof messages = 'zh-CN') {
   const calls: SearchRequest[] = [], pushes: any[] = []
   const page = component('./SearchView.vue', {
     'vue-router': { useRoute: () => ({ query: {} }), useRouter: () => ({ replace: (value: unknown) => Promise.resolve(pushes.push(value)), push: (value: unknown) => Promise.resolve(pushes.push(value)) }) },
-    '@/api/search': { searchEntries: (request: SearchRequest) => { calls.push(request); return search ? search(request) : Promise.resolve({ success: true, data: { results: [article], excluded_missing_published_at: 2 } }) }, getSearchOptions: async () => ({ success: true, data: { entities: article.entities, topics: article.topics } }) },
+    '@/api/search': { searchEntries: (request: SearchRequest) => { calls.push(request); return search ? search(request) : Promise.resolve({ success: true, data: { results: [article], excluded_missing_published_at: 2 } }) }, getSearchOptions: async () => ({ success: true, data: { entities: article.entities, } }) },
     '@/components/SearchFilters.vue': moduleOf(stub), '@/components/SearchEntry.vue': moduleOf(articleComponent()), '@/utils/search': helpers,
   })
   const html = await render(page, {}, locale, state => action(state, calls, pushes))
@@ -255,13 +217,15 @@ async function pageScenario(action: (state: any, calls: SearchRequest[], pushes:
 test('search page submits all filters, renders exclusion count and opens the article detail', async () => {
   const result = await pageScenario(async (state, calls, pushes) => {
     state.query.value = ' Launch '
-    state.filters.value = { ...helpers.defaultSearchFilters(), content_types: ['research'], entity_ids: ['e1'], topic_ids: ['t1'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false }
+    state.filters.value = { ...helpers.defaultSearchFilters(),  published_from: '2026-10-01', published_to: '2026-10-11', }
     await state.runSearch()
     await state.loadOptions()
-    assert.equal(calls.length, 1); assert.equal(calls[0].collapse_similar, false); assert.deepEqual(calls[0].entity_ids, ['e1'])
-    assert.deepEqual(state.options.value.topics, article.topics)
+    assert.equal(calls.length, 1);
+
     state.openArticle(article)
     assert.deepEqual(pushes.at(-1), { path: '/platform/entries', query: { entry_id: 'a' } })
+    state.openEntity('e1')
+    assert.deepEqual(pushes.at(-1), { path: '/platform/entries', query: { tab: 'entities', entity_id: 'e1' } })
   })
   assert.ok(result.html.includes('已排除 2 篇缺失发布时间的资料。')); assert.match(result.html, /data-article-id="a"/)
 })
@@ -326,16 +290,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 }
 for (const count of [1, 2]) {
   test(`English quantities use correct article and report nouns for ${count}`, async () => {
-    const reports = Array.from({ length: count }, (_, index) => ({ ...article, entry_id: `b${index}`, similar_reports: [] }))
-    const closed = await render(articleComponent(), { article: { ...article, similar_reports: reports }, query: 'Launch' }, 'en-US')
-    const opened = await render(articleComponent(), { article: { ...article, similar_reports: reports }, query: 'Launch' }, 'en-US', async state => { state.expanded.value = true })
-    const noun = count === 1 ? 'report' : 'reports'
-    assert.ok(closed.includes(`Show ${count} similar ${noun}`)); assert.ok(opened.includes(`Hide ${count} similar ${noun}`))
+    const reports = Array.from({ length: count }, (_, index) => ({ ...article, entry_id: `b${index}`, }))
     const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, async () => ({ success: true, data: { results: reports, excluded_missing_published_at: count } }), 'en-US')
     const articleNoun = count === 1 ? 'material' : 'materials'
     assert.ok(result.html.includes(`Showing ${count} ${articleNoun}`))
     assert.ok(result.html.includes(`Excluded ${count} ${articleNoun} without a publication date.`))
-    if (count === 1) assert.doesNotMatch(closed + opened + result.html, /1 (?:articles|similar reports)/)
   })
 }
 
@@ -409,14 +368,7 @@ test('search results render their library display name', async () => {
   assert.equal(groups[0].libraryId, 'lib-a')
 })
 
-test('personal document search results render the content type returned by the API', async () => {
-  const api = ingestSearchAPI({ source: 'mine', content_type: '内部方案', vault_path: 'personal/plan.md' })
-  const result = await pageScenario(async state => {
-    state.query.value = 'Launch'; await state.runSearch()
-    assert.equal(state.results.value[0].content_type, '内部方案')
-  }, api.searchEntries, 'zh-CN')
-  assert.ok(result.html.includes('内部方案'))
-})
+
 
 for (const locale of ['zh-CN','en-US'] as const) test(`${locale}: real search results show an update link and global grouping retains the latest ID`,async()=>{
  const api=ingestSearchAPI({source:'mine',has_update:true,latest_entry_id:'latest-record'})

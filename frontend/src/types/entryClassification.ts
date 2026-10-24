@@ -1,10 +1,7 @@
 import type { Entity } from '@/api/entities'
 import type { Acquisition } from './ingest'
 
-export const CONTENT_TYPES = ['event', 'opinion', 'research', 'tutorial', 'case', 'reference', 'other'] as const
-export type ContentType = typeof CONTENT_TYPES[number]
 export interface StructuredSummary { overview: string; points: string[]; key_terms: string[] }
-export interface EntryTopic { id: string; name: string; description?: string }
 export interface ClassifiedEntry {
   summary_status?: string
   error_message?: string
@@ -12,7 +9,6 @@ export interface ClassifiedEntry {
   latest_entry_id?: string
   library_id?: string
   library_name?: string
- library_content_types?: { name: string; enabled: boolean; position: number }[]
  image_descriptions?: { url: string; description?: string; skip_reason?: string; ordinal: number; locations: { paragraph: number; start: number; end: number }[] }[]
   acquisition?: Acquisition | ''
   related_entry_id?: string
@@ -21,11 +17,9 @@ export interface ClassifiedEntry {
   source_unverified?: boolean
   source_kind?: 'article' | 'mine' | 'report'
   vault_path?: string
-  content_type?: ContentType | string | null
   structured_summary?: StructuredSummary | null
   description?: string
   source?: string
   metadata?: { intake?: { decision?: string; reason?: string; source?: string; original_path?: string; source_info?: { author?: string; publisher?: string; original_url?: string; original_url_source?: string; published_at?: string } } }
   entities?: Pick<Entity, 'id' | 'canonical_name' | 'entity_type'>[]
-  topics?: EntryTopic[]
 }

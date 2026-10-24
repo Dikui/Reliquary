@@ -11,12 +11,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reliquary/internal/testutil/pgtest"
+	"reliquary/internal/utils"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/testutil/pgtest"
-	"reliquary/internal/utils"
 )
 
 func TestVaultOnlyLoadRejectsTamperedBodyAndMissingTableBeforeImport(t *testing.T) {
@@ -25,32 +25,32 @@ func TestVaultOnlyLoadRejectsTamperedBodyAndMissingTableBeforeImport(t *testing.
 	seed(t, db)
 	root := t.TempDir()
 	article := filepath.Join(root, "articles/original.md")
-	require.NoError(t, os.MkdirAll(filepath.Dir(article), 0700))
-	require.NoError(t, os.WriteFile(article, []byte("Original body and unchanged ID"), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(article), 0o700))
+	require.NoError(t, os.WriteFile(article, []byte("Original body and unchanged ID"), 0o600))
 	snapshot, err := Capture(ctx, db)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, "", snapshot))
 	_, err = Load(root)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(article, []byte("Modified body and unchanged ID"), 0600))
+	require.NoError(t, os.WriteFile(article, []byte("Modified body and unchanged ID"), 0o600))
 	_, err = Load(root)
 	require.ErrorContains(t, err, "vault file checksum mismatch")
-	require.NoError(t, os.WriteFile(article, []byte("Original body and unchanged ID"), 0600))
+	require.NoError(t, os.WriteFile(article, []byte("Original body and unchanged ID"), 0o600))
 	var manifest ReplicaManifest
 	manifestPath := filepath.Join(root, ".reliquary/manifest.json")
 	require.NoError(t, json.Unmarshal(mustRead(t, manifestPath), &manifest))
 	filtered := []File{}
 	for _, file := range manifest.Files {
-		if file.Path != "data/topics.json" {
+		if file.Path != "data/entities.json" {
 			filtered = append(filtered, file)
 		}
 	}
 	manifest.Files = filtered
 	data, err := json.Marshal(manifest)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(manifestPath, data, 0600))
+	require.NoError(t, os.WriteFile(manifestPath, data, 0o600))
 	_, err = Load(root)
-	require.ErrorContains(t, err, "missing replica table topics")
+	require.ErrorContains(t, err, "missing replica table entities")
 }
 
 func TestReplicaRefusesCredentialsInUploadedAssetWithoutChangingOriginal(t *testing.T) {
@@ -60,7 +60,7 @@ func TestReplicaRefusesCredentialsInUploadedAssetWithoutChangingOriginal(t *test
 	root, uploads := t.TempDir(), t.TempDir()
 	original := []byte("Original binary-compatible source contains MODEL_SECRET and must remain untouched.")
 	path := filepath.Join(uploads, "raw-original.txt")
-	require.NoError(t, os.WriteFile(path, original, 0600))
+	require.NoError(t, os.WriteFile(path, original, 0o600))
 	snapshot, err := Capture(ctx, db)
 	require.NoError(t, err)
 	err = WriteSnapshot(root, uploads, snapshot)
@@ -215,17 +215,22 @@ func TestCredentialsStayInMemoryAndAreExcludedFromHeadersErrorsAndCompressedFile
 	require.NoError(t, writer.Close())
 	var archive bytes.Buffer
 	tarWriter := tar.NewWriter(&archive)
-	require.NoError(t, tarWriter.WriteHeader(&tar.Header{Name: "layer.tar.gz", Mode: 0600, Size: int64(compressed.Len())}))
+	require.NoError(
+		t,
+		tarWriter.WriteHeader(
+			&tar.Header{Name: "layer.tar.gz", Mode: 0o600, Size: int64(compressed.Len())},
+		),
+	)
 	_, err = tarWriter.Write(compressed.Bytes())
 	require.NoError(t, err)
 	require.NoError(t, tarWriter.Close())
 	require.NotContains(t, string(archive.Bytes()), secret)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "image.tar"), archive.Bytes(), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "image.tar"), archive.Bytes(), 0o600))
 	err = ScanCredentialFiles(ctx, db, root)
 	require.ErrorContains(t, err, "image.tar")
 	require.NotContains(t, err.Error(), secret)
 	require.NoError(t, os.Remove(filepath.Join(root, "image.tar")))
-	require.NoError(t, os.WriteFile(filepath.Join(root, secret+".txt"), []byte("ordinary bytes"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, secret+".txt"), []byte("ordinary bytes"), 0o600))
 	err = ScanCredentialFiles(ctx, db, root)
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), secret)
@@ -273,11 +278,11 @@ func TestManifestExplicitModelChangeAndLogAppendStillRejectPermanentDataTamperin
 	require.NoError(t, err)
 	require.Contains(t, CompareManifestWithOptions(expected, actual, true, true), "table embedding_rebuild_runs")
 	require.NoError(t, db.Exec(`UPDATE embedding_rebuild_runs SET model_id='new-embed' WHERE id='new-rebuild'`).Error)
-	require.NoError(t, db.Exec(`UPDATE entries SET content_type_corrected=false WHERE id='article'`).Error)
+	require.NoError(t, db.Exec(`UPDATE entries SET source_unverified=false WHERE id='article'`).Error)
 	actual, err = BuildManifest(ctx, db, root, uploads)
 	require.NoError(t, err)
 	require.Contains(t, CompareManifestWithOptions(expected, actual, true, true), "table entries")
-	require.NoError(t, db.Exec(`UPDATE entries SET content_type_corrected=true WHERE id='article'`).Error)
+	require.NoError(t, db.Exec(`UPDATE entries SET source_unverified=true WHERE id='article'`).Error)
 	require.NoError(t, db.Exec(`UPDATE models SET display_name='changed unrelated chat model' WHERE id='chat'`).Error)
 	actual, err = BuildManifest(ctx, db, root, uploads)
 	require.NoError(t, err)

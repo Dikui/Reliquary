@@ -159,3 +159,11 @@
 维护列归属按版本核对，历史副本导入到当前结构时移除上述退役表列；其余数据继续严格核对。备份、恢复、重建与恢复演练只依赖 PostgreSQL、Redis 和存储，不再执行 Neo4j 操作。升级默认不备份，生产退回仍须使用已有完整备份。
 
 发布版本 33 前，按本机部署文档同步运行目录的 `config/prompt_templates/processing.yaml` 与 `content_check.yaml`。输出结构与代码同时变化，运行副本不能继续保留 `article_relations` 模板或要求调用旧图谱工具；严格启动校验会拒绝已删除的模板 ID。`verification.yaml` 不再加载，无需 Neo4j 配置或服务。
+
+## 删除内容类型、主题与资料自检
+
+`000034_remove_classification_checks` 删除 `library_content_types`、`topics`、`entry_topics`、`topic_backfill_jobs`、`topic_backfill_batches`、`content_check_settings`、`content_check_runs`；删除资料的 `content_type`、`content_type_corrected`、`content_type_hint`，处理输出的 `content_type`，以及关注表的 `topic_id`。主题关注和 `topic:backfill`、`content:check` 待处理任务删除，实体关注保留。全文表头函数和触发器同步去掉主题，重算派生检索文本。
+
+本迁移永久删除上述分类、自检及主题关注数据；资料正文、图片、来源、星标、实体关联和其他数据保留。开发 down 只重建空结构，不恢复已删除的数据。不备份不影响迁移执行，但不能保证恢复到此次操作前的最新状态；生产退回仍需要此前校验过的完整备份。
+
+发布时须同步新的 `config/prompt_templates/processing.yaml`；`topic_backfill`、`content_type_hint` 不再是有效模板 ID，`content_check.yaml` 不再加载。部署与备份继续独立执行。

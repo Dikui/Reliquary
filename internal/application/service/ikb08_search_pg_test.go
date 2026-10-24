@@ -6,10 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"testing"
-	"time"
-
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/rerank"
@@ -18,6 +14,10 @@ import (
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
 	"reliquary/internal/utils/ollama"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 type ikb08Models struct {
@@ -29,6 +29,7 @@ type ikb08Models struct {
 func (m ikb08Models) GetEmbeddingModel(context.Context, string) (embedding.Embedder, error) {
 	return m.embedder, nil
 }
+
 func (m ikb08Models) GetRerankModel(context.Context, string) (rerank.Reranker, error) {
 	return m.ranker, nil
 }
@@ -47,7 +48,10 @@ func TestIKB08RequiredLibrariesAndCandidateScope(t *testing.T) {
 		h.add(t, fmt.Sprintf("selected-%d", i), "article", "2026-10-01", "event", "semanticlaunch", 1)
 	}
 	for _, query := range []string{"semanticlaunch", "searchfixture"} {
-		response, err := h.svc.Search(h.ctx, types.EntrySearchRequest{Query: query, Libraries: []string{"chosen"}, Limit: 7, CollapseSimilar: entrySearchNoCollapse()})
+		response, err := h.svc.Search(
+			h.ctx,
+			types.EntrySearchRequest{Query: query, Libraries: []string{"chosen"}, Limit: 7},
+		)
 		require.NoError(t, err)
 		require.Len(t, response.Results, 7)
 		for _, hit := range response.Results {
@@ -55,7 +59,10 @@ func TestIKB08RequiredLibrariesAndCandidateScope(t *testing.T) {
 			require.Equal(t, "chosen", hit.LibraryDirectory)
 		}
 	}
-	response, err := h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Libraries: []string{h.library.ID, other.ID}, Limit: 100, CollapseSimilar: entrySearchNoCollapse()})
+	response, err := h.svc.Search(
+		h.ctx,
+		types.EntrySearchRequest{Query: "semanticlaunch", Libraries: []string{h.library.ID, other.ID}, Limit: 100},
+	)
 	require.NoError(t, err)
 	require.Len(t, response.Results, 72)
 	_, err = h.svc.Search(h.ctx, types.EntrySearchRequest{Query: "q", Libraries: []string{"unknown"}})
@@ -101,7 +108,10 @@ func TestIKB08SearchRerankHTTPAndFallback(t *testing.T) {
 	h.library.ModelTiers.Rerank = "local-rerank"
 	require.NoError(t, h.db.Save(h.library).Error)
 	svc := NewSearchService(entrySearchFixtureBases{library: h.library}, nil, ikb08Models{ranker: ranker}, h.db)
-	response, err = svc.Search(h.ctx, types.EntrySearchRequest{Query: "semanticlaunch", Libraries: []string{h.library.ID}, CollapseSimilar: entrySearchNoCollapse()})
+	response, err = svc.Search(
+		h.ctx,
+		types.EntrySearchRequest{Query: "semanticlaunch", Libraries: []string{h.library.ID}},
+	)
 	require.NoError(t, err)
 	require.Equal(t, "applied", response.RerankStatus)
 	require.Equal(t, "b", response.Results[0].EntryID)

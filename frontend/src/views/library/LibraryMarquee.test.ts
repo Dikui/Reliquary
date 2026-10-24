@@ -49,10 +49,10 @@ async function mountLibrary(realCheckbox = false) {
     '@/stores/resources': { useResourcesStore: () => ({ library: { id: 'library' }, fetchLibrary: async () => ({ id: 'library' }) }) },
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [], ensureParserEngines: async () => {} }) },
     '@/stores/reparseConfirm': { useReparseConfirmStore: () => ({}) },
-    '@/types/entryClassification': { CONTENT_TYPES: [] },
+    '@/types/entryClassification': { },
     '@/types/search': { SEARCH_SOURCES },
     '@/api/entities': { listEntities: async () => ({ success: true, data: [] }) },
-    '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) },
+
     '@/api/library': {},
     '@/utils/entryTrace': {},
     '@/utils/entrySourceLabels': entrySourceLabels,

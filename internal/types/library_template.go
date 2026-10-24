@@ -24,21 +24,31 @@ type IdentityRules struct {
 
 // TemplateRules are code-owned behavior, never per-library configuration.
 type TemplateRules struct {
-	Identity        IdentityRules `json:"-"`
-	EvidenceMode    string        `json:"-"`
-	Deduplication   string        `json:"deduplication"`
-	SourceEvidence  string        `json:"source_evidence"`
-	Review          bool          `json:"review"`
-	Process         bool          `json:"process"`
-	MergeReposts    bool          `json:"merge_reposts"`
-	CollapseSimilar bool          `json:"collapse_similar"`
-	FactSource      bool          `json:"fact_source"`
+	Identity       IdentityRules `json:"-"`
+	EvidenceMode   string        `json:"-"`
+	Deduplication  string        `json:"deduplication"`
+	SourceEvidence string        `json:"source_evidence"`
+	Review         bool          `json:"review"`
+	Process        bool          `json:"process"`
+	MergeReposts   bool          `json:"merge_reposts"`
+	FactSource     bool          `json:"fact_source"`
 }
 
 func RulesForTemplate(template string) (TemplateRules, bool) {
 	switch template {
 	case TemplateExternalTimely, TemplateExternalDurable, TemplateOwn, TemplateGenerated:
-		return TemplateRules{Deduplication: "仅在本库按来源标识或规范化链接定位；保存内容相同返回原 ID，变化覆盖旧文；无来源标识时新建。", SourceEvidence: "来源可选，保留已有依据，不因缺少来源进入待审。", Process: true, CollapseSimilar: template == TemplateExternalTimely, FactSource: template != TemplateGenerated, Identity: IdentityRules{URL: true, Identifier: true, SourceRef: true}}, true
+		return TemplateRules{
+				Deduplication:  "仅在本库按来源标识或规范化链接定位；保存内容相同返回原 ID，变化覆盖旧文；无来源标识时新建。",
+				SourceEvidence: "来源可选，保留已有依据，不因缺少来源进入待审。",
+				Process:        true,
+				FactSource:     template != TemplateGenerated,
+				Identity: IdentityRules{
+					URL:        true,
+					Identifier: true,
+					SourceRef:  true,
+				},
+			},
+			true
 	default:
 		return TemplateRules{}, false
 	}
@@ -73,27 +83,19 @@ func evidencePublisherPresent(value string) bool {
 	return true
 }
 
-type LibraryContentType struct {
-	LibraryID string `json:"-" gorm:"primaryKey"`
-	Name      string `json:"name" gorm:"primaryKey"`
-	Position  int    `json:"position"`
-	Enabled   bool   `json:"enabled"`
-}
-
 // LibraryPatch intentionally includes immutable fields so attempts to write
 // them are rejected instead of silently ignored by JSON decoding.
 type LibraryPatch struct {
-	Name               *string               `json:"name"`
-	Description        *string               `json:"description"`
-	ReviewCriteria     *string               `json:"review_criteria"`
-	ModelTiers         *ModelTierConfig      `json:"model_tiers"`
-	ChunkingConfig     *ChunkingConfig       `json:"chunking_config"`
-	SourceEvidenceRule *string               `json:"source_evidence_rule"`
-	FeedEnabled        *bool                 `json:"feed_enabled"`
-	ContentTypes       *[]LibraryContentType `json:"content_types"`
-	Template           *string               `json:"template"`
-	Directory          *string               `json:"directory"`
-	SystemRole         *string               `json:"system_role"`
+	Name               *string          `json:"name"`
+	Description        *string          `json:"description"`
+	ReviewCriteria     *string          `json:"review_criteria"`
+	ModelTiers         *ModelTierConfig `json:"model_tiers"`
+	ChunkingConfig     *ChunkingConfig  `json:"chunking_config"`
+	SourceEvidenceRule *string          `json:"source_evidence_rule"`
+	FeedEnabled        *bool            `json:"feed_enabled"`
+	Template           *string          `json:"template"`
+	Directory          *string          `json:"directory"`
+	SystemRole         *string          `json:"system_role"`
 }
 
 const (
@@ -168,24 +170,7 @@ func ValidateLibrary(l *Library) error {
 	} else if l.SourceEvidenceRule != "" {
 		return fmt.Errorf("source evidence rule is only configurable for external_timely")
 	}
-	for _, names := range [][]string{contentTypeNames(l.ContentTypes)} {
-		seen := map[string]bool{}
-		for _, name := range names {
-			if strings.TrimSpace(name) == "" || len([]rune(name)) > 100 || seen[name] {
-				return fmt.Errorf("type names must be nonempty, unique and fit 100 characters")
-			}
-			seen[name] = true
-		}
-	}
 	return nil
-}
-
-func contentTypeNames(rows []LibraryContentType) []string {
-	names := []string{}
-	for _, row := range rows {
-		names = append(names, row.Name)
-	}
-	return names
 }
 
 func SystemRoleForSource(kind string) string {
@@ -200,7 +185,7 @@ func SystemRoleForSource(kind string) string {
 }
 
 func SystemLibraryDefaults() []*Library {
-	makeLibrary := func(role, name, template, description, evidence string, feed bool, names []string) *Library {
+	makeLibrary := func(role, name, template, description, evidence string, feed bool) *Library {
 		l := &Library{
 			SystemRole:         role,
 			Directory:          role,
@@ -209,12 +194,8 @@ func SystemLibraryDefaults() []*Library {
 			Description:        description,
 			SourceEvidenceRule: evidence,
 			FeedEnabled:        feed,
-			ContentTypes:       []LibraryContentType{},
 		}
 		l.ReviewCriteria = l.DefaultReviewCriteria()
-		for i, n := range names {
-			l.ContentTypes = append(l.ContentTypes, LibraryContentType{Name: n, Position: i, Enabled: true})
-		}
 		l.EnsureDefaults()
 		return l
 	}
@@ -226,7 +207,6 @@ func SystemLibraryDefaults() []*Library {
 			"官方、公司、媒体、研究机构发布的新闻、公告、财报、研报、政策。有时效的机构研报收在这里。",
 			"link_or_publisher_date",
 			true,
-			[]string{"新闻", "公告", "财报", "研究报告", "政策法规", "其他"},
 		),
 		makeLibrary(
 			"media",
@@ -235,7 +215,6 @@ func SystemLibraryDefaults() []*Library {
 			"外部媒体、机构账号或个人的报道、观点、分析与实践经验；不要求个人署名。",
 			"link_required",
 			true,
-			[]string{"评论", "分析", "预测", "访谈", "其他"},
 		),
 		makeLibrary(
 			"references",
@@ -244,7 +223,6 @@ func SystemLibraryDefaults() []*Library {
 			"长期引用的论文、书籍、标准、官方文档、教程。作为定义和方法长期引用的白皮书收在这里。",
 			"",
 			false,
-			[]string{"论文", "书籍", "标准", "官方文档", "教程", "其他"},
 		),
 		makeLibrary(
 			"personal",
@@ -253,7 +231,6 @@ func SystemLibraryDefaults() []*Library {
 			"本人的工作资料、经验、SOP、笔记。",
 			"",
 			false,
-			[]string{"方案", "纪要", "报告", "SOP", "经验", "笔记", "其他"},
 		),
 		makeLibrary(
 			"ai-output",
@@ -262,7 +239,6 @@ func SystemLibraryDefaults() []*Library {
 			"外部 AI 按要求写回的报告；不能当作事实。",
 			"",
 			false,
-			nil,
 		),
 	}
 }

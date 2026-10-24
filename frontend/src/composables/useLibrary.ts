@@ -11,7 +11,7 @@ import {
 import { entryStore } from "@/stores/entry";
 import { useI18n } from 'vue-i18n';
 import type { EntryRepostSource } from '@/api/library';
-import type { ClassifiedEntry, StructuredSummary, EntryTopic } from '@/types/entryClassification';
+import type { ClassifiedEntry, StructuredSummary } from '@/types/entryClassification';
 
 export default function (defaultLibraryId?: string) {
   const usemenuStore = entryStore();
@@ -34,8 +34,6 @@ export default function (defaultLibraryId?: string) {
     file_type: "",
     description: "",
     collect_reason: "",
-    content_type: '',
-    library_content_types: [] as NonNullable<ClassifiedEntry['library_content_types']>,
     image_descriptions: [] as NonNullable<ClassifiedEntry['image_descriptions']>,
     starred: false,
     source_unverified: false,
@@ -47,7 +45,6 @@ export default function (defaultLibraryId?: string) {
     related_entry_id: '',
     structured_summary: null as StructuredSummary | null,
     entities: [] as NonNullable<ClassifiedEntry['entities']>,
-    topics: [] as EntryTopic[],
     parse_status: "",
     summary_status: "",
     error_message: "",
@@ -68,7 +65,6 @@ export default function (defaultLibraryId?: string) {
       libraries?: string[];
       keyword?: string;
       file_type?: string;
-      content_type?: string;
       starred?: boolean;
       parse_status?: string;
       source?: string;
@@ -171,8 +167,6 @@ export default function (defaultLibraryId?: string) {
       collect_reason: "",
       library_name: '',
       library_id: '',
-      content_type: '',
-      library_content_types: [],
       image_descriptions: [],
       starred: false,
       source_unverified: false,
@@ -184,7 +178,6 @@ export default function (defaultLibraryId?: string) {
       related_entry_id: '',
       structured_summary: null,
       entities: [],
-      topics: [],
       parse_status: "",
       summary_status: "",
       error_message: "",
@@ -221,8 +214,6 @@ export default function (defaultLibraryId?: string) {
             collect_reason: data.collect_reason || '',
             library_name: data.library_name || '',
             library_id: data.library_id || '',
-            content_type: data.content_type || '',
-            library_content_types: Array.isArray(data.library_content_types) ? data.library_content_types : [],
             image_descriptions: Array.isArray(data.image_descriptions) ? data.image_descriptions : [],
             starred: Boolean(data.starred),
             source_unverified: Boolean(data.source_unverified),
@@ -234,7 +225,6 @@ export default function (defaultLibraryId?: string) {
             related_entry_id: data.related_entry_id || '',
             structured_summary: data.structured_summary || null,
             entities: Array.isArray(data.entities) ? data.entities : [],
-            topics: Array.isArray(data.topics) ? data.topics : [],
             parse_status: data.parse_status || '',
             summary_status: data.summary_status || '',
             error_message: data.error_message || '',

@@ -21,7 +21,6 @@ type segmentedChat struct {
 	mergeCalls        int
 	mergeFail         bool
 	cancel            context.CancelFunc
-	topic             string
 	reviewFail        int
 	auxiliaryFrom     int
 	reviewMergeCalls  int
@@ -37,7 +36,7 @@ func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts 
 		if m.mergeFail {
 			return nil, fmt.Errorf("merge failed")
 		}
-		return &types.ChatResponse{Content: "```json\n" + validProcessingFixture("event") + "\n```"}, nil
+		return &types.ChatResponse{Content: "```json\n" + validProcessingFixture() + "\n```"}, nil
 	}
 	if stage != "intake_review" && stage != "article_processing" {
 		return &types.ChatResponse{Content: `{"decision":"new","confidence":1}`}, nil
@@ -91,16 +90,9 @@ func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts 
 		}
 		return nil, fmt.Errorf("fixture failure %d", n)
 	}
-	kind := "event"
-	if n == 1 {
-		kind = "research"
-	}
-	result, _ := parseArticleProcessingResult(validProcessingFixture(kind))
+	result, _ := parseArticleProcessingResult(validProcessingFixture())
 	entityType := "company"
 	result.Entities = []articleProcessingEntity{{Name: "Acme", Type: &entityType, Aliases: []string{fmt.Sprintf("Alias%d", n)}, Description: "Acme is the publisher.", Relevance: "central", EvidenceIDs: []int{1}}}
-	if m.topic != "" {
-		result.Topics = []string{m.topic, m.topic}
-	}
 	data, _ := json.Marshal(result)
 	return &types.ChatResponse{Content: string(data)}, nil
 }
@@ -129,9 +121,6 @@ func TestSegmentProcessingRetryAndMerge(t *testing.T) {
 	_, attempt, err := h.service.tracker().OpenAttempt(h.ctx, k.ID)
 	require.NoError(t, err)
 	h.ctx = withAttempt(h.ctx, attempt)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Segments", Description: "fixture"})
-	require.NoError(t, err)
-	m.topic = topic.ID
 	body := "# Main\n\n" + strings.Repeat("paragraph with meaningful original material. ", 13)
 	m.fail = 3
 	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
@@ -160,9 +149,7 @@ func TestSegmentProcessingRetryAndMerge(t *testing.T) {
 	require.Equal(t, 2, m.calls["article_processing"][3])
 	require.Equal(t, 1, m.mergeCalls)
 	require.Len(t, result.Entities, 1)
-	require.Equal(t, []string{topic.ID}, result.Topics)
-	require.Equal(t, "event", *result.ContentType)
-	require.Len(t, result.Provenance.Topics[topic.ID], len(m.calls["article_processing"]))
+
 	require.Len(t, result.Provenance.Entities, len(result.Entities))
 	_, err = restarted.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
@@ -217,24 +204,17 @@ func TestIntakeDoesNotCreateReviewSegmentsOrApplyModelLimits(t *testing.T) {
 	require.Zero(t, count)
 }
 
-func TestShortArticleStillOneCallAndTypeTie(t *testing.T) {
+func TestShortArticleStillOneCall(t *testing.T) {
 	h, m := segmentedHarness(t)
 	k := segmentedEntry(t, h)
 	_, err := h.service.callArticleProcessing(h.ctx, h.library, k, "Short complete body", nil)
 	require.NoError(t, err)
 	require.Equal(t, 1, m.calls["article_processing"][1])
 	require.Zero(t, m.mergeCalls)
-	one, _ := parseArticleProcessingResult(validProcessingFixture("research"))
-	two, _ := parseArticleProcessingResult(validProcessingFixture("event"))
-	result := mergeArticleSegments([]*articleProcessingResult{one, two})
-	require.Equal(t, "research", *result.ContentType)
 }
 
 func TestSegmentPersistenceResolvesGlobalProvenance(t *testing.T) {
 	h, m := segmentedHarness(t)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Long original", Description: "Original fixture"})
-	require.NoError(t, err)
-	m.topic = topic.ID
 	k := h.upload(t, "long-persisted", "# Original\n\n"+strings.Repeat("This original document describes Acme products and measurements. ", 15))
 	require.Equal(t, types.ParseStatusCompleted, k.ParseStatus)
 	var entities []types.EntryEntity
@@ -245,7 +225,6 @@ func TestSegmentPersistenceResolvesGlobalProvenance(t *testing.T) {
 	var result articleProcessingResult
 	require.NoError(t, json.Unmarshal(run.Result, &result))
 	require.Len(t, result.Provenance.ResolvedEntities[entities[0].EntityID], len(m.calls["article_processing"]))
-	require.Len(t, result.Provenance.Topics[topic.ID], len(m.calls["article_processing"]))
 }
 
 func TestSegmentInlineReviewUsesTheFullEnvelopeBudget(t *testing.T) {
@@ -342,10 +321,8 @@ func TestSegmentUnverifiedFingerprintRepeatsOldWorkAndThenRetainsVerifiedCheckpo
 	h, model := segmentedHarness(t)
 	k := segmentedEntry(t, h)
 	body := "# Original\n\n" + strings.Repeat("Complete original measurements. ", 30)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Original topic"})
-	require.NoError(t, err)
 	model.fail = 4
-	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
+	_, err := h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.Error(t, err)
 	input, prompt, chatModel, err := h.service.prepareArticleProcessing(h.ctx, h.library, k)
 	require.NoError(t, err)
@@ -362,11 +339,10 @@ func TestSegmentUnverifiedFingerprintRepeatsOldWorkAndThenRetainsVerifiedCheckpo
 	var upgraded entrySegmentRun
 	require.NoError(t, h.db.Where("entry_id=? AND phase='processing'", k.ID).Order("created_at DESC,id DESC").First(&upgraded).Error)
 	require.NotEqual(t, legacy, upgraded.PlanHash)
-	require.NoError(t, h.db.Delete(topic).Error)
 	model.fail = 0
 	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
-	require.Equal(t, 2, model.calls["article_processing"][1], "topic changes retain verified checkpoints")
+	require.Equal(t, 2, model.calls["article_processing"][1], "resuming retains verified checkpoints")
 	var runs int64
 	require.NoError(t, h.db.Model(&entrySegmentRun{}).Where("entry_id=? AND phase='processing'", k.ID).Count(&runs).Error)
 	require.EqualValues(t, 2, runs)

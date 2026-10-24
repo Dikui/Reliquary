@@ -6,13 +6,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
 	"reliquary/internal/config"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
+	"strings"
+	"testing"
+	"time"
 
 	"github.com/pgvector/pgvector-go"
 	"github.com/stretchr/testify/require"
@@ -41,6 +40,7 @@ func (e *allRebuildEmbedder) Embed(ctx context.Context, text string) ([]float32,
 	}
 	return e.vector(), nil
 }
+
 func (e *allRebuildEmbedder) EmbedImage(ctx context.Context, dataURL string) ([]float32, error) {
 	e.imageCalls++
 	if !strings.HasPrefix(dataURL, "data:image/png;base64,") {
@@ -73,8 +73,16 @@ func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	h.add(t, "summary", "article", "2026-10-02", "tutorial", "semanticlaunch", 0)
 	h.add(t, "mine", "mine", "", "", "personal", 1)
 	h.add(t, "report", "report", "", "", "analysis", 1)
-	require.NoError(t, h.db.Create(&types.Entity{ID: "entity", SpaceID: 1, CanonicalName: "Rebuild Entity", NormalizedName: "rebuild entity", EntityType: "product", EmbeddingNeedsRebuild: true,
-		EmbeddingModelID: "fixture-model", EmbeddingDimension: 3, NameEmbedding: types.EntityNameEmbedding{0, 1, 0}}).Error)
+	require.NoError(t, h.db.Create(&types.Entity{
+		ID:                    "entity",
+		SpaceID:               1,
+		CanonicalName:         "Rebuild Entity",
+		NormalizedName:        "rebuild entity",
+		EntityType:            "product",
+		EmbeddingNeedsRebuild: true,
+
+		EmbeddingModelID: "fixture-model", EmbeddingDimension: 3, NameEmbedding: types.EntityNameEmbedding{0, 1, 0},
+	}).Error)
 	root := t.TempDir()
 	vault, err := NewVaultService(h.db, &config.Config{Vault: &config.VaultConfig{Root: root}})
 	require.NoError(t, err)
@@ -82,11 +90,11 @@ func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	imagePath := "../../attachments/full/photo.png"
 	full.VaultBody = "Plain body\n\n![image](" + imagePath + ")"
 	require.NoError(t, h.db.Save(full).Error)
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "attachments", full.ID), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "attachments", full.ID), 0o755))
 	dataURL := articleImageDataURI(t, 42)
 	data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(dataURL, "data:image/png;base64,"))
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "attachments", full.ID, "photo.png"), data, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "attachments", full.ID, "photo.png"), data, 0o644))
 	require.NoError(t, h.db.Exec(`INSERT INTO image_embeddings(space_id,entry_id,library_id,attachment_path,model_id,dimension,embedding,content_hash)
 		VALUES(1,?, ?, ?, 'fixture-model',3,?,'old')`, full.ID, h.library.ID, imagePath, pgvector.NewHalfVector([]float32{0, 1, 0})).Error)
 	configureNameEmbedding(t, h.db, "replacement-model", 3)
@@ -249,7 +257,7 @@ func TestAllEmbeddingRebuildPauseFencesInFlightAndRetrievalRemainsUsable(t *test
 	require.NoError(t, err)
 	h.embedder.onEmbed = func(_ context.Context, _ string) error {
 		// This runs while the embedding provider is working, before the write.
-		response := h.search(t, types.EntrySearchRequest{Query: "searchfixture", CollapseSimilar: entrySearchNoCollapse()})
+		response := h.search(t, types.EntrySearchRequest{Query: "searchfixture"})
 		require.NotEmpty(t, response.Results, "keyword search continues while old vector identities are excluded")
 		require.NoError(t, h.rebuilder.Pause(h.ctx, 1, run.ID))
 		return nil
@@ -416,7 +424,6 @@ func TestAllEmbeddingRebuildIncludesImportedPersonalSummaryImagesAndChunks(t *te
 	h := newAllRebuildFixture(t, true)
 	var personal types.Entry
 	require.NoError(t, h.db.Where("id='mine'").First(&personal).Error)
-	personal.ContentType = "tutorial"
 	personal.VaultPath = "personal/personal.md"
 	personal.VaultBody = "# Personal procedure\n\n![Personal image](../attachments/mine/personal.png)"
 	personal.StructuredSummary = &types.EntrySummary{Overview: "Personal operating procedure", Points: []string{"Retain the complete instructions"}, KeyTerms: []string{"Personal"}}
@@ -426,8 +433,8 @@ func TestAllEmbeddingRebuildIncludesImportedPersonalSummaryImagesAndChunks(t *te
 	data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(dataURL, "data:image/png;base64,"))
 	require.NoError(t, err)
 	path := filepath.Join(h.rebuilder.vault.root, "attachments", personal.ID, "personal.png")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
-	require.NoError(t, os.WriteFile(path, data, 0644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, data, 0o644))
 	run, err := h.rebuilder.Start(h.ctx, 1)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, run.TotalCount)

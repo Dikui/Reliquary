@@ -5,15 +5,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/middleware"
+	"reliquary/internal/testutil/pgtest"
+	"reliquary/internal/types"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/application/repository"
-	"reliquary/internal/middleware"
-	"reliquary/internal/testutil/pgtest"
-	"reliquary/internal/types"
 )
 
 func TestEntryListSourceKindFiltersPostgresRowsAndPagination(t *testing.T) {
@@ -32,10 +32,12 @@ func TestEntryListSourceKindFiltersPostgresRowsAndPagination(t *testing.T) {
 		{"mine-other-base", "mine", "event", "api", "completed", "library-2", true, 1},
 		{"mine-other-space", "mine", "event", "api", "completed", "library-1", true, 2},
 	} {
-		require.NoError(t, db.Create(&types.Entry{ID: row.id, SpaceID: row.space, LibraryID: row.library,
-			SourceKind: row.kind, ContentType: row.contentType, Channel: row.channel, Starred: row.starred,
+		require.NoError(t, db.Create(&types.Entry{
+			ID: row.id, SpaceID: row.space, LibraryID: row.library,
+			SourceKind: row.kind, Channel: row.channel, Starred: row.starred,
 			Type: "manual", Source: "", Title: "filtertoken " + row.id, FileName: row.id + ".md", FileType: "md",
-			ParseStatus: row.status, CreatedAt: updated, UpdatedAt: updated}).Error)
+			ParseStatus: row.status, CreatedAt: updated, UpdatedAt: updated,
+		}).Error)
 	}
 	gin.SetMode(gin.TestMode)
 	h := &EntryHandler{libraryService: &stubArticleLibraryService{}, kgService: &classificationEntryService{repo: repository.NewEntryRepository(db)}}
@@ -59,7 +61,7 @@ func TestEntryListSourceKindFiltersPostgresRowsAndPagination(t *testing.T) {
 		{"trimmed", "source_kind=%20mine%20", []string{"mine-event", "mine-tutorial"}, 2},
 		{"combined", "source_kind=mine&source=api&content_type=event&starred=true&file_type=md&parse_status=completed&keyword=filtertoken&start_time=2026-10-13T00:00:00Z&end_time=2026-10-14T00:00:00Z", []string{"mine-event"}, 1},
 		{"other-channel", "source_kind=mine&source=web", []string{"mine-tutorial"}, 1},
-		{"no-matches", "source_kind=report&content_type=tutorial", []string{}, 0},
+		{"no-matches", "source_kind=report&starred=true", []string{}, 0},
 		{"page-one", "source_kind=mine&page=1&page_size=1", nil, 2},
 		{"page-two", "source_kind=mine&page=2&page_size=1", nil, 2},
 	} {

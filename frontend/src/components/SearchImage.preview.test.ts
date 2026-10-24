@@ -30,7 +30,7 @@ function loadSearchAPI(post: (url: string, body: any) => Promise<unknown>) {
     post, get: async (url: string) => {
       if (url === '/api/v1/libraries') return { success: true, data: [{ id: 'images' }] }
       assert.equal(url, '/api/v1/search/options')
-      return { success: true, data: { entities: [], topics: [] } }
+      return { success: true, data: { entities: [], } }
     },
   } : name === '@/utils/libraryScope' ? libraryScopeHelpers : require(name), value, value.exports)
   return value.exports

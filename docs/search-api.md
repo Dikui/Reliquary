@@ -6,12 +6,9 @@ HTTP 为 `POST /api/v1/search`，网页不带凭据，外部工具使用收录 A
 {
   "query": "仪器校准",
   "libraries": ["personal", "references"],
-  "content_types": ["教程"],
   "entity_ids": [],
-  "topic_ids": [],
   "published_from": "2026-01-01",
   "starred": true,
-  "collapse_similar": true,
   "limit": 20
 }
 ```
@@ -24,10 +21,10 @@ HTTP 为 `POST /api/v1/search`，网页不带凭据，外部工具使用收录 A
 | --- | --- |
 | `entry_id` | HTTP 与 MCP 的资料 ID |
 | `library_id`, `library_name`, `library_directory` | 所属库 |
-| `title`, `summary`, `entities`, `topics`, `starred` | 资料信息 |
+| `title`, `summary`, `entities`, `starred` | 资料信息 |
 | `source_unverified`, `incomplete` | 来源未核实、缺少图片 |
 | `has_update`, `latest_entry_id` | 同一来源标识是否有新记录及最新记录 ID |
-| `score`, `similar_reports` | 最终排序分数及同库相似报道 |
+| `score` | 最终排序分数 |
 | `snippets` | 最多三个命中片段 |
 
 同一 source_ref 的旧记录返回 has_update=true 时，网页资料列表、卡片、详情和检索结果显示“有更新的记录”，点击可打开 latest_entry_id 指向的新资料。字段缺失或 has_update=false 时不显示更新标记；旧资料仍可读取与检索。

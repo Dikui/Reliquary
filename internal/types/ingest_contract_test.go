@@ -28,7 +28,7 @@ func TestIngestContractFieldSetAndExample(t *testing.T) {
 			"url",
 			"content",
 			"acquisition",
-			"content_type_hint",
+
 			"title",
 			"author",
 			"publisher",

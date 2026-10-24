@@ -31,7 +31,6 @@ type IngestRequest struct {
 	URL                string             `json:"url"`
 	Content            string             `json:"content"`
 	Acquisition        string             `json:"acquisition"`
-	ContentTypeHint    string             `json:"content_type_hint,omitempty"`
 	InputError         string             `json:"-"`
 	Title              string             `json:"title,omitempty"`
 	Author             string             `json:"author,omitempty"`

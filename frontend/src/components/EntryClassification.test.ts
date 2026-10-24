@@ -11,7 +11,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zhCN from '../i18n/locales/zh-CN'
 import enUS from '../i18n/locales/en-US'
-import { CONTENT_TYPES } from '../types/entryClassification'
+
 import { safeTextareaTestModule } from './__tests__/safeTextareaStub'
 
 const require = createRequire(import.meta.url)
@@ -39,9 +39,9 @@ function component(path: string, modules: Record<string, unknown>) {
 const classification = component('./EntryClassification.vue', {
   './FollowToggle.vue': emptyModule,
   '@/utils/markdownPlainText': markdownPlainText,
-  '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) },
+  '@/types/entryClassification': { }, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) },
 })
-const reviewModule = { __esModule: true, default: component('./ReviewActions.vue', { '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-review': {}, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, 'tdesign-vue-next': { MessagePlugin: {} } }) }
+const reviewModule = { __esModule: true, default: component('./ReviewActions.vue', { '@/types/entryClassification': { }, '@/api/entry-review': {}, '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, 'tdesign-vue-next': { MessagePlugin: {} } }) }
 const classificationModule = { __esModule: true, default: classification }
 async function render(value: any, props: Record<string, unknown>, locale: keyof typeof messages) {
   const app = createSSRApp(value, props)
@@ -55,9 +55,9 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   return html
 }
 const article = {
-  id: 'article', file_name: 'Example.md', type: 'manual', parse_status: 'completed', content_type: 'event', processing_mode: 'full',
+  id: 'article', file_name: 'Example.md', type: 'manual', parse_status: 'completed',  processing_mode: 'full',
   structured_summary: { overview: 'A product was announced.', points: ['Launch date', 'Main feature', 'Availability'], key_terms: ['Example Company', '42'] },
-  entities: [{ id: 'entity-1', canonical_name: 'Example Company', entity_type: 'company' }], topics: [{ id: 'topic-1', name: 'Product releases', description: 'New product announcements' }], md: [], total: 0, metadata: {},
+  entities: [{ id: 'entity-1', canonical_name: 'Example Company', entity_type: 'company' }],  md: [], total: 0, metadata: {},
 }
 const listModules = {
   '@/components/EntryProcessingStatus.vue': emptyModule,
@@ -99,18 +99,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 
 
 }
-test('content type filters use enabled types from the selected libraries', () => {
-  const page = readFileSync(new URL('../views/library/Library.vue', import.meta.url), 'utf8')
-  const api = readFileSync(new URL('../api/library.ts', import.meta.url), 'utf8')
-  assert.match(page, /v-model="selectedContentType"/)
-  assert.match(page, /content_type: selectedContentType\.value/)
-  assert.match(page, /libraryCatalog\.value\.filter/)
-  assert.match(page, /content_types \|\| \[\]/)
-  assert.match(page, /filter\(row => row\.enabled\)/)
-  assert.match(api, /query\.append\('content_type', params\.content_type\)/)
-  assert.match(page, /@openEntity="openArticleEntity"/)
-  assert.match(page, /:initial-entity-id="selectedEntityId"/)
-})
+
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: historical RSS and web article channels keep their localized labels`, async () => {
@@ -142,7 +131,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: AI reports display their trust marker in classification, cards and rows`, async () => {
-    const report = { ...article, source_kind: 'report', cannot_be_fact: true, content_type: '', structured_summary: null, entities: [], topics: [] }
+    const report = { ...article, source_kind: 'report', cannot_be_fact: true,  structured_summary: null, entities: [], }
     const html = await render(classification, { entry: report }, locale)
     assert.ok(html.includes(messages[locale].ingestStatus.cannotBeFact))
     const ordinary = await render(classification, { entry: article }, locale)
@@ -156,6 +145,5 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: report association relations can move to the dedicated detail section`, async () => {
     const html = await render(classification, { entry: article, hideRelations: true }, locale)
     assert.ok(!html.includes(messages[locale].library.articleEntities))
-    assert.ok(!html.includes(messages[locale].library.articleTopics))
   })
 }

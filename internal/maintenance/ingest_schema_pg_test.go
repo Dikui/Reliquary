@@ -3,12 +3,12 @@ package maintenance
 import (
 	"context"
 	"path/filepath"
+	"reliquary/internal/testutil/pgtest"
 	"testing"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
-	"reliquary/internal/testutil/pgtest"
 )
 
 func TestIngestContractMigrationUpDownUpAndPreservation(t *testing.T) {
@@ -37,6 +37,7 @@ func TestIngestContractMigrationUpDownUpAndPreservation(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, CompareManifest(beforeManifest, afterManifest))
 	// Every preexisting table, row and column remains exact, including nonregenerable data.
+	projectRetiredSnapshot(before, after.schemaVersion)
 	for table, rows := range before.Tables {
 		if table == "schema_migrations" || table == "library_relation_types" {
 			continue

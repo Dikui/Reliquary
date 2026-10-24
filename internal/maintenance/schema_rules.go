@@ -44,19 +44,20 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 				delete(copy, table)
 			}
 		}
-		if migration.Version >= 33 {
-			for _, table := range retiredTables {
-				delete(copy, table)
+		retired := retirementAt(migration.Version)
+		for _, table := range retired.tables {
+			delete(copy, table)
+		}
+		for table, columns := range retired.columns {
+			if rule, ok := copy[table]; ok {
+				for _, column := range columns {
+					rule.Header = strings.ReplaceAll(" "+rule.Header+" ", " "+column+" ", " ")
+					rule.Sidecar = strings.ReplaceAll(" "+rule.Sidecar+" ", " "+column+" ", " ")
+					rule.Configuration = strings.ReplaceAll(" "+rule.Configuration+" ", " "+column+" ", " ")
+					rule.Regenerated = strings.ReplaceAll(" "+rule.Regenerated+" ", " "+column+" ", " ")
+				}
+				copy[table] = rule
 			}
-			rule := copy["entries"]
-			rule.Sidecar = strings.ReplaceAll(" "+rule.Sidecar+" ", " graph ", " ")
-			copy["entries"] = rule
-			rule = copy["entry_processing_outputs"]
-			rule.Sidecar = strings.ReplaceAll(" "+rule.Sidecar+" ", " relations ", " ")
-			copy["entry_processing_outputs"] = rule
-			rule = copy["library_content_types"]
-			rule.Configuration = strings.ReplaceAll(" "+rule.Configuration+" ", " extract_graph ", " ")
-			copy["library_content_types"] = rule
 		}
 		if migration.Version < 19 {
 			rule := copy["graph_pending_sync"]

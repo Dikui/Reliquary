@@ -126,7 +126,7 @@ test('knowledge search has an independent page and preserves query and filter UR
   assert.equal(router.currentRoute.value.name, 'search')
   assert.equal(router.currentRoute.value.query.q, 'Launch')
   assert.equal(router.currentRoute.value.query.sources, 'article')
-  assert.equal(router.currentRoute.value.query.collapse_similar, 'false')
+
 })
 
 test('the operation log bookmark opens its settings section and preserves filters', async () => {

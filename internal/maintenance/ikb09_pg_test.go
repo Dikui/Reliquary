@@ -2,12 +2,13 @@ package maintenance
 
 import (
 	"context"
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
 	"path/filepath"
 	"reliquary/internal/testutil/pgtest"
 	"testing"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
 )
 
 func TestIKB09ReplicaUpgradeImportAndTamperDetection(t *testing.T) {
@@ -37,10 +38,16 @@ func TestIKB09ReplicaUpgradeImportAndTamperDetection(t *testing.T) {
 	after, err := BuildManifest(ctx, db, root, "")
 	require.NoError(t, err)
 	require.Empty(t, CompareManifest(before, after))
-	require.NoError(t, db.Exec(`UPDATE topics SET library_ids='["one"]'`).Error)
+	require.NoError(
+		t,
+		db.Exec(
+			`UPDATE follow_feed_library_states
+SET last_viewed_at=last_viewed_at+interval '1 second' WHERE library_id='one'`,
+		).Error,
+	)
 	tampered, err := BuildManifest(ctx, db, root, "")
 	require.NoError(t, err)
-	require.Contains(t, CompareManifest(before, tampered), "table topics")
+	require.Contains(t, CompareManifest(before, tampered), "table follow_feed_library_states")
 	restored := pgtest.Open(t)
 	_, err = Import(ctx, restored, restoreRoot, "", nil)
 	require.NoError(t, err)
@@ -49,6 +56,7 @@ func TestIKB09ReplicaUpgradeImportAndTamperDetection(t *testing.T) {
 	var n int64
 	require.NoError(t, restored.Table("follow_feed_library_states").Count(&n).Error)
 	require.EqualValues(t, 2, n)
-	require.NoError(t, restored.Exec(`UPDATE follow_feed_library_states SET last_viewed_at=last_viewed_at+interval '1 second' WHERE library_id='one'`).Error)
+	require.NoError(t, restored.Exec(`UPDATE follow_feed_library_states
+SET last_viewed_at=last_viewed_at+interval '1 second' WHERE library_id='one'`).Error)
 	require.ErrorContains(t, VerifyImportedReplica(ctx, restored, restoreRoot), "follow_feed_library_states")
 }

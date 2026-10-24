@@ -18,7 +18,7 @@ import { safeExternalUrl } from '../utils/externalUrl'
 import type { EntryRepostSource } from '../api/library'
 import { createSafeImage, isValidImageURL, protectProviderImageSrcInHTML, createProtectedFileImageScope, hydrateProtectedFileImages } from '../utils/security'
 import { buildProtectedFileRequest } from '../utils/protectedFileAccess'
-import { CONTENT_TYPES } from '../types/entryClassification'
+
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zhCN, 'en-US': enUS }
@@ -201,7 +201,7 @@ test('declining to discard a body draft never sends a close event to the library
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: detail conflict keeps its approval label after loading the actual related article field`, async () => {
     const loader = createArticleDetailsLoader({ conflict: { related_entry_id: 'original-article', parse_status: 'rejected', metadata: { intake: { source: 'api', decision: 'rejected', source_info: { original_url: 'https://example.com/conflict' } } } } })
-    const review = compileSFC('./ReviewActions.vue').create({ '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-review': {}, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) }, 'tdesign-vue-next': { MessagePlugin: {} } })
+    const review = compileSFC('./ReviewActions.vue').create({ '@/types/entryClassification': { }, '@/api/entry-review': {}, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) }, 'tdesign-vue-next': { MessagePlugin: {} } })
     const loadedDetails = await loader.load('conflict')
     const html = await renderDetails([], locale, { loadedDetails, reviewActions: { __esModule: true, default: review } })
     assert.equal(loadedDetails.related_entry_id, 'original-article')
@@ -222,7 +222,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       state.reprocessing.value = true
       state.applyProcessingState({ parse_status: 'completed' })
       assert.equal(events.length, 0, 'processing polls do not refresh pending counts')
-      state.applyEntryJudgment({ content_type: 'research' })
+      state.applyEntryJudgment({ })
       assert.equal(events.length, 1)
     } })
     assert.deepEqual(disabled, [true])
@@ -230,7 +230,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: source unverified marker reaches the actual article drawer from the detail loading hook`, async () => {
     const loader = createArticleDetailsLoader({ unverified: { source_unverified: true }, verified: {} })
-    const classification = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
+    const classification = compileSFC('./EntryClassification.vue').create({ './FollowToggle.vue': emptyModule, '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { }, '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) } })
     const flagged = await renderDetails([], locale, { loadedDetails: await loader.load('unverified'), classification: { __esModule: true, default: classification } })
     assert.ok(flagged.includes(messages[locale].knowledgeReview.sourceUnverified))
     const verified = await renderDetails([], locale, { loadedDetails: await loader.load('verified'), classification: { __esModule: true, default: classification } })

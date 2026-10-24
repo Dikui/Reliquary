@@ -62,10 +62,6 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		entry.SourceUnverified, entry.Starred = existing.SourceUnverified, existing.Starred
 		entry.CustomMetadata = existing.CustomMetadata
 		entry.RelatedEntryID = existing.RelatedEntryID
-		entry.ContentTypeCorrected = existing.ContentTypeCorrected
-		if existing.ContentTypeCorrected {
-			entry.ContentType = existing.ContentType
-		}
 		if request.Title == "" {
 			entry.Title, entry.FileName = existing.Title, existing.FileName
 		}
@@ -80,9 +76,6 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		}
 		if request.CollectReason == "" {
 			entry.CollectReason = existing.CollectReason
-		}
-		if request.ContentTypeHint == "" {
-			entry.ContentTypeHint = existing.ContentTypeHint
 		}
 		if request.AgentSummary == "" {
 			entry.AgentSummary = existing.AgentSummary
@@ -164,7 +157,7 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		newSource, _ := json.Marshal(after.SourceInfo)
 		if strings.TrimSuffix(existing.VaultBody, "\n") == strings.TrimSuffix(body, "\n") && existing.Title == entry.Title && existing.Acquisition == entry.Acquisition &&
 			existing.SourceRef == entry.SourceRef && existing.Identifier == entry.Identifier &&
-			existing.CollectReason == entry.CollectReason && existing.ContentTypeHint == entry.ContentTypeHint &&
+			existing.CollectReason == entry.CollectReason &&
 			existing.AgentSummary == entry.AgentSummary && bytes.Equal(existing.AgentTags, entry.AgentTags) &&
 			existing.SourceName == entry.SourceName && bytes.Equal(oldSource, newSource) {
 			return ingestResult(existing, "exists", "保存内容未变化。", "", ""), nil

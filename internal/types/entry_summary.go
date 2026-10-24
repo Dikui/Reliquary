@@ -7,29 +7,6 @@ import (
 	"strings"
 )
 
-const (
-	ContentTypeEvent     = "event"
-	ContentTypeOpinion   = "opinion"
-	ContentTypeResearch  = "research"
-	ContentTypeTutorial  = "tutorial"
-	ContentTypeCase      = "case"
-	ContentTypeReference = "reference"
-	ContentTypeOther     = "other"
-)
-
-var ContentTypes = []string{ContentTypeEvent, ContentTypeOpinion, ContentTypeResearch, ContentTypeTutorial, ContentTypeCase, ContentTypeReference, ContentTypeOther}
-
-// NormalizeContentType maps missing and unsupported classifications to other.
-func NormalizeContentType(value string) string {
-	value = strings.TrimSpace(value)
-	for _, allowed := range ContentTypes {
-		if value == allowed {
-			return value
-		}
-	}
-	return ContentTypeOther
-}
-
 type EntrySummary struct {
 	Overview string   `json:"overview" yaml:"overview"`
 	Points   []string `json:"points" yaml:"points"`
@@ -76,12 +53,3 @@ func (s *EntrySummary) Scan(value interface{}) error {
 
 // EntrySummarySearchID identifies a summary hit without a persisted body chunk.
 func EntrySummarySearchID(entryID string) string { return "knowledge-summary:" + entryID }
-
-func IsContentType(value string) bool {
-	for _, allowed := range ContentTypes {
-		if value == allowed {
-			return true
-		}
-	}
-	return false
-}

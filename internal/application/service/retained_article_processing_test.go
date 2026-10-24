@@ -3,16 +3,16 @@ package service
 import (
 	"context"
 	"fmt"
-	"testing"
-
-	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
 	"reliquary/internal/models/chat"
-	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	taskqueue "reliquary/internal/queue"
 )
 
 type retainedProcessingLibrary struct {
@@ -23,6 +23,7 @@ type retainedProcessingLibrary struct {
 func (s retainedProcessingLibrary) GetLibraryByID(context.Context, string) (*types.Library, error) {
 	return s.library, nil
 }
+
 func (s retainedProcessingLibrary) GetLibraryByIDOnly(context.Context, string) (*types.Library, error) {
 	return s.library, nil
 }
@@ -44,7 +45,7 @@ type retainedProcessingChat struct {
 func (m *retainedProcessingChat) Chat(ctx context.Context, _ []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
 	m.stages = append(m.stages, stage)
-	result := validProcessingFixture("event")
+	result := validProcessingFixture()
 	if stage == "intake_review" {
 		result = `{"approved":true,"reason":"Original source describes the product"}`
 	}
@@ -57,8 +58,10 @@ func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 	db := pgtest.Open(t)
 	space := &types.Space{ID: 1, Name: "Space"}
 	require.NoError(t, db.Create(space).Error)
-	library := &types.Library{ID: "library", SpaceID: 1, Name: "Articles", Type: types.LibraryTypeDocument,
-		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512}}
+	library := &types.Library{
+		ID: "library", SpaceID: 1, Name: "Articles", Type: types.LibraryTypeDocument,
+		SummaryModelID: "local-fixture", ChunkingConfig: types.ChunkingConfig{ChunkSize: 512},
+	}
 	require.NoError(t, db.Create(library).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.SpaceInfoContextKey, space)
@@ -70,9 +73,11 @@ func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 	models := &summaryStateModelService{model: model}
 	queue := &retainedProcessingQueue{}
 	bases := retainedProcessingLibrary{library: library}
-	svc := &entryService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
+	svc := &entryService{
+		db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
 		libraryService: bases, modelService: models, task: queue, spaceRepo: repository.NewSpaceRepository(db),
-		fileSvc: &intakeFileService{}, config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}}}
+		fileSvc: &intakeFileService{}, config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}},
+	}
 	article, err := svc.createLegacyManualFixture(ctx, library.ID, &legacyManualFixturePayload{
 		Title: "Widget announcement", Content: "# Widget\n\nAcme released its new widget product. The original announcement describes deployment choices, supported platforms and the complete product capabilities.", Status: "publish",
 		SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.com/widget", PublishedAt: "2026-10-01"},

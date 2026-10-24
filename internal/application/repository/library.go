@@ -35,7 +35,6 @@ func (r *libraryRepository) CreateLibrary(ctx context.Context, library *types.Li
 func (r *libraryRepository) GetLibraryByID(ctx context.Context, id string) (*types.Library, error) {
 	var library types.Library
 	if err := r.db.WithContext(ctx).
-		Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).
 		Where("id = ? AND space_id = ?", id, types.SingleSpaceID).
 		First(&library).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -53,7 +52,6 @@ func (r *libraryRepository) GetLibraryByID(ctx context.Context, id string) (*typ
 func (r *libraryRepository) GetLibraryByIDAndSpace(ctx context.Context, id string, spaceID uint64) (*types.Library, error) {
 	var library types.Library
 	if err := r.db.WithContext(ctx).
-		Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).
 		Where("id = ? AND space_id = ?", id, spaceID).
 		First(&library).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -74,7 +72,6 @@ func (r *libraryRepository) GetLibraryByIDs(ctx context.Context, ids []string) (
 	}
 	var libraries []*types.Library
 	if err := r.db.WithContext(ctx).
-		Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).
 		Where("id IN ? AND space_id = ?", ids, types.SingleSpaceID).Find(&libraries).Error; err != nil {
 		return nil, err
 	}
@@ -94,7 +91,6 @@ func (r *libraryRepository) GetSystemLibraryByRole(ctx context.Context, spaceID 
 	}
 	var library types.Library
 	if err := r.db.WithContext(ctx).
-		Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).
 		Where("space_id = ? AND system_role = ?", spaceID, role).
 		First(&library).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -118,21 +114,8 @@ func (r *libraryRepository) UpdateLibrary(ctx context.Context, library *types.Li
 		if previous.Template != library.Template || previous.Directory != library.Directory || previous.SystemRole != library.SystemRole {
 			return fmt.Errorf("library identity is immutable")
 		}
-		if err := tx.Omit("ContentTypes", "EmbeddingModelID").Save(library).Error; err != nil {
+		if err := tx.Omit("EmbeddingModelID").Save(library).Error; err != nil {
 			return err
-		}
-		if library.ContentTypes != nil {
-			if err := tx.Where("library_id=?", library.ID).Delete(&types.LibraryContentType{}).Error; err != nil {
-				return err
-			}
-			for i := range library.ContentTypes {
-				library.ContentTypes[i].LibraryID = library.ID
-			}
-			if len(library.ContentTypes) > 0 {
-				if err := tx.Create(&library.ContentTypes).Error; err != nil {
-					return err
-				}
-			}
 		}
 		return nil
 	})
@@ -240,7 +223,6 @@ func EnsureSystemLibraries(ctx context.Context, db *gorm.DB, spaceID uint64, cre
 func (r *libraryRepository) ListLibraries(ctx context.Context, spaceID uint64) ([]*types.Library, error) {
 	libraries := []*types.Library{}
 	err := r.db.WithContext(ctx).
-		Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).
 		Where("space_id=?", spaceID).
 		Order("created_at,id").
 		Find(&libraries).
@@ -262,9 +244,6 @@ func (r *libraryRepository) hydrate(ctx context.Context, library *types.Library)
 	if space.ID != 0 {
 		library.EmbeddingModelID = space.EmbeddingModelID
 		library.ModelTiers.Embedding = space.EmbeddingModelID
-	}
-	if library.ContentTypes == nil {
-		library.ContentTypes = []types.LibraryContentType{}
 	}
 	library.EnsureDefaults()
 	return nil

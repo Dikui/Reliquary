@@ -3,11 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"reliquary/internal/types"
 	"strings"
 	"time"
 
 	werrors "reliquary/internal/errors"
-	"reliquary/internal/types"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -33,8 +33,8 @@ func followSpace(ctx context.Context) (uint64, error) {
 }
 
 func validateFollowTarget(targetType, targetID string) error {
-	if targetType != types.FollowTargetEntity && targetType != types.FollowTargetTopic {
-		return werrors.NewBadRequestError("target_type must be entity or topic")
+	if targetType != types.FollowTargetEntity {
+		return werrors.NewBadRequestError("target_type must be entity")
 	}
 	if strings.TrimSpace(targetID) == "" || len(targetID) > 36 {
 		return werrors.NewBadRequestError("a target_id of at most 36 characters is required")
@@ -65,14 +65,8 @@ func resolveFollowTarget(tx *gorm.DB, spaceID uint64, targetType, targetID strin
 		}
 		return nil, werrors.NewBadRequestError("entity merge cycle")
 	}
-	var topic types.Topic
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, targetID).First(&topic).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, werrors.NewNotFoundError("topic not found")
-		}
-		return nil, err
-	}
-	return &types.FollowTarget{TargetType: targetType, TargetID: topic.ID, Name: topic.Name}, nil
+
+	return nil, werrors.NewBadRequestError("target_type must be entity")
 }
 
 func (s *FollowService) Follow(ctx context.Context, targetType, targetID string) (*types.FollowTarget, error) {
@@ -167,10 +161,8 @@ const followEligibleSQL = `k.deleted_at IS NULL AND EXISTS (SELECT 1 FROM librar
     AND k.parse_status='completed' AND k.enable_status='enabled'
     AND COALESCE(k.metadata #>> '{intake,decision}','approved')='approved'`
 
-const followMatchSQL = `((f.target_type='entity' AND EXISTS (SELECT 1 FROM entry_entities ke
-    WHERE ke.space_id=k.space_id AND ke.entry_id=k.id AND ke.entity_id=f.target_id))
-    OR (f.target_type='topic' AND EXISTS (SELECT 1 FROM entry_topics kt
-    JOIN topics scoped_topic ON scoped_topic.id=kt.topic_id AND scoped_topic.space_id=kt.space_id WHERE kt.space_id=k.space_id AND kt.entry_id=k.id AND kt.topic_id=f.target_id AND (scoped_topic.library_ids='[]'::jsonb OR scoped_topic.library_ids @> jsonb_build_array(k.library_id)))))`
+const followMatchSQL = `(f.target_type='entity' AND EXISTS (SELECT 1 FROM entry_entities ke
+    WHERE ke.space_id=k.space_id AND ke.entry_id=k.id AND ke.entity_id=f.target_id))`
 
 func (s *FollowService) ListFollows(ctx context.Context) ([]types.FollowTarget, error) {
 	spaceID, err := followSpace(ctx)
@@ -180,12 +172,11 @@ func (s *FollowService) ListFollows(ctx context.Context) ([]types.FollowTarget, 
 	cutoff := time.Now().UTC()
 	result := []types.FollowTarget{}
 	err = s.db.WithContext(ctx).Raw(`SELECT f.target_type,f.target_id,f.created_at,
-        CASE WHEN f.target_type='entity' THEN e.canonical_name ELSE t.name END AS name,
+        e.canonical_name AS name,
         (SELECT count(*) FROM entries k WHERE k.space_id=f.space_id AND `+followEligibleSQL+`
             AND k.created_at>=? AND k.created_at<=? AND `+followMatchSQL+`) AS recent_entry_count
         FROM follows f LEFT JOIN entities e ON f.target_type='entity' AND e.space_id=f.space_id AND e.id=f.target_id
-        LEFT JOIN topics t ON f.target_type='topic' AND t.space_id=f.space_id AND t.id=f.target_id
-        WHERE f.space_id=? AND ((f.target_type='entity' AND e.merged_into_id='') OR (f.target_type='topic' AND t.id IS NOT NULL))
+        WHERE f.space_id=? AND f.target_type='entity' AND e.merged_into_id=''
         ORDER BY name,f.target_type,f.target_id`, cutoff.AddDate(0, 0, -7), cutoff, spaceID).Scan(&result).Error
 	return result, err
 }

@@ -13,7 +13,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
-import { CONTENT_TYPES } from '../../types/entryClassification'
+
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zh, 'en-US': en }
@@ -61,7 +61,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   return html
 }
 const intake = { id: 'missing-url', title: 'Missing link article', review_kind: 'intake', parse_status: 'rejected', metadata: { intake: { source: 'upload', decision: 'rejected', reason: '缺少原始链接', source_info: {} } } }
-const processing = { id: 'uncertain', title: 'Uncertain article', parse_status: 'completed', review_kind: 'processing', content_type: 'tutorial', processing_mode: 'full', content_type_uncertain: true, processing_review_status: 'pending', processing_review_content_type: 'tutorial', processing_review_reason: 'Mixes a research finding and instructions', metadata: {} }
+const processing = { id: 'uncertain', title: 'Uncertain article', parse_status: 'completed', review_kind: 'processing',  processing_mode: 'full', content_type_uncertain: true, processing_review_status: 'pending', processing_review_content_type: 'tutorial', processing_review_reason: 'Mixes a research finding and instructions', metadata: {} }
 type Call = { method: string; url: string; body?: any }
 function createReviewAPI(handler: (call: Call) => Promise<any>) {
   const calls: Call[] = []
@@ -70,7 +70,7 @@ function createReviewAPI(handler: (call: Call) => Promise<any>) {
   return { api, calls }
 }
 function reviewComponent(api: object) {
-  return component('../../components/ReviewActions.vue', { '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-review': api, '@/utils/security': security, 'tdesign-vue-next': { MessagePlugin: { success() {} } } })
+  return component('../../components/ReviewActions.vue', { '@/types/entryClassification': { }, '@/api/entry-review': api, '@/utils/security': security, 'tdesign-vue-next': { MessagePlugin: { success() {} } } })
 }
 function pendingComponent(api: object, child = reviewComponent(api)) {
   return component('./components/PendingReviews.vue', { '@/api/entry-review': api, '@/utils/security': security, '@/components/ReviewActions.vue': moduleOf(child) })
@@ -173,7 +173,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       getEntryBatch: async () => ({ success: true, data: { batch_id: 'legacy-review', action: 'review', status: 'completed', total: 1, succeeded: 1, failed: 0, skipped: 0, pending: 0, running: 0, warnings: 0, items: [], page: 1, page_size: 20 } }),
       submitEntryBatch: async () => assert.fail('Historical results must not create a review task'),
     }
-    const dialog = component('../../components/EntryBatchDialog.vue', { '@/api/entry-batches': api, '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) } })
+    const dialog = component('../../components/EntryBatchDialog.vue', { '@/api/entry-batches': api, })
     const html = await render(dialog, { visible: true, batchId: 'legacy-review', libraries: [] }, locale, async state => {
       state.ready.value = true
       assert.ok(!state.actions.includes('review'))

@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"os"
-	"sync"
-
-	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/file"
 	"reliquary/internal/maintenanceops"
-	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"sync"
+
+	taskqueue "reliquary/internal/queue"
+
+	"gorm.io/gorm"
 )
 
 // transactionTaskEnqueuer binds every task created by a mutation to its
@@ -40,6 +41,7 @@ func (q *transactionTaskEnqueuer) Enqueue(task *taskqueue.Task, opts ...taskqueu
 	}
 	return info, err
 }
+
 func (s *entryService) needsTaskTransaction() bool {
 	if s.db == nil {
 		return false
@@ -47,6 +49,7 @@ func (s *entryService) needsTaskTransaction() bool {
 	_, bound := s.task.(*transactionTaskEnqueuer)
 	return !bound
 }
+
 func entryTaskTransaction[T any](ctx context.Context, s *entryService, mutation func(*entryService) (T, error)) (result T, err error) {
 	queue, ok := s.task.(interfaces.TransactionalTaskEnqueuer)
 	if !ok {
@@ -65,7 +68,7 @@ func entryTaskTransaction[T any](ctx context.Context, s *entryService, mutation 
 		copy.repo = repository.NewEntryRepository(tx)
 		copy.chunkRepo = repository.NewChunkRepository(tx)
 		copy.spaceRepo = repository.NewSpaceRepository(tx)
-		copy.retrieveEngine = s.contentTypeTransactionService(tx).retrieveEngine
+		copy.retrieveEngine = s.transactionService(tx).retrieveEngine
 		copy.chunkService = NewChunkService(copy.chunkRepo, copy.repo, repository.NewLibraryRepository(tx), copy.modelService, copy.retrieveEngine)
 		if _, ok := s.resourceCatalog.(*resourceCatalog); ok {
 			copy.resourceCatalog = NewResourceCatalog(repository.NewResourceRepository(tx))
@@ -129,6 +132,7 @@ func entryTaskTransaction[T any](ctx context.Context, s *entryService, mutation 
 	}
 	return result, responseErr
 }
+
 func (s *entryService) taskEnqueueFailedInTransaction() bool {
 	bound, ok := s.task.(*transactionTaskEnqueuer)
 	return ok && bound.enqueueErr != nil

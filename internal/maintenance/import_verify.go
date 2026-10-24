@@ -38,14 +38,14 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 			return err
 		}
 	}
-	if _, modern := current.Tables["library_content_types"]; modern {
+	if db.Migrator().HasColumn("libraries", "template") {
 		if err := migrateLibrarySnapshot(original, current.Tables["libraries"]); err != nil {
 			return err
 		}
 	}
 	projectLibraryLabelsSnapshot(original, current.schemaVersion)
 	projectLibraryDirectoriesSnapshot(original, current.schemaVersion)
-	if db.Migrator().HasColumn("topics", "library_ids") {
+	if db.Migrator().HasTable("follow_feed_library_states") {
 		projectFollowSnapshot(original)
 	}
 	if db.Migrator().HasColumn("entries", "source_ref") {

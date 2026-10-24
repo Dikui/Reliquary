@@ -50,8 +50,6 @@ func (r chatGPTGenerationRequest) stage() string {
 		return "intake_review"
 	case strings.HasPrefix(r.Instructions, articleProcessingPrompt()):
 		return "article_processing"
-	case r.Instructions == topicBackfillPrompt():
-		return "topic_backfill"
 	case strings.HasPrefix(r.Instructions, "Decide whether the source mention is the exact same real-world entity"):
 		return "entity_resolution"
 	default:
@@ -223,26 +221,15 @@ func chatGPTGenerationSuccess(t *testing.T, request chatGPTGenerationRequest) (s
 	case "intake_review":
 		return `{"approved":true,"reason":"Complete original publication"}`, ""
 	case "article_processing":
-		return articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "Fixture Acme", EntityType: "company"}}, []string{}), ""
+		return articleProcessingOutput(t, []types.EntityCandidate{{Name: "Fixture Acme", EntityType: "company"}}), ""
 	case "entity_resolution":
 		return `{"decision":"new","confidence":1}`, ""
-	case "topic_backfill":
-		var input topicBackfillInput
-		if err := json.Unmarshal([]byte(request.userText()), &input); err != nil {
-			return "invalid topic request", ""
-		}
-		decisions := make([]map[string]interface{}, 0, len(input.Articles))
-		for _, article := range input.Articles {
-			decisions = append(decisions, map[string]interface{}{"id": article.ID, "matches": true})
-		}
-		output, _ := json.Marshal(map[string]interface{}{"decisions": decisions})
-		return string(output), ""
 	default:
 		return "unexpected original prompt", ""
 	}
 }
 
-func TestChatGPTGenerationRunsProcessingEntityJudgementAndTopicHistory(t *testing.T) {
+func TestChatGPTGenerationRunsProcessingEntityJudgement(t *testing.T) {
 	h := newChatGPTGenerationHarness(t, func(request chatGPTGenerationRequest) (string, string) {
 		if request.stage() == "entity_resolution" {
 			return `{"decision":"match","entity_id":"existing-acme","confidence":0.99}`, ""
@@ -256,7 +243,7 @@ func TestChatGPTGenerationRunsProcessingEntityJudgementAndTopicHistory(t *testin
 	image := articleImageDataURI(t, 22)
 	article := h.upload(t, "chatgpt-original", "# Original product announcement\n\nFixture Acme published measured product capabilities and deployment details.\n\n![chart]("+image+")")
 	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
-	require.Equal(t, "event", article.ContentType)
+
 	require.NotNil(t, article.StructuredSummary)
 	require.Len(t, article.StructuredSummary.Points, 3)
 	intake, err := article.IntakeMetadata()
@@ -266,16 +253,8 @@ func TestChatGPTGenerationRunsProcessingEntityJudgementAndTopicHistory(t *testin
 	require.NoError(t, h.db.Find(&entities).Error)
 	require.Len(t, entities, 1)
 	require.Equal(t, "Fixture Acme", entities[0].CanonicalName)
-	topics := NewTopicService(h.db)
-	topics.SetModelService(h.models)
-	topic, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Original product announcements", Description: "Measured product capabilities"})
-	require.NoError(t, err)
-	job := runTopicJob(t, topics, h.ctx, topic.ID)
-	require.Equal(t, "completed", job.Status)
-	require.Len(t, topicLinks(t, topics, topic.ID), 1)
-
 	requests := h.requests()
-	require.Len(t, requests, 3, "each retained generation path must reach the real ChatGPT model service")
+	require.Len(t, requests, 2, "each retained generation path must reach the real ChatGPT model service")
 	stages := make([]string, 0, len(requests))
 	for _, request := range requests {
 		stages = append(stages, request.stage())
@@ -290,10 +269,10 @@ func TestChatGPTGenerationRunsProcessingEntityJudgementAndTopicHistory(t *testin
 			require.Equal(t, image, request.Input[0].Content[1].ImageURL)
 		}
 	}
-	require.Equal(t, []string{"article_processing", "entity_resolution", "topic_backfill"}, stages)
+	require.Equal(t, []string{"article_processing", "entity_resolution"}, stages)
 	policy, err := h.policy.Get(h.ctx)
 	require.NoError(t, err)
-	require.Equal(t, 3, policy.DailyUsed)
+	require.Equal(t, 2, policy.DailyUsed)
 	_, err = h.models.GetEmbeddingModel(h.ctx, "chatgpt-generation")
 	require.Error(t, err, "subscription generation model cannot supply embedding")
 }
@@ -345,43 +324,6 @@ func TestChatGPTQuotaDefersEnrichmentAndPreservesSearchableBody(t *testing.T) {
 			})
 		}
 	}
-}
-
-func TestChatGPTQuotaDefersHistoricalTopicBatchWithoutOrdinaryFailureAttempt(t *testing.T) {
-	var quota atomic.Bool
-	h := newChatGPTGenerationHarness(t, func(request chatGPTGenerationRequest) (string, string) {
-		if quota.Load() && request.stage() == "topic_backfill" {
-			return "", "subscription_sharing_usage_limit_exceeded"
-		}
-		return chatGPTGenerationSuccess(t, request)
-	})
-	h.upload(t, "topic-quota", "Fixture Acme published an original technical announcement with complete source details and measured capabilities.")
-	topics := NewTopicService(h.db)
-	topics.SetModelService(h.models)
-	topic, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Products", Description: "Product capabilities"})
-	require.NoError(t, err)
-	quota.Store(true)
-	job := runTopicJob(t, topics, h.ctx, topic.ID)
-	require.Equal(t, "running", job.Status)
-	require.Zero(t, job.FailedBatches)
-	var batch types.TopicBackfillBatch
-	require.NoError(t, h.db.Where("job_id=?", job.ID).First(&batch).Error)
-	require.Equal(t, "pending", batch.Status)
-	require.Zero(t, batch.Attempts)
-	require.NotNil(t, batch.RetryAt)
-	require.True(t, batch.RetryAt.After(time.Now()))
-	before := len(h.requests())
-	require.NoError(t, topics.runBackfillJob(h.ctx, *job))
-	require.Len(t, h.requests(), before, "a deferred historical batch must wait for its scheduled retry")
-	quota.Store(false)
-	_, err = h.policy.Resume(context.Background())
-	require.NoError(t, err)
-	// Simulate the scheduled delayed retry becoming due without waiting in a test.
-	require.NoError(t, h.db.Model(&batch).Update("retry_at", time.Now().Add(-time.Second)).Error)
-	job = runTopicJob(t, topics, h.ctx, topic.ID)
-	require.Equal(t, "completed", job.Status)
-	require.Zero(t, job.FailedBatches)
-	require.Len(t, topicLinks(t, topics, topic.ID), 1)
 }
 
 func chatGPTScheduledQueue(t *testing.T, h *chatGPTGenerationHarness) *taskqueue.Client {

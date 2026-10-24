@@ -1,9 +1,9 @@
 # 数据归属与文件库恢复格式
 
-所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，新登记表在 `internal/maintenance/registry.go` 并合入同一归属清单，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。最新完整清单见下节逐列审计表，历史对照表保留原有 public 表的详细归属，结构版本 `000005` 已删除 `data_sources` 与 `sync_logs`。之后新增的表与列按结构版本在文末补充，当前完整清单以 `Rules` 和登记框架的目录核对结果为准。
+所有 PostgreSQL 非系统普通表及其每列均显式分类：public 表在 `internal/maintenance/rules.go`，新登记表在 `internal/maintenance/registry.go` 并合入同一归属清单，扩展拥有的表在 `internal/maintenance/extension_rules.go`。目录核对也遍历分区表、外部表和物化视图，出现未经审核的关系类型立即停止。维护导出遇到未分类 schema、表或列立即报错；测试也检测重复分类、漏列和拼写错误。新增结构必须同时更新分类与逐表恢复测试。下节逐列审计表是版本 22 的历史记录，历史对照表保留原有 public 表的详细归属，结构版本 `000005` 已删除 `data_sources` 与 `sync_logs`。之后新增的表与列按结构版本在文末补充，当前完整清单以 `Rules` 和登记框架的目录核对结果为准。
 
 
-## 最新结构逐列归属审计
+## 结构版本 22 的逐列归属审计
 
 本表来自结构版本 22 的真实 PostgreSQL 目录，共 101 张非系统表、1125 列。列由 `maintenance audit` 自动核查，表格每格完整列出该归属的列，没有使用通配符。副本列包括统一表头、非密钥配置及高成本处理结果；仅备份列由脱敏 PostgreSQL dump 保留。凭据列归入可再生，但必须通过重新登录或配置生成新值，不恢复原值；审计的 recovery 字段标记 replace_secret。凭据不放入备份。扩展可再生列只在扩展版本、默认行数和指纹匹配时成立。
 
@@ -274,7 +274,7 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
   manifest.json               格式版本、文件及正文哈希、当前上传清单、表清单、凭据待填字段、JSONB null 类型
   config/<table>.json         账号、模型和其他非密钥配置
   config/required_credentials.json  待填字段名的冗余清单与 SHA256，不保存字段值
-  data/<table>.json           实体、主题、关注、待审、复核、转载、任务与诊断等
+  data/<table>.json           实体、关注、待审、复核、转载、任务与诊断等
   operation_logs.jsonl        只追加的操作日志
   resources/<relative-path>  上传原件与附件副本，保留 local:// 相对路径
   quarantine/                明确修复操作保留的损坏日志
@@ -334,7 +334,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 ### 五库配置（迁移 000010）
 
-`libraries` 的 `system_role`、`template`、`directory`、`review_criteria`、`source_evidence_rule`、`feed_enabled` 属于配置正本。当前 `library_content_types` 的 `library_id name position enabled` 同样属于配置，子表在库之后恢复。版本 10 至 32 还包含 `library_content_types.extract_graph` 与 `library_relation_types`，仅旧结构核对保留这些字段；迁移到版本 33 时删除。
+`libraries` 的 `system_role`、`template`、`directory`、`review_criteria`、`source_evidence_rule`、`feed_enabled` 属于配置正本。版本 34 起移除库内容类型；历史结构仍使用相应版本的列归属核对。
 
 `spaces.embedding_model_id` 是空间共享向量模型的配置正本。旧 `libraries.embedding_model_id` 和 `model_tiers.embedding` 保留用于旧副本兼容，运行读取投影为空间选择，不能作为各库独立的模型选择。模型设置的旧 HTTP 入口写入空间值。维护核对允许向量配置变更时一并检查空间选择；重建配置副本包含空间和仍存在的库配置子表。
 
@@ -366,9 +366,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 | 7 | `author` | 有值时输出作者，即使与发布者相同 |
 | 8 | `published_at` | 有值时输出发布时间，不用收录时间代替 |
 | 9 | `collected_at` | UTC 收录时间 |
-| 10 | `content_type` | 所属库的内容类型，可为自定义值 |
 | 11 | `entities` | 非空实体链接列表，排序去重 |
-| 12 | `topics` | 非空主题列表，排序去重 |
 | 13 | `summary` | 非空结构摘要，内部按 overview、points、key_terms 排序，空项省略 |
 | 14 | `starred` | 星标布尔值 |
 | 15 | `collect_reason` | 有值时输出收录理由 |
@@ -399,7 +397,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 
 `File` 使用 `data/<表名>.json` 或 `config/<表名>.json`，一表一文件。必须列全主键、外键、业务列和历史时间列；只有确定可重算的列放在 Regenerated。敏感列沿用 SecretColumns 与净化机制。After 声明所有必须先恢复的父表；缺依赖或依赖环在写数据库前失败。登记项从 Since 指定版本进入列归属核对，新列未归类仍直接失败。已有登记项增加列时仍按数据库迁移规范维护历史版本映射。
 
-第一个登记对象为库配置：`libraries` 使用既有 `config/libraries.json`，`library_content_types` 保留既有 `data/<表名>.json` 文件位置，保留完整数据库备份底层的旧映射。该子表虽位于 data/，列归属仍为 Configuration。库在空间及账号之后恢复，子表在库之后恢复。库的名称、目录、模板、审核规则、内容类型都参与逐列核对。
+版本 34 之前的第一个登记对象为库配置：`libraries` 使用既有 `config/libraries.json`，`library_content_types` 保留既有 `data/<表名>.json` 文件位置，保留完整数据库备份底层的旧映射。该子表虽位于 data/，列归属仍为 Configuration。库在空间及账号之后恢复，子表在库之后恢复。库的名称、目录、模板、审核规则、内容类型都参与逐列核对。
 
 副本新增 `registry.json`，自身格式版本为 1；主 manifest 的 `registry_version` 为 1，文件哈希在主 manifest 中登记。原副本主格式继续为 5，没有改变原有表文件格式。文件库重建拒绝没有受支持登记版本的旧副本，包括没有 registry_version 的旧格式 1 至 5，并提示使用匹配版本读取原文，再通过当前收录接口重新导入。不会猜测旧目录对应哪个库。底层完整数据库备份读取仍保留原有名称、默认值和结构版本映射，独立于当前文件库重建入口。没有生产数据迁移或旧目录扫描兼容。旧 schema 的维护 helper 仅导出副本并按原哈希核对，不生成库目录或改写旧表头；旧文件修复需使用匹配版本。
 
@@ -459,3 +457,7 @@ evaluation_sets 在 spaces 之后，questions 在 sets 之后，answers 在 ques
 ## 结构版本 33 的退役数据
 
 当前维护数据不包含关系、关系来源、关系抑制、关系类型合并、库关系类型和图谱待同步表，也不包含 `entries.graph`、`library_content_types.extract_graph` 和 `entry_processing_outputs.relations`。这些名称仅用于版本 33 之前的迁移核对与副本读取。导入当前版本时删除上述表列，其余数据及图片引用继续核对；恢复不重建 Neo4j。
+
+## 版本 34 的退役数据
+
+当前结构不再包含主题及关联、历史归入批次、库内容类型、自检设置和运行记录，也不包含资料的内容类型、人工修正标记、调用方分类建议及处理输出的内容类型。主题关注和两类待处理任务随迁移删除。旧版本副本导入先按原结构校验，再投影到当前结构；其他字段、文件及任意用户元数据继续严格核对。登记表中保留这些历史名称仅用于旧版本读取与迁移验证。

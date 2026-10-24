@@ -5,14 +5,14 @@ export interface RankedEntry { entry_id: string; rank: number; score: number }
 export interface EvaluationSet { id: string; name: string; description: string }
 export interface Question {
   id: string; method: string; source: string; status: string; revision: number; answer_deleted: boolean
-  request: { query: string; libraries: string[]; collapse_similar?: boolean; [key: string]: unknown }
+  request: { query: string; libraries: string[]; [key: string]: unknown }
   answers: Answer[]; suggested_results?: RankedEntry[]
 }
 export interface SearchRecord { id: string; source: string; method: string; libraries: string[]; query: string; created_at: string; results: RankedEntry[]; error: string }
 import { metricKeys } from './insightMetrics'
 export { metricKeys, metricLabels } from './insightMetrics'
 export type Metrics = Record<typeof metricKeys[number], number>
-export interface RunOptions { k: number; vector_set: string; collapse_similar: boolean; rerank_model_id?: string }
+export interface RunOptions { k: number; vector_set: string; rerank_model_id?: string }
 export interface RunResult { question_id: string; question: Question; snapshot: unknown; metrics: Metrics; hits: string[]; results?: { results: { entry_id?: string; id?: string; title?: string; score?: number }[] }; error: string }
 export interface EvaluationRun { id: string; set_id: string; set_snapshot: EvaluationSet; options: RunOptions; status: string; summary: Metrics; snapshot: unknown; created_at: string; error: string; questions?: RunResult[] }
 export interface Comparison { before_summary: Metrics; after_summary: Metrics; delta: Metrics; questions: { question_id: string; change: string; question_changed: boolean; before?: RunResult; after?: RunResult; delta: Metrics; added_hits: string[]; lost_hits: string[] }[] }

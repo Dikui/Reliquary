@@ -2,7 +2,6 @@ import type { TranslationCall } from './translationCallAudit.ts'
 
 /** Reviewed runtime expressions. New expressions must be explicitly reviewed here. */
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
-  { file: 'views/insights/ContentChecksPage.vue', expressions: ['`contentCheck.day${value}`', '`contentCheck.${s}`', '`contentCheck.${kind}`'], reason: 'Weekdays, run states and finding kinds use the fixed content-check contract and have labels in both locales.' },
   { file: 'components/EntryBatchDialog.vue', expressions: ['`entryBatch.actions.${value}`', '`entryBatch.actions.${batch.action}`', '`entryBatch.reasons.${reason.code}`', '`entryBatch.status.${batch.status}`', '`entryBatch.status.${item.status}`'], reason: 'Batch actions, item states and preview reasons use the server batch contract; unknown reasons retain their raw code.' },
   { file: 'components/EntryProcessingStatus.vue', expressions: ['state.label'], reason: 'entryProcessingState returns the fixed admission and processing label keys defined in the locale bundles.' },
   {
@@ -56,7 +55,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
     "file": "components/EntryClassification.vue",
     "expressions": [
-      "`library.contentTypes.${type}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
@@ -134,7 +132,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
     "file": "components/SearchFilters.vue",
     "expressions": [
-      "`library.contentTypes.${value}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
@@ -197,13 +194,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
-  {
-    "file": "views/library/TopicManagement.vue",
-    "expressions": [
-      "`topicManagement.status.${progress[topic.id]!.status}`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
+
   {
     "file": "views/library/components/EntryWorkbench.vue",
     "expressions": [

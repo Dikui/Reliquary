@@ -7,10 +7,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"testing"
-
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -96,7 +95,16 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 			require.ErrorIs(t, err, os.ErrNotExist)
 			_, err = os.Stat(attachmentPath)
 			require.ErrorIs(t, err, os.ErrNotExist)
-			for _, table := range []string{"entries", "chunks", "embeddings", "article_embeddings", "image_embeddings", "entry_entities", "entry_topics", "entry_processing_spans", "ingest_assets"} {
+			for _, table := range []string{
+				"entries",
+				"chunks",
+				"embeddings",
+				"article_embeddings",
+				"image_embeddings",
+				"entry_entities",
+				"entry_processing_spans",
+				"ingest_assets",
+			} {
 				column := "entry_id"
 				if table == "entries" {
 					column = "id"

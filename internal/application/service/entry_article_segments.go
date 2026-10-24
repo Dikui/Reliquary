@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-
 	"reliquary/internal/config"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/models/chat"
@@ -31,33 +30,19 @@ type articleProcessingEntity struct {
 
 type articleProcessingProvenance struct {
 	Summary          []int            `json:"summary"`
-	ContentTypes     map[string][]int `json:"content_types"`
 	Entities         map[string][]int `json:"entities"`
-	Topics           map[string][]int `json:"topics"`
 	ResolvedEntities map[string][]int `json:"resolved_entities,omitempty"`
 }
 
 func (s *entryService) prepareArticleProcessing(ctx context.Context, library *types.Library, k *types.Entry) (articleProcessingInput, string, *types.Model, error) {
-	input := articleProcessingInput{Title: articleTitleForProcessing(k), ContentTypeHint: k.ContentTypeHint, ExistingTopics: []articleProcessingTopic{}}
+	input := articleProcessingInput{Title: articleTitleForProcessing(k)}
 	source, err := entrySourceInfo(k)
 	if err != nil {
 		return input, "", nil, err
 	}
 	input.Publisher, input.PublishedAt, input.Author = source.Publisher, source.PublishedAt, source.Author
-	if s.db != nil {
-		topics, err := NewTopicService(s.db).TopicsForLibrary(ctx, k.LibraryID)
-		if err != nil {
-			return input, "", nil, err
-		}
-		for _, topic := range topics {
-			input.ExistingTopics = append(input.ExistingTopics, articleProcessingTopic{ID: topic.ID, Name: topic.Name, Description: topic.Description})
-		}
-	}
 	prompt := libraryProcessingPrompt(library, k)
 	prompt += "\n图片附件与输入 images 的顺序一一对应。仅依据已提供的可读图片理解文章，不猜测缺失或不可读图片的内容。"
-	if input.ContentTypeHint != "" {
-		prompt += "\n" + config.Prompt("content_type_hint")
-	}
 	id, err := ResolveModelTier(ctx, s.db, library, types.ModelTierGeneration)
 	if err != nil {
 		return input, prompt, nil, err
@@ -129,13 +114,8 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 			budget = max(1, min(budget-1, budget*inputBudget/largest))
 		}
 	}
-	// Topic eligibility is live catalog state, not a document processing revision.
-	// Completed segment results are retained when the catalog changes; new
-	// segments use the current candidates and persistence revalidates all IDs.
-	fingerprintInput := input
-	fingerprintInput.ExistingTopics = []articleProcessingTopic{}
 	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{
-		fingerprintInput, prompt, segmentSummaryPrompt(), entityResolutionPrompt(), segmentModelIdentity(model), budget,
+		input, prompt, segmentSummaryPrompt(), entityResolutionPrompt(), segmentModelIdentity(model), budget,
 	})
 	if err != nil {
 		return nil, err
@@ -152,17 +132,6 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 		if err != nil {
 			return nil, err
 		}
-		allowed := map[string]bool{}
-		for _, topic := range input.ExistingTopics {
-			allowed[topic.ID] = true
-		}
-		topics := []string{}
-		for _, id := range result.Topics {
-			if allowed[id] {
-				topics = append(topics, id)
-			}
-		}
-		result.Topics = topics
 		qualifySegmentOutput(library, k, body, p, result)
 		qualifyImageLocations(body, p, result, refs)
 		return json.Marshal(result)
@@ -205,7 +174,17 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 		}
 		return nil, err
 	}
-	s.endStage(ctx, k.ID, types.StageProcessing, types.JSONMap{"segment_count": len(parts), "completed_segments": len(parts), "run_id": run.ID, "content_type": *result.ContentType, "content_type_rule": "majority_first_on_tie", "model_calls": calls.Snapshot()})
+	s.endStage(
+		ctx,
+		k.ID,
+		types.StageProcessing,
+		types.JSONMap{
+			"segment_count":      len(parts),
+			"completed_segments": len(parts),
+			"run_id":             run.ID,
+			"model_calls":        calls.Snapshot(),
+		},
+	)
 	return result, nil
 }
 
@@ -255,16 +234,19 @@ func appendSegmentNumber(values []int, n int) []int {
 // Entity identity remains the existing resolver's responsibility. This merge
 // collapses exact normalized name/type candidates and retains all aliases.
 func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingResult {
-	p := &articleProcessingProvenance{ContentTypes: map[string][]int{}, Entities: map[string][]int{}, Topics: map[string][]int{}}
-	merged := &articleProcessingResult{Title: parts[0].Title, Summary: parts[0].Summary, Entities: []articleProcessingEntity{}, Topics: []string{}, Provenance: p, Extensions: map[string][]SegmentContribution{}}
+	p := &articleProcessingProvenance{Entities: map[string][]int{}}
+	merged := &articleProcessingResult{
+		Title:      parts[0].Title,
+		Summary:    parts[0].Summary,
+		Entities:   []articleProcessingEntity{},
+		Provenance: p,
+		Extensions: map[string][]SegmentContribution{},
+	}
 	entityIndex := map[string]int{}
-	winningType := ""
-	winningCount := 0
 	for i, part := range parts {
 		n := i + 1
 		merged.Images = append(merged.Images, part.Images...)
 		p.Summary = append(p.Summary, n)
-		p.ContentTypes[*part.ContentType] = append(p.ContentTypes[*part.ContentType], n)
 		for _, entity := range part.Entities {
 			key := entityNameKey(*entity.Type, entity.Name)
 			if index, ok := entityIndex[key]; ok {
@@ -282,12 +264,6 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 			}
 			p.Entities[key] = appendSegmentNumber(p.Entities[key], n)
 		}
-		for _, topic := range part.Topics {
-			if len(p.Topics[topic]) == 0 {
-				merged.Topics = append(merged.Topics, topic)
-			}
-			p.Topics[topic] = appendSegmentNumber(p.Topics[topic], n)
-		}
 		for key, values := range part.Extensions {
 			for _, value := range values {
 				value.Segment = n
@@ -295,14 +271,6 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 			}
 		}
 	}
-	// Iterate source order, so a final tie always picks the earliest segment.
-	for _, part := range parts {
-		v := *part.ContentType
-		if len(p.ContentTypes[v]) > winningCount {
-			winningType, winningCount = v, len(p.ContentTypes[v])
-		}
-	}
-	merged.ContentType = &winningType
 	return merged
 }
 
@@ -342,7 +310,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 			return err
 		}
 		encoded, _ := json.Marshal(map[string]any{
-			"title": output.Title, "summary": output.Summary, "entities": []any{}, "topics": []string{},
+			"title": output.Title, "summary": output.Summary, "entities": []any{},
 		})
 		checked, err := parseArticleProcessingResult(string(encoded))
 		if err == nil && title == "" && checked.Title == "" {

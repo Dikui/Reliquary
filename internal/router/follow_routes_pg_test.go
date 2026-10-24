@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reliquary/internal/application/service"
+	"reliquary/internal/handler"
+	"reliquary/internal/types"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/application/service"
-	"reliquary/internal/handler"
-	"reliquary/internal/types"
 )
 
 func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
@@ -25,10 +25,8 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	var library struct{ Data types.Library }
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &library))
 	entity := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "HTTP followed entity", NormalizedName: "http followed entity", EntityType: "company"}
-	topic := types.Topic{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, Name: "HTTP followed topic"}
 	require.NoError(t, f.db.Create(&entity).Error)
-	require.NoError(t, f.db.Create(&topic).Error)
-	for _, target := range [][2]string{{"entity", entity.ID}, {"topic", topic.ID}} {
+	for _, target := range [][2]string{{"entity", entity.ID}} {
 		for range 2 {
 			r = personalRequest(t, f.router, http.MethodPut, "/api/v1/follows/"+target[0]+"/"+target[1], "", f.key, true)
 			require.Equal(t, http.StatusOK, r.Code, r.Body.String())
@@ -38,24 +36,31 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	require.Equal(t, http.StatusOK, r.Code)
 	var targets struct{ Data []types.FollowTarget }
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &targets))
-	require.Len(t, targets.Data, 2)
+	require.Len(t, targets.Data, 1)
 	article := types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: library.Data.ID, Type: "manual", Title: "HTTP feed article", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now().UTC().Add(-time.Hour)}
 	require.NoError(t, f.db.Create(&article).Error)
 	require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: types.SingleSpaceID, EntryID: article.ID, EntityID: entity.ID}).Error)
-	require.NoError(t, f.db.Create(&types.EntryTopic{SpaceID: types.SingleSpaceID, EntryID: article.ID, TopicID: topic.ID}).Error)
 	r = personalRequest(t, f.router, http.MethodGet, "/api/v1/follows/state", "", f.key, true)
 	require.Equal(t, http.StatusOK, r.Code)
 	var state struct{ Data types.FollowFeedState }
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &state))
 	require.EqualValues(t, 1, state.Data.NewCount)
 	require.Nil(t, state.Data.LastViewedAt)
-	r = personalRequest(t, f.router, http.MethodPost, "/api/v1/follows/feed", fmt.Sprintf(`{"include_seen":true,"target_ids":[%q],"collapse_similar":false}`, topic.ID), f.key, true)
+	r = personalRequest(
+		t,
+		f.router,
+		http.MethodPost,
+		"/api/v1/follows/feed",
+		fmt.Sprintf(`{"include_seen":true,"target_ids":[%q]}`, entity.ID),
+		f.key,
+		true,
+	)
 	require.Equal(t, http.StatusOK, r.Code, r.Body.String())
 	var feed struct{ Data types.FollowFeedResponse }
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &feed))
 	require.Len(t, feed.Data.Results, 1)
 	require.Equal(t, article.ID, feed.Data.Results[0].EntryID)
-	require.Len(t, feed.Data.Results[0].MatchedFollows, 2)
+	require.Len(t, feed.Data.Results[0].MatchedFollows, 1)
 	require.True(t, feed.Data.Results[0].IsNew)
 	require.NotEmpty(t, feed.Data.Results[0].Snippets)
 	require.Nil(t, feed.Data.LastViewedAt)
@@ -81,7 +86,7 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, r.Code)
 	r = personalRequest(t, f.router, http.MethodPut, "/api/v1/follows/article/"+article.ID, "", f.key, true)
 	require.Equal(t, http.StatusBadRequest, r.Code)
-	for _, target := range [][2]string{{"entity", entity.ID}, {"topic", topic.ID}} {
+	for _, target := range [][2]string{{"entity", entity.ID}} {
 		for range 2 {
 			r = personalRequest(t, f.router, http.MethodDelete, "/api/v1/follows/"+target[0]+"/"+target[1], "", f.key, true)
 			require.Equal(t, http.StatusOK, r.Code, r.Body.String())
@@ -89,7 +94,7 @@ func TestFollowHTTPPostgresActionsFeedAndViewedSnapshot(t *testing.T) {
 	}
 	var logs []types.OperationLog
 	require.NoError(t, f.db.Where("operation_type IN ('follow','unfollow')").Find(&logs).Error)
-	require.Len(t, logs, 4)
+	require.Len(t, logs, 2)
 	for _, log := range logs {
 		require.Contains(t, log.Actor, "api_key:")
 	}

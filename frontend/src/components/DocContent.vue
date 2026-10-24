@@ -62,7 +62,7 @@ async function contentSaved(value: { id: string; content: string; status: string
   savedBody.value = { id: value.id, content: value.content };
   await finishContentEdit();
   if (props.details.id !== value.id) return;
-  if (value.status !== 'exists') applyProcessingState({ parse_status: 'pending', summary_status: 'pending', error_message: '', md: [], total: 0, description: '', structured_summary: null, entities: [], topics: [] });
+  if (value.status !== 'exists') applyProcessingState({ parse_status: 'pending', summary_status: 'pending', error_message: '', md: [], total: 0, description: '', structured_summary: null, entities: [] });
   try {
     const result = await getEntryDetails(value.id);
     if (props.details.id !== value.id || !result.success) return;
@@ -254,7 +254,7 @@ watch(() => props.details?.id, async id => {
   }
 });
 
-const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntry", "openEntity", "openTopic", "reviewChanged"]);
+const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntry", "openEntity", "reviewChanged"]);
 const reportRelatedEntryIds = computed(() => Array.isArray(props.details?.metadata?.related_entry_ids)
   ? props.details.metadata.related_entry_ids
   : []);
@@ -1302,8 +1302,8 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         </section>
 
         <ReportAssociations v-if="details.source_kind === 'report'"
-          :entry-ids="reportRelatedEntryIds" :entities="reportRelatedEntities" :topics="details.topics || []"
-          @open-entry="emit('openEntry', $event)" @open-entity="emit('openEntity', $event)" @open-topic="emit('openTopic', $event)" />
+          :entry-ids="reportRelatedEntryIds" :entities="reportRelatedEntities"
+          @open-entry="emit('openEntry', $event)" @open-entity="emit('openEntity', $event)" />
 
         <section v-if="details.type === 'url'" class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('library.urlSource') }}</h4>

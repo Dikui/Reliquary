@@ -1,7 +1,7 @@
 export const ikb18Zh = {
   admissionPolicyTitle: '入库规则',
   admissionPolicyHint: '默认接收可读的 Markdown 正文；拒绝空内容、纯链接、仅图片和技术异常。不逐条调用模型评价价值，不因来源、篇幅或完整度不足进入待审。',
-  processingPolicy: '先保存正文和图片，再后台建立正文索引并运行摘要、分类、主题、实体。后台处理失败不撤销已保存正文。',
+  processingPolicy: '先保存正文和图片，再后台建立正文索引、生成摘要和抽取实体。后台处理失败不撤销已保存正文。',
   parentChildFixed: '父子分块由模板决定：参考文档启用，其他库关闭。',
   sharedEmbedding: '共享向量模型',
 
@@ -12,7 +12,7 @@ export const ikb18Zh = {
   template: '模板', directory: '目录名', systemRole: '系统角色', custom: '自建库',
   name: '名称', description: '说明', review: '收录审核标准', evidence: '来源证据规则',
   linkRequired: '必须有链接', linkOrDate: '链接，或机构名称加发布日期', feed: '关注动态',
-  contentTypes: '内容类型', enabled: '启用',
+  enabled: '启用',
   add: '添加类型', up: '上移', down: '下移', remove: '移除',
 
   deleteLibrary: '删除库', deleteHint: '只可删除无资料的库。删除后不会自动重建，可以不保留任何库。',
@@ -20,7 +20,7 @@ export const ikb18Zh = {
   invalidDirectory: '目录名最多 100 个字符，只能包含小写字母、数字和单个连字符。',
   invalidTypes: '类型名称不能为空或重复，最多 100 个字符。', unsaved: '资料库设置尚未保存，是否放弃修改？',
   external_timely: '外部时效型', external_durable: '外部长效型', own: '自有型', generated: '生成型',
-  external_timelyHint: '共用入库与后台处理规则；默认开启相似报道折叠。',
+  external_timelyHint: '共用入库与后台处理规则；默认开启关注动态。',
   external_durableHint: '共用入库与后台处理规则；默认启用父子分块。',
   ownHint: '共用入库与后台处理规则；同来源内容变化时覆盖原资料。',
   generatedHint: '共用入库与后台处理规则；保留 AI 产出标记，不能直接当作已核实事实。',
@@ -35,7 +35,7 @@ export const ikb18Zh = {
 export const ikb18En: typeof ikb18Zh = {
   admissionPolicyTitle: 'Admission policy',
   admissionPolicyHint: 'Accept readable Markdown by default. Reject empty content, links without text, image-only content and technical errors. Do not run per-item value review or queue materials for review because of missing sources, length or completeness.',
-  processingPolicy: 'Save the body and images first. Build the body index, then run summaries, classification, topics, entity processing in the background. Background failures do not undo the saved body.',
+  processingPolicy: 'Save the body and images first. Build the body index, then run summaries and entity processing in the background. Background failures do not undo the saved body.',
   parentChildFixed: 'The template enables parent–child chunks for reference documents and disables them for other libraries.',
   sharedEmbedding: 'Shared embedding model',
 
@@ -46,7 +46,7 @@ export const ikb18En: typeof ikb18Zh = {
   template: 'Template', directory: 'Directory', systemRole: 'System role', custom: 'Custom library',
   name: 'Name', description: 'Description', review: 'Intake review criteria', evidence: 'Source evidence rule',
   linkRequired: 'Link required', linkOrDate: 'Link, or publisher and publication date', feed: 'Follow feed',
-  contentTypes: 'Content types', enabled: 'Enabled',
+  enabled: 'Enabled',
   add: 'Add type', up: 'Move up', down: 'Move down', remove: 'Remove',
 
   deleteLibrary: 'Delete library', deleteHint: 'Only empty libraries can be deleted. Deleted libraries are not recreated automatically. No libraries are required.',
@@ -54,7 +54,7 @@ export const ikb18En: typeof ikb18Zh = {
   invalidDirectory: 'Use up to 100 lowercase letters, digits and single hyphens for the directory.',
   invalidTypes: 'Type names must be unique, nonempty and at most 100 characters.', unsaved: 'Discard unsaved library settings?',
   external_timely: 'External timely', external_durable: 'External durable', own: 'Own', generated: 'Generated',
-  external_timelyHint: 'Uses the shared admission and background processing policy. Similar coverage is collapsed by default.',
+  external_timelyHint: 'Uses the shared admission and background processing policy. The follow feed is enabled by default.',
   external_durableHint: 'Uses the shared admission and background processing policy. Parent–child chunks are enabled by default.',
   ownHint: 'Uses the shared admission and background processing policy. Changed content from the same source replaces the stored entry.',
   generatedHint: 'Uses the shared admission and background processing policy. Retains the AI-output marker; statements are not automatically verified facts.',

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	stderrors "errors"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"reliquary/internal/errors"
@@ -13,6 +12,8 @@ import (
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 type SearchHandler struct {
@@ -54,8 +55,7 @@ func rewriteEntrySearch(ctx context.Context, rewriter *storageurl.Rewriter, resp
 	if response == nil || !rewriter.Enabled() {
 		return response
 	}
-	var copyResult func(*types.EntrySearchResult) *types.EntrySearchResult
-	copyResult = func(result *types.EntrySearchResult) *types.EntrySearchResult {
+	copyResult := func(result *types.EntrySearchResult) *types.EntrySearchResult {
 		if result == nil {
 			return nil
 		}
@@ -63,10 +63,6 @@ func rewriteEntrySearch(ctx context.Context, rewriter *storageurl.Rewriter, resp
 		copy.Snippets = append([]types.EntrySearchSnippet{}, result.Snippets...)
 		for i := range copy.Snippets {
 			copy.Snippets[i].Content = rewriter.String(ctx, copy.Snippets[i].Content)
-		}
-		copy.SimilarReports = make([]*types.EntrySearchResult, len(result.SimilarReports))
-		for i, report := range result.SimilarReports {
-			copy.SimilarReports[i] = copyResult(report)
 		}
 		return &copy
 	}

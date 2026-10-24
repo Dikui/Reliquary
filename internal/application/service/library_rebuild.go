@@ -190,9 +190,6 @@ func (s *entryService) cleanupLibraryRebuild(ctx context.Context, entry *types.E
 				return err
 			}
 		}
-		if err := tx.Where("entry_id=? AND space_id=? AND source=?", entry.ID, entry.SpaceID, types.TopicSourceModel).Delete(&types.EntryTopic{}).Error; err != nil {
-			return err
-		}
 		if err := pruneUnreferencedEntities(tx, entry.SpaceID, entityIDs); err != nil {
 			return err
 		}

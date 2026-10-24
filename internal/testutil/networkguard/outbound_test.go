@@ -50,8 +50,6 @@ var allowedOutboundCalls = map[string]int{
 	"internal/utils/security.go|roundTripPinnedProxy|transport.RoundTrip": 1,
 	// Local selectors with HTTP-like method names.
 	// Self-check Get calls read persisted run records, without making an HTTP request.
-	"internal/application/service/content_check.go|Handle|s.Get":                                       1,
-	"internal/handler/content_check.go|Get|h.service.Get":                                              1,
 	"internal/application/service/ingest_diagnostics.go|ingestWithDiagnostics|s.diagnostics.Get":       1,
 	"internal/handler/ingest_diagnostics.go|Get|h.service.Get":                                         1,
 	"internal/mcpserver/ingest_diagnostics.go|registerIngestDiagnostics|s.Get":                         1,

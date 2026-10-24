@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-
 	"reliquary/internal/types"
 
 	"gorm.io/gorm"
@@ -20,18 +19,12 @@ func populateEntryLibraryNames(ctx context.Context, db *gorm.DB, entries []*type
 	}
 	ids := map[string]bool{}
 	spaces := map[uint64]bool{}
-	var visit func([]*types.Entry)
-	visit = func(items []*types.Entry) {
-		for _, entry := range items {
-			if entry == nil {
-				continue
-			}
+	for _, entry := range entries {
+		if entry != nil {
 			ids[entry.LibraryID] = true
 			spaces[entry.SpaceID] = true
-			visit(entry.SimilarReports)
 		}
 	}
-	visit(entries)
 	libraryIDs := make([]string, 0, len(ids))
 	spaceIDs := make([]uint64, 0, len(spaces))
 	for id := range ids {
@@ -48,22 +41,16 @@ func populateEntryLibraryNames(ctx context.Context, db *gorm.DB, entries []*type
 	for _, library := range libraries {
 		names[key{library.SpaceID, library.ID}] = library.Name
 	}
-	var fill func([]*types.Entry)
-	fill = func(items []*types.Entry) {
-		for _, entry := range items {
-			if entry == nil {
-				continue
-			}
+	for _, entry := range entries {
+		if entry != nil {
 			entry.LibraryName = names[key{entry.SpaceID, entry.LibraryID}]
 			entry.CannotBeFact = entry.SourceKind == "report"
-			fill(entry.SimilarReports)
 		}
 	}
-	fill(entries)
 	return nil
 }
 
-// loadEntryAssociations batches library, entity and topic data for entry responses.
+// loadEntryAssociations batches library and entity data for entry responses.
 func (s *entryService) loadEntryAssociations(ctx context.Context, spaceID uint64, entries []*types.Entry) error {
 	if err := populateEntryLibraryNames(ctx, s.db, entries); err != nil {
 		return err
@@ -75,7 +62,6 @@ func (s *entryService) loadEntryAssociations(ctx context.Context, spaceID uint64
 			continue
 		}
 		entry.Entities = []types.Entity{}
-		entry.Topics = []types.Topic{}
 		byID[entry.ID] = entry
 		ids = append(ids, entry.ID)
 	}
@@ -95,21 +81,6 @@ func (s *entryService) loadEntryAssociations(ctx context.Context, spaceID uint64
 	for _, row := range entityRows {
 		if entry := byID[row.EntryID]; entry != nil {
 			entry.Entities = append(entry.Entities, row.Entity)
-		}
-	}
-	var topicRows []struct {
-		EntryID string      `gorm:"column:entry_id"`
-		Topic   types.Topic `gorm:"embedded"`
-	}
-	if err := s.db.WithContext(ctx).Table("entry_topics AS kt").
-		Select("kt.entry_id, t.*").Joins("JOIN topics AS t ON t.space_id=kt.space_id AND t.id=kt.topic_id").
-		Where("kt.space_id=? AND kt.entry_id IN ?", spaceID, ids).
-		Order("t.name,t.id").Find(&topicRows).Error; err != nil {
-		return err
-	}
-	for _, row := range topicRows {
-		if entry := byID[row.EntryID]; entry != nil {
-			entry.Topics = append(entry.Topics, row.Topic)
 		}
 	}
 	return nil

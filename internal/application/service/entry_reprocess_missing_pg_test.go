@@ -2,11 +2,11 @@ package service
 
 import (
 	"encoding/json"
+	"reliquary/internal/types"
 	"testing"
 	"time"
 
 	taskqueue "reliquary/internal/queue"
-	"reliquary/internal/types"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -17,8 +17,21 @@ func TestLegacyQueuedURLTasksNeverRetrieveContent(t *testing.T) {
 		t.Run(field, func(t *testing.T) {
 			h, _ := newIngestHarness(t)
 			transport := forbidIngestNetwork(t, h)
-			entry := &types.Entry{ID: uuid.NewString(), SpaceID: h.library.SpaceID, LibraryID: h.library.ID, Type: "url", SourceKind: "article", Channel: types.ChannelRSS,
-				Source: "https://example.org/queued-legacy", Title: "Queued legacy article", ParseStatus: types.ParseStatusPending, EnableStatus: "disabled", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+			entry := &types.Entry{
+				ID:         uuid.NewString(),
+				SpaceID:    h.library.SpaceID,
+				LibraryID:  h.library.ID,
+				Type:       "url",
+				SourceKind: "article",
+				Channel:    types.ChannelRSS,
+
+				Source:       "https://example.org/queued-legacy",
+				Title:        "Queued legacy article",
+				ParseStatus:  types.ParseStatusPending,
+				EnableStatus: "disabled",
+				CreatedAt:    time.Now(),
+				UpdatedAt:    time.Now(),
+			}
 			require.NoError(t, h.db.Create(entry).Error)
 			raw, err := json.Marshal(map[string]any{"tenant_id": h.library.SpaceID, "knowledge_id": entry.ID, "library_id": h.library.ID, field: entry.Source})
 			require.NoError(t, err)
@@ -27,26 +40,6 @@ func TestLegacyQueuedURLTasksNeverRetrieveContent(t *testing.T) {
 			require.Zero(t, transport.calls.Load())
 		})
 	}
-}
-
-func TestContentTypeCorrectionPreservesBodyAndIndexes(t *testing.T) {
-	h, v := newIngestHarness(t)
-	transport := forbidIngestNetwork(t, h)
-	article := uploadedCorrectionSummary(t, h, "https://example.org/legacy-summary-correction")
-	_, _, body := readVaultArticle(t, v, article)
-	require.NotEmpty(t, body)
-	requests := len(h.processor.requests)
-	chunks, vectors, articleVectors := correctionIndexCounts(t, h, article.ID)
-	corrected, err := h.service.CorrectContentType(h.ctx, article.ID, "research")
-	require.NoError(t, err)
-	require.Len(t, h.processor.requests, requests)
-	_, _, afterBody := readVaultArticle(t, v, corrected)
-	require.Equal(t, body, afterBody)
-	newChunks, newVectors, newArticleVectors := correctionIndexCounts(t, h, article.ID)
-	require.Equal(t, chunks, newChunks)
-	require.Equal(t, vectors, newVectors)
-	require.Equal(t, articleVectors, newArticleVectors)
-	require.Zero(t, transport.calls.Load())
 }
 
 func TestLegacyQueuedURLTasksRespectCompletedCancelledAndDeletingArticles(t *testing.T) {

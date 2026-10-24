@@ -614,7 +614,6 @@ const runtimeTaskTypeKeys: Record<string, string> = {
   'report:index': 'reportIndex',
   'entity:name_embedding_rebuild': 'entityNameEmbeddingRebuild',
   'knowledge:embedding_rebuild': 'embeddingRebuild',
-  'topic:backfill': 'topicBackfill',
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null

@@ -39,18 +39,18 @@ function fixture(t: TestContext, results: unknown[]) {
   return { calls, search: evaluateFile('./search.ts', { '@/utils/request': request }), follows: evaluateFile('./follows.ts', { '@/utils/request': request }) }
 }
 
-const article = (id: string, fields = {}) => ({ entry_id: id, source: 'article', acquisition: 'model_written', similar_reports: [], ...fields })
+const article = (id: string, fields = {}) => ({ entry_id: id, source: 'article', acquisition: 'model_written',  ...fields })
 
 for (const kind of ['search', 'follow feed'] as const) {
   test(`${kind} uses incomplete fields from HTTP responses without article detail requests`, async t => {
     const nested = [article('nested-incomplete', { incomplete: true }), article('nested-complete', { incomplete: false }), article('nested-missing')]
-    const results = [article('incomplete', { incomplete: true, similar_reports: nested }), article('complete', { incomplete: false }), article('missing')]
+    const results = [article('incomplete', { incomplete: true, }), article('complete', { incomplete: false }), article('missing')]
     const f = fixture(t, results)
-    const request = kind === 'search' ? { query: 'Launch' } : { limit: 20, collapse_similar: true }
+    const request = kind === 'search' ? { query: 'Launch' } : { limit: 20, }
     const response = kind === 'search' ? await f.search.searchEntries(request) : await f.follows.getFollowFeed(request)
     assert.equal(response.success, true)
     assert.deepEqual(response.data.results, results)
-    for (const rows of [response.data.results, response.data.results[0].similar_reports]) {
+    for (const rows of [response.data.results]) {
       assert.equal(rows[0].incomplete, true)
       assert.equal(rows[1].incomplete, false)
       assert.equal(rows[2].incomplete, undefined)
@@ -72,7 +72,7 @@ test('article search and filter options use the shared HTTP service routes', asy
     assert.equal(name, '@/utils/request')
     return Object.fromEntries(['get', 'post'].map(method => [method, (url: string, body?: unknown) => { calls.push({ method, url, body }); return Promise.resolve({ success: true }) }]))
   }, module, module.exports)
-  const request = { libraries: ['selected'], query: 'Launch', content_types: ['event'], entity_ids: ['e1'], topic_ids: ['t1'], published_from: '2026-10-01', collapse_similar: false, limit: 20 }
+  const request = { libraries: ['selected'], query: 'Launch',  entity_ids: ['e1'],  published_from: '2026-10-01',  limit: 20 }
   await module.exports.searchEntries(request)
   await module.exports.getSearchOptions()
   assert.deepEqual(calls, [{ method: 'post', url: '/api/v1/search', body: request }, { method: 'get', url: '/api/v1/search/options', body: undefined }])

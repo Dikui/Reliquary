@@ -71,21 +71,25 @@ func rebuildAttachments(t *testing.T, root, id string) map[string]string {
 func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	h, vault, _ := newArticleImageHarness(t, true)
 	h.service.libraryService = NewLibraryServiceForIngestTest(h)
-	output := articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "OldCo", EntityType: "company"}, {Name: "Partner", EntityType: "company"}, {Name: "ObsoleteTool", EntityType: "product"}}, []string{})
+	output := articleProcessingOutput(
+		t,
+		[]types.EntityCandidate{
+			{Name: "OldCo", EntityType: "company"},
+			{Name: "Partner", EntityType: "company"},
+			{Name: "ObsoleteTool", EntityType: "product"},
+		},
+	)
 	h.processor.output = output
 	k := h.upload(t, "rebuild", "# OldCo and Partner\n\n"+strings.Repeat("Measured original observations remain unchanged. ", 35)+"\n\n![chart]("+articleImageDataURI(t, 7)+")")
 	originalBody, err := vault.ReadBody(k)
 	require.NoError(t, err)
 	originalImages := rebuildAttachments(t, vault.root, k.ID)
 	require.NotEmpty(t, originalImages)
-	userTopic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "User selected"})
-	require.NoError(t, err)
-	require.NoError(t, NewTopicService(h.db).SetUserEntryTopics(h.ctx, k.ID, []string{userTopic.ID}))
-	k.Starred, k.CollectReason, k.ContentTypeCorrected = true, "Keep my decision", true
+	k.Starred, k.CollectReason = true, "Keep my decision"
 	require.NoError(t, k.SetProcessOverrides(&types.EntryProcessOverrides{ChunkingConfig: &types.ChunkingConfig{ChunkSize: 10000}}))
 	k.ParseStatus = types.ParseStatusFailed // A fresh rebuild must not reuse this completed segment output.
 	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, k))
-	require.NoError(t, h.db.Model(k).Updates(map[string]any{"starred": true, "collect_reason": k.CollectReason, "content_type_corrected": true}).Error)
+	require.NoError(t, h.db.Model(k).Updates(map[string]any{"starred": true, "collect_reason": k.CollectReason}).Error)
 	var oldEntity types.Entity
 	require.NoError(t, h.db.Where("canonical_name=?", "OldCo").First(&oldEntity).Error)
 	var orphan types.Entity
@@ -93,7 +97,7 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.NoError(t, h.db.Create(&types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: k.SpaceID, EntryID: k.ID, NewEntityID: orphan.ID, CandidateEntityID: oldEntity.ID, Status: "pending"}).Error)
 	otherLibrary := *h.library
 	otherLibrary.ID, otherLibrary.SystemRole, otherLibrary.Directory = "other-library", "", "other-library"
-	require.NoError(t, h.db.Omit("ContentTypes").Create(&otherLibrary).Error)
+	require.NoError(t, h.db.Create(&otherLibrary).Error)
 	other := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: otherLibrary.ID, Type: "manual", SourceKind: "article", ParseStatus: types.ParseStatusCompleted, VaultBody: "Other source"}
 	require.NoError(t, h.db.Create(other).Error)
 	var shared []types.Entity
@@ -106,8 +110,8 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	cancelled := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: k.LibraryID, SourceKind: "article", ParseStatus: types.ParseStatusCancelled, VaultBody: "Cancelled source"}
 	require.NoError(t, h.db.Create(cancelled).Error)
 	h.library.ChunkingConfig = types.ChunkingConfig{ChunkSize: 100, ChunkOverlap: 0, Separators: []string{"\n\n", " ", ""}}
-	require.NoError(t, h.db.Omit("ContentTypes").Save(h.library).Error)
-	h.processor.output = articleProcessingOutput(t, "other", []types.EntityCandidate{{Name: "NewCo", EntityType: "company"}}, []string{})
+	require.NoError(t, h.db.Save(h.library).Error)
+	h.processor.output = articleProcessingOutput(t, []types.EntityCandidate{{Name: "NewCo", EntityType: "company"}})
 	var fresh map[string]any
 	require.NoError(t, json.Unmarshal([]byte(h.processor.output), &fresh))
 	fresh["summary"].(map[string]any)["overview"] = "New computed summary"
@@ -128,8 +132,7 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	finished := h.article(t, k.ID)
 	require.Equal(t, types.ParseStatusCompleted, finished.ParseStatus)
 	require.Equal(t, "New computed summary", finished.StructuredSummary.Overview)
-	require.Equal(t, k.ContentType, finished.ContentType)
-	require.True(t, finished.ContentTypeCorrected)
+
 	require.True(t, finished.Starred)
 	require.Equal(t, k.CollectReason, finished.CollectReason)
 	require.Equal(t, k.Source, finished.Source)
@@ -150,8 +153,6 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	}
 	require.NoError(t, h.db.Model(&types.EntryEntity{}).Where("entry_id=? AND entity_id=?", k.ID, oldEntity.ID).Count(&count).Error)
 	require.Zero(t, count)
-	require.NoError(t, h.db.Model(&types.EntryTopic{}).Where("entry_id=? AND topic_id=? AND source=?", k.ID, userTopic.ID, types.TopicSourceUser).Count(&count).Error)
-	require.EqualValues(t, 1, count)
 	var preserved types.Entity
 	require.NoError(t, h.db.First(&preserved, "id=?", oldEntity.ID).Error)
 	require.Equal(t, oldEntity.Description, preserved.Description)
@@ -214,7 +215,7 @@ func TestLibraryRebuildFailureCanResumeWithoutResubmitting(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, body, after)
 	require.Equal(t, images, rebuildAttachments(t, vault.root, k.ID))
-	h.processor.output = validProcessingFixture("event")
+	h.processor.output = validProcessingFixture()
 	var updated map[string]any
 	require.NoError(t, json.Unmarshal([]byte(h.processor.output), &updated))
 	updated["summary"].(map[string]any)["overview"] = "Summary after recovery"

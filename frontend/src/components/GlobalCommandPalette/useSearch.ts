@@ -31,7 +31,6 @@ export interface CmdkFileGroup {
   latest_entry_id?: string
   source_unverified?: boolean
   acquisition?: SearchEntry['acquisition']
-  similarCount?: number
   imagePath?: string
 }
 
@@ -42,7 +41,6 @@ export function articleFileGroups(articles: SearchEntry[]): CmdkFileGroup[] {
     source_unverified: Boolean(article.source_unverified),
     has_update: Boolean(article.has_update), latest_entry_id: article.latest_entry_id,
     acquisition: article.source === 'article' ? article.acquisition : undefined,
-    similarCount: article.similar_reports?.length || 0,
     imagePath: article.source === 'article' ? article.snippets?.find(snippet => snippet.image_path)?.image_path : undefined,
     chunks: (article.snippets?.length ? article.snippets : [{ chunk_id: article.entry_id, chunk_index: 0, content: article.summary?.overview || '', match_type: 'article', score: article.score }]).map(snippet => ({
       id: snippet.chunk_id, chunk_index: snippet.chunk_index, entry_id: article.entry_id,

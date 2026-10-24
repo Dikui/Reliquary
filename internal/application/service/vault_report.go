@@ -156,11 +156,6 @@ func (s *VaultDocumentService) createReportInput(
 		if err := tx.First(entry, "id=?", id).Error; err != nil {
 			return err
 		}
-		for _, topicID := range metadata.TopicIDs {
-			if err := tx.Create(&types.EntryTopic{SpaceID: library.SpaceID, EntryID: id, TopicID: topicID, Source: types.TopicSourceUser, CreatedAt: created}).Error; err != nil {
-				return err
-			}
-		}
 		header, err := vault.articleHeader(ctx, entry)
 		if err != nil {
 			return err
@@ -171,7 +166,13 @@ func (s *VaultDocumentService) createReportInput(
 			return err
 		}
 		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "write_report", entry.ID, nil,
-			map[string]any{"title": title, "vault_path": path, "related_entry_ids": selected, "related_entities": metadata.RelatedEntities, "topic_ids": metadata.TopicIDs, "request_id": metadata.RequestID}); err != nil {
+			map[string]any{
+				"title":             title,
+				"vault_path":        path,
+				"related_entry_ids": selected,
+				"related_entities":  metadata.RelatedEntities,
+				"request_id":        metadata.RequestID,
+			}); err != nil {
 			return err
 		}
 		payload, _ := json.Marshal(types.ReportIndexPayload{SpaceID: library.SpaceID, LibraryID: library.ID, EntryID: id})

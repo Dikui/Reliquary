@@ -8,6 +8,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reliquary/internal/application/service"
+	"reliquary/internal/config"
+	"reliquary/internal/maintenance"
+	"reliquary/internal/testutil/pgtest"
+	"reliquary/internal/types"
 	"strings"
 	"testing"
 	"time"
@@ -16,11 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"reliquary/internal/application/service"
-	"reliquary/internal/config"
-	"reliquary/internal/maintenance"
-	"reliquary/internal/testutil/pgtest"
-	"reliquary/internal/types"
 )
 
 func sourcesAdminFixture(t *testing.T) (*gorm.DB, string, string) {
@@ -47,6 +47,7 @@ func sourcesAdminFixture(t *testing.T) (*gorm.DB, string, string) {
 	}
 	return db, dsn, root
 }
+
 func TestMaintenanceExportSourcesAndMigratePreserveHistory(t *testing.T) {
 	db, dsn, root := sourcesAdminFixture(t)
 	var output bytes.Buffer
@@ -77,10 +78,11 @@ func TestMaintenanceExportSourcesAndMigratePreserveHistory(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, files, 1, "migrate reuses the completed explicit export")
 }
+
 func TestMaintenanceExportFailureLeavesVersionFourPaused(t *testing.T) {
 	db, dsn, root := sourcesAdminFixture(t)
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".reliquary"), 0700))
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".reliquary/exports"), []byte("block export directory"), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".reliquary"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".reliquary/exports"), []byte("block export directory"), 0o600))
 	var output bytes.Buffer
 	err := runMaintenanceDatabase(context.Background(), db, dsn, []string{"migrate"}, bytes.NewReader(nil), &output)
 	require.Error(t, err)
@@ -138,18 +140,29 @@ func TestMaintenanceRestoreOldSnapshotRejectsLegacyLayoutAfterOriginalVerificati
 				{
 					article.VaultPath = "articles/2026-10/old-rss-restore.md"
 					path := filepath.Join(root, filepath.FromSlash(article.VaultPath))
-					if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+					if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 						return err
 					}
-					header := service.VaultArticleHeader{ID: article.ID, URL: article.Source, Title: article.Title, ContentType: article.ContentType, CollectedAt: article.CreatedAt.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano)}
-					if err := os.WriteFile(path, append(service.RenderVaultArticleHeader(header), []byte(article.VaultBody)...), 0600); err != nil {
+					header := service.VaultArticleHeader{
+						ID:          article.ID,
+						URL:         article.Source,
+						Title:       article.Title,
+						CollectedAt: article.CreatedAt.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano),
+					}
+					if err := os.WriteFile(path,
+						append(service.RenderVaultArticleHeader(header),
+							[]byte(article.VaultBody)...),
+						0o600); err != nil {
 						return err
 					}
 					if err := current.Table("entries").Where("id=?", article.ID).UpdateColumn("vault_path", article.VaultPath).Error; err != nil {
 						return err
 					}
 				}
-				if err := os.WriteFile(filepath.Join(uploads, "original.bin"), []byte("Preserved original attachment"), 0600); err != nil {
+				if err := os.WriteFile(filepath.Join(uploads,
+					"original.bin"),
+					[]byte("Preserved original attachment"),
+					0o600); err != nil {
 					return err
 				}
 				if err := vault.Flush(ctx); err != nil {
@@ -163,7 +176,7 @@ func TestMaintenanceRestoreOldSnapshotRejectsLegacyLayoutAfterOriginalVerificati
 			baseline, err := json.Marshal(original)
 			require.NoError(t, err)
 			originalPath := filepath.Join(t.TempDir(), "snapshot.json")
-			require.NoError(t, os.WriteFile(originalPath, baseline, 0600))
+			require.NoError(t, os.WriteFile(originalPath, baseline, 0o600))
 			invoke := func(arguments ...string) error {
 				var output bytes.Buffer
 				err := runMaintenance(arguments, bytes.NewReader(nil), &output)
@@ -176,13 +189,13 @@ func TestMaintenanceRestoreOldSnapshotRejectsLegacyLayoutAfterOriginalVerificati
 			oldLogPath := filepath.Join(root, ".reliquary/data/sync_logs.json")
 			oldLog, err := os.ReadFile(oldLogPath)
 			require.NoError(t, err)
-			require.NoError(t, os.WriteFile(oldLogPath, []byte("[]\n"), 0600))
+			require.NoError(t, os.WriteFile(oldLogPath, []byte("[]\n"), 0o600))
 			require.Error(t, invoke("verify", "--manifest", originalPath, "--vectors"), "an altered old table replica must fail before any flush can overwrite it")
-			require.NoError(t, os.WriteFile(oldLogPath, oldLog, 0600))
+			require.NoError(t, os.WriteFile(oldLogPath, oldLog, 0o600))
 			attachmentPath := filepath.Join(uploads, "original.bin")
-			require.NoError(t, os.WriteFile(attachmentPath, []byte("Altered attachment"), 0600))
+			require.NoError(t, os.WriteFile(attachmentPath, []byte("Altered attachment"), 0o600))
 			require.Error(t, invoke("verify", "--manifest", originalPath, "--vectors"), "altered copied material must fail the original baseline check")
-			require.NoError(t, os.WriteFile(attachmentPath, []byte("Preserved original attachment"), 0600))
+			require.NoError(t, os.WriteFile(attachmentPath, []byte("Preserved original attachment"), 0o600))
 			require.NoError(t, invoke("verify", "--manifest", originalPath, "--vectors"))
 			require.NoError(t, invoke("export-sources"))
 			t.Chdir(repository)

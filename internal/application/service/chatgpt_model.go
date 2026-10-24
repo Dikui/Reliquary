@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
-
-	"gorm.io/gorm"
 	"reliquary/internal/chatgpt"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils/ollama"
+	"time"
+
+	"gorm.io/gorm"
 )
 
 // NewModelServiceWithChatGPT shares the authorization manager with settings.
@@ -106,7 +106,7 @@ func (c *chatGPTBudgetChat) GetModelID() string   { return c.inner.GetModelID() 
 func (c *chatGPTBudgetChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
 	p, err := c.policy.Reserve(ctx)
 	if err != nil {
-		if p != nil && types.IsChatGPTDeferred(err) && p.FallbackModelID != "" && !strictContentCheck(ctx) {
+		if p != nil && types.IsChatGPTDeferred(err) && p.FallbackModelID != "" {
 			result, fallbackErr := c.useFallback(ctx, p.FallbackModelID, messages, opts)
 			if fallbackErr != nil {
 				return nil, c.policy.deferred(p, errors.Join(err, fallbackErr))
@@ -125,7 +125,7 @@ func (c *chatGPTBudgetChat) Chat(ctx context.Context, messages []chat.Message, o
 		errors.As(err, &upstream)
 		return nil, &types.ChatGPTDeferredError{Reason: upstream.Code, RetryAt: c.policy.now().Add(5 * time.Minute), Cause: errors.Join(err, pauseErr)}
 	}
-	if p.FallbackModelID != "" && !strictContentCheck(ctx) {
+	if p.FallbackModelID != "" {
 		result, fallbackErr := c.useFallback(ctx, p.FallbackModelID, messages, opts)
 		if fallbackErr != nil {
 			return nil, c.policy.deferred(p, errors.Join(err, fallbackErr))
@@ -143,6 +143,7 @@ func (s *modelService) chatGPTFallbackInUse(ctx context.Context, id string) (boo
 	err := s.db.WithContext(ctx).Model(&types.ChatGPTPolicy{}).Where("fallback_model_id=?", id).Count(&count).Error
 	return count != 0, err
 }
+
 func (c *chatGPTBudgetChat) useFallback(ctx context.Context, id string, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
 	model, err := c.fallback(ctx, id)
 	if err != nil {
@@ -150,6 +151,7 @@ func (c *chatGPTBudgetChat) useFallback(ctx context.Context, id string, messages
 	}
 	return model.Chat(ctx, messages, opts)
 }
+
 func (c *chatGPTBudgetChat) ChatStream(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (<-chan types.StreamResponse, error) {
 	// Buffer until the terminal event so a fallback never mixes partial output
 	// from two models. The provider still uses HTTP/SSE for every request.

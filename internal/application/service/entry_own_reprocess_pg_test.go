@@ -52,7 +52,7 @@ func TestOwnReprocessAfterFailureAndCancellationReusesCompletedSegments(t *testi
 	h, m := segmentedHarness(t)
 	h.library.SystemRole = ""
 	h.library.ID, h.library.Directory, h.library.Template, h.library.SourceEvidenceRule = "own-retry", "own-retry", types.TemplateOwn, ""
-	require.NoError(t, h.db.Omit("ContentTypes").Create(h.library).Error)
+	require.NoError(t, h.db.Create(h.library).Error)
 	k := segmentedEntry(t, h)
 	k.SourceKind, k.VaultBody = "mine", "# Original\n\n"+strings.Repeat("Complete original measurements. ", 20)
 	require.NoError(t, k.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "approved"}))
@@ -76,21 +76,18 @@ func TestOwnReprocessAfterFailureAndCancellationReusesCompletedSegments(t *testi
 	require.Equal(t, 2, m.calls["article_processing"][3])
 }
 
-func TestGeneratedReparseRunsProcessingAndPreservesUserTopics(t *testing.T) {
+func TestGeneratedReparseRunsProcessing(t *testing.T) {
 	h, m := segmentedHarness(t)
 	h.library.SystemRole = ""
 	h.library.ID, h.library.Directory, h.library.Template, h.library.SourceEvidenceRule = "generated-reindex", "generated-reindex", types.TemplateGenerated, ""
-	require.NoError(t, h.db.Omit("ContentTypes").Create(h.library).Error)
+	require.NoError(t, h.db.Create(h.library).Error)
 	k := segmentedEntry(t, h)
 	k.SourceKind, k.ParseStatus, k.EnableStatus = "report", types.ParseStatusCompleted, "enabled"
-	k.VaultBody, k.Description, k.ContentType = "# Caller report\n\nOriginal report material.", "Caller summary", "research"
+	k.VaultBody, k.Description = "# Caller report\n\nOriginal report material.", "Caller summary"
 	k.StructuredSummary = &types.EntrySummary{Overview: "Caller overview", Points: []string{"One", "Two", "Three"}, KeyTerms: []string{}}
 	k.SummaryStatus = types.SummaryStatusCompleted
 	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, k))
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Caller topic"})
-	require.NoError(t, err)
-	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: k.SpaceID, EntryID: k.ID, TopicID: topic.ID, Source: types.TopicSourceUser}).Error)
-	_, err = h.service.ReparseEntry(h.ctx, k.ID, nil)
+	_, err := h.service.ReparseEntry(h.ctx, k.ID, nil)
 	require.NoError(t, err)
 	h.drain(t)
 	saved := h.article(t, k.ID)
@@ -98,14 +95,12 @@ func TestGeneratedReparseRunsProcessingAndPreservesUserTopics(t *testing.T) {
 	require.NotEmpty(t, saved.Description)
 	require.NotEqual(t, "Caller summary", saved.Description)
 	require.NotNil(t, saved.StructuredSummary)
-	require.NotEmpty(t, saved.ContentType)
+
 	require.NotEmpty(t, m.calls)
 	require.Zero(t, m.mergeCalls)
-	var chunks, links, runs int64
+	var chunks, runs int64
 	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id=?", k.ID).Count(&chunks).Error)
 	require.Positive(t, chunks)
-	require.NoError(t, h.db.Model(&types.EntryTopic{}).Where("entry_id=?", k.ID).Count(&links).Error)
-	require.EqualValues(t, 1, links)
 	require.NoError(t, h.db.Model(&entrySegmentRun{}).Where("entry_id=?", k.ID).Count(&runs).Error)
 	require.Positive(t, runs)
 }

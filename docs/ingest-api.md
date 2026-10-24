@@ -18,7 +18,6 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `title` | 可选，最多 255 个码点；缺失不阻止保存，后台可补标题 |
 | `author`、`publisher`、`published_at` | 可选来源信息；日期使用 YYYY-MM-DD 或 RFC3339 |
 | `images` | 可选图片列表，最多 100 项，见下节 |
-| `content_type_hint` | 可选分类提示，不替代处理结果 |
 | `thread`、`quotes` | 可选有序正文片段与引用；每项 `content` 必填，合计正文仍受 500 万码点限制 |
 | `collect_reason` | 收藏理由 |
 | `agent_summary`、`agent_tags`、`source_name` | 调用方注释，保存数据库，不进入正文或处理提示词 |
@@ -81,7 +80,7 @@ AI产出：
 
 `GET /api/v1/entries/:id/body` 的 `ETag` 为带双引号的完整正文 SHA-256；范围读取也返回同一校验值。HTTP 更新可提交 `base_body_hash`（去掉 ETag 的双引号），网页保存必须携带。后端在事务行锁内检查，正文已变化时返回 HTTP 409 和 `error.details.reason: "body_changed"`，不修改正文、附件或派生数据；相同正文的重试仍返回 `exists`。省略此字段的既有调用保持原更新语义。
 
-HTTP `PUT /api/v1/entries/:id/body` 或 MCP `update_entry_content` 一起更新同一资料的完整 Markdown 正文和图片。认证与收录相同。资料必须已归档；保留资料 ID、库、来源、`source_ref`、`identifier`、创建时间、星标和用户主题。标题、摘要与自定义元数据仍通过 `PUT /api/v1/entries/:id` 修改。
+HTTP `PUT /api/v1/entries/:id/body` 或 MCP `update_entry_content` 一起更新同一资料的完整 Markdown 正文和图片。认证与收录相同。资料必须已归档；保留资料 ID、库、来源、`source_ref`、`identifier`、创建时间、星标和实体关联。标题、摘要与自定义元数据仍通过 `PUT /api/v1/entries/:id` 修改。
 
 新图片先通过 `POST /api/v1/ingest/assets` 上传，取得 `asset_id`，再与正文一起提交；也可直接在 `images[].data` 提交图片 base64/data URI。
 
@@ -170,13 +169,13 @@ MCP 将同一对象作为 `ingest` 的 `arguments`。字段和错误按上文通
 
 正文及串文、引用合计上限 5,000,000 Unicode 码点。保存不等待模型分段、审核或摘要。超过模型上下文、分段上限或输出格式错误，只记录后台处理失败，不转为内容待审，不撤销原文及已建立的正文检索。
 
-后台沿用 Markdown 分段、检查点和重试机制。各段摘要合并、内容类型选择、实体归一与证据校验继续执行。摘要要点按实际内容确定，不要求固定 3–5 条。标题缺失在处理调用中补写，不修改正文。
+后台沿用 Markdown 分段、检查点和重试机制。各段摘要合并、实体归一与证据校验继续执行。摘要要点按实际内容确定，不要求固定 3–5 条。标题缺失在处理调用中补写，不修改正文。
 
 配置见 [个人使用指南](personal-use.md)。默认最多 128 段，每篇顺序执行，受现有模型并发限制。
 
 ## 联合处理的图片输入
 
-所有模板均选择所属库内容类型、补全缺失标题、生成摘要与主题，并抽取有依据的实体和短介绍。内容类型修正仍只能选择所属库启用的类型。
+所有模板均补全缺失标题、生成摘要，并抽取有依据的实体和短介绍。处理结果不再包含内容类型和主题。
 
 支持视觉的处理模型读取由已保存原图生成的模型输入副本，将重要视觉信息纳入理解和摘要。默认处理不再要求、校验或保存逐图说明，也不生成新的 `image_description` 检索块；模型额外返回的 `image_descriptions` 不参与处理结果。每段最多读取 `article_processing.max_images` 张图片，超过时增加分段。图片不可读或模型不支持视觉时保存跳过原因。
 

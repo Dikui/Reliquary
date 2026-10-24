@@ -65,7 +65,7 @@ func TestEveryTaskTypeHasADeclaredQueue(t *testing.T) {
 	taskTypes := []string{
 		TypeDocumentProcess,
 		TypeEntryListReparse, TypeEntryListDelete,
-		TypeManualProcess, TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeTopicBackfill,
+		TypeManualProcess, TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild,
 		TypeIngestAssetCleanup, TypeReportIndex,
 	}
 	for _, taskType := range taskTypes {
@@ -107,7 +107,7 @@ func TestResolveWorkerPoolConcurrencyFallsBackPerPool(t *testing.T) {
 func TestReplacedProcessingTasksHaveNoQueue(t *testing.T) {
 	for _, taskType := range []string{
 		"summary:generation", "question:generation", "image:multimodal", "knowledge:post_process", "datatable:summary",
-		"graph:sync", "graph:check", "graph:rebuild",
+		"graph:sync", "graph:check", "graph:rebuild", "content:check", "topic:backfill",
 	} {
 		if queue, ok := QueueForTaskType(taskType); ok {
 			t.Fatalf("removed task %q still routes to %q", taskType, queue)

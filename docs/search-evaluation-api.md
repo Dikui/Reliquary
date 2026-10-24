@@ -26,14 +26,13 @@
   "method": "ordinary",
   "request": {
     "query": "校准步骤是什么？",
-    "libraries": ["personal"],
-    "collapse_similar": false
+    "libraries": ["personal"]
   },
   "answers": [{"entry_id": "document-id", "grade": 1}]
 }
 ```
 
-`request` 使用普通检索的参数，可包含类型、实体、主题、时间与星标筛选。库目录在保存时解析为稳定 ID。`grade` 省略时为 1，范围为 0 至 10；0 表示不相关。答案必须属于所选库，不允许重复 ID。`answers: []` 允许构造无答案题。`method` 只支持 `ordinary`。
+`request` 使用普通检索的参数，可包含实体、时间与星标筛选。库目录在保存时解析为稳定 ID。`grade` 省略时为 1，范围为 0 至 10；0 表示不相关。答案必须属于所选库，不允许重复 ID。`answers: []` 允许构造无答案题。`method` 只支持 `ordinary`。
 
 转题请求为 `{"record_id":"...","answers":[{"entry_id":"..."}]}`。题目保存当次 `suggested_results`，供界面勾选；再次 PUT 可以修改答案。题目的来源由服务决定，不能由客户端伪造。AI 题的来源为 `ai`，状态为 `pending`，普通 PUT 不能绕过人工确认。
 
@@ -45,13 +44,12 @@
 {
   "k": 5,
   "vector_set": "active",
-  "collapse_similar": false,
   "retrieval_config": {"rrf_vector_weight": 0.7, "rrf_keyword_weight": 0.3},
   "rerank_model_id": ""
 }
 ```
 
-`k` 默认 10，范围 1 至 100。`vector_set` 支持 `active`、`candidate:<embedding_rebuild_run_id>`、`archive:<switched_run_id>`。候选必须完成、计数完整且未切换；归档必须仍然存在，且向量有唯一明确的模型和维度。它们共用普通检索的召回、融合、重排和相似折叠流程，不切换空间设置。归档模型已删除或候选模型语义配置已变化时拒绝运行。
+`k` 默认 10，范围 1 至 100。`vector_set` 支持 `active`、`candidate:<embedding_rebuild_run_id>`、`archive:<switched_run_id>`。候选必须完成、计数完整且未切换；归档必须仍然存在，且向量有唯一明确的模型和维度。它们共用普通检索的召回、融合和重排流程，不切换空间设置。归档模型已删除或候选模型语义配置已变化时拒绝运行。
 
 省略 `retrieval_config` 时冻结运行开始时的空间配置；传入时按完整配置替换，未设置的项使用检索服务默认值。`rerank_model_id` 省略时使用库设置，空字符串显式关闭。每题保存真实执行参数、有效默认值、向量集及模型 profile hash、重排模型 ID、分块与索引配置、代码 revision、折叠规则。运行保存题目、答案与版本的快照。活动向量模型或 profile 在运行期间改变会导致运行失败。删除测评集或题目不会删除历史运行。
 

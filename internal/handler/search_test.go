@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reliquary/internal/middleware"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 	"strings"
 	"testing"
 
 	apperrors "reliquary/internal/errors"
-	"reliquary/internal/middleware"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -34,17 +34,21 @@ func (s *entrySearchHandlerService) Search(_ context.Context, request types.Entr
 	if strings.TrimSpace(request.Query) == "" {
 		return nil, apperrors.NewBadRequestError("query is required")
 	}
-	return &types.EntrySearchResponse{Results: []*types.EntrySearchResult{{EntryID: "article", Title: "Article",
+	return &types.EntrySearchResponse{Results: []*types.EntrySearchResult{{
+		EntryID: "article", Title: "Article",
 		Source: "article", Summary: &types.EntrySummary{Overview: "Summary"},
-		Snippets: []types.EntrySearchSnippet{{Content: "Summary"}}, Entities: []types.EntrySearchEntity{}, Topics: []types.EntrySearchTopic{},
-		SimilarReports: []*types.EntrySearchResult{{EntryID: "similar"}}, VaultPath: "articles/article.md", OriginalURL: "https://example.org/article"}}, ExcludedMissingPublishedAt: 2}, nil
+		Snippets: []types.EntrySearchSnippet{{Content: "Summary"}}, Entities: []types.EntrySearchEntity{},
+		VaultPath: "articles/article.md", OriginalURL: "https://example.org/article",
+	}}, ExcludedMissingPublishedAt: 2}, nil
 }
 
 func (s *entrySearchHandlerService) Options(context.Context) (*types.EntrySearchOptions, error) {
 	if s.failure != nil {
 		return nil, s.failure
 	}
-	return &types.EntrySearchOptions{Entities: []types.EntrySearchEntity{{ID: "entity", CanonicalName: "Entity", Aliases: []string{"Alias"}}}, Topics: []types.EntrySearchTopic{{ID: "topic", Name: "Topic"}}}, nil
+	return &types.EntrySearchOptions{
+		Entities: []types.EntrySearchEntity{{ID: "entity", CanonicalName: "Entity", Aliases: []string{"Alias"}}},
+	}, nil
 }
 
 func entrySearchHandlerRouter(svc interfaces.SearchService) *gin.Engine {
@@ -60,19 +64,30 @@ func entrySearchHandlerRouter(svc interfaces.SearchService) *gin.Engine {
 func TestEntrySearchHTTPSharedRequestAndArticleResponse(t *testing.T) {
 	svc := &entrySearchHandlerService{}
 	router := entrySearchHandlerRouter(svc)
-	request := httptest.NewRequest(http.MethodPost, "/search", strings.NewReader(`{"query":"query","content_types":["event","tutorial"],"entity_ids":["entity"],"topic_ids":["topic"],"sources":["article","mine"],"published_from":"2026-10-01","published_to":"2026-10-03","collapse_similar":false,"limit":20}`))
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/search",
+		strings.NewReader(
+			`{"query":"query",
+"entity_ids":["entity"],
+"sources":["article",
+"mine"],
+"published_from":"2026-10-01",
+"published_to":"2026-10-03",
+"limit":20}`,
+		),
+	)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.Equal(t, "query", svc.request.Query)
-	require.Equal(t, []string{"event", "tutorial"}, svc.request.ContentTypes)
+
 	require.Equal(t, []string{"entity"}, svc.request.EntityIDs)
-	require.Equal(t, []string{"topic"}, svc.request.TopicIDs)
+
 	require.Equal(t, []string{"article", "mine"}, svc.request.Sources)
 	require.Equal(t, "2026-10-03", svc.request.PublishedTo)
-	require.NotNil(t, svc.request.CollapseSimilar)
-	require.False(t, *svc.request.CollapseSimilar)
+
 	require.Equal(t, 20, svc.request.Limit)
 	var envelope struct {
 		Success bool                      `json:"success"`
@@ -85,13 +100,11 @@ func TestEntrySearchHTTPSharedRequestAndArticleResponse(t *testing.T) {
 	result := envelope.Data.Results[0]
 	require.Equal(t, "article", result.EntryID)
 	require.Equal(t, "Summary", result.Summary.Overview)
-	require.Len(t, result.SimilarReports, 1)
-	require.Equal(t, "similar", result.SimilarReports[0].EntryID)
+
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/search/options", nil))
 	require.Equal(t, http.StatusOK, response.Code)
 	require.Contains(t, response.Body.String(), "Alias")
-	require.Contains(t, response.Body.String(), "Topic")
 }
 
 func TestEntrySearchHTTPRejectsOldAndUnknownParameters(t *testing.T) {

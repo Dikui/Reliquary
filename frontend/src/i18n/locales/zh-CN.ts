@@ -28,7 +28,7 @@ export default {
     countLoading: '正在统计匹配资料…',
     countFailed: '无法加载匹配数量，请重试。',
     retryCount: '重试匹配数量',
-    matchedCount: '匹配 {count} 条资料（含未加载及折叠项）',
+    matchedCount: '匹配 {count} 条资料（含未加载项）',
     selectedCount: '已选 {selected} 条 · 可找到 {found} 条 · 不可用 {unavailable} 条',
     checkedHint: '操作仅针对已勾选的资料 ID，不会扩展到下列筛选的其他匹配资料。',
     countHint: '数量为当前查询结果。确认提交后固定名单，新资料不会加入；执行资格以操作预览为准。',
@@ -40,7 +40,7 @@ export default {
     nextAction: '下一步：选择操作',
     changeScope: '上一步：修改范围',
     filterScopeHint: '范围沿用当前列表筛选，包含未加载的资料。需要调整筛选时，请关闭弹窗后修改。',
-    topics: '主题',
+
     fixedScope: '已提交批次；资料集合已固定。',
     resultLink: '打开此批次结果',
     warningCount: '警告 {count} 项；详情见各项结果。',
@@ -55,15 +55,13 @@ export default {
     "reprocess": "重新处理",
     "review": "历史审核",
     "star": "设置星标",
-    "content_type": "修改内容类型",
-    "topics": "修改主题"
-  },
+
+    },
   "star": "添加星标",
   "unstar": "取消星标",
-  "topicMode": "主题操作",
-  "addTopics": "添加主题",
-  "removeTopics": "移除主题",
-  "singleLibrary": "修改内容类型需限定一个库，并使用该库的类型清单。",
+
+
+
   "deleteHint": "删除会移除资料、索引及独占附件，无法撤销。待审资料会同时保留拒绝收录的来源记录。",
   "reprocessHint": "使用当前库配置重新处理所有类型的资料，包括 AI 产出。保留正文、图片及人工判断，重新建立索引并运行后台内容处理；可能产生模型费用。",
   "preview": "预览影响",
@@ -82,7 +80,7 @@ export default {
   "publishedTo": "发布截止日期",
   "publishedDates": "发布时间范围",
   "publishedHint": "按发布时间筛选会排除缺少发布时间的资料。",
-  "choicesFailed": "实体或主题选项加载失败，请重试。",
+  "choicesFailed": "实体选项加载失败，请重试。",
   "manageRelated": "管理关联资料",
   "wholeLibrary": "全库资料，不受当前列表筛选影响",
   "wholeLibraryFailed": "全库失败资料，不受当前列表筛选影响",
@@ -109,53 +107,9 @@ export default {
     "body_unavailable": "原文不可用",
     "requires_completed_article": "仅支持已完成资料",
     "unsupported_material": "此资料不支持该操作",
-    "topic_library_mismatch": "主题不适用于资料所属库"
   }
 },
-  contentCheck: {
-  "unfinishedMaterials": '未完成资料',
-  "notice": "资料自检失败，请查看检查记录。",
-  "title": "检查记录",
-  "description": "每周检查新增和修改的资料，只输出问题和原文证据。",
-  "settings": "每周自检设置",
-  "model": "检查模型",
-  "day": "每周执行日",
-  "time": "执行时间（北京时间）",
-  "enable": "启用每周自检",
-  "save": "保存设置",
-  "hint": "选择已有模型与执行时间后启用。模型额度、限流或上下文错误会停止整次检查。",
-  "next": "下次执行：",
-  "saved": "设置已保存",
-  "loadFailed": "加载失败，请重试",
-  "back": "返回检查记录",
-  "refresh": "刷新",
-  "details": "查看结果",
-  "empty": "暂无检查记录。启用后会按计划检查新增或修改的资料。",
-  "original": "查看原检查记录",
-  "unfinished": "还有 {count} 条资料未完成检查。修复原因后可手动复检。",
-  "recheck": "复检未完成资料",
-  "problem": "问题说明",
-  "materials": "涉及资料",
-  "evidence": "原文证据",
-  "current": "当前结果：",
-  "openSource": "查看原文",
-  "none": "本轮未发现",
-  "incomplete": "检查尚未完成",
-  "duplicate": "疑似重复",
-  "conflict": "疑似冲突",
-  "result_error": "已有结果错误",
-  "pending": "等待执行",
-  "running": "检查中",
-  "completed": "已完成",
-  "failed": "检查失败",
-  "day0": "周日",
-  "day1": "周一",
-  "day2": "周二",
-  "day3": "周三",
-  "day4": "周四",
-  "day5": "周五",
-  "day6": "周六"
-},
+
   ingestDiagnostics: {
     "materialManagement": "资料管理",
     "pending": "待处理",
@@ -283,7 +237,7 @@ export default {
     "grade": "相关等级",
     "gradeHint": "等级为 0 至 10，0 表示不相关。无答案题可以保留空答案。",
     "answerDeleted": "答案资料已删除，请编辑题目并移除或替换失效资料后再运行。",
-    "collapse": "折叠相似资料",
+
     "searchEntries": "搜索资料",
     "search": "搜索",
     "pickerHint": "先选择库，再搜索并勾选资料。搜索结果只显示已选库的资料。",
@@ -406,7 +360,7 @@ export default {
     "reviseRetry": "输入已保留，请检查后重新操作；刷新可重新读取数据。",
     "invalidRange": "结束日期必须晚于开始日期。",
     "purposes": {
-      content_check: '资料自检',
+
         "intakeReview": "收录审核",
         "processing": "资料处理",
         "segmentMerge": "分段合并",
@@ -512,7 +466,7 @@ export default {
     library: '库',
     allLibraries: '全部库',
     title: '关注',
-    description: '集中查看关注实体与主题的资料。各库分别记录查看时间，上次查看后进入动态的资料标为新。',
+    description: '集中查看关注实体的资料。各库分别记录查看时间，上次查看后进入动态的资料标为新。',
     follow: '关注',
     unfollow: '取消关注',
     followNamed: '关注 {name}',
@@ -523,7 +477,7 @@ export default {
     targetsFailed: '无法加载关注列表，请重试。',
     feedFailed: '无法加载关注动态，请重试。',
     countFailed: '新资料数加载失败，稍后自动重试。',
-    filterTarget: '关注的实体与主题',
+    filterTarget: '关注的实体',
     allTargets: '全部关注',
     targetLabel: '{name}（{type}，近 7 日资料：{count}）',
     limit: '显示数量',
@@ -536,7 +490,7 @@ export default {
     previousPage: '上一页',
     nextPage: '下一页',
     pageNumber: '第 {page} 页',
-    emptyTargets: '还没有关注的实体或主题。到相应页面点击关注。',
+    emptyTargets: '还没有关注的实体。到相应页面点击关注。',
     emptyFeed: '没有符合条件的关注动态。',
     new: '新',
     collectedAt: '收录于 {time}',
@@ -544,7 +498,7 @@ export default {
     markAllViewed: '全部标为已看',
     markFailed: '查看时间未保存，请重试。',
     navCount: '关注，{count} 篇新资料',
-    targetTypes: { entity: '实体', topic: '主题' },
+    targetTypes: { entity: '实体' },
   },
   ingestStatus: {
   "navCount": "待处理，{count} 项",
@@ -596,7 +550,6 @@ export default {
   "sourceUnverified": "来源未核实",
   "missingLinkHint": "来源链接可选。可补充链接后收录，也可确认无链接收录并保留“来源未核实”标记。",
   "invalidLink": "请填写有效的 HTTP 或 HTTPS 原始链接。",
-  "chooseType": "请选择内容类型。",
   "failed": "未能保存处理结果，请重试。",
   "loadFailed": "待处理内容加载失败，请重试。",
   "saved": "处理结果已保存",
@@ -635,58 +588,18 @@ export default {
   "allStars": "全部星标状态",
   "starredOnly": "仅星标资料",
   "unstarredOnly": "仅未星标资料",
-  "contentType": "内容类型",
-  "saveContentType": "保存内容类型",
-  "contentTypeHint": "用户修正的类型将在重新处理时保留。修改内容类型不会删除正文或图片。",
-  "contentTypeSaved": "内容类型已保存",
-  "contentTypeQueued": "内容类型已保存，正在重新处理",
-  "contentTypeFailed": "内容类型未保存，请重试。",
-  "topics": "主题",
-  "saveTopics": "保存主题",
-  "noTopics": "未选择主题",
-  "topicsLoadFailed": "无法加载主题，请重试。",
-  "topicsSaved": "主题已保存",
-  "topicsFailed": "主题未保存，请重试。"
-},
-  topicManagement: {
-    libraries: '适用库',
-    libraryHint: '留空适用于全部库。缩小范围会保留已有归入，但范围外资料不再进入该主题的关注动态。',
-    libraryLoadFailed: '库列表加载失败',
-  "title": "主题",
-  "description": "管理关注方向，并把历史资料归入对应主题。",
-  "create": "新建主题",
-  "edit": "修改主题",
-  "name": "主题名称",
-  "topicDescription": "主题说明",
-  "nameRequired": "请填写主题名称。",
-  "nameExists": "此名称已存在，请使用其他名称。",
-  "noDescription": "尚未填写说明。",
-  "descriptionHint": "修改说明会重新判断历史资料，保留手动加入的关联。",
-  "historyHint": "历史归入使用适用库中已完成资料的标题与摘要。未指定适用库时使用全部库。新建主题或修改说明后，后台自动开始。",
-  "articleCount": "{count} 篇资料",
-  "progress": "已处理 {processed} / {total}",
-  "failures": "失败 {articles} 篇，{batches} 批",
-  "historyProgress": "历史归入进度",
-  "retryFailedBatches": "重试失败批次",
-  "retryFailed": "无法重试失败批次，请重试。",
-  "progressFailed": "无法加载历史归入进度，请重试。",
-  "loadFailed": "无法加载主题，请重试。",
-  "saveFailed": "主题未保存，请重试。",
-  "deleteFailed": "主题未删除，请重试。",
-  "created": "主题已创建，历史归入已开始",
-  "updated": "主题已更新",
-  "deleted": "主题已删除",
-  "empty": "还没有主题。新建一个主题，开始归入历史资料。",
-  "deleteTitle": "删除主题",
-  "deleteDescription": "删除“{name}”及其资料关联？资料仍然保留，相关资料的表头会更新。",
-  "batchFailure": "第 {ordinal} 批，{count} 篇，已尝试 {attempts} 次：{reason}",
-  "status": {
-    "pending": "等待历史归入",
-    "running": "正在归入历史资料",
-    "completed": "历史归入完成",
-    "failed": "历史归入有失败批次"
-  }
-},
+
+
+
+
+
+
+
+
+
+
+  },
+
   operationLogs: {
   "title": "操作日志",
   "description": "按时间倒序查看用户操作，包含网页与 API Key 调用。",
@@ -718,12 +631,12 @@ export default {
     "ingest_conflict": "收录冲突",
     "accept_incomplete": "接受图片缺失",
     "ingest_discard": "丢弃资料",
-    "correct_content_type": "修正内容类型",
-    "correct_topics": "修正主题",
+
+
     "merge_entities": "合并实体",
-    "create_topic": "新建主题",
-    "update_topic": "修改主题",
-    "delete_topic": "删除主题",
+
+
+
     "ingest": "收录",
     "write_report": "写入AI产出"
   }
@@ -762,7 +675,7 @@ export default {
   },
   "uses": {
     "light": "按当前库的标准审核收录内容",
-    "generation": "资料摘要、分类、主题、实体",
+    "generation": "资料摘要与实体",
     "embedding": "内容检索与实体名称相似度",
     "rerank": "重排检索结果",
     "entity_resolution": "判断实体候选是否属于已有实体"
@@ -960,7 +873,7 @@ export default {
       baseUrl: 'API 地址',
       baseUrlDesc: '与 REST API 路径拼接使用。',
       ingestUrl: '外部 Agent 收录接口',
-      ingestUrlDesc: "外部工具通过 HTTP 与 MCP 收录接口送入完整材料。Reliquary 不抓取原文，也不下载远程文件和图片。通过必要技术校验后即入库，正文索引、摘要、分类在后台处理。来源相同且内容不变时返回原资料，有变化时更新原资料；后台处理失败不撤销已保存的正文。通过内网访问时使用 Authorization: Bearer API_KEY。",
+      ingestUrlDesc: "外部工具通过 HTTP 与 MCP 收录接口送入完整材料。Reliquary 不抓取原文，也不下载远程文件和图片。通过必要技术校验后即入库，正文索引与摘要在后台处理。来源相同且内容不变时返回原资料，有变化时更新原资料；后台处理失败不撤销已保存的正文。通过内网访问时使用 Authorization: Bearer API_KEY。",
       copyIngestUrl: '复制收录接口地址',
       mcpUrl: 'MCP 服务地址',
       mcpUrlDesc: '通过 Streamable HTTP 连接，支持检索、读取资料、收录、待审区、星标和写入AI产出。内网访问，使用同一个 API Key：Authorization: Bearer API_KEY。',
@@ -1041,14 +954,14 @@ export default {
     clearQuery: '清除检索内容',
     search: '检索',
     searching: '正在检索',
-    contentTypes: '内容类型',
+
     entities: '实体',
-    topics: '主题',
+
     source: '来源',
     sources: { article: '资料', mine: '个人产出', report: 'AI产出' },
     publishedFrom: '发布时间起始',
     publishedTo: '发布时间截止',
-    collapseSimilar: '折叠相似报道',
+
     limit: '最多返回资料数',
     all: '全部',
     filterHint: '同一筛选中的多选值匹配任意一项，不同筛选同时满足。日期范围包含起止日期；缺失发布时间的资料会被排除。',
@@ -1059,8 +972,8 @@ export default {
     missingPublishedAt: '发布时间缺失',
     snippets: '命中片段',
     score: '得分',
-    showSimilar: '展开 {count} 篇相似报道',
-    hideSimilar: '收起 {count} 篇相似报道',
+
+
     noResults: '没有找到匹配内容，请调整检索内容或筛选。',
     idle: '输入检索内容开始查找。',
     searchFailed: '检索失败，请重试。',
@@ -1660,7 +1573,7 @@ export default {
         },
         queue: {
           core_concurrency: '正文处理与手工重新处理的每实例保底并发，可额外借用共享弹性池；修改后需重启。',
-          enrichment_concurrency: "实体名称向量重建、全部向量重建与主题历史归入的每实例保底并发，可额外借用共享弹性池，修改后需重启。",
+          enrichment_concurrency: "实体名称向量重建与全部向量重建的每实例保底并发，可额外借用共享弹性池，修改后需重启。",
           maintenance_concurrency: "每实例批处理与删除清理的并发数，独立于资料处理；最小为 1，修改后需重启服务。",
           shared_concurrency: '核心处理与内容富化共同使用的每实例弹性并发，由有积压的一侧自动借用；修改后需重启。',
         },
@@ -1813,7 +1726,6 @@ export default {
             entityNameEmbeddingRebuild: '实体名称向量重建',
             embeddingRebuild: '全部向量重建',
             reportIndex: 'AI产出索引',
-            topicBackfill: '主题历史归入',
           }
         },
         failedNotice: {
@@ -1854,7 +1766,7 @@ export default {
         },
         poolDescriptions: {
           core: '正文处理与手工重新处理的保底容量',
-          enrichment: "实体名称向量重建、全部向量重建与主题历史归入",
+          enrichment: "实体名称向量重建与全部向量重建",
           maintenance: "批处理与删除清理",
           shared: '由核心处理与内容富化按积压借用',
         },
@@ -1866,7 +1778,7 @@ export default {
         queueDescriptions: {
           default: '正文处理、手工重新处理',
           low: "批量重新处理、删除清理",
-          entity: "实体名称向量重建、全部向量重建与主题历史归入",
+          entity: "实体名称向量重建与全部向量重建",
         },
         errors: {
           generic: '获取队列状态失败'
@@ -2195,8 +2107,7 @@ export default {
     copyFailed: '复制失败',
     retry: '重试',
     expand: '展开',
-    collapse: '收起'
-  ,
+
     discardTitle: "放弃未保存的修改",
     discardHint: "本次修改尚未保存，返回后将丢弃这些修改。",
     discard: "放弃修改"
@@ -2216,15 +2127,14 @@ export default {
     imageWeightLabel: '图片检索通道权重',
     imageWeightHint: '默认 0.2，图片作为正文和资料检索的补充。设为 0 时使用默认权重 0.2；当前模型必须支持图片。',
     title: '搜索设置',
-    description: '配置知识检索的全局检索参数与相似报道折叠规则',
+    description: '配置知识检索的全局检索参数',
     embeddingTopKLabel: '向量检索数量 (Top K)',
     vectorThresholdLabel: '向量相似度阈值',
     keywordThresholdLabel: '关键词匹配阈值',
     rerankTopKLabel: 'Rerank 数量 (Top K)',
     rerankThresholdLabel: 'Rerank 阈值',
-    similarReportsThresholdLabel: '相似报道余弦相似度阈值',
-    similarReportsWindowDaysLabel: '相似报道发布时间窗口（天）',
-    similarReportsHint: '默认相似度 0.85，时间窗口 3 天。仅外部时效型库内同时满足相似度与时间间隔的资料会折叠，其他模板的库不参与。',
+
+
 
     toasts: {
       saveSuccess: '检索配置已保存',
@@ -2442,14 +2352,14 @@ export default {
     collectReason: '收藏理由',
     vaultPath: '文件库路径',
     copyVaultPath: '复制文件库路径',
-    contentTypes: {"event":"事件","opinion":"观点","research":"研究","tutorial":"教程","case":"案例","reference":"参考","other":"其他"},
 
-    contentTypeFilter: "内容类型",
+
+
     summaryOverview: "概述",
     summaryPoints: "要点",
     summaryKeyTerms: "关键名词",
     articleEntities: "实体",
-    articleTopics: "主题",
+
     reportAssociations: "关联内容",
     relatedEntries: "关联资料",
     relatedEntryUnavailable: "资料已删除或无法读取",
@@ -2518,7 +2428,7 @@ export default {
     deleteFailed: '删除失败，请稍后再试！',
     uploadTime: '上传时间',
     rebuildDocument: '重新处理资料',
-    rebuildConfirm: '重新处理资料“{fileName}”？保留正文，更新摘要、分类与索引。',
+    rebuildConfirm: '重新处理资料“{fileName}”？保留正文，更新摘要与索引。',
     rebuildSubmitted: '重建任务已提交',
     rebuildFailed: '重建失败，请稍后再试',
     rebuildInProgress: '当前资料正在处理中，请稍后重试',

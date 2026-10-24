@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"testing"
-
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
@@ -17,6 +15,7 @@ import (
 	"reliquary/internal/middleware"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
+	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -33,7 +32,16 @@ func TestVaultAttachmentRESTReadsCopiedImageAndRestrictsArticlePath(t *testing.T
 	v, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root}})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, v.Close()) })
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: library.ID, Title: "Attachment", SourceKind: "article", Type: "url", Source: "https://example.org/image", ParseStatus: types.ParseStatusCompleted, ContentType: "event"}
+	article := &types.Entry{
+		ID:          uuid.NewString(),
+		SpaceID:     types.SingleSpaceID,
+		LibraryID:   library.ID,
+		Title:       "Attachment",
+		SourceKind:  "article",
+		Type:        "url",
+		Source:      "https://example.org/image",
+		ParseStatus: types.ParseStatusCompleted,
+	}
 	require.NoError(t, db.Create(article).Error)
 	png := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII="
 	body := "# Attachment\n\n![image](data:image/png;base64," + png + ")"

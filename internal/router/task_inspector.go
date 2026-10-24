@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 	"time"
 
 	"gorm.io/gorm"
 
 	task "reliquary/internal/queue"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
 )
 
 // postgresTaskInspector reads the same durable rows the workers claim.
@@ -229,9 +229,6 @@ func projectRuntimeTask(job *task.Job) (types.RuntimeTaskInfo, error) {
 	}
 	if job.TaskType == types.TypeEntryBatch {
 		info.BatchID = probe.BatchID
-	}
-	if job.TaskType == types.TypeTopicBackfill {
-		info.TaskID = probe.JobID
 	}
 	if info.EnqueuedAt == nil {
 		info.EnqueuedAt = runtimeTaskTime(job.CreatedAt)

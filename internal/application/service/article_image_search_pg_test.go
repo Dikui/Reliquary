@@ -7,12 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reliquary/internal/models/rerank"
+	"reliquary/internal/types"
 	"slices"
 	"strings"
 	"testing"
-
-	"reliquary/internal/models/rerank"
-	"reliquary/internal/types"
 
 	"github.com/pgvector/pgvector-go"
 	"github.com/stretchr/testify/require"
@@ -20,9 +19,17 @@ import (
 
 func enableImageSearchFixture(t *testing.T, h *entrySearchFixture) {
 	t.Helper()
-	require.NoError(t, h.db.Create(&types.Model{ID: "fixture-model", SpaceID: 1, Name: "Shared image space",
+	require.NoError(t, h.db.Create(&types.Model{
+		ID: "fixture-model", SpaceID: 1, Name: "Shared image space",
 		Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
-		Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3, SupportsImages: true, MultimodalFormat: "jina"}}}).Error)
+		Parameters: types.ModelParameters{
+			EmbeddingParameters: types.EmbeddingParameters{
+				Dimension:        3,
+				SupportsImages:   true,
+				MultimodalFormat: "jina",
+			},
+		},
+	}).Error)
 	h.config.ImageVectorEnabled = true
 	h.config.VectorThreshold = 0.9
 	var space types.Space
@@ -45,7 +52,7 @@ func TestArticleImageSearchRecallsImageOnlyInformationAndReturnsThumbnail(t *tes
 	path := "../../attachments/image-only/image-chart.png"
 	addImageSearchVector(t, h, article, path, "fixture-model", []float32{0, 1, 0})
 	addImageSearchVector(t, h, article, "../../attachments/image-only/image-second.png", "fixture-model", []float32{0, 1, 0})
-	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic", CollapseSimilar: entrySearchBool(false)})
+	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
 	require.Equal(t, []string{"image-only"}, entrySearchIDs(response))
 	result := response.Results[0]
 	require.Len(t, result.Snippets, 2)
@@ -82,9 +89,9 @@ func TestArticleImageSearchRejectsOldModelAndWrongDimensionAndHonorsFilters(t *t
 		article := h.add(t, test.id, test.kind, "2026-10-01", test.contentType, "unrelated text", 0)
 		addImageSearchVector(t, h, article, fmt.Sprintf("../../attachments/%s/image.png", article.ID), test.model, test.vector)
 	}
-	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic", CollapseSimilar: entrySearchBool(false)})
+	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
 	require.Equal(t, []string{"current", "personal", "summary"}, entrySearchIDs(response))
-	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic", ContentTypes: []string{"event"}})
+	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic", Sources: []string{"report"}})
 	require.Empty(t, response.Results)
 	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic", Sources: []string{"mine"}})
 	require.Equal(t, []string{"personal"}, entrySearchIDs(response))
@@ -123,6 +130,7 @@ func (r *imageSearchReranker) SupportsImages() bool { return true }
 func (r *imageSearchReranker) Rerank(context.Context, string, []string) ([]rerank.RankResult, error) {
 	return nil, errors.New("image matches must use multimodal reranking")
 }
+
 func (r *imageSearchReranker) RerankMultimodal(_ context.Context, _ string, documents []rerank.RerankDocument) ([]rerank.RankResult, error) {
 	r.documentCounts = append(r.documentCounts, len(documents))
 	if r.err != nil {
@@ -158,17 +166,17 @@ func TestArticleImageSearchReranksOriginalAttachmentsWithoutDescriptions(t *test
 		data, err := base64.StdEncoding.DecodeString(encoded)
 		require.NoError(t, err)
 		directory := filepath.Join(root, "attachments", id)
-		require.NoError(t, os.MkdirAll(directory, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(directory, "original.png"), data, 0644))
+		require.NoError(t, os.MkdirAll(directory, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(directory, "original.png"), data, 0o644))
 	}
-	baseline := h.search(t, types.EntrySearchRequest{Query: "othersemantic", CollapseSimilar: entrySearchNoCollapse()})
+	baseline := h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
 	ranker := &imageSearchReranker{target: imageURIs[1]}
 	h.library.ModelTiers.Rerank = ranker.GetModelID()
 	require.NoError(t, h.db.Save(h.library).Error)
 	svc := h.svc.(*searchService)
 	svc.vault = &VaultService{root: root}
 	svc.modelService = ikb08Models{ranker: ranker}
-	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic", CollapseSimilar: entrySearchNoCollapse()})
+	response := h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
 	require.Equal(t, "applied", response.RerankStatus)
 	require.Equal(t, "z-target", response.Results[0].EntryID)
 	require.InDelta(t, 0.95, response.Results[0].Score, 1e-9)
@@ -193,7 +201,7 @@ func TestArticleImageSearchReranksOriginalAttachmentsWithoutDescriptions(t *test
 	require.Equal(t, tailScore, tail.Score)
 
 	ranker.err = errors.New("image model unavailable")
-	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic", CollapseSimilar: entrySearchNoCollapse()})
+	response = h.search(t, types.EntrySearchRequest{Query: "othersemantic"})
 	require.Equal(t, "unavailable", response.RerankStatus)
 	for index, result := range baseline.Results {
 		require.Equal(t, result.EntryID, response.Results[index].EntryID)

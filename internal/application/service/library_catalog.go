@@ -23,15 +23,14 @@ func (s *libraryService) CreateLibrary(
 	request types.CreateLibraryRequest,
 ) (*types.Library, error) {
 	library := &types.Library{
-		ID:           uuid.NewString(),
-		SpaceID:      types.MustSpaceIDFromContext(ctx),
-		Name:         request.Name,
-		Description:  request.Description,
-		Template:     request.Template,
-		Directory:    request.Directory,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
-		ContentTypes: []types.LibraryContentType{},
+		ID:          uuid.NewString(),
+		SpaceID:     types.MustSpaceIDFromContext(ctx),
+		Name:        request.Name,
+		Description: request.Description,
+		Template:    request.Template,
+		Directory:   request.Directory,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 	if library.Template == types.TemplateExternalTimely {
 		library.SourceEvidenceRule = "link_required"
@@ -102,13 +101,6 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 		}
 		if patch.FeedEnabled != nil {
 			library.FeedEnabled = *patch.FeedEnabled
-		}
-		if patch.ContentTypes != nil {
-			library.ContentTypes = *patch.ContentTypes
-			for i := range library.ContentTypes {
-				library.ContentTypes[i].LibraryID = id
-				library.ContentTypes[i].Position = i
-			}
 		}
 		if err := types.ValidateLibrary(library); err != nil {
 			return apperrors.NewBadRequestError(err.Error())

@@ -7,13 +7,11 @@ const TypeEntryBatch = "entry:batch"
 type EntryBatchFilters struct {
 	Libraries       []string `json:"libraries,omitempty"`
 	EntityIDs       []string `json:"entity_ids,omitempty"`
-	TopicIDs        []string `json:"topic_ids,omitempty"`
 	PublishedFrom   string   `json:"published_from,omitempty"`
 	PublishedTo     string   `json:"published_to,omitempty"`
 	IncludeRejected bool     `json:"include_rejected,omitempty"`
 	Keyword         string   `json:"keyword,omitempty"`
 	FileType        string   `json:"file_type,omitempty"`
-	ContentType     string   `json:"content_type,omitempty"`
 	Starred         *bool    `json:"starred,omitempty"`
 	ParseStatus     string   `json:"parse_status,omitempty"`
 	Source          string   `json:"source,omitempty"`
@@ -29,9 +27,6 @@ type EntryBatchRequest struct {
 	Action             string              `json:"action"`
 	Selection          EntryBatchSelection `json:"selection"`
 	Starred            *bool               `json:"starred,omitempty"`
-	ContentType        string              `json:"content_type,omitempty"`
-	TopicIDs           []string            `json:"topic_ids,omitempty"`
-	TopicMode          string              `json:"topic_mode,omitempty"`
 	PreviewFingerprint string              `json:"preview_fingerprint,omitempty"`
 }
 type EntryBatchReason struct {

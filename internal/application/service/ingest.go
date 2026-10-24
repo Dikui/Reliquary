@@ -100,7 +100,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		ParseStatus: types.ParseStatusPending, SummaryStatus: types.SummaryStatusPending, EnableStatus: "disabled",
 		CreatedAt: now, UpdatedAt: now, EmbeddingModelID: library.EmbeddingModelID,
 		CollectReason: strings.TrimSpace(request.CollectReason), AgentSummary: request.AgentSummary, AgentTags: types.JSON(tags),
-		SourceName: request.SourceName, Acquisition: request.Acquisition, ContentTypeHint: request.ContentTypeHint,
+		SourceName: request.SourceName, Acquisition: request.Acquisition,
 		IngestAPIKeyID: keyID, IngestAPIKeyName: keyName, LastIngestAPIKeyID: keyID, LastIngestAPIKeyName: keyName,
 	}
 	intake := &types.EntryIntakeMetadata{Source: "ingest", Decision: "approved", SourceInfo: types.SourceInfo{
@@ -231,9 +231,6 @@ func validateIngestRequest(request *types.IngestRequest) error {
 	}
 	if len([]rune(strings.TrimSpace(request.Title))) > 255 {
 		return bad("title exceeds 255 characters")
-	}
-	if len([]rune(request.ContentTypeHint)) > 100 {
-		return bad("invalid content_type_hint")
 	}
 	if len(request.Images) > 100 {
 		return bad("images supports at most 100 items")

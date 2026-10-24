@@ -3,10 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
-	"slices"
-
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
+	"slices"
 
 	"github.com/pgvector/pgvector-go"
 	"gorm.io/gorm"
@@ -166,7 +165,7 @@ func poolLimit(pool int) int {
 	return pool
 }
 
-// Count query matches before publication filtering, ranking limits, and folding.
+// Count query matches before publication filtering and ranking limits.
 // Imported documents use their recorded publication date; reports are not counted.
 func (s *searchService) countMissingArticleDates(ctx context.Context, spaceID uint64, library *types.Library, f entrySearchFilters, vector []float32, modelID string, config *types.RetrievalConfig) (int64, error) {
 	lanes, err := s.retrieveEntryLanes(ctx, spaceID, library, f, vector, modelID, config, 0, false)

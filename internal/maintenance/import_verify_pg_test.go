@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reliquary/internal/testutil/pgtest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/testutil/pgtest"
 )
 
 func TestImportedReplicaVerificationPreservesCredentialsNullTypesAndMaterializedArticle(t *testing.T) {
@@ -20,10 +20,20 @@ func TestImportedReplicaVerificationPreservesCredentialsNullTypesAndMaterialized
 	require.NoError(t, source.Exec(`INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('literal-null',1,'owner','create_topic','topic','null'::jsonb,'null'::jsonb)`).Error)
 	root, uploads := t.TempDir(), t.TempDir()
 	article := filepath.Join(root, "articles/materialized.md")
-	require.NoError(t, os.MkdirAll(filepath.Dir(article), 0700))
-	require.NoError(t, os.WriteFile(article, []byte("---\nid: article\ntitle: Research article\ncontent_type: research\nsource_unverified: true\nstarred: false\ncollect_reason: owner reason\n---\nImmutable body"), 0600))
-	require.NoError(t, os.MkdirAll(filepath.Join(uploads, "1/pending"), 0700))
-	require.NoError(t, os.WriteFile(filepath.Join(uploads, "1/pending/raw.txt"), []byte("Original attachment"), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(article), 0o700))
+	require.NoError(
+		t,
+		os.WriteFile(
+			article,
+			[]byte(
+				"---\nid: article\ntitle: Research article\nsource_unverified: true\nst"+
+					"arred: false\ncollect_reason: owner reason\n---\nImmutable body",
+			),
+			0o600,
+		),
+	)
+	require.NoError(t, os.MkdirAll(filepath.Join(uploads, "1/pending"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(uploads, "1/pending/raw.txt"), []byte("Original attachment"), 0o600))
 	snapshot, err := Capture(ctx, source)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, uploads, snapshot))
@@ -56,16 +66,41 @@ func TestImportedReplicaVerificationPreservesCredentialsNullTypesAndMaterialized
 	require.NoError(t, err)
 	require.Equal(t, before, after, "verification must not flush or alter original files")
 
-	originalRelation, err := json.Marshal(snapshot.Tables["entry_topics"][0])
+	originalRelation, err := json.Marshal(snapshot.Tables["entry_entities"][0])
 	require.NoError(t, err)
 	for _, test := range []struct {
 		name, mutate, restore, expected string
 		restoreArgs                     []any
 	}{
-		{"missing_row", `DELETE FROM entry_topics WHERE entry_id='article'`, `INSERT INTO entry_topics SELECT * FROM jsonb_populate_record(NULL::entry_topics,?::jsonb)`, "table entry_topics", []any{string(originalRelation)}},
-		{"changed_description", `UPDATE topics SET description='Changed user description' WHERE id='topic'`, `UPDATE topics SET description='User topic description' WHERE id='topic'`, "table topics", nil},
-		{"unexpected_row", `INSERT INTO topics(id,space_id,name,description) VALUES('unexpected',1,'Unexpected','Must not be absorbed into a fresh baseline')`, `DELETE FROM topics WHERE id='unexpected'`, "table topics", nil},
-		{"literal_null_changed_to_sql_null", `UPDATE entries SET structured_summary=NULL WHERE id='pending'`, `UPDATE entries SET structured_summary='null'::jsonb WHERE id='pending'`, "table JSONB null types entries", nil},
+		{
+			name:   "missing_row",
+			mutate: `DELETE FROM entry_entities WHERE entry_id='article'`,
+			restore: `INSERT INTO entry_entities
+SELECT * FROM jsonb_populate_record(NULL::entry_entities,?::jsonb)`,
+			expected:    "table entry_entities",
+			restoreArgs: []any{string(originalRelation)},
+		},
+		{
+			name:     "changed_description",
+			mutate:   `UPDATE entities SET description='Changed user description' WHERE id='entity-a'`,
+			restore:  `UPDATE entities SET description='Owner description' WHERE id='entity-a'`,
+			expected: "table entities",
+		},
+		{
+			name: "unexpected_row",
+			mutate: `INSERT INTO entities(id,space_id,canonical_name,normalized_name,
+entity_type,description,created_at,updated_at)
+VALUES('unexpected',1,'Unexpected','unexpected','company',
+'Must not be absorbed into a fresh baseline',now(),now())`,
+			restore:  `DELETE FROM entities WHERE id='unexpected'`,
+			expected: "table entities",
+		},
+		{
+			name:     "literal_null_changed_to_sql_null",
+			mutate:   `UPDATE entries SET structured_summary=NULL WHERE id='pending'`,
+			restore:  `UPDATE entries SET structured_summary='null'::jsonb WHERE id='pending'`,
+			expected: "table JSONB null types entries",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			require.NoError(t, target.Exec(test.mutate).Error)
@@ -80,6 +115,6 @@ func TestImportedReplicaVerificationPreservesCredentialsNullTypesAndMaterialized
 		})
 	}
 	// Load checks the original article bytes before comparing any database row.
-	require.NoError(t, os.WriteFile(article, []byte("tampered original article"), 0600))
+	require.NoError(t, os.WriteFile(article, []byte("tampered original article"), 0o600))
 	require.ErrorContains(t, VerifyImportedReplica(ctx, target, root), "vault file checksum mismatch")
 }

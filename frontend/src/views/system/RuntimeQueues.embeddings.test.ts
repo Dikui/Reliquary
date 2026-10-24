@@ -18,7 +18,7 @@ const messages = { 'zh-CN': zh, 'en-US': en }
 const queue = { name: 'entity', pool: 'enrichment', weight: 1, active: 1, pending: 0, scheduled: 0, retry: 0, archived: 0, completed: 0, paused: false }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  for (const kind of ['embeddingRebuild', 'topicBackfill'] as const) {
+  for (const kind of ['embeddingRebuild'] as const) {
   test(`${locale}: queue and task API loading shows localized ${kind} name and descriptions`, async () => {
     const calls: { url: string; options?: any }[] = []
     const source = readFileSync(new URL('../../api/system.ts', import.meta.url), 'utf8')
@@ -33,11 +33,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         }
         assert.equal(url, '/api/v1/system/runtime/queues/entity/tasks')
         return { available: true, has_more: false, tasks: [{
-          id: 'full-rebuild-task', queue: 'entity', type: kind === 'embeddingRebuild' ? 'knowledge:embedding_rebuild' : 'topic:backfill', state: 'active',
+          id: 'full-rebuild-task', queue: 'entity', type: 'knowledge:embedding_rebuild', state: 'active',
           retried: 0, max_retry: 3, allowed_actions: [],
           library_id: 'library-12345678-1234-1234-1234-123456789012',
           entry_id: 'article-12345678-1234-1234-1234-123456789012',
-          task_id: kind === 'topicBackfill' ? 'topic-history-job' : undefined,
         }] }
       },
     } : require(name), api, api.exports)
@@ -76,16 +75,12 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(dialog)
       const taskType = descendants(dialog).find(node => hasClass(node, 'rq-failed-row-type'))!
       assert.equal(visibleText(taskType), runtime.tasks.taskTypes[kind])
-      assert.doesNotMatch(visibleText(dialog), /knowledge:embedding_rebuild|topic:backfill/)
+      assert.doesNotMatch(visibleText(dialog), /knowledge:embedding_rebuild/)
       for (const [label, value] of [[runtime.tasks.libraryLabel, 'library-12345678-1234-1234-1234-123456789012'], [runtime.tasks.knowledgeLabel, 'article-12345678-1234-1234-1234-123456789012']]) {
         const reference: ReturnType<typeof descendants>[number] | undefined = descendants(dialog).find(node => hasClass(node, 'rq-failed-ref') && descendants(node).some(child => child.tag === 'dt' && visibleText(child) === label))
         assert.ok(reference, label)
         assert.equal(visibleText(descendants(reference).find(child => child.tag === 'dd')!), value)
         assert.equal(descendants(reference).find(child => child.tag === 'dd')!.props.title, value)
-      }
-      if (kind === 'topicBackfill') {
-        assert.ok(visibleText(dialog).includes(runtime.tasks.taskIDLabel))
-        assert.ok(visibleText(dialog).includes('topic-history-job'))
       }
       assert.deepEqual(calls, [
         { url: '/api/v1/system/runtime/queues', options: undefined },

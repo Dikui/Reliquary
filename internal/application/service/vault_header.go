@@ -25,7 +25,6 @@ type VaultArticleHeader struct {
 	LatestEntryID     string                  `yaml:"latest_entry_id,omitempty" json:"latest_entry_id,omitempty"`
 	CannotBeFact      bool                    `yaml:"cannot_be_fact,omitempty" json:"cannot_be_fact,omitempty"`
 	RelatedEntities   []ReportEntityReference `yaml:"related_entities,omitempty" json:"related_entities,omitempty"`
-	TopicIDs          []string                `yaml:"topic_ids,omitempty" json:"topic_ids,omitempty"`
 	ReportFingerprint string                  `yaml:"report_fingerprint,omitempty" json:"report_fingerprint,omitempty"`
 	RequestID         string                  `yaml:"request_id,omitempty" json:"request_id,omitempty"`
 	RelatedEntryIDs   []string                `yaml:"related_entry_ids,omitempty" json:"related_entry_ids,omitempty"`
@@ -37,10 +36,8 @@ type VaultArticleHeader struct {
 	Author            string                  `yaml:"author" json:"author"`
 	PublishedAt       string                  `yaml:"published_at" json:"published_at"`
 	CollectedAt       string                  `yaml:"collected_at" json:"collected_at"`
-	ContentType       string                  `yaml:"content_type" json:"content_type"`
 	Summary           *types.EntrySummary     `yaml:"summary" json:"summary"`
 	Entities          []string                `yaml:"entities" json:"entities"`
-	Topics            []string                `yaml:"topics" json:"topics"`
 	Starred           bool                    `yaml:"starred" json:"starred"`
 	CollectReason     string                  `yaml:"collect_reason" json:"collect_reason"`
 	SourceUnverified  bool                    `yaml:"source_unverified,omitempty" json:"source_unverified"`
@@ -65,12 +62,8 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 	scalar("author", h.Author)
 	scalar("published_at", h.PublishedAt)
 	scalar("collected_at", h.CollectedAt)
-	scalar("content_type", h.ContentType)
 	if len(h.Entities) > 0 {
 		writeVaultList(&b, "entities", h.Entities, true)
-	}
-	if len(h.Topics) > 0 {
-		writeVaultList(&b, "topics", h.Topics, true)
 	}
 	if h.Summary != nil && (h.Summary.Overview != "" || len(h.Summary.Points) > 0 || len(h.Summary.KeyTerms) > 0) {
 		b.WriteString("summary:\n")
@@ -107,9 +100,6 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 			scalar("    name", entity.Name)
 			scalar("    entity_type", entity.EntityType)
 		}
-	}
-	if len(h.TopicIDs) > 0 {
-		writeVaultList(&b, "topic_ids", h.TopicIDs, true)
 	}
 	scalar("report_fingerprint", h.ReportFingerprint)
 	scalar("request_id", h.RequestID)

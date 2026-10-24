@@ -17,26 +17,18 @@ interface RelatedEntity {
   entity_type?: string
 }
 
-interface RelatedTopic {
-  id: string
-  name: string
-  description?: string
-}
 
 const props = withDefaults(defineProps<{
   entryIds?: string[]
   entities?: RelatedEntity[]
-  topics?: RelatedTopic[]
 }>(), {
   entryIds: () => [],
   entities: () => [],
-  topics: () => [],
 })
 
 const emit = defineEmits<{
   'open-entry': [id: string]
   'open-entity': [id: string]
-  'open-topic': [id: string]
 }>()
 
 const { t } = useI18n()
@@ -58,15 +50,7 @@ const normalizedEntities = computed(() => {
     return true
   })
 })
-const normalizedTopics = computed(() => {
-  const seen = new Set<string>()
-  return props.topics.filter(topic => {
-    if (!topic?.id || seen.has(topic.id)) return false
-    seen.add(topic.id)
-    return true
-  })
-})
-const hasAssociations = computed(() => normalizedEntryIds.value.length > 0 || normalizedEntities.value.length > 0 || normalizedTopics.value.length > 0)
+const hasAssociations = computed(() => normalizedEntryIds.value.length > 0 || normalizedEntities.value.length > 0)
 
 const unavailableEntry = (id: string): RelatedEntry => ({
   id,
@@ -140,12 +124,7 @@ const entityName = (entity: RelatedEntity) => entity.name || entity.canonical_na
       </div>
     </div>
 
-    <div v-if="normalizedTopics.length" class="association-group related-topic-group">
-      <h5>{{ t('library.articleTopics') }}</h5>
-      <div class="association-tags">
-        <button v-for="topic in normalizedTopics" :key="topic.id" type="button" class="association-tag" :title="topic.description" @click="emit('open-topic', topic.id)">{{ topic.name }}</button>
-      </div>
-    </div>
+
   </section>
 </template>
 

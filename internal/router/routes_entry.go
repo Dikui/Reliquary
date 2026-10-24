@@ -2,10 +2,9 @@ package router
 
 import (
 	"net/http"
+	"reliquary/internal/handler"
 
 	"github.com/gin-gonic/gin"
-
-	"reliquary/internal/handler"
 )
 
 func RegisterChunkerDebugRoutes(r *gin.RouterGroup, g *accessGuards) {
@@ -56,7 +55,6 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 		k.DELETE("/:id", g.LibraryExistsFromEntryIDParam("id"), handler.DeleteEntry)
 		k.PUT("/:id", g.LibraryExistsFromEntryIDParam("id"), handler.UpdateEntry)
 		k.PUT("/:id/star", g.LibraryExistsFromEntryIDParam("id"), handler.SetStarred)
-		k.PUT("/:id/content-type", g.LibraryExistsFromEntryIDParam("id"), handler.CorrectContentType)
 		// Compatibility alias; both routes share config overrides and checkpoint resumption.
 		k.POST("/:id/reprocess", g.LibraryExistsFromEntryIDParam("id"), handler.ReparseEntry)
 		k.POST("/:id/reparse", g.LibraryExistsFromEntryIDParam("id"), handler.ReparseEntry)

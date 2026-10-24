@@ -39,7 +39,7 @@ func TestVaultVerifyRepairsAllLibraryFilesAndReplica(t *testing.T) {
 	require.NoError(t, documents.scanReports(h.ctx, &indexing, true))
 	require.NoError(t, v.Flush(h.ctx))
 	require.NoError(t, os.WriteFile(filepath.Join(v.root, article.VaultPath), []byte("damaged article"), 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(v.root, ".reliquary/data/topics.json"), []byte("invalid"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(v.root, ".reliquary/data/entities.json"), []byte("invalid"), 0o600))
 	require.NoError(t,
 		os.WriteFile(filepath.Join(v.root,
 			personal.VaultPath),
@@ -124,7 +124,17 @@ func createMaintenanceMineFixture(t *testing.T, ctx context.Context, documents *
 	own.ChunkingConfig = original.ChunkingConfig
 	own.ModelTiers = original.ModelTiers
 	library = &own
-	header := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "Personal tutorial", ContentType: "tutorial", CollectedAt: time.Now().UTC().Format(time.RFC3339Nano), Summary: &types.EntrySummary{Overview: "Personal operating procedure", Points: []string{"Preserve the full procedure"}, KeyTerms: []string{"Recovery"}}}
+	header := VaultArticleHeader{
+		ID:          uuid.NewString(),
+		SourceKind:  "mine",
+		Title:       "Personal tutorial",
+		CollectedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Summary: &types.EntrySummary{
+			Overview: "Personal operating procedure",
+			Points:   []string{"Preserve the full procedure"},
+			KeyTerms: []string{"Recovery"},
+		},
+	}
 	body := "# Personal tutorial\n\nmaintenanceminefixture full original procedure.\n"
 	path := "personal/Personal-tutorial-" + header.ID[:8] + ".md"
 	entry, err := documents.restoreVaultArticle(ctx, library, path, header, []byte(body))
@@ -185,7 +195,12 @@ func TestVaultReplicaRebuildListsUnmanagedPersonalFilesWithoutIndexing(t *testin
 			[]byte("# Hand placed note\n\nThis document was never imported."),
 			0o600))
 	unregisteredPath := "personal/unregistered.md"
-	header := VaultArticleHeader{ID: uuid.NewString(), SourceKind: "mine", Title: "Unregistered personal document", CollectedAt: time.Now().UTC().Format(time.RFC3339Nano), ContentType: "event"}
+	header := VaultArticleHeader{
+		ID:          uuid.NewString(),
+		SourceKind:  "mine",
+		Title:       "Unregistered personal document",
+		CollectedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
 	require.NoError(t,
 		os.WriteFile(filepath.Join(vault.root,
 			unregisteredPath),
@@ -215,18 +230,22 @@ func TestVaultReplicaRebuildListsUnmanagedPersonalFilesWithoutIndexing(t *testin
 
 func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
-	h.processor.output = articleProcessingOutput(t, "research", []types.EntityCandidate{{Name: "Company", EntityType: "company"}}, []string{})
+	h.processor.output = articleProcessingOutput(t, []types.EntityCandidate{{Name: "Company", EntityType: "company"}})
 	full := h.upload(t, "Research preservation", "# Original research\n\nImmutable original measurements and reasoning.")
-	h.processor.output = articleProcessingOutput(t, "reference", nil, []string{})
+	h.processor.output = articleProcessingOutput(t, nil)
 	summary := h.upload(t, "Reference preservation", "# Summary reference\n\nComplete reference text is retained.")
-	require.NoError(t, h.db.Model(full).Updates(map[string]any{"content_type_corrected": true, "collect_reason": "User reason"}).Error)
+	require.NoError(t, h.db.Model(full).Updates(map[string]any{"collect_reason": "User reason"}).Error)
 	var entity types.Entity
 	require.NoError(t, h.db.Where("canonical_name='Company'").First(&entity).Error)
 	require.NoError(t, h.db.Model(&entity).Update("description", "User entity description").Error)
-	require.NoError(t, h.db.Create(&types.Topic{ID: "maintenance-topic", SpaceID: 1, Name: "Maintenance", Description: "User authored description", CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error)
-	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: full.ID, TopicID: "maintenance-topic", Source: types.TopicSourceUser, IsHistorical: true, CreatedAt: time.Now()}).Error)
-	require.NoError(t, h.db.Exec("INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'entity',?),(1,'topic','maintenance-topic')", entity.ID).Error)
-	require.NoError(t, h.db.Exec("INSERT INTO follow_feed_states(space_id,last_viewed_at) VALUES(1,'2026-10-10T09:00:00Z')").Error)
+	require.NoError(
+		t,
+		h.db.Exec("INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'entity',?)", entity.ID).Error,
+	)
+	require.NoError(
+		t,
+		h.db.Exec("INSERT INTO follow_feed_states(space_id,last_viewed_at) VALUES(1,'2026-10-10T09:00:00Z')").Error,
+	)
 
 	configuration := map[string]string{
 		".obsidian/app.json": `{"theme":"obsidian"}`, ".trash/x.md": "# Deleted note\n", ".DS_Store": "Finder metadata",

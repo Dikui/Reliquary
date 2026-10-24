@@ -4,10 +4,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"testing"
-
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
+	"testing"
 
 	"github.com/stretchr/testify/require"
 )
@@ -36,9 +35,11 @@ func captureMineReview(h *articleProcessingHarness) *mineReviewCapture {
 func TestIngestMineProcessesWithoutReviewAndExportsPortableHeader(t *testing.T) {
 	h, vault := newIngestHarness(t)
 	capture := captureMineReview(h)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Personal measurements", Description: "Measurements and calibration notes"})
-	require.NoError(t, err)
-	h.processor.output = articleProcessingOutput(t, "笔记", []types.EntityCandidate{{Name: "Spectrometer", EntityType: "product"}}, []string{topic.ID})
+	h.processor.output = articleProcessingOutput(
+		t,
+
+		[]types.EntityCandidate{{Name: "Spectrometer", EntityType: "product"}},
+	)
 	content := "# Calibration notes\n\nSpectrometer observations record verified values. Follow the measured calibration procedure and compare the original readings.\n\n来源: https://example.org/reference-not-my-document"
 	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "personal", SourceRef: "fixture-mine", Acquisition: "verbatim", Title: "校准笔记", Content: content})
 	require.NoError(t, err)
@@ -48,7 +49,7 @@ func TestIngestMineProcessesWithoutReviewAndExportsPortableHeader(t *testing.T) 
 	k := h.article(t, result.EntryID)
 	require.Equal(t, "mine", k.SourceKind)
 	require.Equal(t, types.ParseStatusCompleted, k.ParseStatus, k.ErrorMessage)
-	require.Equal(t, "笔记", k.ContentType)
+
 	require.False(t, k.SourceUnverified)
 	require.Empty(t, k.NormalizedURL)
 	intake, err := k.IntakeMetadata()
@@ -68,7 +69,6 @@ func TestIngestMineProcessesWithoutReviewAndExportsPortableHeader(t *testing.T) 
 	require.Contains(t, string(body), content)
 	require.Contains(t, string(data), "[[Spectrometer]]")
 	require.Empty(t, k.Entities)
-	require.Contains(t, string(data), topic.Name)
 	require.NotContains(t, string(data), "url: null")
 	require.NotContains(t, string(data), "publisher: null")
 	require.NotContains(t, string(data), "published_at: null")
@@ -79,13 +79,10 @@ func TestIngestMineProcessesWithoutReviewAndExportsPortableHeader(t *testing.T) 
 	require.EqualValues(t, 1, count)
 	require.Len(t, h.processor.requests, 1)
 	require.Equal(t, "article_processing", h.processor.stages[0])
-	corrected, err := h.service.CorrectContentType(h.ctx, k.ID, "经验")
-	require.NoError(t, err)
-	require.Equal(t, k.VaultBody, corrected.VaultBody)
 	require.NoError(t, vault.RefreshHeader(h.ctx, k.ID))
-	require.NoError(t, os.WriteFile(filepath.Join(vault.root, k.VaultPath), []byte("damaged user document"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(vault.root, k.VaultPath), []byte("damaged user document"), 0o644))
 	require.NoError(t, vault.RefreshHeader(h.ctx, k.ID))
-	restored, err := vault.ReadBody(corrected)
+	restored, err := vault.ReadBody(k)
 	require.NoError(t, err)
 	require.Equal(t, []byte(k.VaultBody), restored)
 }

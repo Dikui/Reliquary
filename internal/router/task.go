@@ -21,12 +21,10 @@ import (
 
 type TaskParams struct {
 	dig.In
-	ContentChecks       *service.ContentCheckService `optional:"true"`
 	Client              *queue.Client
 	SystemSettings      interfaces.SystemSettingService
 	EntryService        interfaces.EntryService
 	LibraryService      interfaces.LibraryService
-	TopicService        *service.TopicService
 	EntityNameEmbedding *service.EntityNameEmbeddingRebuilder
 	EmbeddingRebuild    *service.EmbeddingRebuilder
 	Reports             *service.VaultDocumentService `optional:"true"`
@@ -74,9 +72,6 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux := queue.NewServeMux()
 	mux.Use(chatGPTPermanentFailureMiddleware())
 	mux.Use(backgroundTaskMiddleware())
-	if params.ContentChecks != nil {
-		mux.HandleFunc(types.TypeContentCheck, params.ContentChecks.Handle)
-	}
 	mux.HandleFunc(types.TypeDocumentProcess, params.EntryService.ProcessDocument)
 	mux.HandleFunc(types.TypeManualProcess, params.EntryService.ProcessManualUpdate)
 	mux.HandleFunc(types.TypeEntryListDelete, params.EntryService.ProcessEntryListDelete)
@@ -89,7 +84,6 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
 	mux.HandleFunc(types.TypeEmbeddingRebuild, params.EmbeddingRebuild.Handle)
 	mux.HandleFunc(types.TypeEntryVector, params.EmbeddingRebuild.HandleEntryVector)
-	mux.HandleFunc(types.TypeTopicBackfill, params.TopicService.HandleBackfill)
 	if params.Reports != nil {
 		mux.HandleFunc(types.TypeReportIndex, params.Reports.HandleReportIndex)
 	}
@@ -100,12 +94,6 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 	}
 	entryFailure := newDeadLetterEntryFailer(params.EntryService, params.SpanTracker)
 	config := queue.Config{Pools: resolveWorkerPoolConcurrency(params.SystemSettings), OnDeadLetter: func(ctx context.Context, task *queue.Task, cause error) {
-		if task != nil && task.Type() == types.TypeContentCheck && params.ContentChecks != nil {
-			if err := params.ContentChecks.FailTask(ctx, task, cause); err != nil {
-				logger.Warnf(ctx, "failed to record content check failure: %v", err)
-			}
-			return
-		}
 		if entryFailure != nil {
 			entryFailure(ctx, task, cause)
 		}

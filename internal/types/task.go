@@ -43,10 +43,20 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueDefault, Pool: WorkerPoolCore, Weight: 1, SharedWeight: 3, TaskTypes: []string{
 		TypeDocumentProcess, TypeManualProcess,
 	}},
-	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeEntryVector, TypeTopicBackfill}},
+	{
+		Name:         QueueEntity,
+		Pool:         WorkerPoolEnrichment,
+		Weight:       1,
+		SharedWeight: 1,
+		TaskTypes: []string{
+			TypeEntityNameEmbeddingRebuild,
+			TypeEmbeddingRebuild,
+			TypeEntryVector,
+		},
+	},
+
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
-		TypeEntryListDelete, TypeEntryListReparse, TypeEntryBatch, TypeContentCheck,
-		TypeIngestAssetCleanup, TypeReportIndex,
+		TypeEntryListDelete, TypeEntryListReparse, TypeEntryBatch, TypeIngestAssetCleanup, TypeReportIndex,
 	}},
 }
 
@@ -259,13 +269,6 @@ type ManualProcessPayload struct {
 	ReviewStatus   string `json:"review_status,omitempty"`
 	ReviewEnabled  string `json:"review_enabled,omitempty"`
 	ReviewApproved bool   `json:"review_approved,omitempty"`
-}
-
-const TypeTopicBackfill = "topic:backfill"
-
-type TopicBackfillPayload struct {
-	SpaceID uint64 `json:"tenant_id"`
-	JobID   string `json:"job_id"`
 }
 
 // ReportIndexPayload identifies the saved report to index without embedding its body.

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"math"
 	"reliquary/internal/sourceloc"
 	"reliquary/internal/types"
 	"slices"
@@ -11,8 +10,6 @@ import (
 	"time"
 
 	apperrors "reliquary/internal/errors"
-
-	"github.com/pgvector/pgvector-go"
 )
 
 func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lanes [][]entrySearchHit, config *types.RetrievalConfig) ([]*types.EntrySearchResult, error) {
@@ -66,7 +63,7 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 	if err := s.db.WithContext(ctx).Table("entries").Where("space_id=? AND id IN ? AND deleted_at IS NULL", spaceID, ids).Find(&entries).Error; err != nil {
 		return nil, err
 	}
-	entities, topics, err := s.entrySearchAssociations(ctx, spaceID, ids)
+	entities, err := s.entrySearchAssociations(ctx, spaceID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -114,13 +111,13 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 			LatestEntryID: entry.LatestEntryID,
 
 			EntryID: entry.ID, Title: entry.Title, Source: entry.SourceKind,
-			PublishedAt: entry.SearchPublishedAt, ContentType: entry.ContentType,
+			PublishedAt: entry.SearchPublishedAt,
 			Acquisition: entry.Acquisition, CannotBeFact: entry.SourceKind == "report",
 			Summary: entry.StructuredSummary, Starred: entry.Starred,
 			SourceUnverified: entry.SourceUnverified,
-			Entities:         entities[entry.ID], Topics: topics[entry.ID],
-			Score: scores[entry.ID], SimilarReports: []*types.EntrySearchResult{},
-			VaultPath: entry.VaultPath, OriginalURL: originalURL,
+			Entities:         entities[entry.ID],
+			Score:            scores[entry.ID],
+			VaultPath:        entry.VaultPath, OriginalURL: originalURL,
 			Snippets: []types.EntrySearchSnippet{},
 		}
 		for _, lib := range libraries {
@@ -140,9 +137,6 @@ func (s *searchService) mergeEntryHits(ctx context.Context, spaceID uint64, lane
 		result.HasUpdate, result.LatestEntryID = entry.HasUpdate, entry.LatestEntryID
 		if result.Entities == nil {
 			result.Entities = []types.EntrySearchEntity{}
-		}
-		if result.Topics == nil {
-			result.Topics = []types.EntrySearchTopic{}
 		}
 		for _, snippet := range snippets[entry.ID] {
 			snippet.Locations = locations[snippet.ChunkID]
@@ -211,7 +205,11 @@ func entrySearchMatchName(matchType types.MatchType) string {
 	return "vector"
 }
 
-func (s *searchService) entrySearchAssociations(ctx context.Context, spaceID uint64, ids []string) (map[string][]types.EntrySearchEntity, map[string][]types.EntrySearchTopic, error) {
+func (s *searchService) entrySearchAssociations(
+	ctx context.Context,
+	spaceID uint64,
+	ids []string,
+) (map[string][]types.EntrySearchEntity, error) {
 	type entityRow struct {
 		EntryID                 string
 		types.EntrySearchEntity `gorm:"embedded"`
@@ -223,7 +221,7 @@ func (s *searchService) entrySearchAssociations(ctx context.Context, spaceID uin
 		Select("ke.entry_id,e.id,e.canonical_name,e.entity_type").
 		Order("e.canonical_name,e.id").Scan(&rows).Error
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	entityIDs := []string{}
 	for _, row := range rows {
@@ -231,7 +229,7 @@ func (s *searchService) entrySearchAssociations(ctx context.Context, spaceID uin
 	}
 	aliases, err := s.entryEntityAliases(ctx, spaceID, entityIDs)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	entities := map[string][]types.EntrySearchEntity{}
 	for _, row := range rows {
@@ -241,20 +239,8 @@ func (s *searchService) entrySearchAssociations(ctx context.Context, spaceID uin
 		}
 		entities[row.EntryID] = append(entities[row.EntryID], row.EntrySearchEntity)
 	}
-	type topicRow struct {
-		EntryID                string
-		types.EntrySearchTopic `gorm:"embedded"`
-	}
-	var topicRows []topicRow
-	err = s.db.WithContext(ctx).Table("topics t").
-		Joins("JOIN entry_topics kt ON kt.topic_id=t.id AND kt.space_id=t.space_id").
-		Where("t.space_id=? AND kt.entry_id IN ?", spaceID, ids).
-		Select("kt.entry_id,t.id,t.name").Order("t.name,t.id").Scan(&topicRows).Error
-	topics := map[string][]types.EntrySearchTopic{}
-	for _, row := range topicRows {
-		topics[row.EntryID] = append(topics[row.EntryID], row.EntrySearchTopic)
-	}
-	return entities, topics, err
+
+	return entities, nil
 }
 
 func (s *searchService) entryEntityAliases(ctx context.Context, spaceID uint64, ids []string) (map[string][]string, error) {
@@ -278,12 +264,9 @@ func (s *searchService) Options(ctx context.Context) (*types.EntrySearchOptions,
 	if s.db == nil {
 		return nil, fmt.Errorf("entry search requires PostgreSQL")
 	}
-	options := &types.EntrySearchOptions{ContentTypes: []string{}, Entities: []types.EntrySearchEntity{}, Topics: []types.EntrySearchTopic{}}
+	options := &types.EntrySearchOptions{Entities: []types.EntrySearchEntity{}}
 	if err := s.db.WithContext(ctx).Table("entities").Where("space_id=? AND merged_into_id=''", spaceID).
 		Select("id,canonical_name,entity_type").Order("canonical_name,id").Scan(&options.Entities).Error; err != nil {
-		return nil, err
-	}
-	if err := s.db.WithContext(ctx).Table("library_content_types ct").Joins("JOIN libraries l ON l.id=ct.library_id").Where("l.space_id=? AND l.deleted_at IS NULL AND ct.enabled=true", spaceID).Distinct().Order("ct.name").Pluck("ct.name", &options.ContentTypes).Error; err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, len(options.Entities))
@@ -300,109 +283,6 @@ func (s *searchService) Options(ctx context.Context) (*types.EntrySearchOptions,
 			options.Entities[i].Aliases = []string{}
 		}
 	}
-	err = s.db.WithContext(ctx).Table("topics").Where("space_id=?", spaceID).
-		Select("id,name").Order("name,id").Scan(&options.Topics).Error
-	return options, err
-}
 
-func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint64, results []*types.EntrySearchResult, config *types.RetrievalConfig, sets ...searchVectorSet) ([]*types.EntrySearchResult, error) {
-	ids := []string{}
-	for _, result := range results {
-		if (result.Source == "article" || result.Source == "mine") && result.PublishedAt != nil {
-			ids = append(ids, result.EntryID)
-		}
-	}
-	if len(ids) < 2 {
-		return results, nil
-	}
-	type vectorRow struct {
-		LibraryID string
-		Template  string
-		EntryID   string
-		ModelID   string
-		Dimension int
-		Embedding pgvector.HalfVector
-	}
-	var rows []vectorRow
-	modelID, err := ResolveModelTier(ctx, s.db, nil, types.ModelTierEmbedding)
-	if err != nil {
-		return nil, err
-	}
-	selector := "active"
-	if len(sets) > 0 {
-		selector = sets[0].Selector
-		if sets[0].ModelID != "" {
-			modelID = sets[0].ModelID
-		}
-	}
-	if err := s.db.WithContext(ctx).Table(vectorRelation(selector, "article", "ae")).Select("ae.*, l.template").
-		Joins("JOIN libraries l ON l.space_id=ae.space_id AND l.id=ae.library_id").
-		Joins("JOIN entries e ON e.space_id=ae.space_id AND e.library_id=ae.library_id AND e.id=ae.entry_id").
-		Where("ae.space_id=? AND ae.entry_id IN ? AND ae.model_id=?", spaceID, ids, modelID).Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-	vectors := map[string]vectorRow{}
-	for _, row := range rows {
-		if rules, ok := types.RulesForTemplate(row.Template); ok && rules.CollapseSimilar {
-			vectors[row.EntryID] = row
-		}
-	}
-	window := time.Duration(config.GetEffectiveSimilarReportsWindowDays()) * 24 * time.Hour
-	threshold := config.GetEffectiveSimilarReportsThreshold()
-	similar := func(a, b *types.EntrySearchResult) bool {
-		if a.Source == "report" || b.Source == "report" || a.PublishedAt == nil || b.PublishedAt == nil {
-			return false
-		}
-		delta := a.PublishedAt.Sub(*b.PublishedAt)
-		if delta > window || delta < -window {
-			return false
-		}
-		av, aok := vectors[a.EntryID]
-		bv, bok := vectors[b.EntryID]
-		return aok && bok && av.LibraryID == bv.LibraryID && av.ModelID == bv.ModelID && av.Dimension == bv.Dimension &&
-			articleCosineSimilarity(av.Embedding.Slice(), bv.Embedding.Slice()) >= threshold
-	}
-	groups := []*types.EntrySearchResult{}
-	for _, result := range results {
-		folded := false
-		for _, representative := range groups {
-			if !similar(representative, result) {
-				continue
-			}
-			// Every pair must satisfy both rules, avoiding long similarity chains.
-			compatible := true
-			for _, member := range representative.SimilarReports {
-				if !similar(member, result) {
-					compatible = false
-					break
-				}
-			}
-			if compatible {
-				representative.SimilarReports = append(representative.SimilarReports, result)
-				folded = true
-				break
-			}
-		}
-		if !folded {
-			groups = append(groups, result)
-		}
-	}
-	return groups, nil
-}
-
-func articleCosineSimilarity(a, b []float32) float64 {
-	if len(a) == 0 || len(a) != len(b) {
-		return -1
-	}
-	var dot, aa, bb float64
-	for i := range a {
-		x, y := float64(a[i]), float64(b[i])
-		dot += x * y
-		aa += x * x
-		bb += y * y
-	}
-	if aa == 0 || bb == 0 {
-		return -1
-	}
-	return dot / math.Sqrt(aa*bb)
+	return options, nil
 }

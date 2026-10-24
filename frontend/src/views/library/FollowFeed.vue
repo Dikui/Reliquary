@@ -13,7 +13,7 @@ const route = useRoute(), router = useRouter(), store = useFollowStore()
 const libraryId = ref('')
 const libraryOptions = computed(() => [{ value: '', label: `${t('follows.allLibraries')} (${store.libraries.reduce((n, lib) => n + lib.new_count, 0)})` }, ...store.libraries.map(lib => ({ value: lib.library_id, label: `${lib.display_name || lib.library_name} (${lib.new_count})` }))])
 const scope = () => libraryId.value ? [libraryId.value] : undefined
-const targetIds = ref<string[]>([]), collapseSimilar = ref(true), limit = ref(20)
+const targetIds = ref<string[]>([]), limit = ref(20)
 const results = ref<FollowFeedEntry[]>([]), total = ref(0), loading = ref(false), error = ref(''), viewError = ref(''), marking = ref(false)
 const cursor = ref(''), nextCursor = ref(''), cursorStack = ref<string[]>([]), paginationAction = ref<'previous' | 'next' | ''>('')
 const viewRetryAction = ref<'open' | 'all'>('open')
@@ -24,22 +24,21 @@ const options = computed(() => store.targets.map(target => ({
 const limitOptions = [20, 50, 100].map(value => ({ value, label: String(value) }))
 let snapshotByLibrary: Record<string, string | null> = {}
 let sequence = 0, disposed = false, mounted = false, opened = false, snapshotLastViewed: string | null = null, snapshotViewedAt: string | undefined
-const countArticles = (articles: FollowFeedEntry[]): number => articles.reduce((count, article) => count + 1 + countArticles(article.similar_reports || []), 0)
+const countArticles = (articles: FollowFeedEntry[]): number => articles.reduce((count, article) => count + 1, 0)
 const shownArticleCount = computed(() => countArticles(results.value))
-function applyNewSnapshot(articles: FollowFeedEntry[]) { for (const article of articles) { const viewed = (article.library_id || "") in snapshotByLibrary ? snapshotByLibrary[article.library_id || ""]! : snapshotLastViewed; article.is_new = article.entered_at !== null && (viewed === null || isRFC3339After(article.entered_at, viewed)); applyNewSnapshot(article.similar_reports || []) } }
-const filterKey = () => JSON.stringify({ libraryId: libraryId.value, targetIds: targetIds.value, collapseSimilar: collapseSimilar.value, limit: limit.value })
+function applyNewSnapshot(articles: FollowFeedEntry[]) { for (const article of articles) { const viewed = (article.library_id || "") in snapshotByLibrary ? snapshotByLibrary[article.library_id || ""]! : snapshotLastViewed; article.is_new = article.entered_at !== null && (viewed === null || isRFC3339After(article.entered_at, viewed)) } }
+const filterKey = () => JSON.stringify({ libraryId: libraryId.value, targetIds: targetIds.value, limit: limit.value })
 function readURL() {
   const nextLibrary = typeof route.query.library === 'string' ? route.query.library : ''
   if (nextLibrary !== libraryId.value) { opened = false; snapshotByLibrary = {} }
   libraryId.value = nextLibrary
   const ids = route.query.target_ids
   targetIds.value = [...new Set((Array.isArray(ids) ? ids : typeof ids === 'string' ? ids.split(',') : []).filter((id): id is string => Boolean(id)))]
-  collapseSimilar.value = route.query.collapse_similar !== 'false'
   const value = Number(route.query.limit)
   limit.value = [20, 50, 100].includes(value) ? value : 20
 }
 function syncURL() {
-  void router.replace({ query: { ...(libraryId.value ? { library: libraryId.value } : {}), ...(targetIds.value.length ? { target_ids: targetIds.value.join(',') } : {}), ...(!collapseSimilar.value ? { collapse_similar: 'false' } : {}), ...(limit.value !== 20 ? { limit: String(limit.value) } : {}) } })
+  void router.replace({ query: { ...(libraryId.value ? { library: libraryId.value } : {}), ...(targetIds.value.length ? { target_ids: targetIds.value.join(',') } : {}), ...(limit.value !== 20 ? { limit: String(limit.value) } : {}) } })
 }
 function resetPagination() { cursor.value = ''; nextCursor.value = ''; cursorStack.value = [] }
 function changeFilters() { resetPagination(); void load(true) }
@@ -63,7 +62,7 @@ async function load(updateURL = false) {
     await store.loadTargets(true)
     await store.refreshState()
     if (current !== sequence || disposed) return false
-    const response = await getFollowFeed({ include_seen: true, ...(scope() ? { libraries: scope() } : {}), ...(cursor.value ? { cursor: cursor.value } : {}), ...(targetIds.value.length ? { target_ids: [...targetIds.value] } : {}), limit: limit.value, collapse_similar: collapseSimilar.value })
+    const response = await getFollowFeed({ include_seen: true, ...(scope() ? { libraries: scope() } : {}), ...(cursor.value ? { cursor: cursor.value } : {}), ...(targetIds.value.length ? { target_ids: [...targetIds.value] } : {}), limit: limit.value })
     if (!response.success) throw new Error(response.message)
     if (current !== sequence || disposed) return false
     total.value = response.data.total || 0
@@ -99,7 +98,7 @@ async function previousPage() {
   if (!await load() && filterKey() === filters && cursor.value === requestedCursor) { cursor.value = previousCursor; cursorStack.value = previousStack }
   paginationAction.value = ''
 }
-function clearNew(articles: FollowFeedEntry[]) { for (const article of articles) { article.is_new = false; clearNew(article.similar_reports || []) } }
+function clearNew(articles: FollowFeedEntry[]) { for (const article of articles) { article.is_new = false } }
 async function markAllViewed() {
   if (marking.value || loading.value) return
   marking.value = true
@@ -135,7 +134,6 @@ onUnmounted(() => { disposed = true; sequence++ })
       <label class="feed-filter-field"><span>{{ t('follows.library') }}</span><t-select v-model="libraryId" :options="libraryOptions" :disabled="loading || marking" :aria-label="t('follows.library')" @change="changeLibrary" /></label>
       <label class="feed-filter-field"><span>{{ t('follows.filterTarget') }}</span><t-select v-model="targetIds" :options="options" multiple clearable filterable :loading="store.targetsLoading" :disabled="loading || marking" :placeholder="t('follows.allTargets')" :aria-label="t('follows.filterTarget')" @change="changeFilters" /></label>
       <label class="feed-filter-field feed-limit"><span>{{ t('follows.limit') }}</span><t-select v-model="limit" :options="limitOptions" :disabled="loading || marking" :aria-label="t('follows.limit')" @change="changeFilters" /></label>
-      <label class="feed-filter-field fold-control"><span>{{ t('knowledgeSearch.collapseSimilar') }}</span><t-switch v-model="collapseSimilar" :disabled="loading || marking" :aria-label="t('knowledgeSearch.collapseSimilar')" @change="changeFilters" /></label>
       <t-button class="feed-refresh" variant="outline" :loading="loading" :disabled="marking" @click="load()">{{ t('follows.refresh') }}</t-button>
     </form>
     <t-alert v-if="viewError" theme="error" :message="viewError" role="alert"><template #operation><t-button variant="text" :loading="marking" @click="retryViewed">{{ t('common.retry') }}</t-button></template></t-alert>
@@ -147,7 +145,7 @@ onUnmounted(() => { disposed = true; sequence++ })
         <p v-if="total > shownArticleCount" class="feed-count" role="status">{{ t('follows.limitHint', { shown: shownArticleCount, total }) }}</p>
         <SearchEntry v-for="article in results" :key="article.entry_id" :article="article" query="" follow-feed @open-article="openArticle($event as FollowFeedEntry)" @open-entity="openEntity" />
       </template>
-      <div v-else class="feed-empty"><t-empty :description="t(store.targets.length ? 'follows.emptyFeed' : 'follows.emptyTargets')" /><div v-if="!store.targets.length" class="empty-actions"><router-link to="/platform/entries?tab=entities">{{ t('knowledgeWorkbench.title') }}</router-link><router-link to="/platform/topics">{{ t('topicManagement.title') }}</router-link></div></div>
+      <div v-else class="feed-empty"><t-empty :description="t(store.targets.length ? 'follows.emptyFeed' : 'follows.emptyTargets')" /><div v-if="!store.targets.length" class="empty-actions"><router-link to="/platform/entries?tab=entities">{{ t('knowledgeWorkbench.title') }}</router-link></div></div>
       <nav v-if="results.length || cursorStack.length" class="feed-pagination" :aria-label="t('follows.pagination')" :aria-busy="loading">
         <t-button variant="outline" :loading="loading && paginationAction === 'previous'" :disabled="loading || !cursorStack.length" @click="previousPage">{{ t('follows.previousPage') }}</t-button>
         <span>{{ t('follows.pageNumber', { page: cursorStack.length + 1 }) }}</span>

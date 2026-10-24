@@ -444,9 +444,14 @@ func WriteSnapshot(root, uploads string, snapshot *Snapshot) error {
 		}
 	}
 	if snapshot.schemaVersion >= 33 {
-		for _, table := range retiredTables {
-			if file, registered := registeredPath(table); registered {
-				if err := os.Remove(filepath.Join(directory, file)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		for _, table := range retirementAt(snapshot.schemaVersion).tables {
+			file, registered := registeredPath(table)
+			if !registered {
+				file = "data/" + table + ".json"
+			}
+			for _, retiredFile := range []string{file, "data/" + legacyTable(table) + ".json"} {
+				if err := os.Remove(filepath.Join(directory, retiredFile)); err != nil &&
+					!errors.Is(err, os.ErrNotExist) {
 					return err
 				}
 			}

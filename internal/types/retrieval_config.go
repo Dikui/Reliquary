@@ -34,9 +34,6 @@ type RetrievalConfig struct {
 	// RRFKeywordWeight is the keyword counterpart. Default: 0.3.
 	RRFKeywordWeight float64 `json:"rrf_keyword_weight,omitempty"`
 	RRFImageWeight   float64 `json:"rrf_image_weight,omitempty"`
-	// Similarity and publication distance are evaluated during each search.
-	SimilarReportsThreshold  float64 `json:"similar_reports_threshold,omitempty"`
-	SimilarReportsWindowDays int     `json:"similar_reports_window_days,omitempty"`
 }
 
 // GetEffectiveRRFImageWeight gives the image channel a modest recall boost.
@@ -47,20 +44,6 @@ func (c *RetrievalConfig) GetEffectiveRRFImageWeight() float64 {
 		return 0.2
 	}
 	return c.RRFImageWeight
-}
-
-func (c *RetrievalConfig) GetEffectiveSimilarReportsThreshold() float64 {
-	if c == nil || c.SimilarReportsThreshold <= 0 || c.SimilarReportsThreshold > 1 {
-		return 0.85
-	}
-	return c.SimilarReportsThreshold
-}
-
-func (c *RetrievalConfig) GetEffectiveSimilarReportsWindowDays() int {
-	if c == nil || c.SimilarReportsWindowDays <= 0 {
-		return 3
-	}
-	return c.SimilarReportsWindowDays
 }
 
 // DefaultRetrievalTopK is the retrieval depth used when a caller supplies no

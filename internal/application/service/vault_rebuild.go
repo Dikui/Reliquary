@@ -171,11 +171,6 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 			return fmt.Errorf("entity name exceeds 512 characters")
 		}
 	}
-	for _, name := range header.Topics {
-		if len([]rune(strings.TrimSpace(name))) > 255 {
-			return fmt.Errorf("topic name exceeds 255 characters")
-		}
-	}
 	return nil
 }
 
@@ -192,7 +187,7 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 	entry := &types.Entry{
 		ID: header.ID, SpaceID: library.SpaceID, LibraryID: library.ID,
 		Type: types.EntryTypeManual, SourceKind: kind, VaultPath: path, VaultBody: string(body),
-		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ContentTypeCorrected: true,
+		Source: header.URL, Title: header.Title,
 		StructuredSummary: header.Summary, Starred: header.Starred, CollectReason: header.CollectReason,
 		SourceUnverified: header.SourceUnverified, SourceRef: header.SourceRef, Identifier: header.Identifier,
 		Acquisition: header.Acquisition,
@@ -218,7 +213,14 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 	}
 
 	if kind == "report" {
-		metadata, _ := json.Marshal(reportMetadata{RelatedEntryIDs: header.RelatedEntryIDs, RelatedEntities: header.RelatedEntities, TopicIDs: header.TopicIDs, Fingerprint: header.ReportFingerprint, RequestID: header.RequestID})
+		metadata, _ := json.Marshal(
+			reportMetadata{
+				RelatedEntryIDs: header.RelatedEntryIDs,
+				RelatedEntities: header.RelatedEntities,
+				Fingerprint:     header.ReportFingerprint,
+				RequestID:       header.RequestID,
+			},
+		)
 		entry.Metadata = metadata
 	}
 	setMessageFingerprint(entry, string(body))
@@ -227,37 +229,7 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 			return err
 		}
 		if kind == "report" {
-			for _, topicID := range header.TopicIDs {
-				var count int64
-				if err := tx.Model(&types.Topic{}).Where("space_id=? AND id=?", library.SpaceID, topicID).Count(&count).Error; err != nil {
-					return err
-				}
-				if count > 0 {
-					if err := tx.Create(&types.EntryTopic{SpaceID: library.SpaceID, EntryID: entry.ID, TopicID: topicID, Source: types.TopicSourceUser, CreatedAt: collected.UTC()}).Error; err != nil {
-						return err
-					}
-				}
-			}
 			return nil
-		}
-		for _, name := range sortedUniqueNames(header.Topics) {
-			var topic types.Topic
-			err := tx.Where("space_id=? AND name=?", library.SpaceID, name).First(&topic).Error
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				topic = types.Topic{ID: uuid.NewString(), SpaceID: library.SpaceID, Name: name, CreatedAt: now, UpdatedAt: now}
-				err = tx.Create(&topic).Error
-			}
-			if err != nil {
-				return err
-			}
-			// Headers cannot distinguish model and user selections. Preserve all
-			// recovered selections against later automatic classification.
-			if err := tx.Create(&types.EntryTopic{
-				SpaceID: library.SpaceID, EntryID: entry.ID,
-				TopicID: topic.ID, Source: types.TopicSourceUser, CreatedAt: collected.UTC(),
-			}).Error; err != nil {
-				return err
-			}
 		}
 		for _, link := range sortedUniqueNames(header.Entities) {
 			name := strings.TrimSpace(link[2 : len(link)-2])

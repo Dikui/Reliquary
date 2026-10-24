@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"reliquary/internal/models/embedding"
@@ -14,6 +13,8 @@ import (
 	"reliquary/internal/utils/ollama"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestIKB08CandidateVectorsKeepOldUntilAtomicSwitch(t *testing.T) {
@@ -34,7 +35,7 @@ func TestIKB08CandidateVectorsKeepOldUntilAtomicSwitch(t *testing.T) {
 		var changed int64
 		require.NoError(t, h.db.Table("embeddings").Where("model_id='replacement-model'").Count(&changed).Error)
 		require.Zero(t, changed)
-		response := h.search(t, types.EntrySearchRequest{Query: "semanticlaunch", Libraries: []string{h.library.ID}, CollapseSimilar: entrySearchNoCollapse()})
+		response := h.search(t, types.EntrySearchRequest{Query: "semanticlaunch", Libraries: []string{h.library.ID}})
 		require.NotEmpty(t, response.Results)
 		return nil
 	}

@@ -3,15 +3,15 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"reliquary/internal/models/chat"
+	"reliquary/internal/models/embedding"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 	"testing"
 	"time"
 
 	"github.com/pgvector/pgvector-go"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/models/chat"
-	"reliquary/internal/models/embedding"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
 )
 
 type evaluationModels struct {
@@ -23,6 +23,7 @@ type evaluationModels struct {
 func (m *evaluationModels) GetChatModel(context.Context, string) (chat.Chat, error) {
 	return m.llm, nil
 }
+
 func (m *evaluationModels) GetEmbeddingModel(_ context.Context, id string) (embedding.Embedder, error) {
 	m.selected = append(m.selected, id)
 	return evaluationEmbedder{id: id}, nil
@@ -40,12 +41,14 @@ func (m evaluationEmbedder) Embed(context.Context, string) ([]float32, error) {
 	return []float32{1, 0, 0}, nil
 }
 
-type evaluationChatInterface interface{ chat.Chat }
-type evaluationChat struct {
-	evaluationChatInterface
-	content string
-	onCall  func(context.Context)
-}
+type (
+	evaluationChatInterface interface{ chat.Chat }
+	evaluationChat          struct {
+		evaluationChatInterface
+		content string
+		onCall  func(context.Context)
+	}
+)
 
 func (m evaluationChat) Chat(ctx context.Context, _ []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	if m.onCall != nil {
@@ -58,7 +61,7 @@ func TestEvaluationLifecycleAndRecordCleanup(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	h.add(t, "answer-a", "article", "2026-10-01", "event", "semanticlaunch", 1)
 	h.add(t, "answer-b", "article", "2026-10-01", "event", "semanticlaunch", 1)
-	request := types.EntrySearchRequest{Query: "semanticlaunch", Libraries: []string{h.library.ID}, Limit: 2, CollapseSimilar: entrySearchNoCollapse()}
+	request := types.EntrySearchRequest{Query: "semanticlaunch", Libraries: []string{h.library.ID}, Limit: 2}
 	recorder := NewSearchRecorder(h.db)
 	for _, source := range []string{"web", "http", "mcp"} {
 		_, err := h.svc.Search(types.WithSearchSource(h.ctx, source), request)
@@ -89,7 +92,7 @@ func TestEvaluationLifecycleAndRecordCleanup(t *testing.T) {
 	require.Equal(t, "completed", run.Status)
 	require.Len(t, run.Results, 1)
 	require.InDelta(t, 1, run.Summary.Recall, 1e-12)
-	require.Contains(t, string(run.Results[0].Snapshot), "representatives_only")
+	require.NotContains(t, string(run.Results[0].Snapshot), "folded_member_rule")
 	require.Contains(t, string(run.Results[0].Snapshot), "chunking")
 	require.Contains(t, string(run.Results[0].Snapshot), "vector_weight")
 	records, err = recorder.List(h.ctx, SearchRecordFilter{})
@@ -214,7 +217,15 @@ func TestEvaluationSelectsActiveCandidateAndArchiveVectors(t *testing.T) {
 	require.Error(t, err)
 	set, err := svc.SaveSet(h.ctx, "", "Vectors", "")
 	require.NoError(t, err)
-	_, err = svc.SaveQuestion(h.ctx, set.ID, "", types.EvaluationQuestion{Request: types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch", CollapseSimilar: entrySearchNoCollapse()}, Answers: []types.EvaluationAnswer{{EntryID: "b", Grade: 1}}})
+	_, err = svc.SaveQuestion(
+		h.ctx,
+		set.ID,
+		"",
+		types.EvaluationQuestion{
+			Request: types.EntrySearchRequest{Libraries: []string{h.library.ID}, Query: "semanticlaunch"},
+			Answers: []types.EvaluationAnswer{{EntryID: "b", Grade: 1}},
+		},
+	)
 	require.NoError(t, err)
 	old, err := svc.Run(h.ctx, set.ID, types.EvaluationRunOptions{K: 1, VectorSet: "active"})
 	require.NoError(t, err)
@@ -260,7 +271,7 @@ func TestEvaluationSelectsActiveCandidateAndArchiveVectors(t *testing.T) {
 func TestEvaluationPreservesReportFactBoundaryAndRecords(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	h.add(t, "report-answer", "report", "2026-10-01", "", "semanticlaunch", 1)
-	request := types.EntrySearchRequest{Query: "semanticlaunch", Libraries: []string{h.library.ID}, Limit: 1, CollapseSimilar: entrySearchNoCollapse()}
+	request := types.EntrySearchRequest{Query: "semanticlaunch", Libraries: []string{h.library.ID}, Limit: 1}
 	response, err := h.svc.Search(types.WithSearchSource(h.ctx, "web"), request)
 	require.NoError(t, err)
 	require.Len(t, response.Results, 1)

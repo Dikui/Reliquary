@@ -8,7 +8,6 @@ import (
 	"reliquary/internal/logger"
 	"reliquary/internal/mcpserver"
 	"reliquary/internal/middleware"
-	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"strings"
 	"time"
@@ -21,7 +20,6 @@ import (
 // RouterParams 路由参数
 type RouterParams struct {
 	dig.In
-	ContentCheckHandler      *handler.ContentCheckHandler      `optional:"true"`
 	IngestDiagnosticsHandler *handler.IngestDiagnosticsHandler `optional:"true"`
 
 	Config                  *config.Config
@@ -39,7 +37,6 @@ type RouterParams struct {
 	EvaluationHandler       *handler.EvaluationHandler `optional:"true"`
 	EntityHandler           *handler.EntityHandler
 	EmbeddingRebuildHandler *handler.EmbeddingRebuildHandler `optional:"true"`
-	TopicHandler            *handler.TopicHandler            `optional:"true"`
 	FollowHandler           *handler.FollowHandler           `optional:"true"`
 	OperationLogHandler     *handler.OperationLogHandler     `optional:"true"`
 	MCPHandler              *mcpserver.Handler               `optional:"true"`
@@ -141,22 +138,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 			params.FileService,
 			params.ResourceCatalog)
 		RegisterEntryRoutes(v1, params.EntryHandler, accessGuards)
-		if h := params.ContentCheckHandler; h != nil {
-			g := v1.Group("/diagnostics/content-checks")
-			g.GET("", h.List)
-			g.GET("/settings", h.Settings)
-			g.GET("/:id", h.Get)
-			local := func(c *gin.Context) {
-				p, ok := types.PrincipalFromContext(c.Request.Context())
-				if !ok || p.Type != types.PrincipalWebUser {
-					c.AbortWithStatusJSON(403, gin.H{"success": false, "message": "local settings session required"})
-					return
-				}
-				c.Next()
-			}
-			g.PUT("/settings", local, h.Save)
-			g.POST("/:id/recheck", local, h.Recheck)
-		}
 		if h := params.IngestDiagnosticsHandler; h != nil {
 			v1.GET("/diagnostics/ingest-failures", h.List)
 			v1.GET("/diagnostics/ingest-failures/:id", h.Get)
@@ -179,9 +160,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 		v1.GET("/search/options", params.SearchHandler.Options)
 		RegisterEntityRoutes(v1, params.EntityHandler)
 		RegisterEmbeddingRebuildRoutes(v1, params.EmbeddingRebuildHandler)
-		if params.TopicHandler != nil {
-			RegisterTopicRoutes(v1, params.TopicHandler, accessGuards)
-		}
 		if params.FollowHandler != nil {
 			RegisterFollowRoutes(v1, params.FollowHandler)
 		}

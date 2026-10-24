@@ -102,3 +102,43 @@ VALUES('article',
 	require.NoError(t, target.Exec("UPDATE entries SET vault_body='tampered' WHERE id='article'").Error)
 	require.Error(t, VerifyImportedReplica(ctx, target, root))
 }
+
+func TestClassificationSnapshotImportsRetainedData(t *testing.T) {
+	db := pgtest.Open(t)
+	ctx := context.Background()
+	directory, err := filepath.Abs("../../migrations/versioned")
+	require.NoError(t, err)
+	m, err := migrate.New("file://"+directory, db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := m.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, m.Migrate(33))
+	seed(t, db)
+	require.NoError(t, db.Exec(`
+INSERT INTO topics(id,space_id,name) VALUES('retired',1,'Retired direction');
+INSERT INTO entry_topics(space_id,entry_id,topic_id) VALUES(1,'article','retired');
+INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'topic','retired');
+INSERT INTO content_check_settings(space_id,enabled,weekday,time) VALUES(1,true,1,'09:00');
+INSERT INTO content_check_runs(id,space_id,model_id,status,window_from,window_to)
+VALUES('retired',1,'model','pending',now(),now());
+INSERT INTO task_pending_ops(id,task_type,queue,state,payload)
+VALUES('retired-check','content:check','low','pending','null'),
+ ('retired-topic','topic:backfill','low','pending','{}'),
+ ('retained-task','document:process','normal','pending','{}');
+`).Error)
+	original, err := Capture(ctx, db)
+	require.NoError(t, err)
+	root := t.TempDir()
+	require.NoError(t, WriteSnapshot(root, "", original))
+	target := pgtest.Open(t)
+	_, err = Import(ctx, target, root, "", nil)
+	require.NoError(t, err)
+	require.NoError(t, VerifyImportedReplica(ctx, target, root))
+	restored, err := Capture(ctx, target)
+	require.NoError(t, err)
+	require.NoError(t, WriteSnapshot(root, "", restored))
+	result, err := VerifyReplica(ctx, target, root, "", false)
+	require.NoError(t, err)
+	require.True(t, result.OK, result.Differences)
+	require.NoError(t, target.Exec("UPDATE entries SET vault_body='tampered' WHERE id='article'").Error)
+	require.Error(t, VerifyImportedReplica(ctx, target, root))
+}

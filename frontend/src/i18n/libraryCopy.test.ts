@@ -13,7 +13,7 @@ const pages = [
   '../views/library/Library.vue',
   '../views/library/SearchView.vue',
   '../views/library/components/EntryWorkbench.vue',
-  '../views/library/TopicManagement.vue',
+
   '../views/library/OperationLogs.vue',
   '../views/settings/Settings.vue',
   '../views/settings/LibrarySettings.vue',

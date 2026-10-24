@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"reliquary/internal/types"
 	"sync"
 	"time"
 
@@ -13,8 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-
-	"reliquary/internal/types"
 )
 
 type Client struct {
@@ -153,8 +152,6 @@ func (c *Client) EnqueueTx(ctx context.Context, tx *gorm.DB, t *Task, opts ...Op
 		table = "embedding_rebuild_runs"
 	case types.TypeEntityNameEmbeddingRebuild:
 		table = "entity_embedding_rebuild_runs"
-	case types.TypeTopicBackfill:
-		table = "topic_backfill_jobs"
 	case types.TypeIngestAssetCleanup:
 		table = "ingest_assets"
 	}
@@ -317,6 +314,7 @@ func (c *Client) Start(ctx context.Context, handler Handler, config Config) erro
 	go func() { defer c.wg.Done(); c.supervise(root, handler, conn) }()
 	return nil
 }
+
 func (c *Client) Close() error {
 	c.mu.Lock()
 	cancel := c.cancel

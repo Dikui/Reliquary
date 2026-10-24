@@ -8,7 +8,7 @@ Grok Bot、外部 Agent 与采集程序负责取得原文、将 PDF 或其他格
 
 | 分类 | 查询 | 操作与协议差异 |
 | --- | --- | --- |
-| 资料管理 | 库、资料、正文、检索、实体、主题、关注 | 沿用 `ingest`、整理、关注等 HTTP/MCP 能力 |
+| 资料管理 | 库、资料、正文、检索、实体、关注 | 沿用 `ingest`、整理、关注等 HTTP/MCP 能力 |
 | 待处理 | 收录待审 | 审核、补链接及丢弃；图片缺失不产生待办 |
 | 辅助诊断 | 已接收资料的处理失败、接收故障、时间线、模型调用和队列 | 读取诊断后，按当前状态使用已有审核或重新处理接口 |
 | 系统配置 | 库策略、模型、系统参数、API Key | 沿用 HTTP 配置接口；本次不为全部管理操作增加 MCP 工具 |
@@ -41,7 +41,7 @@ HTTP 响应一般使用 success/data 包装。MCP 工具结果在 content 中返
 
 ## 选择库
 
-HTTP `GET /api/v1/libraries` 对应 MCP `list_libraries`，无工具参数。每个库返回 id、directory、用途、模板、审核标准、来源证据、去重说明、accepted_fields、内容类型和动态开关。优先使用稳定 ID 或英文 directory，不用中文显示名称作为收录或检索参数。自建库按模板执行相同规则，入库后不能换库。库 ID 不随目录更名变化。外部工具应通过 `list_libraries` 获取当前 directory，或继续使用已有库 ID。
+HTTP `GET /api/v1/libraries` 对应 MCP `list_libraries`，无工具参数。每个库返回 id、directory、用途、模板、审核标准、来源证据、去重说明、accepted_fields 和动态开关。优先使用稳定 ID 或英文 directory，不用中文显示名称作为收录或检索参数。自建库按模板执行相同规则，入库后不能换库。库 ID 不随目录更名变化。外部工具应通过 `list_libraries` 获取当前 directory，或继续使用已有库 ID。
 
 | 库目录 | 该收什么 | 来源要求与注意事项 |
 | --- | --- | --- |
@@ -72,10 +72,10 @@ HTTP `POST /api/v1/ingest` 对应 MCP `ingest`，参数相同：
 HTTP `POST /api/v1/search` 对应 MCP `search`：
 
 ```json
-{"query":"仪器校准","libraries":["personal","references"],"limit":20,"collapse_similar":false}
+{"query":"仪器校准","libraries":["personal","references"],"limit":20}
 ```
 
-libraries 必填，可多选。支持所属库的 content_types、entity_ids、topic_ids、published_from、published_to 与 starred。结果按资料合并，返回库、摘要、命中 snippets 和正文位置。vector_unavailable 与 rerank_status 说明退回全文或原排序；检索返回 cannot_be_fact 的报告和 source_unverified 的来源时，外部工具应保留这些标记。完整坐标与过滤规则见 [检索接口](search-api.md)。MCP `get_entry` 可分段读取全文，HTTP 为 `GET /api/v1/entries/:id/body`。
+libraries 必填，可多选。支持 entity_ids、published_from、published_to 与 starred。结果按资料合并，返回库、摘要、命中 snippets 和正文位置。vector_unavailable 与 rerank_status 说明退回全文或原排序；检索返回 cannot_be_fact 的报告和 source_unverified 的来源时，外部工具应保留这些标记。完整坐标与过滤规则见 [检索接口](search-api.md)。MCP `get_entry` 可分段读取全文，HTTP 为 `GET /api/v1/entries/:id/body`。
 
 ## 写入 AI产出
 

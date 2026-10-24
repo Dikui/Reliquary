@@ -8,7 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reliquary/internal/handler"
+	"reliquary/internal/logger"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/testutil/redistest"
+	"reliquary/internal/types"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,11 +20,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"reliquary/internal/handler"
-	"reliquary/internal/logger"
 	task "reliquary/internal/queue"
-	"reliquary/internal/testutil/pgtest"
-	"reliquary/internal/types"
 )
 
 func newPostgresInspectorTest(t *testing.T) *postgresTaskInspector {
@@ -475,51 +475,6 @@ func TestPostgresRuntimeQueueHTTPReadsAndMutatesRealRows(t *testing.T) {
 	}
 }
 
-func TestPostgresRuntimeTopicTaskProjectsBusinessJobID(t *testing.T) {
-	inspector := newPostgresInspectorTest(t)
-	payload, err := json.Marshal(types.TopicBackfillPayload{SpaceID: types.SingleSpaceID, JobID: "topic-history-job"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h := handler.NewSystemHandler(nil, nil, nil, nil, nil, inspector, nil)
-	r := gin.New()
-	r.GET("/api/v1/system/runtime/queues/:queue/tasks", h.ListRuntimeTasks)
-	for _, test := range []struct {
-		kind       string
-		queue      string
-		wantTaskID string
-	}{
-		{types.TypeTopicBackfill, types.QueueEntity, "topic-history-job"},
-		{types.TypeDocumentProcess, types.QueueDefault, ""},
-	} {
-		t.Run(test.kind, func(t *testing.T) {
-			job, err := inspector.client.Enqueue(task.NewTask(test.kind, payload), task.Queue(test.queue))
-			if err != nil {
-				t.Fatal(err)
-			}
-			info, available, err := inspector.GetRuntimeTask(context.Background(), test.queue, job.ID)
-			if err != nil || !available || info.TaskID != test.wantTaskID {
-				t.Fatalf("business job projection: info=%+v available=%v err=%v", info, available, err)
-			}
-			recorder := httptest.NewRecorder()
-			r.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/system/runtime/queues/"+test.queue+"/tasks?state=pending", nil))
-			if recorder.Code != http.StatusOK {
-				t.Fatalf("task list status=%d body=%s", recorder.Code, recorder.Body.String())
-			}
-			var response handler.RuntimeTasksResponse
-			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-				t.Fatal(err)
-			}
-			if !response.Available || len(response.Tasks) != 1 || response.Tasks[0].TaskID != test.wantTaskID {
-				t.Fatalf("business job missing from HTTP response: %+v", response)
-			}
-			if strings.Contains(recorder.Body.String(), "job_id") {
-				t.Fatalf("raw payload field should not be exposed: %s", recorder.Body.String())
-			}
-		})
-	}
-}
-
 func runtimeTaskIDs(tasks []types.RuntimeTaskInfo) []string {
 	ids := make([]string, 0, len(tasks))
 	for _, item := range tasks {
@@ -527,6 +482,7 @@ func runtimeTaskIDs(tasks []types.RuntimeTaskInfo) []string {
 	}
 	return ids
 }
+
 func equalStrings(left, right []string) bool {
 	if len(left) != len(right) {
 		return false

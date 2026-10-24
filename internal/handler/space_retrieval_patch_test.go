@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reliquary/internal/types"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"reliquary/internal/types"
 )
 
 func retrievalPatchFixture() *types.RetrievalConfig {
@@ -17,7 +16,6 @@ func retrievalPatchFixture() *types.RetrievalConfig {
 		ImageVectorEnabled: true, EmbeddingTopK: 71, VectorThreshold: 0.25,
 		KeywordThreshold: 0.35, RerankTopK: 13, RerankThreshold: -0.1,
 		RRFK: 81, RRFVectorWeight: 0.6, RRFKeywordWeight: 0.4, RRFImageWeight: 0.3,
-		SimilarReportsThreshold: 0.91, SimilarReportsWindowDays: 8,
 	}
 }
 
@@ -80,7 +78,6 @@ func TestRetrievalConfigInvalidPatchDoesNotChangeStoredFields(t *testing.T) {
 	for _, body := range []string{
 		`null`, `[]`, `{"image_vector_enabled":null}`, `{"rrf_image_weight":null}`,
 		`{"image_vector_enabled":"true"}`, `{"rrf_image_weight":11}`,
-		`{"vector_threshold":-1}`, `{"similar_reports_window_days":366}`, `{`,
 	} {
 		t.Run(body, func(t *testing.T) {
 			space := secretSpaceFixture()

@@ -42,7 +42,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
     '@/utils/api-base': { getApiBaseUrl: () => options.baseUrl ?? 'http://localhost' },
     '@/utils/clipboard': { copyWithToast(value: string, successKey: string) { copies.push({ value, successKey }) } },
     '@/utils/search': searchHelpers,
-    '@/api/search': { getSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
+    '@/api/search': { getSearchOptions: async () => ({ success: true, data: { entities: [], } }) },
     '@/api/space': {
       listAPIKeys: async () => ({ success: true, data: options.keys ?? [] }),
       createAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'token' } } },
@@ -132,11 +132,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const result = await scenario(locale, async () => {})
     assert.deepEqual(result.warnings, [])
     const expected = locale === 'zh-CN' ? [
-      '通过必要技术校验后即入库，正文索引、摘要、分类在后台处理。',
+      '通过必要技术校验后即入库，正文索引与摘要在后台处理。',
       'API Key 可以访问个人空间的全部内容和收录、检索等接口。',
       '部分账号设置，如 ChatGPT 登录和维护日程，仍需网页登录。',
     ] : [
-      'Content is saved after technical validation. Body indexing, summaries, classification run in the background.',
+      'Content is saved after technical validation. Body indexing and summaries run in the background.',
       'API keys can access all content in your personal space and interfaces such as ingest and search.',
       'Some account settings, including ChatGPT sign-in and maintenance schedules, still require signing in on the web.',
     ]
@@ -271,7 +271,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         await state.runQuery()
       })
       assert.equal(calls.length, 2)
-      assert.deepEqual(JSON.parse(calls[1].body), { libraries: ['all-a', 'all-b'], query: 'question', collapse_similar: true, limit: 20 })
+      assert.deepEqual(JSON.parse(calls[1].body), { libraries: ['all-a', 'all-b'], query: 'question',  limit: 20 })
       assert.equal(calls[0].headers['X-API-Key'], 'secret')
     } finally { globalThis.fetch = originalFetch }
   })
@@ -299,9 +299,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         state.openPlayground()
         state.playground.apiKey = 'secret'
         state.playground.query = ' Launch '
-        state.playgroundFilters.value = { ...searchHelpers.defaultSearchFilters(), content_types: ['event', 'research'], entity_ids: ['e1', 'e2'], topic_ids: ['t1'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
+        state.playgroundFilters.value = { ...searchHelpers.defaultSearchFilters(),  published_from: '2026-10-01', published_to: '2026-10-11',  limit: 50 }
         await state.runQuery()
-        const expected = { libraries: ['all-a', 'all-b'], query: 'Launch', content_types: ['event', 'research'], entity_ids: ['e1', 'e2'], topic_ids: ['t1'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
+        const expected = { libraries: ['all-a', 'all-b'], query: 'Launch',  published_from: '2026-10-01', published_to: '2026-10-11',  limit: 50 }
         assert.deepEqual(JSON.parse(calls[1].body), expected)
         assert.deepEqual(JSON.parse(state.playgroundRequestPreview.value), expected)
         assert.doesNotMatch(state.playgroundRequestPreview.value, /secret|apiKey/)

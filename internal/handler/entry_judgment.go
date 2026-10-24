@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"reliquary/internal/types"
 	"strconv"
 	"time"
 
 	werrors "reliquary/internal/errors"
-	"reliquary/internal/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -60,32 +60,6 @@ func (h *EntryHandler) SetStarred(c *gin.Context) {
 	}
 	item, err := editor.SetStarred(c.Request.Context(), c.Param("id"), *input.Starred)
 	if err != nil {
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
-}
-
-func (h *EntryHandler) CorrectContentType(c *gin.Context) {
-	var input struct {
-		ContentType string `json:"content_type"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.Error(werrors.NewBadRequestError("content_type is required"))
-		return
-	}
-	editor, ok := h.kgService.(interface {
-		CorrectContentType(context.Context, string, string) (*types.Entry, error)
-	})
-	if !ok {
-		c.Error(werrors.NewInternalServerError("article editing unavailable"))
-		return
-	}
-	item, err := editor.CorrectContentType(c.Request.Context(), c.Param("id"), input.ContentType)
-	if err != nil {
-		if writeChatGPTSynchronousPause(c, err) {
-			return
-		}
 		c.Error(err)
 		return
 	}

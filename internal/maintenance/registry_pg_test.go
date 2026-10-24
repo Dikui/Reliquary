@@ -13,18 +13,6 @@ import (
 func TestIKB07RegistryLibraryConfigurationRoundTrip(t *testing.T) {
 	db := pgtest.Open(t)
 	seed(t, db)
-	require.NoError(
-		t,
-		db.Exec(
-			`INSERT INTO library_content_types(library_id,
-name,
-position,
-enabled) SELECT id,
-'项目类型',
-42,
-true FROM libraries WHERE id='library' ON CONFLICT DO NOTHING`,
-		).Error,
-	)
 	ctx := context.Background()
 	root := t.TempDir()
 	snapshot, err := Capture(ctx, db)
@@ -32,7 +20,7 @@ true FROM libraries WHERE id='library' ON CONFLICT DO NOTHING`,
 	require.NoError(t, WriteSnapshot(root, "", snapshot))
 	registry, err := os.ReadFile(filepath.Join(root, ".reliquary/registry.json"))
 	require.NoError(t, err)
-	for _, table := range []string{"libraries", "library_content_types"} {
+	for _, table := range []string{"libraries"} {
 		require.Contains(t, string(registry), table)
 	}
 	fresh := pgtest.Open(t)
@@ -49,7 +37,7 @@ true FROM libraries WHERE id='library' ON CONFLICT DO NOTHING`,
 	check, err = VerifyReplica(ctx, fresh, root, "", false)
 	require.NoError(t, err)
 	require.False(t, check.OK)
-	path := filepath.Join(root, ".reliquary/data/library_content_types.json")
+	path := filepath.Join(root, ".reliquary/config/libraries.json")
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, append(data, ' '), 0o600))

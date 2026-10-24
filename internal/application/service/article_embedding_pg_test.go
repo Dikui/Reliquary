@@ -4,14 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
-
+	"reliquary/internal/models/embedding"
+	"reliquary/internal/types"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"reliquary/internal/models/embedding"
-	"reliquary/internal/types"
 
 	"github.com/stretchr/testify/require"
 )
@@ -165,9 +163,11 @@ func TestArticleTitleVectorChangeRollsBackWhenEmbeddingFails(t *testing.T) {
 
 func TestUnprocessedArticleTitleUpdateDoesNotRequireEmbedding(t *testing.T) {
 	h := newRetainedIntakeHarness(t)
-	article := &types.Entry{ID: "pending-article", SpaceID: h.library.SpaceID, LibraryID: h.library.ID,
+	article := &types.Entry{
+		ID: "pending-article", SpaceID: h.library.SpaceID, LibraryID: h.library.ID,
 		Type: "url", SourceKind: "article", Title: "Pending title", Source: "https://example.org/pending",
-		ParseStatus: types.ParseStatusPending, EnableStatus: "enabled"}
+		ParseStatus: types.ParseStatusPending, EnableStatus: "enabled",
+	}
 	require.NoError(t, h.db.Create(article).Error)
 	h.service.modelService = nil
 	require.NoError(t, h.service.UpdateEntry(h.ctx, &types.Entry{ID: article.ID, Title: "Edited pending title"}))
@@ -213,9 +213,11 @@ func TestImportedDocumentHasSummaryVectorsAndReportsKeepChunkPrefixes(t *testing
 
 func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t *testing.T) {
 	h, _ := newArticleIndexingHarness(t)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Topicmarker"})
-	require.NoError(t, err)
-	h.processor.output = articleProcessingOutput(t, "reference", []types.EntityCandidate{{Name: "Entitymarker", EntityType: "company"}}, []string{topic.ID})
+	h.processor.output = articleProcessingOutput(
+		t,
+
+		[]types.EntityCandidate{{Name: "Entitymarker", EntityType: "company"}},
+	)
 	article := h.upload(t, "Headermarker", "discardedfixture reference source body")
 	var entity types.Entity
 	require.NoError(t, h.db.Where("canonical_name=?", "Entitymarker").First(&entity).Error)
@@ -235,7 +237,16 @@ func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t
 		require.NoError(t, h.db.Table("entries").Where("id=? AND search_seq_id @@@ paradedb.match_disjunction('search_text', ?)", article.ID, term).Count(&count).Error)
 		require.Equal(t, want, count, term)
 	}
-	for _, term := range []string{"Headermarker", "Publishermarker", "Authormarker", "Overviewmarker", "Pointmarker", "Termmarker", "Entitymarker", "Aliasmarker", "Topicmarker"} {
+	for _, term := range []string{
+		"Headermarker",
+		"Publishermarker",
+		"Authormarker",
+		"Overviewmarker",
+		"Pointmarker",
+		"Termmarker",
+		"Entitymarker",
+		"Aliasmarker",
+	} {
 		assertHit(term, 1)
 	}
 	assertHit("discardedfixture", 0)
@@ -250,11 +261,6 @@ func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t
 	require.NoError(t, h.db.Table("entity_aliases").Where("entity_id=?", entityID).Delete(nil).Error)
 	assertHit("Updatedaliasmarker", 0)
 	assertHit("Entitymarker", 0)
-	require.NoError(t, h.db.Table("topics").Where("id=?", topic.ID).Update("name", "Updatedtopicmarker").Error)
-	assertHit("Updatedtopicmarker", 1)
-	assertHit("Topicmarker", 0)
-	require.NoError(t, h.db.Where("entry_id=?", article.ID).Delete(&types.EntryTopic{}).Error)
-	assertHit("Updatedtopicmarker", 0)
 	require.NoError(t, h.db.Where("entry_id=?", article.ID).Delete(&types.EntryEntity{}).Error)
 	assertHit("Renamedentitymarker", 0)
 	var text string

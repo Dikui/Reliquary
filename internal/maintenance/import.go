@@ -232,7 +232,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	if existing != 0 {
 		return nil, errors.New("replica import requires an empty entry database")
 	}
-	if db.Migrator().HasTable("library_content_types") {
+	if db.Migrator().HasColumn("libraries", "template") {
 		if err := migrateLibrarySnapshot(snapshot, nil); err != nil {
 			return nil, err
 		}
@@ -250,7 +250,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 			return nil, err
 		}
 	}
-	if db.Migrator().HasColumn("topics", "library_ids") {
+	if db.Migrator().HasTable("follow_feed_library_states") {
 		projectFollowSnapshot(snapshot)
 	}
 	if db.Migrator().HasColumn("entries", "source_ref") {
@@ -404,6 +404,14 @@ func replicaImportOrder(db *gorm.DB, snapshot *Snapshot) ([]string, error) {
 	if !db.Migrator().HasTable("library_relation_types") {
 		order = slices.DeleteFunc(order, func(table string) bool { return table == "library_relation_types" })
 	}
+	var version int64
+	if db.Migrator().HasTable("schema_migrations") {
+		if err := db.Table("schema_migrations").Select("version").Scan(&version).Error; err != nil {
+			return nil, err
+		}
+	}
+	retired := retirementAt(version)
+	order = slices.DeleteFunc(order, func(table string) bool { return slices.Contains(retired.tables, table) })
 	order, err := registeredImportOrder(order, snapshot.Tables)
 	if err != nil {
 		return nil, err

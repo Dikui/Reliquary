@@ -4,15 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"reliquary/internal/application/service"
+	"reliquary/internal/handler"
+	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/application/service"
-	"reliquary/internal/handler"
-	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
 )
 
 // Inspect wire keys directly, including nested/folded records. User metadata
@@ -114,14 +114,14 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 	require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: source.ID, EntityID: entity.ID}).Error)
 	_, err := follows.Follow(f.ctx, types.FollowTargetEntity, entity.ID)
 	require.NoError(t, err)
-	query := map[string]any{"query": "searchfixture", "libraries": []string{f.library.ID}, "collapse_similar": false}
+	query := map[string]any{"query": "searchfixture", "libraries": []string{f.library.ID}}
 	for _, out := range []map[string]any{httpCall("POST", "/contract/search", query)["data"].(map[string]any), call("search", query)} {
 		require.Equal(t, source.ID, out["results"].([]any)[0].(map[string]any)["entry_id"])
 	}
 	for _, out := range []map[string]any{httpCall("GET", "/contract/entities/"+entity.ID, nil)["data"].(map[string]any), call("get_entity", map[string]any{"id": entity.ID})} {
 		require.NotEmpty(t, out["entries"])
 	}
-	feedInput := map[string]any{"collapse_similar": false}
+	feedInput := map[string]any{}
 	httpFeed := httpCall("POST", "/contract/feed", feedInput)["data"].(map[string]any)
 	mcpFeed := call("follow_feed", feedInput)
 	require.NotEmpty(t, httpFeed["results"])

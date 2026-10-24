@@ -38,17 +38,13 @@ func TestSystemLibrariesInitializationAndCatalog(t *testing.T) {
 		require.Equal(t, want.ReviewCriteria, got.ReviewCriteria)
 		require.Equal(t, want.SourceEvidenceRule, got.SourceEvidenceRule)
 		require.Equal(t, want.FeedEnabled, got.FeedEnabled)
-		for i := range want.ContentTypes {
-			want.ContentTypes[i].LibraryID = got.ID
-		}
-		require.Equal(t, want.ContentTypes, got.ContentTypes)
+
 	}
 	institutional, err := repo.GetSystemLibraryByRole(ctx, 1, "official")
 	require.NoError(t, err)
 	name := "用户改名"
 	off := false
-	empty := []types.LibraryContentType{}
-	_, err = svc.ConfigureLibrary(ctx, institutional.ID, types.LibraryPatch{Name: &name, FeedEnabled: &off, ContentTypes: &empty})
+	_, err = svc.ConfigureLibrary(ctx, institutional.ID, types.LibraryPatch{Name: &name, FeedEnabled: &off})
 	require.NoError(t, err)
 	for range 3 {
 		_, err = repository.EnsureSystemLibraries(ctx, db, 1, "")
@@ -58,12 +54,12 @@ func TestSystemLibrariesInitializationAndCatalog(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, name, got.Name)
 	require.False(t, got.FeedEnabled)
-	require.Empty(t, got.ContentTypes)
+
 	require.Equal(t, name, got.DisplayName("en"))
 	for _, template := range []string{types.TemplateExternalTimely, types.TemplateExternalDurable, types.TemplateOwn, types.TemplateGenerated} {
 		created, err := svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: template, Directory: "custom-" + map[string]string{types.TemplateExternalTimely: "timely", types.TemplateExternalDurable: "durable", types.TemplateOwn: "own", types.TemplateGenerated: "generated"}[template], Name: template})
 		require.NoError(t, err)
-		require.Empty(t, created.ContentTypes)
+
 		_, err = svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: template, Directory: created.Directory, Name: "duplicate"})
 		require.Error(t, err)
 		for _, patch := range []types.LibraryPatch{{Template: &template}, {Directory: &created.Directory}, {SystemRole: &name}} {
@@ -149,7 +145,4 @@ func TestEmptySystemLibrariesCanBeDeletedWithoutRecreation(t *testing.T) {
 	libraries, err = svc.ListLibraries(ctx)
 	require.NoError(t, err)
 	require.Empty(t, libraries)
-	var contentTypes int64
-	require.NoError(t, db.Model(&types.LibraryContentType{}).Count(&contentTypes).Error)
-	require.Zero(t, contentTypes)
 }

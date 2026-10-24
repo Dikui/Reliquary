@@ -23,53 +23,99 @@ var retiredColumns = map[string]string{
 	"entry_processing_outputs": "relations",
 }
 
-func retiredTask(row map[string]any) bool {
-	return slices.Contains([]string{"graph:sync", "graph:check", "graph:rebuild"}, stringValue(row["task_type"]))
+type retirement struct {
+	tables  []string
+	columns map[string][]string
+	tasks   []string
+}
+
+func retirementAt(version int64) retirement {
+	r := retirement{columns: map[string][]string{}}
+	if version >= 33 {
+		r.tables = append(r.tables, retiredTables...)
+		for table, column := range retiredColumns {
+			r.columns[table] = []string{column}
+		}
+		r.tasks = append(r.tasks, "graph:sync", "graph:check", "graph:rebuild")
+	}
+	if version >= 34 {
+		r.tables = append(
+			r.tables,
+			"library_content_types",
+			"topics",
+			"entry_topics",
+			"topic_backfill_jobs",
+			"topic_backfill_batches",
+			"content_check_settings",
+			"content_check_runs",
+		)
+		r.columns["entries"] = append(
+			r.columns["entries"],
+			"content_type",
+			"content_type_corrected",
+			"content_type_hint",
+		)
+		r.columns["entry_processing_outputs"] = append(r.columns["entry_processing_outputs"], "content_type")
+		r.columns["follows"] = []string{"topic_id"}
+		r.tasks = append(r.tasks, "topic:backfill", "content:check")
+	}
+	return r
+}
+
+func (r retirement) dropsRow(table string, row map[string]any) bool {
+	return table == "task_pending_ops" && slices.Contains(r.tasks, stringValue(row["task_type"])) ||
+		table == "follows" && len(r.columns["follows"]) > 0 && row["target_type"] == "topic"
 }
 
 func projectRetiredSnapshot(snapshot *Snapshot, targetVersion int64) {
-	if targetVersion < 33 {
-		return
-	}
-	for _, table := range retiredTables {
+	r := retirementAt(targetVersion)
+	for _, table := range r.tables {
 		delete(snapshot.Tables, table)
 		delete(snapshot.JSONNulls, table)
 	}
-	for _, row := range snapshot.Tables["task_pending_ops"] {
-		if retiredTask(row) {
-			delete(snapshot.JSONNulls["task_pending_ops"], rowIdentity(row))
-		}
-	}
-	if len(snapshot.JSONNulls["task_pending_ops"]) == 0 {
-		delete(snapshot.JSONNulls, "task_pending_ops")
-	}
-	snapshot.Tables["task_pending_ops"] = slices.DeleteFunc(snapshot.Tables["task_pending_ops"], retiredTask)
-	for table, column := range retiredColumns {
-		for _, row := range snapshot.Tables[table] {
-			delete(row, column)
+	for table, rows := range snapshot.Tables {
+		kept := slices.DeleteFunc(rows, func(row map[string]any) bool {
+			if r.dropsRow(table, row) {
+				delete(snapshot.JSONNulls[table], rowIdentity(row))
+				return true
+			}
+			for _, column := range r.columns[table] {
+				delete(row, column)
+			}
+			return false
+		})
+		snapshot.Tables[table] = kept
+		if len(snapshot.JSONNulls[table]) == 0 {
+			delete(snapshot.JSONNulls, table)
 		}
 	}
 }
 
 func projectRetiredManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
-	if expected.SchemaVersion >= 33 || actual.SchemaVersion < 33 {
+	if expected.SchemaVersion >= actual.SchemaVersion || actual.SchemaVersion < 33 {
 		return expected, actual
 	}
+	r := retirementAt(actual.SchemaVersion)
 	left := *expected
 	left.Tables = make(map[string]TableManifest, len(expected.Tables))
 	left.Files = make(map[string][]File, len(expected.Files))
 	changed := map[string][2][]byte{}
 	for table, item := range expected.Tables {
-		if slices.Contains(retiredTables, table) {
+		if slices.Contains(r.tables, table) {
 			continue
 		}
-		column, ok := retiredColumns[table]
-		needsProjection := ok && slices.Contains(item.Columns, column)
+		columns := r.columns[table]
+		needsProjection := slices.ContainsFunc(
+			columns,
+			func(column string) bool { return slices.Contains(item.Columns, column) },
+		)
 		for _, row := range item.Data {
-			if _, present := row[column]; ok && present {
-				needsProjection = true
+			for _, column := range columns {
+				if _, present := row[column]; present {
+					needsProjection = true
+				}
 			}
-			if table == "task_pending_ops" && retiredTask(row) {
+			if r.dropsRow(table, row) {
 				needsProjection = true
 			}
 		}
@@ -91,16 +137,14 @@ func projectRetiredManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 				nulls[id] = append([]string{}, columns...)
 			}
 			for _, row := range rows {
-				if ok {
+				for _, column := range columns {
 					delete(row, column)
 				}
-				if table == "task_pending_ops" && retiredTask(row) {
+				if r.dropsRow(table, row) {
 					delete(nulls, rowIdentity(row))
 				}
 			}
-			if table == "task_pending_ops" {
-				rows = slices.DeleteFunc(rows, retiredTask)
-			}
+			rows = slices.DeleteFunc(rows, func(row map[string]any) bool { return r.dropsRow(table, row) })
 			if len(nulls) == 0 {
 				nulls = nil
 			}
@@ -109,7 +153,7 @@ func projectRetiredManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 			item.Data = rows
 			item.Columns = slices.DeleteFunc(
 				append([]string{}, item.Columns...),
-				func(value string) bool { return value == column },
+				func(value string) bool { return slices.Contains(columns, value) },
 			)
 			encoded, _ := json.Marshal(canonicalRows(table, rows))
 			item.SHA256 = sum(encoded)
@@ -122,7 +166,7 @@ func projectRetiredManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 		for _, file := range files {
 			table := strings.TrimSuffix(path.Base(file.Path), ".json")
 			if strings.HasPrefix(file.Path, ".reliquary/") {
-				if slices.Contains(retiredTables, table) {
+				if slices.Contains(r.tables, table) {
 					continue
 				}
 				if pair, ok := changed[table]; ok && file.SHA256 == sum(pair[0]) && file.Size == int64(len(pair[0])) {

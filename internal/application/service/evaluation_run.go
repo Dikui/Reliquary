@@ -91,9 +91,6 @@ func (s *EvaluationService) Run(ctx context.Context, setID string, options types
 		request := row.Question.Request
 		request.Limit = options.K
 		request.VectorSet = options.VectorSet
-		if options.CollapseSimilar != nil {
-			request.CollapseSimilar = options.CollapseSimilar
-		}
 		var response *types.EntrySearchResponse
 		var searchErr error
 		if err := ctx.Err(); err != nil {
@@ -200,7 +197,15 @@ func freezeEvaluationRun(ctx context.Context, tx *gorm.DB, run *types.Evaluation
 		}
 		librarySnapshots = append(librarySnapshots, map[string]any{"id": lib.ID, "chunking": lib.ChunkingConfig, "indexing": lib.IndexingStrategy, "rerank_model_id": rerankID})
 	}
-	run.Snapshot, _ = json.Marshal(map[string]any{"version": 1, "libraries": librarySnapshots, "vector_set": set, "retrieval_config": run.Options.RetrievalConfig, "k": run.Options.K, "collapse_similar": run.Options.CollapseSimilar, "folded_member_rule": "representatives_only"})
+	run.Snapshot, _ = json.Marshal(
+		map[string]any{
+			"version":          1,
+			"libraries":        librarySnapshots,
+			"vector_set":       set,
+			"retrieval_config": run.Options.RetrievalConfig,
+			"k":                run.Options.K,
+		},
+	)
 	return nil
 }
 

@@ -26,14 +26,12 @@ import (
 func articleProcessingPrompt() string {
 	return config.Prompt("article_processing") + `
 输出所有字段，格式：{"title":"资料标题",
-"content_type":"所属库类型",
 "summary":{"overview":"一句话概述",
 "points":["要点一",
 "要点二",
 "要点三"],
 "key_terms":["关键名词"]},
-"entities":[],
-"topics":["已给定的主题 ID"]}
+"entities":[]}
 segment 是本段在整篇资料中的位置。只分析本段，context_before 仅作衔接上下文。`
 }
 
@@ -53,33 +51,23 @@ const (
 type articleProcessingResult struct {
 	Title            string                           `json:"title,omitempty"`
 	Images           []types.ProcessingImage          `json:"images_result,omitempty"`
-	ContentType      *string                          `json:"content_type"`
 	Summary          *types.EntrySummary              `json:"summary"`
 	Entities         []articleProcessingEntity        `json:"entities"`
-	Topics           []string                         `json:"topics"`
 	Provenance       *articleProcessingProvenance     `json:"provenance,omitempty"`
 	Extensions       map[string][]SegmentContribution `json:"extensions,omitempty"`
 	RunID            string                           `json:"processing_run_id,omitempty"`
 	ResolvedEntities map[string]string                `json:"resolved_entities,omitempty"`
 }
 
-type articleProcessingTopic struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
 type articleProcessingInput struct {
-	Images          []processingImageInput   `json:"images"`
-	Author          string                   `json:"author"`
-	Segment         any                      `json:"segment,omitempty"`
-	Title           string                   `json:"title"`
-	Publisher       string                   `json:"publisher"`
-	PublishedAt     string                   `json:"published_at"`
-	Body            string                   `json:"body"`
-	BodyTruncated   bool                     `json:"body_truncated"`
-	ContentTypeHint string                   `json:"content_type_hint,omitempty"`
-	ExistingTopics  []articleProcessingTopic `json:"existing_topics"`
+	Images        []processingImageInput `json:"images"`
+	Author        string                 `json:"author"`
+	Segment       any                    `json:"segment,omitempty"`
+	Title         string                 `json:"title"`
+	Publisher     string                 `json:"publisher"`
+	PublishedAt   string                 `json:"published_at"`
+	Body          string                 `json:"body"`
+	BodyTruncated bool                   `json:"body_truncated"`
 }
 
 func articleTitleForProcessing(k *types.Entry) string {
@@ -100,7 +88,7 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 	if len([]rune(result.Title)) > 255 || strings.ContainsAny(result.Title, "\r\n\x00") {
 		return nil, errors.New("article processing title must be a single line of at most 255 characters without NUL")
 	}
-	if result.Summary == nil || result.Entities == nil || result.Topics == nil ||
+	if result.Summary == nil || result.Entities == nil ||
 		strings.TrimSpace(result.Summary.Overview) == "" || result.Summary.Points == nil || result.Summary.KeyTerms == nil {
 		return nil, errors.New("article processing output is missing required fields")
 	}
@@ -114,11 +102,6 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 			return nil, errors.New("article processing entity is missing name or type")
 		}
 	}
-	value := types.ContentTypeOther
-	if result.ContentType != nil {
-		value = strings.TrimSpace(*result.ContentType)
-	}
-	result.ContentType = &value
 	return &result, nil
 }
 
@@ -153,7 +136,7 @@ func (s *entryService) articleProcessingLimits(model *types.Model) (bodyChars, i
 	bodyChars, images, completion = defaultArticleBodyChars, defaultArticleImages, defaultArticleCompletionTokens
 	if model != nil && model.Parameters.ContextWindow > 0 {
 		// One rune per token is a conservative estimate for mixed Chinese and
-		// English. Keep 40 percent for instructions, topic metadata, images and output.
+		// English. Keep 40 percent for instructions, images and output.
 		_, _, reserve := s.segmentSettings()
 		bodyChars = max(1, model.Parameters.ContextWindow*(100-reserve)/100)
 		completion = min(completion, max(1, model.Parameters.ContextWindow/4))
@@ -376,19 +359,24 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 	if s.db != nil {
 		if isIngestArticle(k) {
 			var latest types.Entry
-			if err := s.db.WithContext(ctx).Select("acquisition", "ingest_api_key_id", "ingest_api_key_name", "last_ingest_api_key_id", "last_ingest_api_key_name", "content_type_hint", "related_entry_id").Where("id=? AND space_id=?", k.ID, k.SpaceID).Take(&latest).Error; err != nil {
+			if err := s.db.WithContext(ctx).Select("acquisition",
+				"ingest_api_key_id",
+				"ingest_api_key_name",
+				"last_ingest_api_key_id",
+				"last_ingest_api_key_name",
+				"related_entry_id").Where("id=? AND space_id=?",
+				k.ID,
+				k.SpaceID).Take(&latest).Error; err != nil {
 				return err
 			}
 			k.Acquisition = latest.Acquisition
 			k.IngestAPIKeyID, k.IngestAPIKeyName = latest.IngestAPIKeyID, latest.IngestAPIKeyName
 			k.LastIngestAPIKeyID, k.LastIngestAPIKeyName = latest.LastIngestAPIKeyID, latest.LastIngestAPIKeyName
-			k.ContentTypeHint, k.RelatedEntryID = latest.ContentTypeHint, latest.RelatedEntryID
+			k.RelatedEntryID = latest.RelatedEntryID
 		}
 		var current types.Entry
 		if err := s.db.WithContext(ctx).Model(&types.Entry{}).Select("title",
 			"file_name",
-			"content_type",
-			"content_type_corrected",
 			"source_unverified").Where("id=? AND space_id=?",
 			k.ID,
 			k.SpaceID).Take(&current).Error; err != nil {
@@ -396,17 +384,6 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		}
 		k.Title, k.FileName = current.Title, current.FileName
 		k.SourceUnverified = current.SourceUnverified
-		if current.ContentTypeCorrected {
-			k.ContentType, k.ContentTypeCorrected = current.ContentType, true
-		}
-	}
-	if s.db != nil {
-		if err := s.db.WithContext(ctx).Where("library_id=?", library.ID).Order("position,name").Find(&library.ContentTypes).Error; err != nil {
-			return err
-		}
-	}
-	if !k.ContentTypeCorrected {
-		k.ContentType = libraryContentType(library, *result.ContentType)
 	}
 	if articleTitleForProcessing(k) == "" && result.Title != "" {
 		k.Title = result.Title
@@ -457,9 +434,6 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		if err := query.Delete(&types.EntryEntity{}).Error; err != nil {
 			return err
 		}
-		if err := NewTopicService(s.db).ReplaceEntryTopics(ctx, k.ID, result.Topics); err != nil {
-			return err
-		}
 	}
 	if writeFiles && s.vault == nil {
 		if err := s.storeProcessedBody(ctx, library, k, body, images); err != nil {
@@ -502,7 +476,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 	if err := s.repo.UpdateEntry(ctx, k); err != nil {
 		return err
 	}
-	s.tracker().FinalizeAttempt(ctx, k.ID, attemptFromCtx(ctx), "done", types.JSONMap{"content_type": k.ContentType}, "", "")
+	s.tracker().FinalizeAttempt(ctx, k.ID, attemptFromCtx(ctx), "done", types.JSONMap{}, "", "")
 	return nil
 }
 

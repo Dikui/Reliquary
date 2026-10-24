@@ -7,14 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
-	"strings"
-	"time"
-
-	taskqueue "reliquary/internal/queue"
-
-	"github.com/gin-gonic/gin"
-
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
 	"reliquary/internal/diagnostics"
@@ -22,6 +14,13 @@ import (
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"strconv"
+	"strings"
+	"time"
+
+	taskqueue "reliquary/internal/queue"
+
+	"github.com/gin-gonic/gin"
 
 	secutils "reliquary/internal/utils"
 )
@@ -517,13 +516,12 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 	filter := types.EntryListFilter{
 		LibraryIDs:  types.LibraryReadScope(ctx),
 		SourceKind:  strings.TrimSpace(c.Query("source_kind")),
-		ContentType: strings.TrimSpace(c.Query("content_type")),
 		Keyword:     c.Query("keyword"),
 		FileType:    c.Query("file_type"),
 		ParseStatus: c.Query("parse_status"),
 		Source:      c.Query("source"),
 	}
-	for key, target := range map[string]*[]string{"entity_ids": &filter.EntityIDs, "topic_ids": &filter.TopicIDs} {
+	for key, target := range map[string]*[]string{"entity_ids": &filter.EntityIDs} {
 		seen := map[string]bool{}
 		for _, raw := range c.QueryArray(key) {
 			for _, value := range strings.Split(raw, ",") {
@@ -555,14 +553,6 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 	if !filter.PublishedFrom.IsZero() && !filter.PublishedTo.IsZero() && !filter.PublishedFrom.Before(filter.PublishedTo) {
 		c.Error(errors.NewBadRequestError("published_from must not be after published_to"))
 		return
-	}
-	if raw, supplied := c.GetQuery("collapse_similar"); supplied {
-		value, err := strconv.ParseBool(raw)
-		if err != nil {
-			c.Error(errors.NewBadRequestError("collapse_similar must be true or false"))
-			return
-		}
-		filter.CollapseSimilar = &value
 	}
 	switch filter.SourceKind {
 	case "", "article", "mine", "report":

@@ -17,7 +17,7 @@ func (evaluationBrokenSearch) Search(context.Context, types.EntrySearchRequest) 
 	return nil, fmt.Errorf("fixture retrieval outage")
 }
 
-func TestEvaluationFoldedMembersNeverCountAndFailurePersists(t *testing.T) {
+func TestEvaluationCountsEveryResultAndPersistsFailure(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	h.add(t, "a", "article", "2026-10-01", "event", "semanticlaunch", 1)
 	h.add(t, "b", "article", "2026-10-01", "event", "semanticlaunch", 1)
@@ -29,10 +29,10 @@ func TestEvaluationFoldedMembersNeverCountAndFailurePersists(t *testing.T) {
 	folded, err := svc.Run(h.ctx, set.ID, types.EvaluationRunOptions{K: 2})
 	require.NoError(t, err)
 	require.Equal(t, "completed", folded.Status, folded.Error)
-	require.Len(t, folded.Results[0].Results.Results, 1)
-	require.Equal(t, "b", folded.Results[0].Results.Results[0].SimilarReports[0].EntryID)
-	require.Zero(t, folded.Summary.Recall)
-	unfolded, err := svc.Run(h.ctx, set.ID, types.EvaluationRunOptions{K: 2, CollapseSimilar: entrySearchNoCollapse()})
+	require.Len(t, folded.Results[0].Results.Results, 2)
+
+	require.InDelta(t, 1, folded.Summary.Recall, 1e-12)
+	unfolded, err := svc.Run(h.ctx, set.ID, types.EvaluationRunOptions{K: 2})
 	require.NoError(t, err)
 	require.InDelta(t, 1, unfolded.Summary.Recall, 1e-12)
 	failed, err := NewEvaluationService(h.db, evaluationBrokenSearch{}, nil).Run(h.ctx, set.ID, types.EvaluationRunOptions{K: 2})

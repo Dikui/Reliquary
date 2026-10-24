@@ -90,15 +90,6 @@
         <t-input-number v-model="localConfig.rrf_image_weight" :min="0" :max="1" :step="0.05" :decimal-places="2" :aria-label="t('retrievalSettings.imageWeightLabel')" @change="handleParamChange" />
         <p class="setting-desc">{{ t('retrievalSettings.imageWeightHint') }}</p>
       </div>
-      <div class="setting-item">
-        <div class="setting-label-row"><span>{{ t('retrievalSettings.similarReportsThresholdLabel') }}</span></div>
-        <t-input-number v-model="localConfig.similar_reports_threshold" :min="0.01" :max="1" :step="0.01" :decimal-places="2" :aria-label="t('retrievalSettings.similarReportsThresholdLabel')" @change="handleParamChange" />
-      </div>
-      <div class="setting-item">
-        <div class="setting-label-row"><span>{{ t('retrievalSettings.similarReportsWindowDaysLabel') }}</span></div>
-        <t-input-number v-model="localConfig.similar_reports_window_days" :min="1" :step="1" :decimal-places="0" :aria-label="t('retrievalSettings.similarReportsWindowDaysLabel')" @change="handleParamChange" />
-        <p class="setting-desc">{{ t('retrievalSettings.similarReportsHint') }}</p>
-      </div>
     </div>
   </div>
 </template>
@@ -120,8 +111,6 @@ const defaultConfig: RetrievalConfig = {
   keyword_threshold: 0.3,
   rerank_top_k: 10,
   rerank_threshold: 0.2,
-  similar_reports_threshold: 0.85,
-  similar_reports_window_days: 3,
   rrf_image_weight: 0.2,
 }
 
@@ -145,8 +134,6 @@ const loadConfig = async () => {
         keyword_threshold: cfg.keyword_threshold || defaultConfig.keyword_threshold,
         rerank_top_k: cfg.rerank_top_k || defaultConfig.rerank_top_k,
         rerank_threshold: cfg.rerank_threshold ?? defaultConfig.rerank_threshold,
-        similar_reports_threshold: cfg.similar_reports_threshold > 0 && cfg.similar_reports_threshold <= 1 ? cfg.similar_reports_threshold : defaultConfig.similar_reports_threshold,
-        similar_reports_window_days: cfg.similar_reports_window_days > 0 ? cfg.similar_reports_window_days : defaultConfig.similar_reports_window_days,
       })
       initialConfig = { ...localConfig }
     }

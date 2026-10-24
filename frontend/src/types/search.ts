@@ -1,5 +1,5 @@
 import type { EntityType } from '@/api/entity-types'
-import type { ContentType, EntryTopic, StructuredSummary } from './entryClassification'
+import type { StructuredSummary } from './entryClassification'
 import type { Acquisition } from './ingest'
 
 export const SEARCH_SOURCES = ['article', 'mine', 'report'] as const
@@ -19,13 +19,10 @@ export interface SearchEntry {
   title: string
   source: SearchSource
   published_at: string | null
-  content_type: ContentType | string
   summary: StructuredSummary | null
   entities: SearchEntity[]
-  topics: EntryTopic[]
   snippets: SearchSnippet[]
   score: number
-  similar_reports: SearchEntry[]
   vault_path: string
   original_url: string
   starred?: boolean
@@ -34,15 +31,11 @@ export interface SearchEntry {
   acquisition?: Acquisition | ''
 }
 export interface SearchFilters {
-  content_types: string[]
-  entity_ids: string[]
-  topic_ids: string[]
   published_from: string
   published_to: string
-  collapse_similar: boolean
   limit: number
   starred?: boolean
 }
 export interface SearchRequest extends Partial<SearchFilters> { query: string; libraries?: string[] }
 export interface SearchData { vector_unavailable?: boolean; rerank_status?: string; results: SearchEntry[]; excluded_missing_published_at: number }
-export interface SearchOptions { content_types?: string[]; entities: SearchEntity[]; topics: EntryTopic[] }
+export interface SearchOptions { entities: SearchEntity[] }

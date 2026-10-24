@@ -50,6 +50,29 @@ func seedCurrentNames(t *testing.T, db *gorm.DB) {
 		`UPDATE maintenance_state SET backup_at='2026-10-01T12:00:00Z',backup_status='success',backup_path='/old-machine/backup',backup_size_bytes=1234,backup_error='',drill_at='2026-10-02T12:00:00Z',drill_status='failed',drill_error='retained historical failure' WHERE id=true`,
 	}
 	for _, statement := range statements {
+		if !db.Migrator().HasTable("topics") {
+			if strings.Contains(statement, "INSERT INTO topics(") ||
+				strings.Contains(statement, "INSERT INTO entry_topics(") {
+				continue
+			}
+			statement = strings.ReplaceAll(
+				statement,
+				"title,content_type,content_type_corrected,source_unverified",
+				"title,source_unverified",
+			)
+			statement = strings.ReplaceAll(
+				statement,
+				"'Pending source','research',false,false",
+				"'Pending source',false",
+			)
+			statement = strings.ReplaceAll(
+				statement,
+				"'Research article','research',true,true",
+				"'Research article',true",
+			)
+			statement = strings.ReplaceAll(statement, ",(1,'topic','topic')", "")
+		}
+
 		if !db.Migrator().HasTable("task_pending_ops") {
 			statement = strings.ReplaceAll(statement, "task_pending_ops", "task_jobs")
 		}
@@ -60,8 +83,8 @@ func seedCurrentNames(t *testing.T, db *gorm.DB) {
 func TestClassificationCoversEveryTableColumnAndRejectsNewColumns(t *testing.T) {
 	db := pgtest.Open(t)
 	require.NoError(t, ValidateClassification(context.Background(), db))
-	require.NoError(t, db.Exec("ALTER TABLE public.topics ADD COLUMN accidental_new_field text").Error)
-	require.ErrorContains(t, ValidateClassification(context.Background(), db), "topics.accidental_new_field")
+	require.NoError(t, db.Exec("ALTER TABLE public.entities ADD COLUMN accidental_new_field text").Error)
+	require.ErrorContains(t, ValidateClassification(context.Background(), db), "entities.accidental_new_field")
 }
 
 func TestReplicaPreservesJSONLiteralNullDistinctFromSQLNull(t *testing.T) {
@@ -124,8 +147,11 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
 	seed(t, source)
 	root := t.TempDir()
 	uploads := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(uploads, "1/pending"), 0700))
-	require.NoError(t, os.WriteFile(filepath.Join(uploads, "1/pending/raw.txt"), []byte("Original review attachment"), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Join(uploads, "1/pending"), 0o700))
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(uploads, "1/pending/raw.txt"), []byte("Original review attachment"), 0o600),
+	)
 	snapshot, err := Capture(ctx, source)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, uploads, snapshot))
@@ -173,8 +199,8 @@ func TestReplicaTamperingStopsLoadAndVerify(t *testing.T) {
 	snapshot, err := Capture(context.Background(), db)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, "", snapshot))
-	path := filepath.Join(root, ".reliquary/data/topics.json")
-	require.NoError(t, os.WriteFile(path, []byte("[]\n"), 0600))
+	path := filepath.Join(root, ".reliquary/data/entities.json")
+	require.NoError(t, os.WriteFile(path, []byte("[]\n"), 0o600))
 	_, err = Load(root)
 	require.ErrorContains(t, err, "checksum mismatch")
 	result, err := VerifyReplica(context.Background(), db, root, "", false)
@@ -273,15 +299,21 @@ func TestReplicaAtomicDebouncedChangesAndAppendOnlyLogs(t *testing.T) {
 	writer := NewWriter(db, root, "", 120*time.Millisecond)
 	t.Cleanup(func() { require.NoError(t, writer.Close()) })
 	require.NoError(t, writer.Flush(context.Background()))
-	topicPath := filepath.Join(root, ".reliquary/data/topics.json")
-	previousTopic := mustRead(t, topicPath)
-	require.NoError(t, db.Exec("UPDATE topics SET description=? WHERE id='topic'", strings.Repeat("changed", 8)).Error)
+	entityPath := filepath.Join(root, ".reliquary/data/entities.json")
+	previousEntity := mustRead(t, entityPath)
+	require.NoError(
+		t,
+		db.Exec(
+			"UPDATE entities SET description=? WHERE id='entity-a'",
+			strings.Repeat("changed", 8),
+		).Error,
+	)
 	for i := 0; i < 20; i++ {
 		writer.Schedule()
 	}
-	require.Equal(t, previousTopic, mustRead(t, topicPath), "trailing debounce must defer changes")
+	require.Equal(t, previousEntity, mustRead(t, entityPath), "trailing debounce must defer changes")
 	require.Eventually(t, func() bool {
-		data, _ := os.ReadFile(filepath.Join(root, ".reliquary/data/topics.json"))
+		data, _ := os.ReadFile(filepath.Join(root, ".reliquary/data/entities.json"))
 		return bytes.Contains(data, []byte(strings.Repeat("changed", 8)))
 	}, 5*time.Second, 25*time.Millisecond)
 	require.NoError(t, writer.Start())
@@ -291,7 +323,19 @@ func TestReplicaAtomicDebouncedChangesAndAppendOnlyLogs(t *testing.T) {
 	oldInfo, err := os.Stat(logPath)
 	require.NoError(t, err)
 	// Each class changes through raw SQL, exercising the periodic fallback too.
-	for _, statement := range []string{`UPDATE entities SET description='new description' WHERE id='entity-a'`, `UPDATE entity_aliases SET alias='New Alias' WHERE id='alias'`, `UPDATE entity_merge_records SET actor='reviewed owner' WHERE id='merge'`, `UPDATE entry_topics SET source='model' WHERE topic_id='topic'`, `UPDATE follow_feed_states SET last_viewed_at=now()`, `UPDATE entries SET content_type_corrected=false WHERE id='article'`, `UPDATE entries SET metadata=jsonb_set(metadata,'{intake,reason}','"new reason"') WHERE id='pending'`, `UPDATE entry_repost_sources SET author='new author'`, `UPDATE models SET display_name='renamed model'`, `INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value) VALUES('op-2',1,'owner','star','article','{}','{"starred":true}')`} {
+	for _, statement := range []string{
+		`UPDATE entities SET description='new description' WHERE id='entity-a'`,
+		`UPDATE entity_aliases SET alias='New Alias' WHERE id='alias'`,
+		`UPDATE entity_merge_records SET actor='reviewed owner' WHERE id='merge'`,
+		`UPDATE entry_entities SET created_at=now() WHERE entity_id='entity-a'`,
+		`UPDATE follow_feed_states SET last_viewed_at=now()`,
+		`UPDATE entries SET source_unverified=false WHERE id='article'`,
+		`UPDATE entries SET metadata=jsonb_set(metadata,'{intake,reason}','"new reason"') WHERE id='pending'`,
+		`UPDATE entry_repost_sources SET author='new author'`,
+		`UPDATE models SET display_name='renamed model'`,
+		`INSERT INTO operation_logs(id,space_id,actor,operation_type,object_id,before_value,after_value)
+VALUES('op-2',1,'owner','star','article','{}','{"starred":true}')`,
+	} {
 		require.NoError(t, db.Exec(statement).Error)
 	}
 	require.Eventually(t, func() bool {

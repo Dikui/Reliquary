@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reliquary/internal/config"
@@ -20,10 +19,8 @@ type extractedImage struct {
 	Description string `json:"description"`
 }
 
-func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
-	catalog, _ := json.Marshal(l.ContentTypes)
-	prompt := articleProcessingPrompt() + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + `
-先从 content_types 的 enabled=true 项选择 content_type，拿不准或清单外选其他。有其他时使用“其他”，否则使用 other。`
+func libraryProcessingPrompt(l *types.Library, _ *types.Entry) string {
+	prompt := articleProcessingPrompt() + "\n所属库：" + l.Name
 	switch {
 	case l.SystemRole == "media":
 		prompt += "\n" + config.Prompt("library_media")
@@ -34,29 +31,10 @@ func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	default:
 		prompt += "\n" + config.Prompt("library_institutional")
 	}
-	if k.ContentTypeCorrected {
-		name, _ := json.Marshal(k.ContentType)
-		prompt += "\n用户已经修正 content_type=" + string(name) + "，必须使用该类型，不再重新分类。"
-	}
 	if !l.ExtractsEntities() {
 		return prompt + "\n本库不抽取实体或实体短介绍。entities 必须返回空数组。"
 	}
 	return prompt + "\n" + articleEntityProcessingPrompt()
-}
-
-func libraryContentType(l *types.Library, value string) string {
-	value = strings.TrimSpace(value)
-	for _, row := range l.ContentTypes {
-		if row.Enabled && row.Name == value {
-			return value
-		}
-	}
-	for _, row := range l.ContentTypes {
-		if row.Enabled && row.Name == "其他" {
-			return "其他"
-		}
-	}
-	return types.ContentTypeOther
 }
 
 func bodyRangeLocations(body string, start, end int, mapping string) []types.SourceLocation {
@@ -116,11 +94,6 @@ func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types
 	if !l.ExtractsEntities() {
 		result.Entities = []articleProcessingEntity{}
 	}
-	ct := libraryContentType(l, *result.ContentType)
-	if k.ContentTypeCorrected {
-		ct = libraryContentType(l, k.ContentType)
-	}
-	result.ContentType = &ct
 	runes := []rune(body)
 	_, blocks := articleEvidenceBody(string(runes[p.Start:p.End]))
 	accepted := []articleProcessingEntity{}
@@ -161,14 +134,13 @@ func (s *entryService) saveProcessingOutput(
 	result *articleProcessingResult,
 ) error {
 	out := &types.EntryProcessingOutput{
-		EntryID:     k.ID,
-		SpaceID:     k.SpaceID,
-		LibraryID:   k.LibraryID,
-		RunID:       result.RunID,
-		BodyHash:    fmt.Sprintf("%x", sha256.Sum256([]byte(body))),
-		ContentType: k.ContentType,
-		Images:      result.Images,
-		UpdatedAt:   time.Now(),
+		EntryID:   k.ID,
+		SpaceID:   k.SpaceID,
+		LibraryID: k.LibraryID,
+		RunID:     result.RunID,
+		BodyHash:  fmt.Sprintf("%x", sha256.Sum256([]byte(body))),
+		Images:    result.Images,
+		UpdatedAt: time.Now(),
 	}
 	if out.Images == nil {
 		out.Images = []types.ProcessingImage{}

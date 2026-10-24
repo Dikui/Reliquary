@@ -5,15 +5,15 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reliquary/internal/config"
+	"reliquary/internal/testutil/pgtest"
+	"reliquary/internal/types"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"reliquary/internal/config"
-	"reliquary/internal/testutil/pgtest"
-	"reliquary/internal/types"
 )
 
 func TestIKB08MergedVaultPositionsContentUpdateAndRestore(t *testing.T) {
@@ -24,7 +24,17 @@ func TestIKB08MergedVaultPositionsContentUpdateAndRestore(t *testing.T) {
 	v, err := NewVaultService(h.db, &config.Config{Vault: &config.VaultConfig{Root: h.root, HeaderDebounce: time.Millisecond}})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, v.Close()) })
-	entry := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: library.ID, Type: types.EntryTypeManual, SourceKind: "article", Title: "合并后定位 😀", ContentType: "other", ParseStatus: types.ParseStatusCompleted, Acquisition: "verbatim", EnableStatus: "enabled"}
+	entry := &types.Entry{
+		ID:           uuid.NewString(),
+		SpaceID:      1,
+		LibraryID:    library.ID,
+		Type:         types.EntryTypeManual,
+		SourceKind:   "article",
+		Title:        "合并后定位 😀",
+		ParseStatus:  types.ParseStatusCompleted,
+		Acquisition:  "verbatim",
+		EnableStatus: "enabled",
+	}
 	source := "https://example.org/long-original-image.png"
 	body := "# 中文 😀\n\n首段 English。\n\n## 表格\n\n|列|值|\n|---|---|\n|一|two|\n\n- 列表一\n- item two\n\n```text\n# not a heading\n\ncode\n```\n\n![图](" + source + ")\n\n最后一段。"
 	require.NoError(t, h.db.Create(entry).Error)

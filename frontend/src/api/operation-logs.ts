@@ -13,12 +13,7 @@ export const OPERATION_TYPES = [
   'review_admit_unverified',
   'star',
   'unstar',
-  'correct_content_type',
-  'correct_topics',
   'merge_entities',
-  'create_topic',
-  'update_topic',
-  'delete_topic',
   'follow',
   'unfollow',
 ] as const

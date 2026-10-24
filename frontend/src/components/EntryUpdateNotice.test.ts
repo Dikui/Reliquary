@@ -33,7 +33,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const notice={__esModule:true,default:loadComponent(new URL('./EntryUpdateNotice.vue',import.meta.url),modules)}
     modules['@/components/EntryUpdateNotice.vue']=notice;modules['./EntryUpdateNotice.vue']=notice
     const component=loadComponent(url,modules)
-    const old={id:'old',entry_id:'old',title:'Old source',file_name:'Old source',parse_status:'completed',source:'mine',source_kind:'mine',has_update:true,latest_entry_id:'latest',entities:[],topics:[],snippets:[],published_at:null,score:1}
+    const old={id:'old',entry_id:'old',title:'Old source',file_name:'Old source',parse_status:'completed',source:'mine',source_kind:'mine',has_update:true,latest_entry_id:'latest',entities:[],snippets:[],published_at:null,score:1}
     const props=kind==='Search'?{article:old,query:''}:{items:[old],selectedIds:new Set(),batchMode:false,traceAvailableById:{},traceVisibleIds:{}}
     const app=renderer.createApp(component,props);app.use(i18n);registerPrimitives(app)
     const errors:unknown[]=[];app.config.errorHandler=e=>errors.push(e)

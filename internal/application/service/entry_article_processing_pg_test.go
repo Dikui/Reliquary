@@ -45,7 +45,7 @@ func (m *correctedProcessingChat) Chat(ctx context.Context, messages []chat.Mess
 	if stage == "intake_review" {
 		return &types.ChatResponse{Content: "```json\n" + reviewFixtureContent(`{"approved":true,"reason":"Original measurements"}`, messages) + "\n```"}, nil
 	}
-	result, err := parseArticleProcessingResult(validProcessingFixture("event"))
+	result, err := parseArticleProcessingResult(validProcessingFixture())
 	if err != nil {
 		return nil, err
 	}
@@ -167,12 +167,8 @@ type articleProcessingHarness struct {
 func newArticleProcessingHarness(t *testing.T, vision bool) *articleProcessingHarness {
 	t.Helper()
 	h := newRetainedIntakeHarness(t)
-	for i, name := range []string{"event", "opinion", "research", "tutorial", "case", "reference", "other"} {
-		row := types.LibraryContentType{LibraryID: h.library.ID, Name: name, Position: i, Enabled: true}
-		require.NoError(t, h.db.Create(&row).Error)
-		h.library.ContentTypes = append(h.library.ContentTypes, row)
-	}
-	model := &articleProcessingChat{output: validProcessingFixture("event")}
+
+	model := &articleProcessingChat{output: validProcessingFixture()}
 	metadata := &types.Model{ID: "local-fixture", SpaceID: h.library.SpaceID, Name: "Processing fixture", Type: types.ModelTypeGeneration, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{SupportsVision: vision, ContextWindow: 32768}}
 	require.NoError(t, h.db.Create(metadata).Error)
 	require.NoError(t, h.db.Create(&types.Model{ID: "embedding", SpaceID: h.library.SpaceID, Name: "Vector fixture", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
@@ -215,10 +211,10 @@ func (h *articleProcessingHarness) upload(t *testing.T, title, body string) *typ
 	return h.article(t, article.ID)
 }
 
-func articleProcessingOutput(t *testing.T, contentType string, entities []types.EntityCandidate, topics []string) string {
+func articleProcessingOutput(t *testing.T, entities []types.EntityCandidate) string {
 	t.Helper()
 	var result map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(validProcessingFixture(contentType)), &result))
+	require.NoError(t, json.Unmarshal([]byte(validProcessingFixture()), &result))
 	values := make([]map[string]interface{}, 0, len(entities))
 	for _, e := range entities {
 		description := e.Description
@@ -228,7 +224,6 @@ func articleProcessingOutput(t *testing.T, contentType string, entities []types.
 		values = append(values, map[string]interface{}{"name": e.Name, "type": e.EntityType, "aliases": e.Aliases, "description": description, "relevance": "central", "evidence_ids": []int{1}})
 	}
 	result["entities"] = values
-	result["topics"] = topics
 	raw, err := json.Marshal(result)
 	require.NoError(t, err)
 	return string(raw)
@@ -261,7 +256,7 @@ func TestArticleProcessingGeneratesMissingTitleWithSummary(t *testing.T) {
 }
 
 func TestArticleProcessingRejectsMultilineGeneratedTitle(t *testing.T) {
-	raw := strings.Replace(validProcessingFixture("event"), "Acme announces a widget", `Acme\nannounces a widget`, 1)
+	raw := strings.Replace(validProcessingFixture(), "Acme announces a widget", `Acme\nannounces a widget`, 1)
 	_, err := parseArticleProcessingResult(raw)
 	require.ErrorContains(t, err, "title must be a single line")
 }
@@ -270,15 +265,16 @@ func TestAllTemplatesProcessEntities(t *testing.T) {
 	for _, library := range []string{"personal", "references", "ai-output"} {
 		t.Run(library, func(t *testing.T) {
 			h, vault := newIngestHarness(t)
-			topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Deployment notes", Description: "Acme and Beta deployment measurements"})
-			require.NoError(t, err)
-			kind := "方案"
-			if library == "references" {
-				kind = "论文"
-			} else if library == "ai-output" {
-				kind = "other"
-			}
-			output, err := parseArticleProcessingResult(articleProcessingOutput(t, kind, []types.EntityCandidate{{Name: "Acme", EntityType: "company", Description: "A partner of Beta."}, {Name: "Beta", EntityType: "company", Description: "A partner of Acme."}}, []string{topic.ID}))
+			output, err := parseArticleProcessingResult(
+				articleProcessingOutput(
+					t,
+
+					[]types.EntityCandidate{
+						{Name: "Acme", EntityType: "company", Description: "A partner of Beta."},
+						{Name: "Beta", EntityType: "company", Description: "A partner of Acme."},
+					},
+				),
+			)
 			require.NoError(t, err)
 			raw, err := json.Marshal(output)
 			require.NoError(t, err)
@@ -298,9 +294,6 @@ func TestAllTemplatesProcessEntities(t *testing.T) {
 			require.Equal(t, "Acme announces a widget", article.Title)
 			require.NotNil(t, article.StructuredSummary)
 			require.Empty(t, article.Entities)
-			var topicCount int64
-			require.NoError(t, h.db.Model(&types.EntryTopic{}).Where("entry_id=? AND topic_id=?", article.ID, topic.ID).Count(&topicCount).Error)
-			require.EqualValues(t, 1, topicCount)
 			for _, table := range []string{"entities", "entry_entities"} {
 				var count int64
 				require.NoError(t, h.db.Table(table).Count(&count).Error)
@@ -327,26 +320,28 @@ func TestAllTemplatesProcessEntities(t *testing.T) {
 
 func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t *testing.T) {
 	h := newArticleProcessingHarness(t, true)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Product news", Description: "Original product announcements"})
-	require.NoError(t, err)
-	secondTopic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Research", Description: "Experimental results"})
-	require.NoError(t, err)
-	h.processor.output = articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "Acme", EntityType: "company", Aliases: []string{"Acme Inc"}}}, []string{topic.ID, "missing-topic"})
-	body := "# First announcement\n\nAcme released a widget with original measurements.\n\n![chart](" + articleImageDataURI(t, 10) + ")"
+	h.processor.output = articleProcessingOutput(
+		t,
+
+		[]types.EntityCandidate{{Name: "Acme", EntityType: "company", Aliases: []string{"Acme Inc"}}},
+	)
+	body := "# First announcement\n\nAcme released a widget with original measureme" +
+		"nts.\n\n![chart](" + articleImageDataURI(
+		t,
+		10,
+	) + ")"
 	article := h.upload(t, "first-event", body)
 	require.Equal(t, "first-event.md", article.Title, "processing preserves the supplied title")
-	require.Equal(t, "event", article.ContentType)
+
 	require.NotNil(t, article.StructuredSummary)
 	require.Len(t, article.StructuredSummary.Points, 3)
 	require.NotEmpty(t, article.StructuredSummary.KeyTerms)
 	require.Contains(t, article.Description, article.StructuredSummary.Overview)
-	var chunks, links, topicLinks int64
+	var chunks, links int64
 	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id=?", article.ID).Count(&chunks).Error)
 	require.Positive(t, chunks)
 	require.NoError(t, h.db.Model(&types.EntryEntity{}).Where("entry_id=?", article.ID).Count(&links).Error)
 	require.EqualValues(t, 1, links)
-	require.NoError(t, h.db.Model(&types.EntryTopic{}).Where("entry_id=?", article.ID).Count(&topicLinks).Error)
-	require.EqualValues(t, 1, topicLinks)
 	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.VectorRetrieverType, LibraryIDs: []string{h.library.ID}, Embedding: []float32{1, 0, 0}, TopK: 10, Threshold: .9}})
 	require.NoError(t, err)
 	require.NotEmpty(t, hits)
@@ -376,7 +371,7 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	require.NoError(t, err)
 	require.Len(t, firstEntities, 1)
 	require.NotEmpty(t, firstEntities[0].Description)
-	h.processor.output = articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "Acme", EntityType: "company"}}, []string{})
+	h.processor.output = articleProcessingOutput(t, []types.EntityCandidate{{Name: "Acme", EntityType: "company"}})
 	second := h.upload(t, "second-event", "# Second announcement\n\nAcme opened a new office on a different continent. This is an original report of the expansion and its date.")
 	var entityLinks []types.EntryEntity
 	require.NoError(t, h.db.Where("entry_id IN ?", []string{article.ID, second.ID}).Find(&entityLinks).Error)
@@ -384,9 +379,6 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	require.Equal(t, entityLinks[0].EntityID, entityLinks[1].EntityID)
 	request := h.processor.requests[0][1]
 	require.Len(t, request.Images, 1)
-	require.Contains(t, request.Content, topic.ID)
-	require.Contains(t, request.Content, topic.Description)
-	require.Contains(t, request.Content, secondTopic.ID)
 	require.Len(t, h.processor.requests, 2, "one processing call per approved article")
 }
 

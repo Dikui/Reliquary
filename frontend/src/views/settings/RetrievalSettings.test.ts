@@ -48,20 +48,18 @@ async function scenario(locale: keyof typeof messages, stored: object, action: (
 }
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: retrieval settings preserve similarity and fusion parameters when editing an existing setting`, async () => {
-    const stored = { embedding_top_k: 50, vector_threshold: 0.15, keyword_threshold: 0.3, rerank_top_k: 10, rerank_threshold: 0.2, similar_reports_threshold: 0.92, similar_reports_window_days: 7, rrf_k: 80, rrf_vector_weight: 0.6, rrf_keyword_weight: 0.4, rrf_image_weight: 0.15 }
+    const stored = { embedding_top_k: 50, vector_threshold: 0.15, keyword_threshold: 0.3, rerank_top_k: 10, rerank_threshold: 0.2,   rrf_k: 80, rrf_vector_weight: 0.6, rrf_keyword_weight: 0.4, rrf_image_weight: 0.15 }
     const result = await scenario(locale, stored, async (state, requests) => {
-      assert.equal(state.localConfig.similar_reports_threshold, 0.92); assert.equal(state.localConfig.similar_reports_window_days, 7)
+
       assert.equal(state.localConfig.rrf_image_weight, 0.15)
       state.localConfig.embedding_top_k = 60
       await state.saveConfig()
       assert.deepEqual(requests, [{ ...stored, embedding_top_k: 60 }])
     })
-    assert.ok(result.html.includes(messages[locale].retrievalSettings.similarReportsThresholdLabel))
-    assert.ok(result.html.includes(messages[locale].retrievalSettings.similarReportsWindowDaysLabel))
     assert.ok(result.html.includes(messages[locale].retrievalSettings.imageWeightLabel))
   })
   for (const enabled of [true, false]) test(`${locale}: editing image weight returns every loaded field including image vector ${enabled}`, async () => {
-    const stored = { image_vector_enabled: enabled, embedding_top_k: 50, vector_threshold: 0.15, keyword_threshold: 0.3, rerank_top_k: 10, rerank_threshold: 0.2, similar_reports_threshold: 0.92, similar_reports_window_days: 7, rrf_k: 80, rrf_vector_weight: 0.6, rrf_keyword_weight: 0.4, rrf_image_weight: 0.25, future_option: { retained: true } }
+    const stored = { image_vector_enabled: enabled, embedding_top_k: 50, vector_threshold: 0.15, keyword_threshold: 0.3, rerank_top_k: 10, rerank_threshold: 0.2,   rrf_k: 80, rrf_vector_weight: 0.6, rrf_keyword_weight: 0.4, rrf_image_weight: 0.25, future_option: { retained: true } }
     await scenario(locale, stored, async (state, requests) => {
       state.localConfig.rrf_image_weight = 0.3
       await state.saveConfig()
@@ -70,12 +68,12 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: similarity settings save changes and preserve zero as the server default image weight`, async () => {
     await scenario(locale, {}, async (state, requests) => {
-      assert.equal(state.localConfig.similar_reports_threshold, 0.85); assert.equal(state.localConfig.similar_reports_window_days, 3)
+
       assert.equal(state.localConfig.rrf_image_weight, 0.2)
       state.localConfig.rrf_image_weight = 0
-      state.localConfig.similar_reports_threshold = 0.9; state.localConfig.similar_reports_window_days = 5
+
       await state.saveConfig()
-      assert.equal(requests[0].similar_reports_threshold, 0.9); assert.equal(requests[0].similar_reports_window_days, 5)
+
       assert.equal(requests[0].rrf_image_weight, 0)
     })
   })

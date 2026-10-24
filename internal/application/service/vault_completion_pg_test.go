@@ -8,7 +8,7 @@ import (
 
 func TestVaultCompletedTutorialPreservesFullBody(t *testing.T) {
 	h, v := newVaultArticleHarness(t)
-	h.processor.output = validProcessingFixture("tutorial")
+	h.processor.output = validProcessingFixture()
 	k := h.upload(t, "Tutorial stays complete", "# Tutorial\n\nOriginal source remains complete.")
 	require.NoError(t, v.WriteArticle(h.ctx, k, "# Tutorial\n\nOriginal source remains complete.", nil))
 	_, _, body := readVaultArticle(t, v, k)

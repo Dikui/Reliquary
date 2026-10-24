@@ -110,7 +110,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const view = await mount(locale, {
       entryIds: ['entry-2', 'entry-1'],
       entities: [{ id: 'entity-1', name: 'Atlas Lab' }],
-      topics: [{ id: 'topic-1', name: 'Calibration' }],
+
       onOpenEntry: (id: string) => openedEntries.push(id),
       onOpenEntity: (id: string) => openedEntities.push(id),
       onOpenTopic: (id: string) => openedTopics.push(id),
@@ -133,10 +133,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       links[0]!.props!.onClick()
       const tags = view.nodes().filter(value => value.tag === 'button' && hasClass(value, 'association-tag'))
       tags[0]!.props!.onClick()
-      tags[1]!.props!.onClick()
       assert.deepEqual(openedEntries, ['entry-2'])
       assert.deepEqual(openedEntities, ['entity-1'])
-      assert.deepEqual(openedTopics, ['topic-1'])
+      assert.deepEqual(openedTopics, [])
     } finally {
       view.app.unmount()
     }
@@ -145,7 +144,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 
 test('an empty report association list renders no section and makes no request', async () => {
   let calls = 0
-  const view = await mount('zh-CN', { entryIds: [], entities: [], topics: [] }, async () => {
+  const view = await mount('zh-CN', { entryIds: [], entities: [], }, async () => {
     calls++
     return { success: true, data: [] }
   })
