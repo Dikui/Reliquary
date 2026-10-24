@@ -273,6 +273,8 @@ func (library *Library) BeforeCreate(_ *gorm.DB) error {
 // IngestFields describes shared admission fields in the public catalog.
 func (library *Library) IngestFields() map[string]string {
 	fields := map[string]string{"library": "Required library ID or directory"}
+	fields["source_id"] = "Optional stable source ID, at most 2048 Unicode code points; requires source_revision"
+	fields["source_revision"] = "Nonnegative int64, required with source_id; only strictly newer revisions are accepted"
 	fields["source_ref"] = "Optional source identity, at most 2048 Unicode code points; changed content replaces the existing entry"
 	fields["identifier"] = "Optional scheme:value, at most 2048 Unicode code points; scheme and DOI value are lowercased"
 	fields["acquisition"] = "Optional verbatim, extracted or model_written; omitted means unknown"

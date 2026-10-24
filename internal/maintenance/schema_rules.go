@@ -79,6 +79,11 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 				copy["model_calls"] = rule
 			}
 		}
+		if migration.Version < 35 {
+			rule := copy["entries"]
+			rule.Sidecar = strings.TrimSpace(strings.ReplaceAll(rule.Sidecar, "source_id source_revision ", ""))
+			copy["entries"] = rule
+		}
 		if migration.Version < 24 {
 			delete(copy, "model_call_contents")
 			delete(copy, "model_call_content_deletions")

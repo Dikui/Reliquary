@@ -119,6 +119,8 @@ type EntryListFilter struct {
 type Entry struct {
 	ImageDescriptions []ProcessingImage `json:"image_descriptions,omitempty" gorm:"-"`
 
+	SourceID       string `json:"source_id,omitempty" gorm:"not null;default:''"`
+	SourceRevision *int64 `json:"source_revision,omitempty"`
 	SourceRef      string `json:"source_ref,omitempty" gorm:"not null;default:''"`
 	SourceBodyHash string `json:"-" gorm:"not null;default:''"`
 	Identifier     string `json:"identifier,omitempty" gorm:"not null;default:''"`

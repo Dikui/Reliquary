@@ -94,6 +94,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	tags, _ := json.Marshal(agentTags)
 	entry := &types.Entry{
 		ID: uuid.NewString(), SpaceID: spaceID, LibraryID: library.ID,
+		SourceID: request.SourceID, SourceRevision: request.SourceRevision,
 		SourceRef: request.SourceRef, Identifier: request.Identifier,
 		Type: types.EntryTypeManual, SourceKind: kind, Source: strings.TrimSpace(request.URL), Channel: types.ChannelAPI,
 		Title: title, FileName: sanitizeManualDownloadFilename(title), FileType: types.EntryTypeManual,
@@ -180,6 +181,7 @@ func ingestResult(article *types.Entry, status, message, reason, id string) *typ
 		result.EntryID = article.ID
 		result.SourceUnverified = article.SourceUnverified
 		result.LibraryID, result.SourceRef, result.Identifier = article.LibraryID, article.SourceRef, article.Identifier
+		result.SourceID, result.SourceRevision = article.SourceID, article.SourceRevision
 		result.HasUpdate, result.LatestEntryID = article.HasUpdate, article.LatestEntryID
 		if article.SourceRef != "" && result.LatestEntryID == "" {
 			result.LatestEntryID = article.ID

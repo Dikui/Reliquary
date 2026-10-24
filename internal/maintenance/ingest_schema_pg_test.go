@@ -67,3 +67,41 @@ func TestIngestContractMigrationUpDownUpAndPreservation(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, CompareManifest(beforeManifest, manifest))
 }
+
+func TestSourceRevisionMigrationPreservesEntries(t *testing.T) {
+	db := pgtest.Open(t)
+	ctx := context.Background()
+	directory, err := filepath.Abs("../../migrations/versioned")
+	require.NoError(t, err)
+	migration, err := migrate.New("file://"+directory, db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, migration.Migrate(34))
+	seed(t, db)
+	before, err := Capture(ctx, db)
+	require.NoError(t, err)
+	root := t.TempDir()
+	require.NoError(t, WriteSnapshot(root, "", before))
+	oldManifest, err := BuildManifest(ctx, db, root, "")
+	require.NoError(t, err)
+	require.NoError(t, migration.Migrate(35))
+	after, err := Capture(ctx, db)
+	require.NoError(t, err)
+	require.NoError(t, WriteSnapshot(root, "", after))
+	newManifest, err := BuildManifest(ctx, db, root, "")
+	require.NoError(t, err)
+	require.Empty(t, CompareManifest(oldManifest, newManifest))
+	projectSourceRevisionSnapshot(before)
+	require.Equal(t, before.Tables["entries"], after.Tables["entries"])
+	for _, table := range []string{"libraries", "spaces", "operation_logs"} {
+		require.Equal(t, before.Tables[table], after.Tables[table], table)
+	}
+	require.NoError(t, db.Exec(
+		"UPDATE entries SET source_id='revision-source',source_revision=7 WHERE id='pending'",
+	).Error)
+	require.NoError(t, migration.Migrate(34))
+	require.NoError(t, migration.Migrate(35))
+	reset, err := Capture(ctx, db)
+	require.NoError(t, err)
+	require.Equal(t, after.Tables["entries"], reset.Tables["entries"])
+}

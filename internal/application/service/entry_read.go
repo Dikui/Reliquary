@@ -14,6 +14,8 @@ import (
 type EntryReadResult struct {
 	LibraryID        string             `json:"library_id"`
 	LibraryName      string             `json:"library_name"`
+	SourceID         string             `json:"source_id,omitempty"`
+	SourceRevision   *int64             `json:"source_revision,omitempty"`
 	SourceRef        string             `json:"source_ref,omitempty"`
 	Identifier       string             `json:"identifier,omitempty"`
 	HasUpdate        bool               `json:"has_update"`
@@ -58,6 +60,8 @@ func (s *entryService) ReadEntry(ctx context.Context, id string, offset, length 
 	result := &EntryReadResult{
 		LibraryID:        entry.LibraryID,
 		LibraryName:      entry.LibraryName,
+		SourceID:         entry.SourceID,
+		SourceRevision:   entry.SourceRevision,
 		SourceRef:        entry.SourceRef,
 		Identifier:       entry.Identifier,
 		HasUpdate:        entry.HasUpdate,

@@ -11,6 +11,8 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `library` | 每项必填，库 ID 或英文目录名。不能用中文名称。缺少或不存在时提示调用 `list_libraries` |
 | `content` | 非空可读 Markdown，可为草稿、片段或摘要；纯链接与仅图片不接收。正文与串文、引用合计上限 5,000,000 Unicode 码点 |
 | `acquisition` | 可选，缺省表示未知；提供时为 `verbatim` 逐字原文、`extracted` 提取、`model_written` 模型整理 |
+| `source_id` | 可选稳定来源 ID，去首尾空白，最多 2048 Unicode 码点，不含 NUL；与 `source_revision` 成对提供 |
+| `source_revision` | 与 `source_id` 一起提供的非负 int64 整数，可从 0 开始；同库同来源只接受严格增加的修订号 |
 | `source_ref` | 所有模板接受。可选字符串，去首尾空白，最多 2048 Unicode 码点。同库内用于唯一定位来源 |
 | `identifier` | 所有模板接受。可选 `scheme:value`，最多 2048 Unicode 码点。scheme 小写、DOI value 小写；其他 value 保留大小写 |
 | `recovery_failure_id` | 可选接收故障编号，用于关联修复请求与结果；不参与正文、来源身份或去重 |
@@ -68,7 +70,11 @@ AI产出：
 
 入库只保留身份、格式、长度、图片与存储等技术校验。不逐条调用模型评价价值，不检查章节、文章完整度或最小篇幅；缺来源不进入常规待审。尚未明确的广告或无关内容排除规则不启用。已有 review_criteria 和来源证据配置不再作为新提交的准入门槛。
 
-同库内按 source_ref、规范化 identifier 或规范化 URL 定位来源。唯一匹配且正文、实际图片与提供的元数据未变时返回 exists，不重复处理；有变化则覆盖旧文，返回同一 ID 和 accepted，撤除旧派生数据并重新处理。不保存正文版本。标识匹配不同资料时报告定位冲突。无可靠来源标识时新建，即使正文相同；不同库独立处理。不做入口近似判重或自动归并转载。
+同库内按 source_id、source_ref、规范化 identifier 或规范化 URL 定位来源。唯一匹配且正文、实际图片与提供的元数据未变时返回 exists，不重复处理；有变化则覆盖旧文，返回同一 ID 和 accepted，撤除旧派生数据并重新处理。不保存正文版本。标识匹配不同资料时报告定位冲突。无可靠来源标识时新建，即使正文相同；不同库独立处理。不做入口近似判重或自动归并转载。
+
+提供 `source_id` 时，修订号小于或等于已保存值均返回 `status=stale_revision`、`reason=source_revision_not_newer`，并返回当前 `entry_id`、`source_id` 和 `source_revision`，不保存提交的正文、图片或元数据。新修订保留资料 ID；即使内容未变也推进修订号，返回 `exists`。同一个来源 ID 在不同库独立计数。已有资料可通过 source_ref、identifier 或 URL 定位后首次绑定来源 ID；已绑定的来源 ID 不允许替换为其他值。
+
+省略来源 ID 与修订号时，沿用原有 source_ref、identifier 和 URL 更新行为，没有修订顺序保护；若命中已有带修订号的资料，保留其来源 ID 与修订号。调用方若需要顺序保护，应在每次提交时都带上这两个字段。HTTP 资料详情与 MCP `get_entry` 均可读取已保存的两个字段。
 
 原有人工作出的拒收记录继续生效。已有来源未核实标记保留。任一已提交图片无效时整条回滚，已有正文不变。未提供的远程图片保留引用，不下载或生成缺图待办。
 
@@ -105,9 +111,9 @@ curl -X PUT "$RELIQUARY_URL/api/v1/entries/$ENTRY_ID/body" \
 
 ## 来源标识与结果
 
-source_ref、identifier 和规范化 URL 用于同库精确定位，具体见上文。新提交不再追加同来源的正文版本。既有 has_update、latest_entry_id 字段继续返回历史记录关系；不批量迁移旧记录。多个历史记录造成来源定位歧义时明确报错。
+source_id、source_ref、identifier 和规范化 URL 用于同库精确定位，具体见上文。新提交不再追加同来源的正文版本。既有 has_update、latest_entry_id 字段继续返回历史记录关系；不批量迁移旧记录。多个历史记录造成来源定位歧义时明确报错。
 
-逐项结果另含 `index`、`library_id`、`entry_id`、`status`、`message`、`reason`、`image_failures`。正常提交返回 `accepted`、`exists`、`discarded` 或 `invalid`；不生成常规 `pending_review`。无效项原因可包含：
+逐项结果另含 `index`、`library_id`、`entry_id`、`status`、`message`、`reason`、`image_failures`，带来源 ID 时另含 `source_id` 和 `source_revision`。正常提交返回 `accepted`、`exists`、`stale_revision`、`discarded` 或 `invalid`；不生成常规 `pending_review`。无效项原因可包含：
 
 | 错误 | 返回方式与信息 |
 | --- | --- |

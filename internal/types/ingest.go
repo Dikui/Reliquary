@@ -15,6 +15,7 @@ const (
 	MaxIngestBatchBytes         = 128 * 1024 * 1024
 	MaxIngestMCPBytes           = MaxIngestBatchBytes + 1024*1024
 	MaxIngestSourceRefRunes     = 2048
+	MaxIngestSourceIDRunes      = 2048
 	MaxIngestIdentifierRunes    = 2048
 )
 
@@ -24,6 +25,8 @@ type IngestRequest struct {
 	RecoveryFailureID  string             `json:"recovery_failure_id,omitempty"`
 	RawInput           json.RawMessage    `json:"-"`
 	Library            string             `json:"library"`
+	SourceID           string             `json:"source_id,omitempty"`
+	SourceRevision     *int64             `json:"source_revision,omitempty"`
 	SourceRef          string             `json:"source_ref,omitempty"`
 	Identifier         string             `json:"identifier,omitempty"`
 	SourceRefProvided  bool               `json:"-"`
@@ -84,6 +87,8 @@ type IngestResult struct {
 	LibraryName      string                     `json:"library_name"`
 	SourceUnverified bool                       `json:"source_unverified"`
 	LibraryID        string                     `json:"library_id"`
+	SourceID         string                     `json:"source_id,omitempty"`
+	SourceRevision   *int64                     `json:"source_revision,omitempty"`
 	SourceRef        string                     `json:"source_ref,omitempty"`
 	Identifier       string                     `json:"identifier,omitempty"`
 	HasUpdate        bool                       `json:"has_update"`

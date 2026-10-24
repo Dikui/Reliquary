@@ -438,7 +438,8 @@ func addIngestTool(server *mcp.Server, collector interfaces.IngestService) {
 			Name:        "ingest",
 			InputSchema: ingestSchema(),
 			Description: "一次收录 1 到 50 条，逐项返回结果。每项 library 必填，接受库 ID 或英文目录名，可调用 list_libraries。各库" +
-				"均可传 source_ref、identifier；acquisition 可选。同库同来源内容变化时覆盖旧文，完全相同返回原 ID；无来源" +
+				"均可传 source_id 和 source_revision 保护修订顺序，旧修订或相同修订返回 stale_revision。" +
+				"也可传 source_ref、identifier；acquisition 可选。同库同来源内容变化时覆盖旧文，完全相同返回原 ID；无来源" +
 				"标识时正常新建。正文上限 5000000 Unicode 码点，单项 JSON 64 MiB，批量 JSON 128 MiB，单张图片 10" +
 				" MiB，内联图片总计 20 MiB。" + completeMaterialNotice + externalContentNotice,
 		},
@@ -490,12 +491,19 @@ func ingestSchema() map[string]any {
 	item := object(map[string]any{
 		"library":             text("必填，库 ID 或英文目录名；先调用 list_libraries"),
 		"recovery_failure_id": text("可选，关联修复的接收故障编号；不参与正文或去重"),
-		"source_ref":          text("可选来源标识，最多 2048 Unicode 码点；同来源有变化时覆盖旧文"),
-		"identifier":          text("可选 scheme:value 标识，最多 2048 Unicode 码点"),
-		"url":                 text("可选原文链接；同库同链接有变化时覆盖旧文"),
-		"content":             text("Markdown 正文全文，必填；调用方须先将原始资料转换成 Markdown"),
-		"acquisition":         enum("可选获取方式，省略表示未知", "verbatim", "extracted", "model_written"),
-		"title":               text("原文标题"), "author": text("原文明确署名的个人作者；不要用发布机构或转发账号替代，不推测未提供的署名"), "publisher": text("发布机构、媒体或平台账号，与个人作者分别填写"),
+		"source_id":           text("可选稳定来源 ID，最多 2048 Unicode 码点；须与 source_revision 一起提供"),
+		"source_revision": map[string]any{
+			"type": "integer", "minimum": 0,
+			"description": "同库同 source_id 单调递增的非负 int64；旧修订或相同修订返回 stale_revision",
+		},
+		"source_ref":   text("可选来源标识，最多 2048 Unicode 码点；同来源有变化时覆盖旧文"),
+		"identifier":   text("可选 scheme:value 标识，最多 2048 Unicode 码点"),
+		"url":          text("可选原文链接；同库同链接有变化时覆盖旧文"),
+		"content":      text("Markdown 正文全文，必填；调用方须先将原始资料转换成 Markdown"),
+		"acquisition":  enum("可选获取方式，省略表示未知", "verbatim", "extracted", "model_written"),
+		"title":        text("原文标题"),
+		"author":       text("原文明确署名的个人作者；不要用发布机构或转发账号替代，不推测未提供的署名"),
+		"publisher":    text("发布机构、媒体或平台账号，与个人作者分别填写"),
 		"published_at": text("原文发布时间，YYYY-MM-DD 或 RFC3339，可省略"),
 		"images":       map[string]any{"type": "array", "description": "原始图片文件，按 source_url 对应正文图片引用，不下载远程图片", "items": image},
 		"thread": map[string]any{"type": "array", "description": "按顺序追加的推文串", "items": object(map[string]any{

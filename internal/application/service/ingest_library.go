@@ -30,6 +30,19 @@ var identifierScheme = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*$`)
 
 func validateLibraryIngest(request *types.IngestRequest, library *types.Library) error {
 	bad := werrors.NewBadRequestError
+	if utf8.RuneCountInString(request.SourceID) > types.MaxIngestSourceIDRunes {
+		return bad("source_id exceeds 2048 Unicode code points")
+	}
+	if strings.ContainsRune(request.SourceID, 0) {
+		return bad("source_id cannot contain NUL")
+	}
+	request.SourceID = strings.TrimSpace(request.SourceID)
+	if (request.SourceID != "") != (request.SourceRevision != nil) {
+		return bad("source_id and source_revision must be provided together")
+	}
+	if request.SourceRevision != nil && *request.SourceRevision < 0 {
+		return bad("source_revision must be a nonnegative integer")
+	}
 	if utf8.RuneCountInString(request.SourceRef) > types.MaxIngestSourceRefRunes {
 		return bad("source_ref exceeds 2048 Unicode code points")
 	}

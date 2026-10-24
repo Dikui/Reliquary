@@ -16,7 +16,8 @@ func TestIngestMaterialsAndIdentitySurvivePortableReplicaRoundtrip(t *testing.T)
 	source := pgtest.Open(t)
 	seed(t, source)
 	require.NoError(t, source.Exec(`
-UPDATE entries SET acquisition='extracted',incomplete=true,external_completion_attempted=true,
+UPDATE entries SET source_id='eyeandear/portable',source_revision=42,
+ acquisition='extracted',incomplete=true,external_completion_attempted=true,
  ingest_api_key_id=1,ingest_api_key_name='Collector original name',last_ingest_api_key_id=1,last_ingest_api_key_name='Collector last name',
  missing_materials='[{"type":"image","source_url":"https://example.test/missing.png","reason":"source does not supply image","api_key_id":1,"api_key_name":"Collector last name","submitted_at":"2026-10-12T01:00:00Z"}]',
  related_entry_id='article' WHERE id='pending';

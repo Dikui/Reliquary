@@ -45,6 +45,8 @@ func escapeLikeKeyword(keyword string) string {
 // User star choices, collection reasons and the correction marker are owned by dedicated
 // editing methods, so background snapshots cannot overwrite those columns.
 var omitFieldsOnUpdate = []string{
+	"SourceID",
+	"SourceRevision",
 	"SourceRef",
 	"SourceBodyHash",
 	"Identifier",

@@ -51,6 +51,9 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 	if db.Migrator().HasColumn("entries", "source_ref") {
 		projectIngestSnapshot(original)
 	}
+	if current.schemaVersion >= 35 {
+		projectSourceRevisionSnapshot(original)
+	}
 	if db.Migrator().HasColumn("ingest_discards", "library_id") {
 		projectDiscardSnapshot(original)
 	}

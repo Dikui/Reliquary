@@ -23,6 +23,8 @@ func TestIngestContractFieldSetAndExample(t *testing.T) {
 		[]string{
 			"recovery_failure_id",
 			"library",
+			"source_id",
+			"source_revision",
 			"source_ref",
 			"identifier",
 			"url",

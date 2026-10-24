@@ -22,7 +22,12 @@ import (
 // Source identity never uses body similarity or an unprovided source inferred by a model.
 func (s *entryService) findExactIngestSource(ctx context.Context, incoming *types.Entry) (*types.Entry, error) {
 	conditions, values := []string{}, []any{}
-	for _, field := range []struct{ column, value string }{{"source_ref", incoming.SourceRef}, {"identifier", incoming.Identifier}, {"normalized_url", incoming.NormalizedURL}} {
+	for _, field := range []struct{ column, value string }{
+		{"source_id", incoming.SourceID},
+		{"source_ref", incoming.SourceRef},
+		{"identifier", incoming.Identifier},
+		{"normalized_url", incoming.NormalizedURL},
+	} {
 		if field.value != "" {
 			condition := field.column + " <> '' AND " + field.column + " = ?"
 			if field.column != "normalized_url" {
@@ -56,6 +61,19 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		}
 		if err := s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", existing.ID, entry.SpaceID).First(existing).Error; err != nil {
 			return nil, err
+		}
+		if entry.SourceID != "" && existing.SourceID != "" {
+			if entry.SourceID != existing.SourceID {
+				return nil, werrors.NewConflictError("source_id is already bound to a different source")
+			}
+			if *entry.SourceRevision <= *existing.SourceRevision {
+				existing.LibraryName = library.Name
+				return ingestResult(existing, "stale_revision", "修订号未增加，已保留当前资料。",
+					"source_revision_not_newer", ""), nil
+			}
+		}
+		if entry.SourceID == "" {
+			entry.SourceID, entry.SourceRevision = existing.SourceID, existing.SourceRevision
 		}
 		entry.ID, entry.CreatedAt, entry.VaultPath = existing.ID, existing.CreatedAt, existing.VaultPath
 		entry.IngestAPIKeyID, entry.IngestAPIKeyName = existing.IngestAPIKeyID, existing.IngestAPIKeyName
@@ -160,6 +178,15 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 			existing.CollectReason == entry.CollectReason &&
 			existing.AgentSummary == entry.AgentSummary && bytes.Equal(existing.AgentTags, entry.AgentTags) &&
 			existing.SourceName == entry.SourceName && bytes.Equal(oldSource, newSource) {
+			// Advance the revision even when the submitted body and metadata are unchanged.
+			if request.SourceID != "" {
+				if err := s.db.WithContext(ctx).Model(existing).Updates(map[string]any{
+					"source_id": entry.SourceID, "source_revision": entry.SourceRevision,
+				}).Error; err != nil {
+					return nil, err
+				}
+			}
+			existing.SourceID, existing.SourceRevision = entry.SourceID, entry.SourceRevision
 			return ingestResult(existing, "exists", "保存内容未变化。", "", ""), nil
 		}
 		if err := s.cleanupLibraryRebuild(ctx, existing); err != nil {

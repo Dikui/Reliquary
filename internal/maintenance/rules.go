@@ -23,7 +23,7 @@ var Rules = map[string]Rule{
 	"entry_processing_spans":        {Sidecar: "id entry_id attempt span_id parent_span_id name kind status input output metadata error_code error_message error_detail started_at finished_at duration_ms created_at updated_at"},
 	"entry_repost_sources":          {Sidecar: "id space_id library_id entry_id original_url normalized_url source_fingerprint author publisher published_at published_at_missing match_method sim_hash_distance created_at"},
 	"entry_topics":                  {Sidecar: "space_id entry_id topic_id source is_historical created_at"},
-	"entries":                       {Header: "title content_type source_unverified starred collect_reason structured_summary created_at acquisition", Sidecar: "source_ref source_body_hash identifier graph id space_id library_id type description source_kind vault_path vault_body agent_summary agent_tags source_name source parse_status enable_status file_name file_type file_size file_path file_hash storage_size metadata updated_at processed_at error_message deleted_at summary_status channel pending_subtasks_count custom_metadata follow_ready_at content_type_corrected normalized_url content_hash content_sim_hash content_rune_count incomplete external_completion_attempted ingest_api_key_id ingest_api_key_name last_ingest_api_key_id last_ingest_api_key_name missing_materials content_type_hint related_entry_id", Regenerated: "search_seq_id search_text search_published_at embedding_model_id"},
+	"entries":                       entryPreservationRule,
 	"maintenance_state":             {Sidecar: "backup_at backup_status backup_path backup_size_bytes backup_error drill_at drill_status drill_error", Regenerated: "id paused pause_mode pause_reason paused_at updated_at backup_due_at drill_due_at", Configuration: "backup_schedule drill_schedule schedule_timezone backup_directory automatic_enabled"},
 	"models":                        {Configuration: "id space_id name display_name type source description parameters is_default status created_at updated_at deleted_at is_builtin managed_by"},
 	"operation_logs":                {Sidecar: "id space_id actor api_key_id api_key_name operation_type object_id before_value after_value created_at"},
@@ -44,4 +44,16 @@ var Rules = map[string]Rule{
 	"topic_backfill_jobs":           {Sidecar: "id space_id topic_id topic_name topic_description status total processed failed_entries failed_batches created_at updated_at"},
 	"topics":                        {Sidecar: "id space_id name description library_ids created_at updated_at"},
 	"users":                         {Configuration: "id username email password_hash avatar space_id is_active created_at updated_at deleted_at"},
+}
+
+var entryPreservationRule = Rule{
+	Header: "title content_type source_unverified starred collect_reason structured_summary created_at acquisition",
+	Sidecar: "source_id source_revision source_ref source_body_hash identifier graph id space_id library_id " +
+		"type description source_kind vault_path vault_body agent_summary agent_tags source_name source " +
+		"parse_status enable_status file_name file_type file_size file_path file_hash storage_size metadata " +
+		"updated_at processed_at error_message deleted_at summary_status channel pending_subtasks_count " +
+		"custom_metadata follow_ready_at content_type_corrected normalized_url content_hash content_sim_hash " +
+		"content_rune_count incomplete external_completion_attempted ingest_api_key_id ingest_api_key_name " +
+		"last_ingest_api_key_id last_ingest_api_key_name missing_materials content_type_hint related_entry_id",
+	Regenerated: "search_seq_id search_text search_published_at embedding_model_id",
 }

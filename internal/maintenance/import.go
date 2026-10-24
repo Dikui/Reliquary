@@ -256,6 +256,9 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	if db.Migrator().HasColumn("entries", "source_ref") {
 		projectIngestSnapshot(snapshot)
 	}
+	if targetVersion >= 35 {
+		projectSourceRevisionSnapshot(snapshot)
+	}
 	if db.Migrator().HasColumn("ingest_discards", "library_id") {
 		projectDiscardSnapshot(snapshot)
 	}
