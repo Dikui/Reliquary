@@ -10,7 +10,7 @@ Reliquary serves a single user collecting source material and maintaining entity
 | --- | --- |
 | Current entity terminology and component scope | CONTEXT.md and docs/adr/0009-kb-collect-store-retrieve.md |
 | Shared entity identity and article attribution | docs/adr/0002-global-entity-registry.md and the task 01 entity API contract |
-| Features retained during staged implementation | .scratch/kb-reshape/spec.md and the explicit task 02 request |
+| Features retained during staged implementation | .scratch/kb-reshape/spec.md (local only) and the explicit task 02 request |
 | Single-user access | docs/adr/0007-personal-single-user.md |
 | Imported personal documents and deletion | docs/adr/0013-user-documents-imported.md |
 
@@ -128,7 +128,7 @@ Personal documents arrive through ingest with kind=mine. Pending intake and miss
 
 ## Ingest failure diagnostics
 
-Source: .scratch/agent-operations-diagnostics/spec.md and internal/types/ingest_diagnostics.go. The read-only /platform/diagnostics page lists technical ingest failures, with URL-backed committed filters and pagination. Selecting a failure preserves the list query in the URL. List, detail and material requests ignore stale responses and teardown. Refresh failures retain the current readable list. Filters use explicit apply; clear immediately applies the new filter. TDesign owns date entry and localization.
+Source: .scratch/agent-operations-diagnostics/spec.md (local only) and internal/types/ingest_diagnostics.go. The read-only /platform/diagnostics page lists technical ingest failures, with URL-backed committed filters and pagination. Selecting a failure preserves the list query in the URL. List, detail and material requests ignore stale responses and teardown. Refresh failures retain the current readable list. Filters use explicit apply; clear immediately applies the new filter. TDesign owns date entry and localization.
 
 Details distinguish unknown outcomes, partial inputs, unavailable materials and expiry. Raw text is escaped and read in server-defined Unicode segments. Image reads use the authenticated request owner, never a public file path; Blob URLs are released when replaced or unmounted. Reading does not replay, modify or delete content. Recovery entry/request associations are links, not claims of completed repair. Existing failed processing, timeline, model calls, queues, operation log, vault and evaluation owners remain accessible. The default retention hint is 7 days / 512 MiB and explains capacity eviction. Visual intent and token ownership are documented in DESIGN.md.
 
@@ -151,4 +151,4 @@ The entry API's parse_status describes body indexing, and summary_status describ
 
 ## Weekly content checks
 
-Source: .scratch/weekly-self-check/spec.md. ContentChecksPage under Diagnostics reuses TDesign selects, input, switch, buttons, loading and pagination, the shared theme and the existing entry reference route. Settings are explicitly saved; no model or schedule is enabled by default. List page and selected run live in URL state. Inline failures remain visible with existing results; only explicit recheck starts another run. Details expose source excerpts as escaped text and navigate through the existing reference/hash validation.
+Source: .scratch/weekly-self-check/spec.md (local only). ContentChecksPage under Diagnostics reuses TDesign selects, input, switch, buttons, loading and pagination, the shared theme and the existing entry reference route. Settings are explicitly saved; no model or schedule is enabled by default. List page and selected run live in URL state. Inline failures remain visible with existing results; only explicit recheck starts another run. Details expose source excerpts as escaped text and navigate through the existing reference/hash validation.

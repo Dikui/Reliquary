@@ -1,7 +1,7 @@
 # Issue tracker: Local Markdown
 
 本仓库的 issues 和 specs 作为 Markdown 文件存放在 `.scratch/` 中。
-`.scratch/<feature>/` 随仓库提交；`.scratch/tasks/` 与 `.scratch/prototype/` 被 `.gitignore` 忽略，仅保存在本地（见 `docs/agents/layout.md`）。
+`.scratch/` 整个目录不提交，只在本机保留；功能目录不删除（见 `docs/agents/layout.md`）。
 
 ## Conventions
 
@@ -13,6 +13,13 @@
 - Triage 状态记录在 issue 文件顶部附近的 `Status:` 行；
   状态字符串见 `docs/agents/triage-labels.md`。
 - 评论和讨论历史追加到文件底部的 `## Comments` 下。
+
+## When a skill closes a ticket
+
+设置 `Status: resolved`（或 triage 的关闭状态）并保存后，检查同一
+`.scratch/<feature-slug>/issues/` 下是否还有未关闭的任务单。
+全部关闭且 `spec.md`、`map.md` 顶部没有 `ADR review: done` 行时，
+按 `docs/agents/layout.md` 的“收尾检查”执行。
 
 ## When a skill says "publish to the issue tracker"
 
@@ -35,4 +42,5 @@
 - Frontier：扫描 open、unblocked 且 unclaimed 的 tickets，按编号选第一个。
 - Claim：开始工作前设置 `Status: claimed` 并保存。
 - Resolve：将答案追加到 `## Answer`，设置 `Status: resolved`，
-  再向 map 的 Decisions-so-far 追加结论摘要和相关文件链接。
+  再向 map 的 Decisions-so-far 追加结论摘要和相关文件链接，
+  然后按 “When a skill closes a ticket” 检查。

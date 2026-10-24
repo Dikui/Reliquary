@@ -70,3 +70,11 @@ compose.images.json
 # 须在 !.scratch/ 之后，否则会被重新放出
 .scratch/tasks/
 .scratch/prototype/
+
+# 只在本机保留的文档（见 docs/agents/layout.md）
+design/
+docs/research/
+docs/experiments/
+.scratch/
+.out-of-scope/
+*.excalidraw
