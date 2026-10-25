@@ -3,7 +3,7 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 
-test('manual corrections identify the donor and retained target explicitly', async () => {
+test('story requests preserve correction targets, mixed filters and pagination', async () => {
   const requests: unknown[] = [], module = { exports: {} as any }
   const code = ts.transpileModule(readFileSync(new URL('./stories.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
   new Function('require', 'module', 'exports', code)(() => Object.fromEntries(['get', 'post'].map(method => [method, (url: string, body?: unknown) => {
@@ -15,11 +15,15 @@ test('manual corrections identify the donor and retained target explicitly', asy
   await api.mergeFacts('fact/a', 'kept-fact')
   await api.mergeStories('story/a', 'kept-story')
   await api.getFact('fact/a')
+  await api.listStories()
+  await api.listStories(20, 40, { entity_ids: ['entity/a', 'entity&b'], domain_ids: ['domain+c'] })
   assert.deepEqual(requests, [
     { method: 'post', url: '/api/v1/facts/fact%2Fa/move', body: { story_id: 'story-b' } },
     { method: 'post', url: '/api/v1/facts/fact%2Fa/split', body: { title: 'New story' } },
     { method: 'post', url: '/api/v1/facts/fact%2Fa/merge', body: { keep_fact_id: 'kept-fact' } },
     { method: 'post', url: '/api/v1/stories/story%2Fa/merge', body: { keep_story_id: 'kept-story' } },
     { method: 'get', url: '/api/v1/facts/fact%2Fa' },
+    { method: 'get', url: '/api/v1/stories?limit=20&offset=0' },
+    { method: 'get', url: '/api/v1/stories?limit=20&offset=40&entity_ids=entity%2Fa%2Centity%26b&domain_ids=domain%2Bc' },
   ])
 })

@@ -72,8 +72,10 @@ type StoryDetail struct {
 
 // StoryQuery selects a bounded page from the story list.
 type StoryQuery struct {
-	Limit  int `json:"limit,omitempty"`
-	Offset int `json:"offset,omitempty"`
+	DomainIDs []string `json:"domain_ids,omitempty"`
+	EntityIDs []string `json:"entity_ids,omitempty"`
+	Limit     int      `json:"limit,omitempty"`
+	Offset    int      `json:"offset,omitempty"`
 }
 
 // StoryPage contains a bounded list and the total visible story count.

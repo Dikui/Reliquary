@@ -5,6 +5,7 @@ import (
 	"errors"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/types"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -28,6 +29,16 @@ func (s *StoryService) ListStories(ctx context.Context, query types.StoryQuery) 
 	if err != nil {
 		return nil, err
 	}
+	for name, ids := range map[string][]string{"domain_ids": query.DomainIDs, "entity_ids": query.EntityIDs} {
+		if len(ids) > 100 {
+			return nil, werrors.NewBadRequestError(name + " accepts at most 100 IDs")
+		}
+		for _, id := range ids {
+			if strings.TrimSpace(id) == "" {
+				return nil, werrors.NewBadRequestError(name + " cannot contain an empty ID")
+			}
+		}
+	}
 	if query.Limit <= 0 || query.Limit > 100 {
 		query.Limit = 20
 	}
@@ -37,6 +48,19 @@ func (s *StoryService) ListStories(ctx context.Context, query types.StoryQuery) 
 	page := &types.StoryPage{Items: []types.Story{}}
 	visible := s.visibleFacts(ctx, spaceID).Select("f.story_id")
 	q := s.db.WithContext(ctx).Model(&types.Story{}).Where("space_id=? AND id IN (?)", spaceID, visible)
+	if len(query.EntityIDs) > 0 {
+		entities := s.visibleFacts(ctx, spaceID).Select("f.story_id").
+			Where("f.subject_entity_id IN ? OR f.object_entity_id IN ?", query.EntityIDs, query.EntityIDs)
+		q = q.Where("id IN (?)", entities)
+	}
+	if len(query.DomainIDs) > 0 {
+		domains := s.visibleFacts(ctx, spaceID).Select("f.story_id").
+			Joins("JOIN entry_facts ef ON ef.space_id=f.space_id AND ef.fact_id=f.id AND ef.role='source'").
+			Joins("JOIN entries e ON e.space_id=ef.space_id AND e.id=ef.entry_id AND e.deleted_at IS NULL").
+			Joins("JOIN entry_domains ed ON ed.space_id=e.space_id AND ed.entry_id=e.id").
+			Where("ed.domain_id IN ?", query.DomainIDs)
+		q = q.Where("id IN (?)", domains)
+	}
 	if err := q.Count(&page.Total).Error; err != nil {
 		return nil, err
 	}

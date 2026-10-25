@@ -3,11 +3,14 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getFact, getStory, listStories, type CorrectionAction, type Story, type StoryDetail, type StoryFact } from '@/api/stories'
+import { listEntities, type Entity } from '@/api/entities'
+import { listDomains, type Domain } from '@/api/domains'
 
 import FollowToggle from '@/components/FollowToggle.vue'
 import { useFollowStore } from '@/stores/follows'
 
 import GroupingCorrection from './components/GroupingCorrection.vue'
+import EntityDomainSelect from './components/EntityDomainSelect.vue'
 
 const followStore = useFollowStore()
 const correction = ref<{ action: CorrectionAction; fact?: StoryFact } | null>(null)
@@ -21,6 +24,40 @@ const factActions = computed(() => [
 const route = useRoute(), router = useRouter()
 const pageSize = 20
 const selectedID = computed(() => typeof route.params.storyId === 'string' ? route.params.storyId : '')
+function filterIDs(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : [value]
+  return [...new Set(values.flatMap(item => typeof item === 'string' ? item.split(',') : [])
+    .map(id => id.trim()).filter(Boolean))].slice(0, 100)
+}
+const entityIDs = computed(() => filterIDs(route.query.entity_ids))
+const domainIDs = computed(() => filterIDs(route.query.domain_ids))
+const selectedClassification = computed({
+  get: () => [...entityIDs.value.map(id => `entity:${id}`), ...domainIDs.value.map(id => `domain:${id}`)],
+  set: (values: string[]) => {
+    const selected = (kind: string) => values.filter(value => value.startsWith(`${kind}:`)).map(value => value.slice(kind.length + 1)).join(',') || undefined
+    void router.replace({ query: { ...route.query, entity_ids: selected('entity'), domain_ids: selected('domain'), page: undefined } })
+  },
+})
+const filterEntities = ref<Entity[]>([]), filterDomains = ref<Domain[]>([])
+const filtersLoading = ref(false), filtersError = ref(''), moreEntities = ref(false)
+let filtersVersion = 0
+async function loadFilters(more = false) {
+  const ticket = ++filtersVersion
+  filtersLoading.value = true; filtersError.value = ''
+  try {
+    const [entities, domains] = await Promise.all([
+      listEntities({ limit: 100, offset: more ? filterEntities.value.length : 0 }), listDomains(),
+    ])
+    if (!entities.success || !domains.success) throw new Error()
+    if (ticket !== filtersVersion || disposed) return
+    filterEntities.value = more ? [...filterEntities.value, ...entities.data] : entities.data
+    filterDomains.value = domains.data; moreEntities.value = entities.data.length === 100
+  } catch {
+    if (ticket === filtersVersion && !disposed) filtersError.value = t('stories.filtersFailed')
+  } finally {
+    if (ticket === filtersVersion && !disposed) filtersLoading.value = false
+  }
+}
 const page = computed(() => {
   const value = Number(route.query.page)
   return Number.isSafeInteger(value) && value > 0 && value <= 1000000 ? value : 1
@@ -58,7 +95,7 @@ async function load() {
         }
       }
     } else {
-      const response = await listStories(pageSize, (page.value - 1) * pageSize)
+      const response = await listStories(pageSize, (page.value - 1) * pageSize, { entity_ids: entityIDs.value, domain_ids: domainIDs.value })
       if (!response.success) throw new Error(t('stories.loadFailed'))
       if (ticket !== version || disposed) return
       items.value = response.data.items; total.value = response.data.total
@@ -81,10 +118,11 @@ async function load() {
     }
   }
 }
-watch(() => [selectedID.value, page.value, route.hash], () => {
+watch(() => [selectedID.value, page.value, route.hash, entityIDs.value.join(','), domainIDs.value.join(',')], () => {
   correction.value = null; detail.value = null; items.value = []
   void load()
 }, { immediate: true })
+watch(selectedID, id => { if (!id) void loadFilters() }, { immediate: true })
 watch(() => [locale.value, detail.value?.story.title, selectedID.value], () => {
   document.title = `${selectedID.value ? detail.value?.story.title || t('stories.detail') : t('stories.title')} · Reliquary`
 }, { immediate: true })
@@ -94,7 +132,7 @@ async function corrected(target: { storyID: string; factID?: string }) {
   if (target.storyID === selectedID.value) await load()
   else await router.push({ path: `/platform/stories/${encodeURIComponent(target.storyID)}`, query: route.query, hash: target.factID ? `#fact-${target.factID}` : '' })
 }
-onUnmounted(() => { disposed = true; version++ })
+onUnmounted(() => { disposed = true; version++; filtersVersion++ })
 </script>
 
 <template>
@@ -107,6 +145,15 @@ onUnmounted(() => { disposed = true; version++ })
         <t-button variant="outline" :loading="loading" @click="load">{{ t('common.refresh') }}</t-button>
       </div>
       <p v-if="!selectedID" class="muted">{{ t('stories.description') }}</p>
+      <div v-if="!selectedID" class="story-filters">
+        <label for="story-classification">{{ t('domains.mixedFilter') }}</label>
+        <EntityDomainSelect id="story-classification" v-model="selectedClassification"
+          :entities="filterEntities.map(item => ({ value: item.id, label: item.canonical_name }))"
+          :domains="filterDomains.map(item => ({ value: item.id, label: item.name }))" :loading="filtersLoading" />
+        <p class="muted">{{ t('stories.filtersHint') }}</p>
+        <t-button v-if="moreEntities" size="small" variant="text" :loading="filtersLoading" @click="loadFilters(true)">{{ t('common.loadMore') }}</t-button>
+        <p v-if="filtersError" role="alert" class="error">{{ filtersError }} <t-button size="small" variant="text" :disabled="filtersLoading" @click="loadFilters()">{{ t('common.retry') }}</t-button></p>
+      </div>
     </header>
     <div v-if="error" class="error" role="alert">
       {{ error }}
@@ -125,7 +172,7 @@ onUnmounted(() => { disposed = true; version++ })
               </dl>
             </li>
           </ol>
-          <t-empty v-else-if="!loading && !error" :description="t('stories.empty')" />
+          <t-empty v-else-if="!loading && !error" :description="t(entityIDs.length || domainIDs.length ? 'stories.noMatches' : 'stories.empty')" />
         </template>
         <template v-else-if="detail">
           <dl class="times">
@@ -188,6 +235,8 @@ onUnmounted(() => { disposed = true; version++ })
 .stories-page { height: 100%; overflow: auto; padding: 24px; box-sizing: border-box; color: var(--td-text-color-primary); }
 header, .content { margin-bottom: 20px; }
 .heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.story-filters { width: 100%; max-width: 560px; margin-top: 16px; }
+.story-filters label { display: block; margin-bottom: 8px; font-size: 14px; }
 h1 { flex: 1; min-width: 0; font-size: 24px; margin: 12px 0; overflow-wrap: anywhere; }
 h2 { font-size: 18px; margin: 0 0 16px; }
 h3 { font-size: 16px; margin: 8px 0 16px; }

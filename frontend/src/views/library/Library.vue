@@ -30,6 +30,7 @@ import {
 import { entrySpansPayloadHasTrace } from '@/utils/entryTrace';
 import DocumentListView from './components/DocumentListView.vue';
 import DocumentCardView from './components/DocumentCardView.vue';
+import EntityDomainSelect from './components/EntityDomainSelect.vue';
 import EntryBatchDialog from '@/components/EntryBatchDialog.vue';
 import type { EntryBatchSelection } from '@/api/entry-batches';
 import { listDomains, type Domain } from '@/api/domains';
@@ -170,14 +171,6 @@ const selectedClassification = computed({
     selectedEntityIds.value = values.filter(value => value.startsWith('entity:')).map(value => value.slice(7));
     selectedDomainIds.value = values.filter(value => value.startsWith('domain:')).map(value => value.slice(7));
   },
-});
-const classificationOptions = computed(() => {
-  const domains = filterDomains.value.map(item => ({ value: item.id, label: item.name }));
-  for (const id of selectedDomainIds.value) if (!domains.some(item => item.value === id)) domains.push({ value: id, label: id });
-  return [
-    { group: t('library.articleEntities'), children: filterEntityOptions.value.map(item => ({ value: `entity:${item.value}`, label: item.label })) },
-    { group: t('domains.title'), children: domains.map(item => ({ value: `domain:${item.value}`, label: item.label })) },
-  ];
 });
 let filterEntitiesRequest = 0;
 async function loadFilterEntities(more = false) {
@@ -1043,7 +1036,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 <div class="doc-filter-bar__filters">
                 <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
                 <div class="doc-filter-field">
-                  <t-select v-model="selectedClassification" multiple filterable clearable :options="classificationOptions" :loading="filterEntitiesLoading" :placeholder="t('domains.mixedFilter')" :aria-label="t('domains.mixedFilter')" class="doc-filter-field__control" />
+                  <EntityDomainSelect v-model="selectedClassification" :entities="filterEntityOptions" :domains="filterDomains.map(item => ({ value: item.id, label: item.name }))" :loading="filterEntitiesLoading" class="doc-filter-field__control" />
                   <t-button v-if="moreFilterEntities" size="small" variant="text" :loading="filterEntitiesLoading" @click="loadFilterEntities(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
                   <p v-if="filterEntitiesError" role="alert">{{ filterEntitiesError }} <t-button size="small" variant="text" @click="loadFilterEntities()">{{ t('common.retry') }}</t-button></p>
                 </div>

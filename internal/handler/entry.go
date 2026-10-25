@@ -522,20 +522,12 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 		Source:      c.Query("source"),
 	}
 	for key, target := range map[string]*[]string{"domain_ids": &filter.DomainIDs, "entity_ids": &filter.EntityIDs} {
-		seen := map[string]bool{}
-		for _, raw := range c.QueryArray(key) {
-			for _, value := range strings.Split(raw, ",") {
-				id := strings.TrimSpace(value)
-				if id != "" && !seen[id] {
-					*target = append(*target, id)
-					seen[id] = true
-				}
-			}
-		}
-		if len(*target) > 100 {
-			c.Error(errors.NewBadRequestError(key + " accepts at most 100 IDs"))
+		ids, err := queryFilterIDs(c, key)
+		if err != nil {
+			_ = c.Error(err)
 			return
 		}
+		*target = ids
 	}
 	for key, target := range map[string]*time.Time{"published_from": &filter.PublishedFrom, "published_to": &filter.PublishedTo} {
 		if raw := c.Query(key); raw != "" {

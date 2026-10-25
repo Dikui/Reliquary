@@ -56,6 +56,9 @@ export default {
     "loadFailed": "Could not load destinations. Try again."
   },
   stories: {
+    "filtersHint": "Entities match either end of a visible fact. Domains come from source materials; mentions do not count. Select entities and domains to match both; choices within each group match any.",
+    "filtersFailed": "Could not load filter options. Try again.",
+    "noMatches": "No stories match these filters. Change or clear your selections.",
     "related": "Related stories",
     "mentions": "Materials mentioning this story",
     "mentionsHint": "These materials discuss the facts and do not serve as source evidence.",

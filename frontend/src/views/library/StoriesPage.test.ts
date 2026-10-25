@@ -9,6 +9,15 @@ import { descendants, element, loadComponent, registerPrimitives, renderer, sett
 const messages = { 'en-US': en, 'zh-CN': zh }
 const arrivedAt = '2026-10-24T16:00:00Z'
 
+function loadStoriesPage(modules: Record<string, unknown>) {
+  return loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+    '@/api/entities': { listEntities: async () => ({ success: true, data: [] }) },
+    '@/api/domains': { listDomains: async () => ({ success: true, data: [] }) },
+    './components/EntityDomainSelect.vue': { __esModule: true, default: loadComponent(new URL('./components/EntityDomainSelect.vue', import.meta.url), {}) },
+    ...modules,
+  })
+}
+
 for (const locale of ['en-US', 'zh-CN'] as const) {
   test(`${locale}: related stories are links with only one level of expansion`, async () => {
     const previousDocument = globalThis.document
@@ -22,7 +31,7 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
         related_stories: [{ id: 'distant', title: 'Second level must stay hidden' }],
       }],
     }
-    const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+    const component = loadStoriesPage({
       '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
       '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
       './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
@@ -66,7 +75,7 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
           occurred_at: scenario.occurredAt, created_at: arrivedAt, sources: [], manual_corrected: true, no_source: true,
         }],
       }
-      const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+      const component = loadStoriesPage({
         '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
       '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
       './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
@@ -113,7 +122,7 @@ for (const merged of [false, true]) {
       id: 'target', title: 'Second fact', subject: 'Aurora', action: 'released', object: '', conditions: '', sources: [],
     }], mentions: [] }
     let first = true
-    const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+    const component = loadStoriesPage({
       '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
       '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
       './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
@@ -154,7 +163,7 @@ test('linked fact endpoints open their entity, unlinked ones stay plain text', a
       subject_entity_id: 'entity-aurora', object_entity_id: null, occurred_at: null, created_at: arrivedAt, sources: [],
     }],
   }
-  const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+  const component = loadStoriesPage({
     '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
       '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
       './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
@@ -188,7 +197,7 @@ for (const missingAnchor of [false, true]) {
     globalThis.document = { title: '' } as Document
     const route = reactive({ params: { storyId: 'old-story' }, query: { page: '3' }, hash: '#fact-old-fact' })
     const destinations: unknown[] = []
-    const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+    const component = loadStoriesPage({
       '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
       '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
       './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
@@ -231,7 +240,7 @@ for (const selectedID of ['', 'story']) {
     }
     const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)
     const story = { id: 'story', title: 'Progress', first_fact_at: arrivedAt, last_fact_at: arrivedAt }
-    const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+    const component = loadStoriesPage({
       ...modules,
       '@/components/FollowToggle.vue': { __esModule: true, default: toggle },
       './components/GroupingCorrection.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
@@ -253,3 +262,101 @@ for (const selectedID of ['', 'story']) {
     } finally { app.unmount(); globalThis.document = previousDocument }
   })
 }
+
+for (const locale of ['en-US', 'zh-CN'] as const) {
+  test(`${locale}: mixed story filters restore from the URL, reset pagination and survive detail navigation`, async () => {
+    const previousDocument = globalThis.document
+    globalThis.document = { title: '' } as Document
+    const route = reactive({ params: { storyId: '' }, query: { page: '3', entity_ids: [' e1,e1', 'e2'], domain_ids: 'd1', kept: 'yes' } as Record<string, any>, hash: '' })
+    const reads: unknown[] = []
+    const story = { id: 'story', title: 'Filtered progress', first_fact_at: arrivedAt, last_fact_at: arrivedAt }
+    const component = loadStoriesPage({
+      '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+      '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
+      './components/GroupingCorrection.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+      'vue-router': { useRoute: () => route, useRouter: () => ({ replace: ({ query }: { query: Record<string, unknown> }) => {
+        route.query = Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined))
+      } }) },
+      '@/api/entities': { listEntities: async () => ({ success: true, data: [{ id: 'e1', canonical_name: 'Aurora' }] }) },
+      '@/api/domains': { listDomains: async () => ({ success: true, data: [{ id: 'd1', name: 'Agent' }, { id: 'd2', name: 'LLM' }] }) },
+      '@/api/stories': {
+        listStories: async (limit: number, offset: number, filters: unknown) => { reads.push({ limit, offset, filters }); return { success: true, data: { items: [story], total: 60 } } },
+        getStory: async () => ({ success: true, data: { story, facts: [], mentions: [], related_stories: [] } }),
+      },
+    })
+    const root = element('root'), app = renderer.createApp(component)
+    app.use(createI18n({ legacy: false, locale, messages })); registerPrimitives(app)
+    delete app._context.components['t-select']
+    app.component('t-select', defineComponent({
+      props: ['modelValue', 'options', 'loading'], emits: ['update:modelValue'],
+      setup: (props, { attrs, emit }) => () => h('select', {
+        ...attrs, value: props.modelValue, options: props.options,
+        onChange: (values: string[]) => emit('update:modelValue', values),
+      }),
+    }))
+    app.component('router-link', defineComponent({ props: ['to'], setup: (props, { slots }) => () => h('a', { to: props.to }, slots.default?.()) }))
+    for (const name of ['t-empty', 't-pagination']) app.component(name, defineComponent({ setup: () => () => null }))
+    app.config.warnHandler = warning => { throw new Error(warning) }
+    const select = () => descendants(root).find(node => node.tag === 'select')!
+    try {
+      app.mount(root); await settle()
+      assert.deepEqual(reads, [{ limit: 20, offset: 40, filters: { entity_ids: ['e1', 'e2'], domain_ids: ['d1'] } }])
+      assert.deepEqual(select().props.value, ['entity:e1', 'entity:e2', 'domain:d1'])
+      assert.deepEqual(select().props.options.map((group: any) => group.children), [
+        [{ value: 'entity:e1', label: 'Aurora' }, { value: 'entity:e2', label: 'e2' }],
+        [{ value: 'domain:d1', label: 'Agent' }, { value: 'domain:d2', label: 'LLM' }],
+      ])
+      select().props.onChange(['entity:e1', 'domain:d2']); await settle()
+      assert.deepEqual(route.query, { entity_ids: 'e1', domain_ids: 'd2', kept: 'yes' })
+      assert.deepEqual(reads.at(-1), { limit: 20, offset: 0, filters: { entity_ids: ['e1'], domain_ids: ['d2'] } })
+      const storyLink = descendants(root).find(node => node.tag === 'a' && visibleText(node) === 'Filtered progress')!
+      assert.deepEqual(storyLink.props.to, { path: '/platform/stories/story', query: route.query })
+      route.params.storyId = 'story'; await settle()
+      assert.equal(select(), undefined)
+      const back = descendants(root).find(node => node.tag === 'a' && (node.props.to as { path?: string })?.path === '/platform/stories')!
+      assert.deepEqual(back.props.to.query, route.query)
+      route.params.storyId = ''; await settle()
+      assert.deepEqual(select().props.value, ['entity:e1', 'domain:d2'])
+      select().props.onChange([]); await settle()
+      assert.deepEqual(route.query, { kept: 'yes' })
+      assert.deepEqual(reads.at(-1), { limit: 20, offset: 0, filters: { entity_ids: [], domain_ids: [] } })
+    } finally { app.unmount(); globalThis.document = previousDocument }
+  })
+}
+
+test('story filter failures keep results readable, allow retry and ignore superseded list responses', async () => {
+  const previousDocument = globalThis.document
+  globalThis.document = { title: '' } as Document
+  const route = reactive({ params: { storyId: '' }, query: { entity_ids: 'e1' }, hash: '' })
+  let filtersFail = true, defer = false, resolveOld!: (value: unknown) => void
+  const story = (title: string) => ({ id: title, title, first_fact_at: arrivedAt, last_fact_at: arrivedAt })
+  const component = loadStoriesPage({
+    '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+    '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
+    './components/GroupingCorrection.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+    'vue-router': { useRoute: () => route, useRouter: () => ({ replace() {} }) },
+    '@/api/entities': { listEntities: async () => { if (filtersFail) throw new Error('Offline'); return { success: true, data: [{ id: 'e1', canonical_name: 'Aurora' }] } } },
+    '@/api/stories': { listStories: async () => {
+      if (defer) { defer = false; return new Promise(resolve => { resolveOld = resolve }) }
+      return { success: true, data: { items: [story(route.query.entity_ids)], total: 1 } }
+    } },
+  })
+  const root = element('root'), app = renderer.createApp(component)
+  app.use(createI18n({ legacy: false, locale: 'en-US', messages })); registerPrimitives(app)
+  app.component('router-link', defineComponent({ setup: (_props, { slots }) => () => h('a', slots.default?.()) }))
+  for (const name of ['t-empty', 't-pagination']) app.component(name, defineComponent({ setup: () => () => null }))
+  try {
+    app.mount(root); await settle()
+    assert.ok(visibleText(root).includes('Could not load filter options'))
+    assert.ok(visibleText(root).includes('e1'))
+    filtersFail = false
+    await descendants(root).find(node => node.tag === 'button' && visibleText(node) === 'Retry')!.props.onClick(); await settle()
+    assert.ok(!visibleText(root).includes('Could not load filter options'))
+    defer = true; route.query.entity_ids = 'old'; await settle()
+    route.query.entity_ids = 'latest'; await settle()
+    assert.ok(visibleText(root).includes('latest'))
+    resolveOld({ success: true, data: { items: [story('Stale response')], total: 1 } }); await settle()
+    assert.ok(!visibleText(root).includes('Stale response'))
+    assert.ok(visibleText(root).includes('latest'))
+  } finally { app.unmount(); globalThis.document = previousDocument }
+})

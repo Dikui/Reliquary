@@ -25,7 +25,16 @@ func (h *StoryHandler) List(c *gin.Context) {
 		_ = c.Error(werrors.NewBadRequestError("invalid story pagination"))
 		return
 	}
-	page, err := h.service.ListStories(c.Request.Context(), types.StoryQuery{Limit: query.Limit, Offset: query.Offset})
+	filters := types.StoryQuery{Limit: query.Limit, Offset: query.Offset}
+	for key, target := range map[string]*[]string{"domain_ids": &filters.DomainIDs, "entity_ids": &filters.EntityIDs} {
+		ids, err := queryFilterIDs(c, key)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+		*target = ids
+	}
+	page, err := h.service.ListStories(c.Request.Context(), filters)
 	if err != nil {
 		_ = c.Error(err)
 		return

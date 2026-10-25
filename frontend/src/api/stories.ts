@@ -43,8 +43,13 @@ export interface StoryDetail { story: Story; facts: StoryFact[]; mentions: FactS
 export interface StoryPage { items: Story[]; total: number }
 interface StoryEnvelope<T> { success: boolean; data: T }
 
-export const listStories = (limit = 20, offset = 0) =>
-  get<StoryEnvelope<StoryPage>>(`/api/v1/stories?limit=${limit}&offset=${offset}`)
+export interface StoryFilters { entity_ids?: string[]; domain_ids?: string[] }
+export const listStories = (limit = 20, offset = 0, filters: StoryFilters = {}) => {
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (filters.entity_ids?.length) query.set('entity_ids', filters.entity_ids.join(','))
+  if (filters.domain_ids?.length) query.set('domain_ids', filters.domain_ids.join(','))
+  return get<StoryEnvelope<StoryPage>>(`/api/v1/stories?${query}`)
+}
 export const getStory = (id: string) =>
   get<StoryEnvelope<StoryDetail>>(`/api/v1/stories/${encodeURIComponent(id)}`)
 

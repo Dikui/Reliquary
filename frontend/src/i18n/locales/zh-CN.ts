@@ -56,6 +56,9 @@ export default {
     "loadFailed": "无法加载目标，请重试。"
   },
   stories: {
+    "filtersHint": "实体匹配可见事实的任一端，领域来自出处资料，提及不计入。实体与领域条件取交集，同类选项内取并集。",
+    "filtersFailed": "无法加载筛选选项，请重试。",
+    "noMatches": "没有符合筛选条件的事件，请调整或清除选项。",
     "related": "相关事件",
     "mentions": "提及它的资料",
     "mentionsHint": "这些资料讨论了事件中的事实，不作为出处证据。",

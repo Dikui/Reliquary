@@ -263,10 +263,13 @@ func registerTools(server *mcp.Server, services Services) {
 		})
 
 	if services.Stories != nil {
-		addTool(server, "list_stories", "列出事件 ID、标题、首次与最近新事实时间，按最近新事实时间倒序。"+externalContentNotice,
+		addTool(server, "list_stories", "列出事件 ID、标题、首次与最近新事实时间，按最近新事实时间倒序。"+
+			"实体匹配可见事实任一端，领域来自可见事实的出处资料，提及不计入。实体与领域取交集，同类数组内取并集。"+externalContentNotice,
 			object(map[string]any{
-				"limit":  integer("返回条数，默认 20，最大 100", 1, 100),
-				"offset": integer("跳过的事件数，默认 0", 0, 0),
+				"entity_ids": stringArray("实体 ID 列表，最多 100 个"),
+				"domain_ids": stringArray("领域 ID 列表，最多 100 个，与实体条件取交集"),
+				"limit":      integer("返回条数，默认 20，最大 100", 1, 100),
+				"offset":     integer("跳过的事件数，默认 0", 0, 0),
 			}),
 			func(ctx context.Context, in types.StoryQuery) (any, error) {
 				return services.Stories.ListStories(ctx, in)
@@ -277,7 +280,8 @@ func registerTools(server *mcp.Server, services Services) {
 	}
 
 	if services.Domains != nil {
-		addTool(server, "list_domains", "列出共享领域的 ID、名称与一句定义，可用于 search 的 domain_ids 筛选。"+externalContentNotice,
+		addTool(server, "list_domains", "列出共享领域的 ID、名称与一句定义，"+
+			"可用于 search 和 list_stories 的 domain_ids 筛选。"+externalContentNotice,
 			object(map[string]any{}), func(ctx context.Context, _ struct{}) (any, error) {
 				items, err := services.Domains.ListDomains(ctx)
 				return map[string]any{"domains": items}, err

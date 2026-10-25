@@ -132,6 +132,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     for (const match of readFileSync(new URL(path, import.meta.url), 'utf8').matchAll(/from\s+['"]([^'"]+\.vue)['"]/g)) modules[match[1]] = empty
   }
   modules['@/components/EmptyEntry.vue'] = moduleOf(loadComponent(new URL('../../components/EmptyEntry.vue', import.meta.url), modules))
+  modules['./components/EntityDomainSelect.vue'] = moduleOf(loadComponent(new URL('./components/EntityDomainSelect.vue', import.meta.url), modules))
   modules['@/components/EntryBatchDialog.vue'] = moduleOf(loadComponent(new URL('../../components/EntryBatchDialog.vue', import.meta.url), modules))
   modules['@/components/LibraryScopeSelect.vue'] = moduleOf(defineComponent({
     emits: ['loaded'], setup: (_, { emit }) => {
@@ -149,7 +150,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   if (unavailable) {
     modules['@/api/entities'] = { ENTITY_TYPES: ['organization'], listEntities: async () => { if (!backendAvailable) throw new Error('Backend unavailable'); return {success:true,data:[{id:'recovered',canonical_name:'Recovered entity',entity_type:'organization',aliases:[]}] } } }
     modules['@/stores/follows'] = {useFollowStore:()=>({refreshAfterTargetChange:async()=>{}})}
-    modules['./EntityCandidates.vue']=empty;modules['./EntityEditor.vue']=empty;modules['@/components/FollowToggle.vue']=empty
+    modules['./EntityCandidates.vue']=empty;modules['./EntityEditor.vue']=empty;modules['./EntityActivity.vue']=empty;modules['@/components/FollowToggle.vue']=empty
     modules['./components/EntryWorkbench.vue']=moduleOf(loadComponent(new URL('./components/EntryWorkbench.vue',import.meta.url),modules))
   }
   const library = loadComponent(new URL('./Library.vue', import.meta.url), modules)
@@ -247,6 +248,25 @@ test('an initial library request failure stops the material loading placeholders
   try {
     assert.equal(env.requests.length, 0)
     assert.equal(descendants(env.root).some(node => hasClass(node, 'entry-card-skeleton')), false)
+  } finally { env.cleanup() }
+})
+
+test('the shared entity and domain selector preserves material filter requests and URL selections', async () => {
+  const env = await mountLibrary('en-US', { entity_ids: 'entity-1', domain_ids: 'domain-1' })
+  try {
+    const control = env.control('domains.mixedFilter')
+    assert.deepEqual(control.props.value, ['entity:entity-1', 'domain:domain-1'])
+    assert.deepEqual(control.props['data-options'].map((group: any) => group.children), [
+      [{ value: 'entity:entity-1', label: 'Target Entity' }],
+      [{ value: 'domain:domain-1', label: 'domain-1' }],
+    ])
+    await env.change(control, ['entity:entity-1', 'domain:domain-2'])
+    assert.equal(env.requests.at(-1)!.get('entity_ids'), 'entity-1')
+    assert.equal(env.requests.at(-1)!.get('domain_ids'), 'domain-2')
+    assert.equal(env.route.query.domain_ids, 'domain-2')
+    await env.change(env.control('domains.mixedFilter'), [])
+    assert.equal(env.requests.at(-1)!.has('entity_ids'), false)
+    assert.equal(env.requests.at(-1)!.has('domain_ids'), false)
   } finally { env.cleanup() }
 })
 
