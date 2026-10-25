@@ -19,7 +19,7 @@ const classification = computed(() => ({
   structured_summary: props.article.summary,
 }))
 const published = computed(() => props.article.published_at
-  ? new Date(props.article.published_at).toLocaleDateString(locale.value)
+  ? new Date(props.article.published_at).toLocaleDateString(locale.value, { timeZone: 'UTC' })
   : t('knowledgeSearch.missingPublishedAt'))
 </script>
 

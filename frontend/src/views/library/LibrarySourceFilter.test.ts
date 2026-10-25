@@ -258,7 +258,8 @@ test('the shared entity and domain selector preserves material filter requests a
     assert.deepEqual(control.props.value, ['entity:entity-1', 'domain:domain-1'])
     assert.deepEqual(control.props['data-options'].map((group: any) => group.children), [
       [{ value: 'entity:entity-1', label: 'Target Entity' }],
-      [{ value: 'domain:domain-1', label: 'domain-1' }],
+      // listDomains returned the full list without domain-1, so the URL points at a deleted domain.
+      [{ value: 'domain:domain-1', label: 'Deleted domain' }],
     ])
     await env.change(control, ['entity:entity-1', 'domain:domain-2'])
     assert.equal(env.requests.at(-1)!.get('entity_ids'), 'entity-1')

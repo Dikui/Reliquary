@@ -22,7 +22,7 @@ const options = ref<SearchOptions>({ entities: [] })
 const optionsLoading = ref(false), optionsError = ref('')
 const results = ref<Article[]>([])
 const excludedMissingPublishedAt = ref(0)
-const loading = ref(false), hasSearched = ref(false), error = ref('')
+const loading = ref(false), hasSearched = ref(false), noLibraries = ref(false), error = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
 const composing = ref(false)
 let sequence = 0, synchronizing = false
@@ -63,6 +63,7 @@ async function runSearch(updateURL = true) {
     const response = await searchEntries(request)
     if (current !== sequence) return
     if (!response.success) throw response
+    noLibraries.value = !!response.noLibraries
     results.value = response.data.results || []
     excludedMissingPublishedAt.value = response.data.excluded_missing_published_at || 0
   } catch (cause: any) {
@@ -136,7 +137,7 @@ onUnmounted(invalidate)
         <p class="result-count" role="status">{{ t('knowledgeSearch.resultCount', { count: results.length }) }}</p>
         <SearchEntry v-for="article in results" :key="article.entry_id" :article="article" :query="query" @open-article="openArticle" @open-entity="openEntity" />
       </template>
-      <t-empty v-else :description="t(hasSearched ? 'knowledgeSearch.noResults' : 'knowledgeSearch.idle')" />
+      <t-empty v-else :description="t(noLibraries ? 'knowledgeSearch.noLibraries' : hasSearched ? 'knowledgeSearch.noResults' : 'knowledgeSearch.idle')" />
     </section>
   </main>
 </template>

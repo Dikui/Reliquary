@@ -12,6 +12,7 @@ import { onMounted, ref, nextTick, onUnmounted, watch, computed, defineAsyncComp
 import {
   getChunkByIdOnly,
   updateEntryMetadata,
+  updateEntryOverview,
   reparseEntry, getEntryDetails,
   ENTRY_CHUNK_PAGE_SIZE,
 } from "@/api/library";
@@ -171,6 +172,37 @@ const saveMetadata = async () => {
   }
 };
 
+const overviewEditing = ref(false);
+const overviewSaving = ref(false);
+const overviewDraft = ref({ title: '', description: '' });
+const startOverviewEdit = () => {
+  overviewDraft.value = { title: getDisplayTitle(), description: props.details.structured_summary?.overview || props.details.description || '' };
+  overviewEditing.value = true;
+};
+const saveOverview = async () => {
+  const title = overviewDraft.value.title.trim();
+  if (!title) { MessagePlugin.error(t('library.titleRequired')); return; }
+  const id = props.details.id;
+  overviewSaving.value = true;
+  try {
+    const description = overviewDraft.value.description.trim();
+    const result: any = await updateEntryOverview(id, { title, description });
+    if (!result?.success) throw new Error(result?.message || t('common.saveFailed'));
+    if (props.details.id !== id) return;
+    // The handler returns no data when reloading the saved entry fails.
+    const data = result.data || { ...props.details, file_type: props.details.type, description, structured_summary: description ? { overview: description } : null, summary_status: description ? 'completed' : 'none' };
+    // Lists name Markdown and vault entries by title; uploaded files keep their file name.
+    const named = data.file_type === 'manual' || data.source_kind === 'mine' || data.source_kind === 'report';
+    applyProcessingState({ ...(named ? { title, file_name: title, display_name: title } : {}), description: data.description ?? '', structured_summary: data.structured_summary ?? null, summary_status: data.summary_status });
+    overviewEditing.value = false;
+    MessagePlugin.success(t('common.saveSuccess'));
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('common.saveFailed'));
+  } finally {
+    overviewSaving.value = false;
+  }
+};
+
 const reprocessing = ref(false);
 const articleJudgmentsBusy = ref(false);
 const canReprocess = computed(() => Boolean(props.details?.id));
@@ -237,6 +269,7 @@ mermaid.initialize({
   }
 });
 const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "libraryId", "reference"]);
+watch(() => props.details?.id, () => { overviewEditing.value = false; });
 const externalToolName = computed(() => getExternalToolName(props.details));
 let previewImages = createProtectedFileImageScope();
 function releasePreviewResources() {
@@ -1224,7 +1257,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           </div>
         </section>
 
-        <section v-if="hasIntake" class="setting-drawer__section intake-review-panel">
+        <section v-if="hasIntake && (isIntakeRejected || intake.reason || intake.original_path || intakeOriginalURL || intakeSourceInfo.author || intakeSourceInfo.publisher || intakeSourceInfo.published_at)" class="setting-drawer__section intake-review-panel">
           <h4 class="setting-drawer__section-title">{{ isIntakeRejected ? $t('library.intakeWaiting') : $t('library.intakePreviewOriginal') }}</h4>
           <p v-if="intake.reason">{{ intake.reason }}</p>
           <p v-if="intakeSourceInfo.author">{{ $t('library.intakeAuthor') }}: {{ intakeSourceInfo.author }}</p>
@@ -1326,6 +1359,10 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         <section class="setting-drawer__section summary-section">
           <div class="section-title-actions">
             <h4 class="setting-drawer__section-title">{{ $t('library.documentSummary') }}</h4>
+            <t-button v-if="details.id && !overviewEditing" size="small" variant="outline" :disabled="isProcessing || reprocessing" @click="startOverviewEdit">
+              <template #icon><t-icon name="edit" size="15px" /></template>
+              {{ $t('library.editOverview') }}
+            </t-button>
             <t-button v-if="canReprocess && !processingState.failed" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy" @click="reprocess">
               <template #icon><t-icon name="refresh" size="15px" /></template>
               {{ $t('library.reprocess') }}
@@ -1338,7 +1375,17 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               <p>{{ image.description }}</p>
             </div>
           </details>
+          <div v-if="overviewEditing" class="overview-editor">
+            <label><span>{{ $t('library.titleLabel') }}</span><t-input v-model="overviewDraft.title" :maxlength="200" :disabled="overviewSaving" /></label>
+            <label><span>{{ $t('library.summaryOverview') }}</span><SafeTextarea v-model="overviewDraft.description" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="overviewSaving" /></label>
+            <p class="summary-empty-hint">{{ $t('library.overviewManualHint') }}</p>
+            <div class="overview-actions">
+              <t-button size="small" variant="outline" :disabled="overviewSaving" @click="overviewEditing = false">{{ $t('common.cancel') }}</t-button>
+              <t-button size="small" theme="primary" :loading="overviewSaving" @click="saveOverview">{{ $t('common.save') }}</t-button>
+            </div>
+          </div>
           <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
+          <p v-if="!isProcessing && !details.structured_summary && !details.description" class="summary-empty-hint">{{ $t('library.summaryEmpty') }}</p>
           <EntryDomainsEditor :key="`domains-${details.id}`" :entry-id="details.id" :domains="details.domains || []" :manual="details.domains_manual" @saved="applyProcessingState" />
           <EntryEntitiesEditor :key="details.id" :entry-id="details.id" :entities="details.entities || []" :manual="details.entities_manual" @saved="applyProcessingState" />
         <EntryUpdateNotice :has-update="details.has_update" :latest-entry-id="details.latest_entry_id" />
@@ -1708,6 +1755,32 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 
 .metadata-display {
   min-width: 0;
+}
+
+.overview-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+  }
+}
+
+.overview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.summary-empty-hint {
+  margin: 8px 0;
+  font-size: 13px;
+  color: var(--td-text-color-secondary);
 }
 
 .summary-section-heading,

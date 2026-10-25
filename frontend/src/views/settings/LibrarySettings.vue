@@ -62,6 +62,7 @@
 
                 <!-- 模型配置 -->
                 <div v-show="currentSection === 'models'" class="section">
+                  <t-empty v-if="!formData && !loading && !error" :description="$t('ikb18.sharedEmbeddingNoLibrary')" />
 
                   <ModelTierEditor v-if="formData" v-model="formData.modelTiers" :tiers="['embedding']" scope="space" :all-models="allModels" :before-navigate="confirmLeave" :disabled="saving" @resolved="resolvedModelTiers = $event" />
                   <EmbeddingRebuild v-if="formData && currentSection === 'models'" :model-id="formData.modelTiers.embedding || ''" :models="allModels" :disabled="dirty || saving" />
@@ -70,7 +71,7 @@
 
       </div>
     </t-loading>
-    <div v-if="currentSection !== 'catalog'" class="library-settings-actions"><t-button variant="outline" :disabled="!dirty || saving || loading" @click="reset">{{ $t('common.cancel') }}</t-button><t-button theme="primary" :loading="saving" :disabled="!dirty || loading" @click="handleSubmit">{{ $t('common.save') }}</t-button></div>
+    <div v-if="currentSection !== 'catalog' && formData" class="library-settings-actions"><t-button variant="outline" :disabled="!dirty || saving || loading" @click="reset">{{ $t('common.cancel') }}</t-button><t-button theme="primary" :loading="saving" :disabled="!dirty || loading" @click="handleSubmit">{{ $t('common.save') }}</t-button></div>
   </section>
 </template>
 <script setup lang="ts">

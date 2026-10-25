@@ -392,6 +392,10 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 	if entry.Title != "" {
 		record.Title = entry.Title
 		record.TitleSpecified = true
+		// Lists show file_name, which a Markdown entry derives from its title.
+		if record.FileType == types.EntryTypeManual {
+			record.FileName = sanitizeManualDownloadFilename(entry.Title)
+		}
 	}
 	if entry.DescriptionSpecified {
 		record.Description = entry.Description

@@ -15,7 +15,7 @@ const options = computed(() => {
     const choices = items.map(item => ({ value: `${kind}:${item.value}`, label: item.label }))
     for (const value of props.modelValue) {
       if (value.startsWith(`${kind}:`) && !choices.some(item => item.value === value)) {
-        choices.push({ value, label: value.slice(kind.length + 1) })
+        choices.push({ value, label: kind === 'domain' && !props.loading ? t('domains.deletedFilter') : value.slice(kind.length + 1) })
       }
     }
     return choices

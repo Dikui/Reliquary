@@ -3,12 +3,13 @@ import type { SearchData, SearchOptions, SearchRequest } from '@/types/search'
 
 import { readLibraryScope, scopedLibraryIDs } from '@/utils/libraryScope'
 
-interface SearchEnvelope<T> { success: boolean; data: T; message?: string }
+interface SearchEnvelope<T> { success: boolean; data: T; message?: string; noLibraries?: boolean }
 export async function searchEntries(request: SearchRequest) {
   if (request.libraries === undefined || request.libraries.length === 0) {
     const catalog = await get<SearchEnvelope<Array<{ id: string }>>>('/api/v1/libraries')
     if (!catalog.success) throw catalog
     request = { ...request, libraries: scopedLibraryIDs(request.libraries ?? readLibraryScope(), catalog.data) }
+    if (!request.libraries?.length) return { success: true, data: { results: [], excluded_missing_published_at: 0 }, noLibraries: true }
   }
   return post<SearchEnvelope<SearchData>>('/api/v1/search', request)
 }

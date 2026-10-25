@@ -131,6 +131,11 @@ export function getEntryDetailsCon(id: string, page: number) {
   return get(`/api/v1/chunks/${id}?page=${page}&page_size=${ENTRY_CHUNK_PAGE_SIZE}`);
 }
 
+/** Manual title and overview are kept when the entry is reprocessed. */
+export function updateEntryOverview(entryId: string, data: { title: string; description: string }) {
+  return put(`/api/v1/entries/${entryId}`, data);
+}
+
 export function updateEntryMetadata(entryId: string, customMetadata: Record<string, unknown>) {
   return put(`/api/v1/entries/${entryId}`, { custom_metadata: customMetadata });
 }

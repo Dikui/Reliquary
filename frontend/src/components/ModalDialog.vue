@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useModalFocus } from '@/composables/useModalFocus'
 
 defineOptions({ inheritAttrs: false })
@@ -11,6 +11,7 @@ const shown = computed(() => mounted.value && props.visible)
 function close() { if (!props.busy) { emit('close'); emit('update:visible', false) } }
 const { focusInside } = useModalFocus(shown, () => content.value?.closest<HTMLElement>('[role="dialog"]') || null, () => props.busy, close)
 onMounted(() => { mounted.value = true })
+watch(() => props.busy, () => nextTick(focusInside))
 </script>
 
 <template>

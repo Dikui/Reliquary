@@ -173,7 +173,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       getEntryBatch: async () => ({ success: true, data: { batch_id: 'legacy-review', action: 'review', status: 'completed', total: 1, succeeded: 1, failed: 0, skipped: 0, pending: 0, running: 0, warnings: 0, items: [], page: 1, page_size: 20 } }),
       submitEntryBatch: async () => assert.fail('Historical results must not create a review task'),
     }
-    const dialog = component('../../components/EntryBatchDialog.vue', { '@/api/entry-batches': api, })
+    const dialog = component('../../components/EntryBatchDialog.vue', { '@/api/entry-batches': api, '@/api/library': { listLibraries: async () => ({ success: true, data: [] }) } })
     const html = await render(dialog, { visible: true, batchId: 'legacy-review', libraries: [] }, locale, async state => {
       state.ready.value = true
       assert.ok(!state.actions.includes('review'))

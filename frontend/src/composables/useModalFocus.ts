@@ -13,7 +13,8 @@ export function useModalFocus(visible: Ref<boolean>, root: () => HTMLElement | n
   }
   function focusInside() {
     const dialog = root()
-    if (isTop() && dialog && !dialog.contains(document.activeElement)) (focusable()[0] || dialog).focus()
+    const current = document.activeElement as HTMLElement | null
+    if (isTop() && dialog && (!dialog.contains(current) || current?.matches(':disabled'))) (focusable()[0] || dialog).focus()
   }
   function keydown(event: KeyboardEvent) {
     if (!isTop() || event.defaultPrevented || event.isComposing) return

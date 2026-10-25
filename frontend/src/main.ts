@@ -8,6 +8,7 @@ import TDesign from "tdesign-vue-next";
 // 引入组件库的少量全局样式变量
 import "tdesign-vue-next/dist/tdesign.css";
 import "./assets/popup-word-wrapping.css";
+import "./assets/narrow-popups.css";
 import "@/assets/theme/theme.css";
 import "@/assets/dropdown-menu.less";
 import "@/components/css/highlight.less";
@@ -16,6 +17,7 @@ import { initTheme } from "@/composables/useTheme";
 import { initFont } from "@/composables/useFont";
 import { installTDesignIconOfflineGuard } from "@/utils/tdesign-icon-offline";
 import { installAutofillGuard } from "@/utils/disable-autofill";
+import { installPaginationKeyboard } from "@/utils/paginationKeyboard";
 
 // 必须在 Vue 组件挂载之前执行，避免 tdesign-icons 运行时请求 tdesign.gtimg.com
 installTDesignIconOfflineGuard();
@@ -44,6 +46,7 @@ async function bootstrap() {
   app.onUnmount(removeImeEnterGuard);
   app.mount("#app");
   installAutofillGuard();
+  installPaginationKeyboard(key => key === "more" ? i18n.global.t("ikb19.morePages") : key === "previous" ? i18n.global.t("ikb19.previous") : i18n.global.t("ikb19.next"));
 }
 
 bootstrap();

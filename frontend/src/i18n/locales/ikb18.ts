@@ -4,6 +4,7 @@ export const ikb18Zh = {
   processingPolicy: '先保存正文和图片，再后台建立正文索引、生成摘要。后台处理失败不撤销已保存正文。',
   parentChildFixed: '父子分块由模板决定：参考文档启用，其他库关闭。',
   sharedEmbedding: '共享向量模型',
+  sharedEmbeddingNoLibrary: '还没有资料库。创建资料库后才能配置共享向量模型。',
 
   priceTextInput: '文本输入单价（每百万 token）', priceImageInput: '图片输入单价（每百万 token）',
   priceModalityHint: '文本与图片分别计费。图片单价留空时，含图片的调用费用可能显示未知；接口未返回分项用量时也会显示未知。',
@@ -38,6 +39,7 @@ export const ikb18En: typeof ikb18Zh = {
   processingPolicy: 'Save the body and images first. Build the body index, then generate summaries in the background. Background failures do not undo the saved body.',
   parentChildFixed: 'The template enables parent–child chunks for reference documents and disables them for other libraries.',
   sharedEmbedding: 'Shared embedding model',
+  sharedEmbeddingNoLibrary: 'There are no libraries yet. Create a library before configuring the shared embedding model.',
 
   priceTextInput: 'Text input price per million tokens', priceImageInput: 'Image input price per million tokens',
   priceModalityHint: 'Text and images are priced separately. Calls with images may show an unknown cost if the image price or itemized usage is missing.',

@@ -56,6 +56,26 @@ func TestUpdateEntryOmittedDescriptionPreservesExisting(t *testing.T) {
 	require.Equal(t, types.SummaryStatusCompleted, repo.entry.SummaryStatus)
 }
 
+func TestUpdateEntryTitleRenamesMarkdownFileName(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		fileType, fileName, want string
+	}{
+		{types.EntryTypeManual, "old.md", "new - title.md"},
+		{"pdf", "report.pdf", "report.pdf"},
+	} {
+		repo := &metadataUpdateEntryRepo{entry: &types.Entry{
+			ID: "entry-1", SpaceID: 7, LibraryID: "library-1", Title: "old", FileType: test.fileType, FileName: test.fileName,
+		}}
+		service := &entryService{repo: repo, libraryService: metadataUpdateLibraryService{}}
+		ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(7))
+
+		require.NoError(t, service.UpdateEntry(ctx, &types.Entry{ID: "entry-1", Title: "new / title"}))
+		require.Equal(t, "new / title", repo.entry.Title)
+		require.Equal(t, test.want, repo.entry.FileName)
+	}
+}
+
 func TestUpdateEntryManualDescriptionSetsCompletedStatus(t *testing.T) {
 	t.Parallel()
 	repo := &metadataUpdateEntryRepo{entry: &types.Entry{

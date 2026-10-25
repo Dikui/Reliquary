@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { previewEntryBatch, submitEntryBatch, getEntryBatch, retryFailedEntryBatch, type EntryBatchAction, type EntryBatchSelection, type EntryBatchRequest, type EntryBatchPreview, type EntryBatch } from '@/api/entry-batches'
-import type { LibraryCatalogItem } from '@/api/library'
+import { listLibraries, type LibraryCatalogItem } from '@/api/library'
 import { entryChannelLabel, entryFileFormatLabel } from '@/utils/entrySourceLabels'
 const props = defineProps<{ visible: boolean; batchId?: string; ids?: string[]; selection?: EntryBatchSelection; scopeLabel?: string; libraries: LibraryCatalogItem[]; selectedLibraryIds?: string[]; initialAction?: EntryBatchAction; domainOptions?: { value: string; label: string }[]; entityOptions?: { value: string; label: string }[] }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean]; changed: []; created: [id: string] }>()
@@ -128,6 +128,16 @@ watch([() => props.visible, () => props.batchId, selection], ([visible, batchId]
   if (visible && !batchId) void loadScope()
 }, { immediate: true, deep: true })
 watch(page, () => { if (props.visible && batch.value) void refresh() })
+// Opened from the domains page, the parent has not loaded the library catalog yet.
+const fetchedLibraries = ref<LibraryCatalogItem[]>([])
+watch(() => props.visible, async visible => {
+  if (!visible || props.libraries.length || fetchedLibraries.value.length) return
+  try { const response = await listLibraries(); if (response.success) fetchedLibraries.value = response.data || [] } catch { /* Names fall back to IDs. */ }
+})
+function libraryName(id: string) {
+  const library = (props.libraries.length ? props.libraries : fetchedLibraries.value).find(item => item.id === id)
+  return library?.display_name || library?.name || id
+}
 onUnmounted(() => { disposed = true; trigger = null; generation++; readGeneration++; scopeGeneration++; stop() })
 </script>
 <template>
@@ -161,7 +171,7 @@ onUnmounted(() => { disposed = true; trigger = null; generation++; readGeneratio
         <t-alert v-if="action === 'reprocess'" theme="warning" :message="t('entryBatch.reprocessHint')" />
         <t-alert v-if="action === 'reclassify_domains'" theme="info" :message="t('domains.reclassifyHint')" />
         <t-button :loading="busy" :disabled="busy || !valid" @click="showPreview">{{ t('entryBatch.preview') }}</t-button>
-        <section v-if="preview" aria-live="polite"><p>{{ t('entryBatch.previewCounts', { ...preview }) }}</p><ul><li v-for="reason in preview.reasons" :key="reason.code">{{ t('entryBatch.reasonCount', { reason: t(`entryBatch.reasons.${reason.code}`, reason.code), count: reason.count }) }}</li></ul><p>{{ t('entryBatch.samples') }}</p><ul><li v-for="item in preview.samples" :key="item.id">{{ item.title || item.id }} · {{ libraries.find(lib => lib.id === item.library_id)?.display_name || item.library_id }}</li></ul><t-checkbox v-model="confirmed" :disabled="busy || !preview.eligible">{{ t('entryBatch.confirmScope', { scope: scopeText, count: preview.eligible }) }}</t-checkbox><div><t-button :theme="action === 'delete' ? 'danger' : 'primary'" :disabled="busy || !confirmed || !preview.eligible || preview.blocked > 0" :loading="busy" @click="submit()">{{ t('entryBatch.confirm') }}</t-button></div></section>
+        <section v-if="preview" aria-live="polite"><p>{{ t('entryBatch.previewCounts', { ...preview }) }}</p><ul><li v-for="reason in preview.reasons" :key="reason.code">{{ t('entryBatch.reasonCount', { reason: t(`entryBatch.reasons.${reason.code}`, reason.code), count: reason.count }) }}</li></ul><p>{{ t('entryBatch.samples') }}</p><ul><li v-for="item in preview.samples" :key="item.id">{{ item.title || item.id }} · {{ libraryName(item.library_id) }}</li></ul><t-checkbox v-model="confirmed" :disabled="busy || !preview.eligible">{{ t('entryBatch.confirmScope', { scope: scopeText, count: preview.eligible }) }}</t-checkbox><div><t-button :theme="action === 'delete' ? 'danger' : 'primary'" :disabled="busy || !confirmed || !preview.eligible || preview.blocked > 0" :loading="busy" @click="submit()">{{ t('entryBatch.confirm') }}</t-button></div></section>
         </template>
       </template>
       <section v-else-if="batch" aria-live="polite"><p><strong>{{ t(`entryBatch.actions.${batch.action}`) }}</strong> · {{ t(`entryBatch.status.${batch.status}`) }} · {{ t('entryBatch.resultCounts', { ...batch }) }}</p><a class="batch-id" :href="`/platform/entries?batch_id=${encodeURIComponent(batch.batch_id)}`">{{ t('entryBatch.resultLink') }} · {{ batch.batch_id }}</a><p v-if="active">{{ t('entryBatch.runningHint') }}</p><p v-if="batch.warnings">{{ t('entryBatch.warningCount', { count: batch.warnings }) }}</p><ul class="batch-results"><li v-for="item in batch.items" :key="item.entry_id"><strong>{{ item.title || item.entry_id }}</strong><span>{{ t(`entryBatch.status.${item.status}`) }}</span><p v-if="item.message || item.warning">{{ item.message === 'domains_manual' ? t('entryBatch.reasons.domains_manual') : item.message || item.warning }}</p><small v-if="item.task_id">{{ item.task_id }}</small></li></ul><t-pagination v-if="batch.total > 20" v-model:current="page" :total="batch.total" :page-size="20" :show-page-size="false" size="small" /><t-button v-if="!active && batch.failed > 0" :loading="busy" :disabled="busy" @click="submit(true)">{{ t('entryBatch.retryFailed') }}</t-button></section>
@@ -177,7 +187,7 @@ onUnmounted(() => { disposed = true; trigger = null; generation++; readGeneratio
 .entry-batch-content > * { flex-shrink: 0; }
 .batch-step-title { margin: 0; font-size: 16px; font-weight: 600; }
 .entry-batch p { margin: 0; overflow-wrap: anywhere; }
-.entry-batch label { display: flex; flex-direction: column; gap: 6px; }
+.entry-batch label:not(.t-checkbox) { display: flex; flex-direction: column; gap: 6px; }
 .entry-batch small, .batch-id { color: var(--td-text-color-secondary); overflow-wrap: anywhere; }
 .entry-batch section { display: flex; flex-direction: column; gap: 12px; }
 .entry-batch ul { margin: 0; padding-left: 20px; overflow-wrap: anywhere; }

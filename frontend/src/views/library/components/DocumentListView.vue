@@ -236,6 +236,7 @@ const openDelete = async (item: EntryItem) => {
   overflow: visible;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   animation: doc-list-fade-in 0.32s ease-out;
+  container-type: inline-size;
 }
 
 .doc-list-header,
@@ -485,6 +486,13 @@ const openDelete = async (item: EntryItem) => {
     background: var(--td-component-stroke);
     color: var(--td-text-color-primary);
   }
+}
+
+/* 列宽之和约 850px；容器变窄时先隐藏来源和大小两列 */
+@container (max-width: 860px) {
+  .doc-list-header,
+  .doc-list-row { grid-template-columns: 44px minmax(0, 2.6fr) minmax(96px, 0.7fr) 140px 80px; }
+  .cell-source, .cell-size { display: none; }
 }
 
 @media (max-width: 640px) {

@@ -1,0 +1,4 @@
+/* TDesign 的日期范围弹层并排两个月份，约 560px；窄屏改为上下排列，避免撑开页面 */
+@media (max-width: 600px) {
+  .t-date-range-picker__panel-content-wrapper { flex-direction: column; }
+}

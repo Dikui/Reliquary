@@ -160,6 +160,7 @@ onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; 
 .panel-heading h3 { margin: 0; font-size: 16px; }
 .entity-filters { display: flex; gap: 12px; width: min(480px, 100%); }
 .entity-filters > :deep(*) { min-width: 0; }
+.entity-filters > :deep(.t-button) { flex: none; }
 .entity-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: 24px; min-height: 300px; }
 .entity-list { min-width: 0; }
 .entity-list__item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; border: 1px solid transparent; background: transparent; border-radius: var(--td-radius-medium); text-align: left; color: var(--td-text-color-primary); cursor: pointer; }

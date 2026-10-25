@@ -1018,6 +1018,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       <DomainsManager v-if="activeLibraryTab === 'domains'" @reclassify="openDomainReclassification" />
 
       <PendingReviews v-if="activeLibraryTab === 'reviews' && libraryId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="handlePendingChanged" @refreshed="pendingCounts.refresh()" />
+      <t-empty v-else-if="activeLibraryTab === 'reviews'" :description="$t('knowledgeReview.noLibrary')" />
 
       <template v-if="activeLibraryTab === 'documents'">
         <div class="entry-main">
