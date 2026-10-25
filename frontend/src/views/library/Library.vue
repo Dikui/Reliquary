@@ -157,7 +157,7 @@ const starredOptions = computed(() => [
 ]);
 const selectedEntityId = ref('');
 const selectedDomainIds = ref<string[]>((initialDocumentFilters.domainIds || '').split(',').filter(Boolean));
-const filterDomains = ref<Domain[]>([]);
+const filterDomains = ref<Domain[]>([]), filterDomainsLoaded = ref(false);
 const selectedEntityIds = ref<string[]>((initialDocumentFilters.entityIds || '').split(',').filter(Boolean));
 const filterEntities = ref<Entity[]>([]), filterEntitiesLoading = ref(false), filterEntitiesError = ref(''), moreFilterEntities = ref(false);
 const filterEntityOptions = computed(() => {
@@ -165,6 +165,9 @@ const filterEntityOptions = computed(() => {
   for (const id of selectedEntityIds.value) if (!options.some(option => option.value === id)) options.push({ value: id, label: id });
   return options;
 });
+// A saved link can still filter by a domain deleted since; the domain list is loaded in full.
+const deletedDomainIds = computed(() => !filterDomainsLoaded.value ? [] : selectedDomainIds.value.filter(id => !filterDomains.value.some(domain => domain.id === id)));
+const clearDeletedDomains = () => { selectedDomainIds.value = selectedDomainIds.value.filter(id => !deletedDomainIds.value.includes(id)); };
 const selectedClassification = computed({
   get: () => [...selectedEntityIds.value.map(id => `entity:${id}`), ...selectedDomainIds.value.map(id => `domain:${id}`)],
   set: (values: string[]) => {
@@ -181,7 +184,7 @@ async function loadFilterEntities(more = false) {
       listEntities({ limit: 100, offset: more ? filterEntities.value.length : 0 }), listDomains(),
     ]);
     if (!domains.success) throw new Error(domains.error || t('domains.requestFailed'));
-    if (current === filterEntitiesRequest) filterDomains.value = domains.data;
+    if (current === filterEntitiesRequest) { filterDomains.value = domains.data; filterDomainsLoaded.value = true; }
     if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed'));
     if (current === filterEntitiesRequest) { filterEntities.value = more ? [...filterEntities.value, ...response.data] : response.data; moreFilterEntities.value = response.data.length === 100; }
   } catch (cause) { if (current === filterEntitiesRequest) filterEntitiesError.value = cause instanceof Error ? cause.message : t('knowledgeWorkbench.requestFailed'); }
@@ -1037,7 +1040,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 <div class="doc-filter-bar__filters">
                 <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
                 <div class="doc-filter-field">
-                  <EntityDomainSelect v-model="selectedClassification" :entities="filterEntityOptions" :domains="filterDomains.map(item => ({ value: item.id, label: item.name }))" :loading="filterEntitiesLoading" class="doc-filter-field__control" />
+                  <EntityDomainSelect v-model="selectedClassification" :entities="filterEntityOptions" :domains="filterDomains.map(item => ({ value: item.id, label: item.name }))" :loading="filterEntitiesLoading || !filterDomainsLoaded" class="doc-filter-field__control" />
                   <t-button v-if="moreFilterEntities" size="small" variant="text" :loading="filterEntitiesLoading" @click="loadFilterEntities(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
                   <p v-if="filterEntitiesError" role="alert">{{ filterEntitiesError }} <t-button size="small" variant="text" @click="loadFilterEntities()">{{ t('common.retry') }}</t-button></p>
                 </div>
@@ -1136,8 +1139,11 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </template>
                 <template v-else-if="!docListLoading">
                   <div class="doc-empty-state">
-
-                    <EmptyEntry />
+                    <div v-if="deletedDomainIds.length" class="doc-deleted-filter-empty">
+                      <p>{{ $t('domains.deletedFilterEmpty') }}</p>
+                      <t-button variant="outline" @click="clearDeletedDomains">{{ $t('domains.clearDeletedFilter') }}</t-button>
+                    </div>
+                    <EmptyEntry v-else />
                   </div>
                 </template>
               </div>
@@ -1774,6 +1780,15 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
     justify-content: space-between;
     border-top: 1px solid var(--td-component-stroke);
   }
+}
+
+.doc-deleted-filter-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  color: var(--td-text-color-secondary);
 }
 
 .doc-empty-state {

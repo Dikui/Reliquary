@@ -46,7 +46,8 @@ async function bootstrap() {
   app.onUnmount(removeImeEnterGuard);
   app.mount("#app");
   installAutofillGuard();
-  installPaginationKeyboard(key => key === "more" ? i18n.global.t("ikb19.morePages") : key === "previous" ? i18n.global.t("ikb19.previous") : i18n.global.t("ikb19.next"));
+  const paginationLabels = { previous: "ikb19.previous", next: "ikb19.next", more: "ikb19.morePages", jump: "ikb19.jumpToPage" } as const;
+  installPaginationKeyboard(key => i18n.global.t(paginationLabels[key]));
 }
 
 bootstrap();

@@ -140,23 +140,31 @@ func TestArticleChunkPrefixOmitsMissingPublicationDate(t *testing.T) {
 	require.Nil(t, date.SearchPublishedAt)
 }
 
-func TestArticleTitleVectorChangeRollsBackWhenEmbeddingFails(t *testing.T) {
+func TestArticleTitleChangeSavesAndDefersVectorWhenEmbeddingFails(t *testing.T) {
 	h, e := newArticleIndexingHarness(t)
 	article := h.upload(t, "Original title", "Measured deployment details and original observations.")
 	var originalHash string
 	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).Pluck("content_hash", &originalHash).Error)
+	require.NotEmpty(t, originalHash)
+	queued := len(h.queue.tasks)
 	e.err = errors.New("fixture embedding unavailable")
-	err := h.service.UpdateEntry(h.ctx, &types.Entry{ID: article.ID, Title: "Changed title"})
-	require.ErrorContains(t, err, "fixture embedding unavailable")
-	reloaded := h.article(t, article.ID)
-	require.Equal(t, article.Title, reloaded.Title)
-	var currentHash string
-	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).Pluck("content_hash", &currentHash).Error)
-	require.Equal(t, originalHash, currentHash)
-	e.err = nil
 	require.NoError(t, h.service.UpdateEntry(h.ctx, &types.Entry{ID: article.ID, Title: "Changed title"}))
-	reloaded = h.article(t, article.ID)
+	reloaded := h.article(t, article.ID)
 	require.Equal(t, "Changed title", reloaded.Title)
+	// The deferred vector task rebuilds the vector; TestIKB08EntryVectorPendingRecoversWithoutReprocessing covers it.
+	require.Len(t, h.queue.tasks, queued+1)
+	require.Equal(t, types.TypeEntryVector, h.queue.tasks[queued].Type())
+	var hashes []string
+	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).Pluck("content_hash", &hashes).Error)
+	require.NotContains(t, hashes, originalHash, "the old title's vector must not keep matching")
+}
+
+func TestArticleOverviewEditRefreshesVector(t *testing.T) {
+	h, _ := newArticleIndexingHarness(t)
+	article := h.upload(t, "Stable title", "Measured deployment details and original observations.")
+	var originalHash, currentHash string
+	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).Pluck("content_hash", &originalHash).Error)
+	require.NoError(t, h.service.UpdateEntry(h.ctx, &types.Entry{ID: article.ID, Description: "Hand-written overview", DescriptionSpecified: true}))
 	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).Pluck("content_hash", &currentHash).Error)
 	require.NotEqual(t, originalHash, currentHash)
 }

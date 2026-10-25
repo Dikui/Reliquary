@@ -435,18 +435,23 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 		record.CustomMetadata = entry.CustomMetadata
 	}
 
-	if s.db != nil && record.Title != previousTitle && record.SourceKind != "report" &&
-		record.StructuredSummary != nil && record.ParseStatus == types.ParseStatusCompleted {
+	// The article vector embeds title and summary, so either edit refreshes it.
+	if s.db != nil && (record.Title != previousTitle || entry.DescriptionSpecified) && record.SourceKind != "report" &&
+		record.ParseStatus == types.ParseStatusCompleted {
 		library, err := s.libraryService.GetLibraryByID(ctx, record.LibraryID)
 		if err != nil {
 			return err
 		}
-		// Keep a title change and its vector atomic when the provider fails.
 		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			if err := repository.NewEntryRepository(tx).UpdateEntry(ctx, record); err != nil {
 				return err
 			}
-			return indexArticleEmbedding(ctx, tx, s.modelService, library, record)
+			// A manual edit is kept when the embedding provider is down; the vector catches up
+			// through the same deferred vector task article processing uses.
+			if err := indexArticleEmbedding(ctx, tx, s.modelService, library, record); err != nil {
+				return s.deferEntryVectors(ctx, record, err)
+			}
+			return nil
 		}); err != nil {
 			return err
 		}

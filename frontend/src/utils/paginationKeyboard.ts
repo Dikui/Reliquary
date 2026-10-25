@@ -1,7 +1,7 @@
 // TDesign 1.19 Pagination renders pages and prev/next as li/div without tabindex or role,
-// so keyboard users cannot reach them. Patch every rendered pagination in place.
+// so keyboard users cannot reach them, and its jump input has no name. Patch every rendered pagination in place.
 const ITEMS = '.t-pagination__btn, .t-pagination__number'
-type Label = (key: 'previous' | 'next' | 'more') => string
+type Label = (key: 'previous' | 'next' | 'more' | 'jump') => string
 
 export function syncPaginationItems(root: ParentNode, label: Label) {
   root.querySelectorAll<HTMLElement>(ITEMS).forEach((item) => {
@@ -14,6 +14,7 @@ export function syncPaginationItems(root: ParentNode, label: Label) {
     const key = item.classList.contains('t-pagination__btn-prev') ? 'previous' : item.classList.contains('t-pagination__btn-next') ? 'next' : item.classList.contains('t-pagination__number--more') ? 'more' : ''
     if (key) item.setAttribute('aria-label', label(key))
   })
+  root.querySelectorAll<HTMLElement>('.t-pagination__jump input').forEach(input => input.setAttribute('aria-label', label('jump')))
 }
 
 export function activatePaginationItem(event: KeyboardEvent) {

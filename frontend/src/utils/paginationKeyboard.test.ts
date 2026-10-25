@@ -21,12 +21,14 @@ test('pagination items become focusable buttons that follow disabled and current
   const current = item('t-pagination__number', 't-is-current')
   const next = item('t-pagination__btn', 't-pagination__btn-next')
   const more = item('t-pagination__number', 't-pagination__number--more')
-  const root = { querySelectorAll: () => [prev, current, next, more] } as unknown as ParentNode
-  syncPaginationItems(root, key => ({ previous: 'Previous', next: 'Next', more: 'More pages' })[key])
+  const jump = item()
+  const root = { querySelectorAll: (selector: string) => selector.includes('jump') ? [jump] : [prev, current, next, more] } as unknown as ParentNode
+  syncPaginationItems(root, key => ({ previous: 'Previous', next: 'Next', more: 'More pages', jump: 'Go to page' })[key])
   assert.deepEqual(prev.attrs, { role: 'button', tabindex: '-1', 'aria-disabled': 'true', 'aria-label': 'Previous' })
   assert.deepEqual(current.attrs, { role: 'button', tabindex: '0', 'aria-disabled': 'false', 'aria-current': 'page' })
   assert.deepEqual(next.attrs, { role: 'button', tabindex: '0', 'aria-disabled': 'false', 'aria-label': 'Next' })
   assert.equal(more.attrs['aria-label'], 'More pages')
+  assert.deepEqual(jump.attrs, { 'aria-label': 'Go to page' })
 })
 
 test('Enter and Space click an enabled item; disabled items and other keys do nothing', () => {
