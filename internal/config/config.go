@@ -15,6 +15,7 @@ import (
 
 // Config 应用程序总配置
 type Config struct {
+	FactGrouping      *FactGroupingConfig      `yaml:"fact_grouping" json:"fact_grouping"`
 	IngestDiagnostics *IngestDiagnosticsConfig `yaml:"ingest_diagnostics" json:"ingest_diagnostics"`
 	Vault             *VaultConfig             `yaml:"vault" json:"vault"`
 	ArticleProcessing *ArticleProcessingConfig `yaml:"article_processing" json:"article_processing"`
@@ -22,6 +23,26 @@ type Config struct {
 	Library           *LibraryConfig           `yaml:"library"   json:"library"`
 
 	Models []ModelConfig `yaml:"models"           json:"models"`
+}
+
+// FactGroupingConfig controls candidate recall and high-confidence verification.
+type FactGroupingConfig struct {
+	RecallThreshold float64 `yaml:"recall_threshold" json:"recall_threshold"`
+	ReviewThreshold float64 `yaml:"review_threshold" json:"review_threshold"`
+}
+
+// GroupingThresholds supplies defaults for omitted or zero configuration.
+func (cfg *Config) GroupingThresholds() (float64, float64) {
+	recall, review := 0.6, 0.85
+	if cfg != nil && cfg.FactGrouping != nil {
+		if cfg.FactGrouping.RecallThreshold != 0 {
+			recall = cfg.FactGrouping.RecallThreshold
+		}
+		if cfg.FactGrouping.ReviewThreshold != 0 {
+			review = cfg.FactGrouping.ReviewThreshold
+		}
+	}
+	return recall, review
 }
 
 // ArticleProcessingConfig bounds review, processing and segmented input.
@@ -162,6 +183,10 @@ func LoadConfig() (*Config, error) {
 // It checks for obviously invalid or missing values that would cause runtime failures.
 func ValidateConfig(cfg *Config) error {
 	var errs []string
+	recall, review := cfg.GroupingThresholds()
+	if !(recall > 0 && recall <= 1 && review > 0 && review <= 1) {
+		errs = append(errs, "fact_grouping thresholds must be in (0,1]")
+	}
 	if cfg.ArticleProcessing != nil && (cfg.ArticleProcessing.MaxBodyChars < 0 || cfg.ArticleProcessing.MaxImages < 0 || cfg.ArticleProcessing.MaxCompletionTokens < 0 || cfg.ArticleProcessing.MaxSegments < 0 || cfg.ArticleProcessing.SegmentOverlapChars < 0 || cfg.ArticleProcessing.ContextReservePercent < 0 || cfg.ArticleProcessing.ContextReservePercent > 90) {
 		errs = append(errs, "article_processing limits must be nonnegative")
 	}

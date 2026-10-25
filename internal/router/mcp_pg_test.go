@@ -84,6 +84,7 @@ func (mcpFixtureChat) GetModelName() string { return "mcp-test-chat" }
 type mcpFixtureModels struct {
 	interfaces.ModelService
 	chatModel chat.Chat
+	embedder  embedding.Embedder
 }
 
 func (mcpFixtureModels) GetModelByID(_ context.Context, id string) (*types.Model, error) {
@@ -96,9 +97,12 @@ func (mcpFixtureModels) GetModelByID(_ context.Context, id string) (*types.Model
 	return model, nil
 }
 
-func (mcpFixtureModels) GetEmbeddingModel(_ context.Context, id string) (embedding.Embedder, error) {
+func (m mcpFixtureModels) GetEmbeddingModel(_ context.Context, id string) (embedding.Embedder, error) {
 	if id == "missing-embedding" {
 		return nil, fmt.Errorf("embedding model no longer exists")
+	}
+	if m.embedder != nil {
+		return m.embedder, nil
 	}
 	return mcpFixtureEmbedder{}, nil
 }
@@ -161,6 +165,8 @@ func (f *mcpFixture) seedProcessingModels(t *testing.T) {
 type mcpProcessingFixture struct {
 	chat         chat.Chat
 	maxBodyChars int
+	embedder     embedding.Embedder
+	grouping     *config.FactGroupingConfig
 }
 
 func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture {
@@ -175,6 +181,7 @@ func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture
 	models := mcpFixtureModels{ModelService: service.NewModelService(apprepo.NewModelRepository(f.db), libraryRepo, nil, nil, f.params.SpaceService)}
 	if len(processing) > 0 {
 		models.chatModel = processing[0].chat
+		models.embedder = processing[0].embedder
 	}
 	engine := retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(f.db))
 	bases := service.NewLibraryService(f.db, libraryRepo, entryRepo, chunkRepo, models, engine, nil)
@@ -189,6 +196,7 @@ func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture
 	root := t.TempDir()
 	cfg := &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: 10 * time.Millisecond}}
 	if len(processing) > 0 {
+		cfg.FactGrouping = processing[0].grouping
 		cfg.ArticleProcessing = &config.ArticleProcessingConfig{MaxBodyChars: processing[0].maxBodyChars}
 	}
 	vault, err := service.NewVaultService(f.db, cfg)

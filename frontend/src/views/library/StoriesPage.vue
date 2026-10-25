@@ -111,6 +111,16 @@ onUnmounted(() => { disposed = true; version++ })
             </li>
           </ol>
           <t-empty v-else :description="t('stories.noFacts')" />
+          <section class="mentions" :aria-label="t('stories.mentions')">
+            <h2>{{ t('stories.mentions') }}</h2>
+            <p class="muted">{{ t('stories.mentionsHint') }}</p>
+            <ul v-if="detail.mentions?.length" class="records">
+              <li v-for="mention in detail.mentions" :key="mention.entry_id" class="record">
+                <router-link :to="entryLocation(mention.entry_id)">{{ mention.title }}</router-link>
+              </li>
+            </ul>
+            <p v-else class="muted">{{ t('stories.noMentions') }}</p>
+          </section>
         </template>
       </t-loading>
     </section>
@@ -131,6 +141,7 @@ p { margin: 8px 0; }
 .records, .sources { list-style: none; padding: 0; margin: 0; }
 .records { display: grid; gap: 16px; }
 .record { padding: 20px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-medium); background: var(--td-bg-color-container); overflow-wrap: anywhere; }
+.mentions { margin-top: 24px; }
 .timeline .record { border-inline-start: 3px solid var(--td-brand-color); }
 .times, .frame { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 16px; font-size: 13px; }
 dt, .muted { color: var(--td-text-color-secondary); }

@@ -22,6 +22,7 @@ const (
 // IngestRequest is sourced content collected deliberately by an external agent.
 // Agent annotations are stored separately from article metadata and processing input.
 type IngestRequest struct {
+	MentionedFactIDs   *[]string          `json:"mentioned_fact_ids,omitempty"`
 	RecoveryFailureID  string             `json:"recovery_failure_id,omitempty"`
 	RawInput           json.RawMessage    `json:"-"`
 	Library            string             `json:"library"`

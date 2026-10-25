@@ -20,6 +20,10 @@ export default {
     "ignoreSaved": "已忽略，出现记录继续保留"
   },
   stories: {
+    "mentions": "提及它的资料",
+    "mentionsHint": "这些资料讨论了事件中的事实，不作为出处证据。",
+    "noMentions": "暂无提及它的资料。",
+
     "title": "事件",
     "detail": "事件详情",
     "description": "按最近一次新事实时间排序，查看每件事的事实与出处。",

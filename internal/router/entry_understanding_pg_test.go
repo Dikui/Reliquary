@@ -24,7 +24,8 @@ import (
 
 type understandingChat struct {
 	mcpFixtureChat
-	respond func(context.Context, []chat.Message) string
+	respond      func(context.Context, []chat.Message) string
+	groupRespond func(context.Context, []chat.Message) string
 }
 
 func (m *understandingChat) Chat(
@@ -32,6 +33,12 @@ func (m *understandingChat) Chat(
 	messages []chat.Message,
 	_ *chat.ChatOptions,
 ) (*types.ChatResponse, error) {
+	if purpose, _ := types.LLMCallMetadataFromContext(ctx); purpose == "fact_grouping" {
+		if m.groupRespond != nil {
+			return &types.ChatResponse{Content: m.groupRespond(ctx, messages)}, nil
+		}
+		return &types.ChatResponse{Content: `{"result":"unrelated","confidence":0.7}`}, nil
+	}
 	return &types.ChatResponse{Content: m.respond(ctx, messages)}, nil
 }
 

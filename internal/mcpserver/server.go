@@ -516,6 +516,7 @@ func ingestSchema() map[string]any {
 	item := object(map[string]any{
 		"library":             text("必填，库 ID 或英文目录名；先调用 list_libraries"),
 		"recovery_failure_id": text("可选，关联修复的接收故障编号；不参与正文或去重"),
+		"mentioned_fact_ids":  stringArray("AI产出可选提及的已有事实 ID；提供空数组表示不提及，永不作为出处"),
 		"source_id":           text("可选稳定来源 ID，最多 2048 Unicode 码点；须与 source_revision 一起提供"),
 		"source_revision": map[string]any{
 			"type": "integer", "minimum": 0,

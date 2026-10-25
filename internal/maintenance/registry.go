@@ -22,6 +22,11 @@ type PersistentTable struct {
 const RegistryVersion = 1
 
 var PersistentTables = map[string]PersistentTable{
+	"grouping_decisions": {
+		Columns: Rule{Sidecar: "id space_id entry_id candidate_fact_id similarity model_id result confidence " +
+			"review_result review_confidence applied_result reason created_at"},
+		File: "data/grouping_decisions.json", After: []string{"entries", "facts"}, Since: 41,
+	},
 	"entity_candidates": {
 		Columns: Rule{Sidecar: "id space_id name normalized_name entity_type status entity_id created_at updated_at"},
 		File:    "data/entity_candidates.json", After: []string{"spaces", "entities"}, Since: 40,
@@ -226,6 +231,9 @@ type RegeneratedTable struct {
 }
 
 var RegeneratedTables = map[string]RegeneratedTable{
+	"fact_embeddings": {
+		Columns: Rule{Regenerated: "space_id fact_id model_id dimension content_hash embedding"}, Since: 41,
+	},
 	"graph_pending_sync":        {Columns: Rule{Regenerated: "id space_id entity_id relation_id relation_version deleted created_at completed_at"}, Since: 18},
 	"embedding_rebuild_vectors": {Columns: Rule{Regenerated: "run_id kind source_id attachment_path entry_id library_id model_id dimension embedding content_hash"}, Since: 14},
 	"embedding_vector_archives": {Columns: Rule{Regenerated: "run_id space_id payload created_at"}, Since: 14},

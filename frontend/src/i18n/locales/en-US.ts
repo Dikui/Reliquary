@@ -20,6 +20,10 @@ export default {
     "ignoreSaved": "Candidate ignored; occurrences retained"
   },
   stories: {
+    "mentions": "Materials mentioning this story",
+    "mentionsHint": "These materials discuss the facts and do not serve as source evidence.",
+    "noMentions": "No materials mention this story yet.",
+
     "title": "Stories",
     "detail": "Story details",
     "description": "Ordered by the most recent new fact. Read each story with its source evidence.",

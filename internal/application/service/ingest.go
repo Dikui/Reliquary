@@ -47,6 +47,9 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, err
 	}
 	diagnostics.SetLibrary(ctx, library)
+	if err := s.validateFactMentions(ctx, library, request); err != nil {
+		return nil, err
+	}
 	if err := validateLibraryIngest(request, library); err != nil {
 		return nil, err
 	}

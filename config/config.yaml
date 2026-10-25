@@ -14,6 +14,11 @@ article_processing:
   segment_overlap_chars: 128
   context_reserve_percent: 40
 
+# Candidate cosine similarity and grouping confidence for swapped-input review.
+fact_grouping:
+  recall_threshold: 0.6
+  review_threshold: 0.85
+
 # Technical ingest failures only; rejected content is not retained.
 ingest_diagnostics:
   root: "" # Compose sets RELIQUARY_DIAGNOSTICS_ROOT; native default is the user's cache directory.

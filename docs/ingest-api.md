@@ -11,6 +11,7 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `library` | 每项必填，库 ID 或英文目录名。不能用中文名称。缺少或不存在时提示调用 `list_libraries` |
 | `content` | 非空可读 Markdown，可为草稿、片段或摘要；纯链接与仅图片不接收。正文与串文、引用合计上限 5,000,000 Unicode 码点 |
 | `acquisition` | 可选，缺省表示未知；提供时为 `verbatim` 逐字原文、`extracted` 提取、`model_written` 模型整理 |
+| `mentioned_fact_ids` | 仅 AI产出接受的可选已有事实 ID 数组，跨库但须处于个人空间内；不存在的 ID 拒收。重复 ID 去重，空数组清空提及，省略保留已有选择。只建立提及，不成为出处；已指定时后台不再推断其他提及 |
 | `source_id` | 可选稳定来源 ID，去首尾空白，最多 2048 Unicode 码点，不含 NUL；与 `source_revision` 成对提供 |
 | `source_revision` | 与 `source_id` 一起提供的非负 int64 整数，可从 0 开始；同库同来源只接受严格增加的修订号 |
 | `source_ref` | 所有模板接受。可选字符串，去首尾空白，最多 2048 Unicode 码点。同库内用于唯一定位来源 |

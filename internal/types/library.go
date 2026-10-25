@@ -277,6 +277,10 @@ func (library *Library) IngestFields() map[string]string {
 	fields["source_revision"] = "Nonnegative int64, required with source_id; only strictly newer revisions are accepted"
 	fields["source_ref"] = "Optional source identity, at most 2048 Unicode code points; changed content replaces the existing entry"
 	fields["identifier"] = "Optional scheme:value, at most 2048 Unicode code points; scheme and DOI value are lowercased"
+	if library.Template == TemplateGenerated {
+		fields["mentioned_fact_ids"] = "Optional existing fact IDs to mention; empty array clears mentions; " +
+			"never source evidence"
+	}
 	fields["acquisition"] = "Optional verbatim, extracted or model_written; omitted means unknown"
 	return fields
 }

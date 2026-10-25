@@ -58,8 +58,9 @@ type StoryFact struct {
 
 // StoryDetail is the story header and its chronological timeline.
 type StoryDetail struct {
-	Story Story       `json:"story"`
-	Facts []StoryFact `json:"facts"`
+	Story    Story        `json:"story"`
+	Facts    []StoryFact  `json:"facts"`
+	Mentions []FactSource `json:"mentions"`
 }
 
 // StoryQuery selects a bounded page from the story list.
@@ -72,4 +73,21 @@ type StoryQuery struct {
 type StoryPage struct {
 	Items []Story `json:"items"`
 	Total int64   `json:"total"`
+}
+
+// GroupingDecision retains every recalled candidate and its verified disposition.
+type GroupingDecision struct {
+	ID               string    `json:"id" gorm:"primaryKey"`
+	SpaceID          uint64    `json:"space_id"`
+	EntryID          string    `json:"entry_id"`
+	CandidateFactID  string    `json:"candidate_fact_id"`
+	Similarity       float64   `json:"similarity"`
+	ModelID          string    `json:"model_id"`
+	Result           string    `json:"result"`
+	Confidence       float64   `json:"confidence"`
+	ReviewResult     string    `json:"review_result"`
+	ReviewConfidence *float64  `json:"review_confidence"`
+	AppliedResult    string    `json:"applied_result"`
+	Reason           string    `json:"reason"`
+	CreatedAt        time.Time `json:"created_at"`
 }

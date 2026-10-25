@@ -49,7 +49,7 @@ func (s *StoryService) StoryDetail(ctx context.Context, id string) (*types.Story
 	if err != nil {
 		return nil, err
 	}
-	detail := &types.StoryDetail{Facts: []types.StoryFact{}}
+	detail := &types.StoryDetail{Facts: []types.StoryFact{}, Mentions: []types.FactSource{}}
 	err = s.db.WithContext(ctx).Where("space_id=? AND id=?", spaceID, id).First(&detail.Story).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, werrors.NewNotFoundError("story not found")
@@ -78,5 +78,39 @@ func (s *StoryService) StoryDetail(ctx context.Context, id string) (*types.Story
 		}
 		detail.Facts = append(detail.Facts, item)
 	}
+
+	err = s.db.WithContext(ctx).Table("entry_facts ef").
+		Select(`DISTINCT ON (ef.entry_id) ef.entry_id,e.library_id,e.title,ef.role,ef.quote,ef.manual,
+   COALESCE(e.metadata#>>'{intake,source_info,original_url}',e.metadata->>'original_url','') AS original_url`).
+		Joins("JOIN facts f ON f.id=ef.fact_id AND f.space_id=ef.space_id").
+		Joins("JOIN entries e ON e.id=ef.entry_id AND e.space_id=ef.space_id AND e.deleted_at IS NULL").
+		Where("f.space_id=? AND f.story_id=? AND ef.role='mention'", spaceID, id).
+		Order("ef.entry_id,ef.created_at").Scan(&detail.Mentions).Error
+	if err != nil {
+		return nil, err
+	}
 	return detail, nil
+}
+
+// GroupingDecisions exposes the retained candidate comparisons for one material.
+func (s *StoryService) GroupingDecisions(ctx context.Context, entryID string) ([]types.GroupingDecision, error) {
+	spaceID, err := domainSpace(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var entry types.Entry
+	if err = s.db.WithContext(ctx).Select("id").
+		Where("space_id=? AND id=?", spaceID, entryID).First(&entry).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, werrors.NewNotFoundError("entry not found")
+		}
+		return nil, err
+	}
+	decisions := []types.GroupingDecision{}
+	err = s.db.WithContext(ctx).
+		Where("space_id=? AND entry_id=?", spaceID, entryID).
+		Order("created_at,id").
+		Find(&decisions).
+		Error
+	return decisions, err
 }

@@ -147,6 +147,9 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 	if err := entry.SetIntakeMetadata(intake); err != nil {
 		return nil, err
 	}
+	if err := setRequestedFactMentions(entry, request); err != nil {
+		return nil, err
+	}
 	diagnosticsBody, canonical, err := s.storeIngestMaterials(ctx, library, entry, request)
 	if err != nil {
 		return nil, err
@@ -192,7 +195,8 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 			existing.SourceRef == entry.SourceRef && existing.Identifier == entry.Identifier &&
 			existing.CollectReason == entry.CollectReason &&
 			existing.AgentSummary == entry.AgentSummary && bytes.Equal(existing.AgentTags, entry.AgentTags) &&
-			existing.SourceName == entry.SourceName && bytes.Equal(oldSource, newSource) {
+			existing.SourceName == entry.SourceName && bytes.Equal(oldSource, newSource) &&
+			sameRequestedFactMentions(existing, entry) {
 			// Advance the revision even when the submitted body and metadata are unchanged.
 			if request.SourceID != "" {
 				if err := s.db.WithContext(ctx).Model(existing).Updates(map[string]any{
@@ -219,6 +223,11 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 			return nil, err
 		}
 		if err := s.db.WithContext(ctx).Create(entry).Error; err != nil {
+			return nil, err
+		}
+	}
+	if request.MentionedFactIDs != nil {
+		if err := s.saveExplicitFactMentions(ctx, entry, *request.MentionedFactIDs); err != nil {
 			return nil, err
 		}
 	}

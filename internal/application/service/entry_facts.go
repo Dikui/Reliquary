@@ -92,9 +92,22 @@ func factOccurrenceTime(value string) *string {
 func (s *entryService) saveUnderstandingFact(
 	ctx context.Context, library *types.Library, entry *types.Entry, body string, result *articleProcessingResult,
 ) error {
-	fact := qualifyUnderstandingFact(library, entry, body, result.Fact)
-	if fact == nil {
+	if hasExplicitFactMentions(entry) {
 		return nil
+	}
+	fact := qualifyUnderstandingFact(library, entry, body, result.Fact)
+	var existing int64
+	if err := s.db.WithContext(ctx).Model(&types.EntryFact{}).
+		Where("space_id=? AND entry_id=? AND (role='source' OR manual=true)", entry.SpaceID, entry.ID).
+		Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return nil
+	}
+	plan, err := s.planFactGrouping(ctx, library, entry, result, fact)
+	if err != nil {
+		return err
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, entry.SpaceID); err != nil {
@@ -105,11 +118,11 @@ func (s *entryService) saveUnderstandingFact(
 			Where("space_id=? AND id=?", entry.SpaceID, entry.ID).First(&current).Error; err != nil {
 			return err
 		}
-		if !materialCanProduceFact(library, &current) {
+		if current.SourceBodyHash != entry.SourceBodyHash {
 			return nil
 		}
 		var count int64
-		if err := tx.Model(&types.EntryFact{}).Where("space_id=? AND entry_id=? AND role='source'",
+		if err := tx.Model(&types.EntryFact{}).Where("space_id=? AND entry_id=? AND (role='source' OR manual=true)",
 			entry.SpaceID, entry.ID).Count(&count).Error; err != nil {
 			return err
 		}
@@ -117,12 +130,56 @@ func (s *entryService) saveUnderstandingFact(
 		if count > 0 {
 			return nil
 		}
+
+		for _, decision := range plan.decisions {
+			if err := tx.Create(&decision).Error; err != nil {
+				return err
+			}
+		}
+
 		now := time.Now()
+		for _, decision := range plan.decisions {
+			if decision.AppliedResult == groupingMention {
+				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&types.EntryFact{
+					SpaceID: entry.SpaceID, EntryID: entry.ID, FactID: decision.CandidateFactID,
+					Role: "mention", CreatedAt: now,
+				}).Error; err != nil {
+					return err
+				}
+			}
+		}
+		if plan.candidate != nil && (plan.result == groupingSameOccurrence || plan.result == groupingMention) {
+			role, quote := "mention", ""
+			if plan.result == groupingSameOccurrence && fact != nil && materialCanProduceFact(library, &current) {
+				role, quote = "source", fact.Quote
+			}
+			return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&types.EntryFact{
+				SpaceID: entry.SpaceID, EntryID: entry.ID, FactID: plan.candidate.ID,
+				Role: role, Quote: quote, CreatedAt: now,
+			}).Error
+		}
+		if fact == nil || !materialCanProduceFact(library, &current) {
+			return nil
+		}
+		source, err := entrySourceInfo(&current)
+		if err != nil {
+			return err
+		}
+		if plan.result != groupingSameStory && groupingDate(source.PublishedAt) == nil {
+			return nil
+		}
+
 		story := types.Story{
 			ID: uuid.NewString(), SpaceID: entry.SpaceID, Title: fact.Title,
 			FirstFactAt: now, LastFactAt: now,
 		}
-		if err := tx.Create(&story).Error; err != nil {
+		if plan.result == groupingSameStory && plan.candidate != nil {
+			story.ID = plan.candidate.StoryID
+			if err := tx.Model(&types.Story{}).Where("space_id=? AND id=?", entry.SpaceID, story.ID).
+				Update("last_fact_at", now).Error; err != nil {
+				return err
+			}
+		} else if err := tx.Create(&story).Error; err != nil {
 			return err
 		}
 		stored := types.Fact{

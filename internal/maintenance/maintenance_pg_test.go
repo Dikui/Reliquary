@@ -179,6 +179,12 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
  ('candidate-approved',1,'Approved','approved','person','approved','entity-a',now(),now());
  INSERT INTO entity_candidate_occurrences(space_id,candidate_id,fact_id,endpoint,created_at)
  VALUES(1,'candidate','fact','object',now()),(1,'candidate-approved','fact','subject',now());
+ INSERT INTO grouping_decisions(id,space_id,entry_id,candidate_fact_id,similarity,model_id,result,confidence,
+ review_result,review_confidence,applied_result,reason,created_at)
+ VALUES('decision',1,'article','fact',0.76,'chat','same_occurrence',0.9,
+ 'unrelated',0.88,'unrelated','review_disagreed',now());
+ INSERT INTO fact_embeddings(space_id,fact_id,model_id,dimension,content_hash,embedding)
+ VALUES(1,'fact','embed',3,'cache','[1,0,0]');
  `).Error)
 	root := t.TempDir()
 	uploads := t.TempDir()

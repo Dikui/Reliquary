@@ -33,7 +33,7 @@ export interface StoryFact {
   sources: FactSource[]
 }
 
-export interface StoryDetail { story: Story; facts: StoryFact[] }
+export interface StoryDetail { story: Story; facts: StoryFact[]; mentions: FactSource[] }
 export interface StoryPage { items: Story[]; total: number }
 interface StoryEnvelope<T> { success: boolean; data: T }
 

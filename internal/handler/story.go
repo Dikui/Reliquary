@@ -42,3 +42,13 @@ func (h *StoryHandler) Get(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": detail})
 }
+
+// Decisions reads candidate scores and the outcome of verification.
+func (h *StoryHandler) Decisions(c *gin.Context) {
+	decisions, err := h.service.GroupingDecisions(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": decisions})
+}
