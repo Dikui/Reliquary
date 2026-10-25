@@ -13,8 +13,8 @@
     <nav class="menu_top" :aria-label="t('menu.library')">
       <section v-for="group in menuGroups" :key="group.key" class="menu-group" :aria-label="group.title"><h2 v-if="!sidebarCollapsed" class="menu-group-title">{{ group.title }}</h2>
       <t-tooltip v-for="item in group.items" :key="item.key" :content="item.title" placement="right" :disabled="!sidebarCollapsed">
-        <button type="button" :class="['menu_item', { menu_item_active: active(item.path, item.tab) }]" :aria-label="item.key === 'follows' && follows.newCount > 0 ? t('follows.navCount', { count: follows.newCount }) : item.title" :aria-current="active(item.path, item.tab) ? 'page' : undefined" @click="navigate(item.path, item.tab)">
-          <t-icon :name="item.icon" size="20px" /><span v-if="!sidebarCollapsed" class="menu_title">{{ item.title }}</span><span v-if="item.key === 'follows' && (follows.newCount > 0 || follows.stateError)" class="follow-badge" :title="follows.stateError ? t('follows.countFailed') : t('follows.navCount', { count: follows.newCount })" aria-hidden="true">{{ follows.stateError ? '!' : follows.newCount }}</span>
+        <button type="button" :class="['menu_item', { menu_item_active: active(item.path, item.tab) }]" :aria-label="item.title" :aria-current="active(item.path, item.tab) ? 'page' : undefined" @click="navigate(item.path, item.tab)">
+          <t-icon :name="item.icon" size="20px" /><span v-if="!sidebarCollapsed" class="menu_title">{{ item.title }}</span>
         </button>
       </t-tooltip>
       </section>
@@ -23,25 +23,18 @@
   </aside>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMenuStore } from '@/stores/menu'
 import { useUIStore } from '@/stores/ui'
-import { useFollowStore } from '@/stores/follows'
 import UserMenu from '@/components/UserMenu.vue'
 const props = defineProps<{ mobileOverlay?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
 const route = useRoute(), router = useRouter()
 const uiStore = useUIStore()
-const follows = useFollowStore()
-let followTimer: ReturnType<typeof setInterval> | undefined
-function refreshFollowCount() { if (typeof document === 'undefined' || document.visibilityState !== 'hidden') void follows.refreshState() }
-watch(() => route.path, refreshFollowCount)
-onMounted(() => { refreshFollowCount(); followTimer = setInterval(refreshFollowCount, 30000); if (typeof document !== 'undefined') document.addEventListener('visibilitychange', refreshFollowCount) })
-onUnmounted(() => { clearInterval(followTimer); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', refreshFollowCount) })
 const { menuGroups } = storeToRefs(useMenuStore())
 const sidebarCollapsed = computed(() => !props.mobileOverlay && uiStore.sidebarCollapsed)
 const active = (path: string, tab?: string) => path === 'entries'
@@ -68,8 +61,6 @@ function navigate(path: string, tab?: string) {
 .menu_top { flex: 1; min-height: 0; overflow: auto; }
 .menu_item { display: flex; align-items: center; gap: 12px; position: relative; width: 100%; min-height: 44px; margin-bottom: 8px; padding: 10px 12px; text-align: left; }
 .menu_title { min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
-.follow-badge { margin-left: auto; min-width: 18px; padding: 1px 5px; border-radius: var(--td-radius-round); background: var(--td-brand-color-light); color: var(--td-brand-color); font-size: 11px; text-align: center; }
-.aside_box--collapsed .follow-badge { position: absolute; top: 0; right: 0; min-width: 12px; padding-inline: 3px; font-size: 10px; }
 .menu_item:hover, .header-icon-btn:hover { background: var(--td-bg-color-container-hover); }
 .menu_item_active { color: var(--td-brand-color); background: var(--td-brand-color-light); }
 button:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }

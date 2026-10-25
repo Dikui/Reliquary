@@ -217,10 +217,6 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 		t,
 		h.db.Exec("INSERT INTO follows(space_id,target_type,target_id) VALUES(1,'entity',?)", entity.ID).Error,
 	)
-	require.NoError(
-		t,
-		h.db.Exec("INSERT INTO follow_feed_states(space_id,last_viewed_at) VALUES(1,'2026-10-10T09:00:00Z')").Error,
-	)
 
 	configuration := map[string]string{
 		".obsidian/app.json": `{"theme":"obsidian"}`, ".trash/x.md": "# Deleted note\n", ".DS_Store": "Finder metadata",

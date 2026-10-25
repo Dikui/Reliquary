@@ -4,8 +4,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getFact, getStory, listStories, type CorrectionAction, type Story, type StoryDetail, type StoryFact } from '@/api/stories'
 
+import FollowToggle from '@/components/FollowToggle.vue'
+import { useFollowStore } from '@/stores/follows'
+
 import GroupingCorrection from './components/GroupingCorrection.vue'
 
+const followStore = useFollowStore()
 const correction = ref<{ action: CorrectionAction; fact?: StoryFact } | null>(null)
 const pageElement = ref<HTMLElement | null>(null)
 const { t, locale } = useI18n()
@@ -86,6 +90,7 @@ watch(() => [locale.value, detail.value?.story.title, selectedID.value], () => {
 }, { immediate: true })
 async function corrected(target: { storyID: string; factID?: string }) {
   correction.value = null
+  await followStore.refreshAfterTargetChange()
   if (target.storyID === selectedID.value) await load()
   else await router.push({ path: `/platform/stories/${encodeURIComponent(target.storyID)}`, query: route.query, hash: target.factID ? `#fact-${target.factID}` : '' })
 }
@@ -98,6 +103,7 @@ onUnmounted(() => { disposed = true; version++ })
       <router-link v-if="selectedID" :to="listLocation">{{ t('stories.back') }}</router-link>
       <div class="heading">
         <h1>{{ selectedID ? detail?.story.title || t('stories.detail') : t('stories.title') }}</h1>
+        <FollowToggle v-if="detail && selectedID" target-type="story" :target-id="detail.story.id" :name="detail.story.title" />
         <t-button variant="outline" :loading="loading" @click="load">{{ t('common.refresh') }}</t-button>
       </div>
       <p v-if="!selectedID" class="muted">{{ t('stories.description') }}</p>
@@ -112,6 +118,7 @@ onUnmounted(() => { disposed = true; version++ })
           <ol v-if="items.length" class="records">
             <li v-for="story in items" :key="story.id" class="record">
               <h2><router-link :to="{ path: `/platform/stories/${encodeURIComponent(story.id)}`, query: route.query }">{{ story.title }}</router-link></h2>
+              <FollowToggle target-type="story" :target-id="story.id" :name="story.title" />
               <dl class="times">
                 <dt>{{ t('stories.firstFact') }}</dt><dd><time :datetime="story.first_fact_at">{{ timestamp(story.first_fact_at) }}</time></dd>
                 <dt>{{ t('stories.lastFact') }}</dt><dd><time :datetime="story.last_fact_at">{{ timestamp(story.last_fact_at) }}</time></dd>
@@ -180,8 +187,8 @@ onUnmounted(() => { disposed = true; version++ })
 <style scoped lang="less">
 .stories-page { height: 100%; overflow: auto; padding: 24px; box-sizing: border-box; color: var(--td-text-color-primary); }
 header, .content { margin-bottom: 20px; }
-.heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-h1 { font-size: 24px; margin: 12px 0; overflow-wrap: anywhere; }
+.heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+h1 { flex: 1; min-width: 0; font-size: 24px; margin: 12px 0; overflow-wrap: anywhere; }
 h2 { font-size: 18px; margin: 0 0 16px; }
 h3 { font-size: 16px; margin: 8px 0 16px; }
 h4 { font-size: 14px; margin: 16px 0 8px; }

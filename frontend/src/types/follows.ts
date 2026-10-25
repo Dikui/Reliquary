@@ -1,27 +1,24 @@
-import type { SearchEntry } from './search'
+import type { Story, StoryFact } from '@/api/stories'
 
-export type FollowTargetType = 'entity'
+export type FollowTargetType = 'entity' | 'story'
 export interface FollowTarget {
   target_type: FollowTargetType
   target_id: string
   name: string
   created_at: string
-  recent_entry_count: number
 }
-export interface FollowLibraryState { library_id: string; library_name: string; display_name: string; new_count: number; last_viewed_at: string | null }
-export interface FollowState { libraries?: FollowLibraryState[]; new_count: number; last_viewed_at: string | null }
+export interface FollowLibrary { library_id: string; library_name: string; display_name: string }
 export interface FollowFeedRequest {
   libraries?: string[]
   cursor?: string
   since?: string
   target_ids?: string[]
   limit?: number
-  include_seen?: boolean
 }
-export interface FollowFeedEntry extends SearchEntry {
-  entered_at: string | null
-  collected_at: string
-  is_new: boolean
+export interface FollowFeedCard {
+  story: Story
+  trigger_fact: StoryFact
+  recent_facts: StoryFact[]
   matched_follows: FollowTarget[]
 }
-export interface FollowFeedData extends FollowState { results: FollowFeedEntry[]; next_cursor?: string; viewed_at: string; total: number }
+export interface FollowFeedData { libraries: FollowLibrary[]; results: FollowFeedCard[]; next_cursor?: string; total: number }

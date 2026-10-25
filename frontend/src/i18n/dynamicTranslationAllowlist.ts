@@ -124,7 +124,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
     "file": "components/SearchEntry.vue",
     "expressions": [
-      "`follows.targetTypes.${target.target_type}`",
       "`knowledgeSearch.sources.${article.source}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."

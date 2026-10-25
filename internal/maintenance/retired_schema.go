@@ -72,6 +72,9 @@ func retirementAt(version int64) retirement {
 		r.tasks = append(r.tasks, "entity:name_embedding_rebuild")
 	}
 
+	if version >= 45 {
+		r.tables = append(r.tables, "follow_feed_states", "follow_feed_library_states")
+	}
 	return r
 }
 

@@ -56,14 +56,13 @@ function environment(locale: keyof typeof messages) {
   const calls: { method: string; url: string; body?: unknown }[] = []
   const received: any[] = []
   const record = structuredClone(sourceRecord)
-  const feedArticle = { entry_id: record.id, title: record.title, source: 'article', published_at: record.updated_at, collected_at: record.updated_at, entered_at: record.updated_at, is_new: true, matched_follows: [],  processing_mode: record.processing_mode, summary: record.structured_summary, entities: [],  snippets: [], score: 1,  original_url: '' }
+
   async function request(method: string, url: string, requestBody?: unknown) {
     calls.push({ method, url, ...(requestBody === undefined ? {} : { body: requestBody }) })
     let response: any
     if (method === 'get' && url.startsWith('/api/v1/entries?')) response = { success: true, data: [structuredClone(record)], total: 1 }
     else if (method === 'get' && url === `/api/v1/entries/${record.id}`) response = { success: true, data: structuredClone(record) }
     else if (method === 'get' && url.startsWith(`/api/v1/chunks/${record.id}?`)) response = { success: true, data: [{ id: 'body-chunk', content: body, chunk_index: 0 }], total: 1 }
-    else if (method === 'post' && url === '/api/v1/follows/feed') response = { success: true, data: { results: [structuredClone(feedArticle)], total: 1, new_count: 1, last_viewed_at: null, viewed_at: record.updated_at } }
     else throw new Error(`Unexpected request: ${method} ${url}`)
     received.push(response)
     return response
@@ -89,7 +88,7 @@ function environment(locale: keyof typeof messages) {
     'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async () => {}, push: async () => {} }) },
     './GlobalCommandPalette/useHighlight': highlight,
     '@/api/follows': evaluateFile('../api/follows.ts', { '@/utils/request': transport }),
-    '@/stores/follows': { useFollowStore: () => ({ libraries: [], targets: [], targetsLoading: false, refreshState: async () => {}, loadTargets: async () => {}, markViewed: async () => ({ last_viewed_at: record.updated_at }) }) },
+    '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
   }
   const classification = moduleOf(component('./EntryClassification.vue', modules))
   modules['@/components/EntryClassification.vue'] = modules['./EntryClassification.vue'] = classification
@@ -110,7 +109,7 @@ function environment(locale: keyof typeof messages) {
     app.mount(root)
     return { root, close: () => app.unmount() }
   }
-  return { record, feedArticle, calls, received, modules, errors, warnings, mount, hook: () => evaluateFile('../composables/useLibrary.ts', modules).default('summary-displays') }
+  return { record, calls, received, modules, errors, warnings, mount, hook: () => evaluateFile('../composables/useLibrary.ts', modules).default('summary-displays') }
 }
 
 function summaryFields(root: Element, localizedImage: string, structured: boolean) {
@@ -180,22 +179,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       } finally { mounted.close(); restore() }
     })
   }
-  test(`${locale}: follow feed loads summaries through its page and API once while preserving escaped and code symbols`, async () => {
-    const env = environment(locale)
-    const mounted = env.mount(component('../views/library/FollowFeed.vue', env.modules))
-    try {
-      await settle()
-      const article = descendants(mounted.root).find(node => node.props['data-article-id'] === env.record.id)!
-      assert.ok(article)
-      summaryFields(article, image, true)
-      assert.ok(env.calls.some(call => call.method === 'post' && call.url === '/api/v1/follows/feed'))
-      const loaded = env.received.find(response => response.data.results)?.data.results[0]
-      assert.deepEqual(loaded.summary, structuredSummary)
-      assert.deepEqual(env.feedArticle.summary, structuredSummary)
-      assert.deepEqual(env.errors, [])
-      assert.deepEqual(env.warnings, [])
-    } finally { mounted.close() }
-  })
 }
 
 test('initial detail mount, document switch and refreshed mount render API image descriptions and library type options', async () => {

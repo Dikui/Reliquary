@@ -2,14 +2,13 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { SourceLocation, SearchEntry } from '@/types/search'
-import type { FollowFeedEntry } from '@/types/follows'
 import EntryUpdateNotice from './EntryUpdateNotice.vue'
 import EntryClassification from './EntryClassification.vue'
 import SearchImage from './SearchImage.vue'
 import { highlightText } from './GlobalCommandPalette/useHighlight'
 import { markdownToPlainText } from '@/utils/markdownPlainText'
 
-const props = withDefaults(defineProps<{ article: SearchEntry; query: string; followFeed?: boolean }>(), { followFeed: false })
+const props = defineProps<{ article: SearchEntry; query: string }>()
 const emit = defineEmits<{ 'open-article': [article: SearchEntry, location?: SourceLocation]; 'open-entity': [id: string] }>()
 const { t, locale } = useI18n()
 const plainText = (text: string | undefined) => markdownToPlainText(text, `[${t('ingestStatus.missingTypes.image')}]`)
@@ -22,18 +21,15 @@ const classification = computed(() => ({
 const published = computed(() => props.article.published_at
   ? new Date(props.article.published_at).toLocaleDateString(locale.value)
   : t('knowledgeSearch.missingPublishedAt'))
-const feedArticle = computed(() => props.article as FollowFeedEntry)
 </script>
 
 <template>
   <article class="search-article" :data-article-id="article.entry_id">
     <div class="article-heading">
       <button type="button" class="article-title" @click="emit('open-article', article)">{{ article.title }}</button>
-      <t-tag v-if="followFeed && feedArticle.is_new" class="feed-new" size="small" theme="primary">{{ t('follows.new') }}</t-tag>
-      <span v-else-if="!followFeed" class="article-score">{{ t('knowledgeSearch.score') }} {{ article.score.toLocaleString(locale, { maximumFractionDigits: 4 }) }}</span>
+      <span class="article-score">{{ t('knowledgeSearch.score') }} {{ article.score.toLocaleString(locale, { maximumFractionDigits: 4 }) }}</span>
     </div>
     <p class="article-meta"><span v-if="article.library_name" class="article-library">{{ article.library_name }}</span><span>{{ t(`knowledgeSearch.sources.${article.source}`) }}</span><span>{{ published }}</span><code v-if="article.vault_path">{{ article.vault_path }}</code></p>
-    <div v-if="followFeed" class="feed-attribution"><time :datetime="feedArticle.collected_at">{{ t('follows.collectedAt', { time: new Date(feedArticle.collected_at).toLocaleString(locale) }) }}</time><div class="feed-matches"><strong>{{ t('follows.matchedTargets') }}</strong><t-tag v-for="target in feedArticle.matched_follows" :key="`${target.target_type}:${target.target_id}`" size="small" variant="light-outline">{{ t('follows.targetLabel', { name: target.name, type: t(`follows.targetTypes.${target.target_type}`), count: target.recent_entry_count }) }}</t-tag></div></div>
     <EntryClassification :entry="classification" compact @open-entity="emit('open-entity', $event)" />
     <EntryUpdateNotice :has-update="article.has_update" :latest-entry-id="article.latest_entry_id" />
     <div v-if="article.snippets?.length" class="article-snippets">
@@ -56,10 +52,6 @@ const feedArticle = computed(() => props.article as FollowFeedEntry)
 .article-score { flex-shrink: 0; color: var(--td-text-color-secondary); font-size: 12px; line-height: 24px; }
 .article-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--td-text-color-secondary); font-size: 12px; }
 .article-meta code { white-space: normal; }
-.feed-attribution { display: grid; gap: 6px; margin-block: 12px; color: var(--td-text-color-secondary); font-size: 12px; }
-.feed-matches { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.feed-matches strong { font-weight: 500; }
-.feed-new { flex-shrink: 0; }
 .article-snippets { display: grid; gap: 8px; margin-top: 14px; color: var(--td-text-color-secondary); font-size: 13px; line-height: 1.7; }
 .article-snippets strong { color: var(--td-text-color-primary); font-weight: 500; }
 .snippet-reference { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }

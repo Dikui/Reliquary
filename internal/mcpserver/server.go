@@ -300,8 +300,7 @@ func registerTools(server *mcp.Server, services Services) {
 	addTool(
 		server,
 		"list_follows",
-		"列出关注的实体，返回 follows 数组，包含 target_type、target_id、名称、关注时间和近 7 天已完成资料数。只统计"+
-			"开启动态的库中已完成、已启用且已通过审核的资料；调用不更新上次查看时间。"+externalContentNotice,
+		"列出关注的事件与实体，返回 follows 数组，包含 target_type、target_id、名称和关注时间。"+externalContentNotice,
 
 		object(map[string]any{}),
 		func(ctx context.Context, _ struct{}) (any, error) {
@@ -312,16 +311,16 @@ func registerTools(server *mcp.Server, services Services) {
 	addTool(
 		server,
 		"follow_feed",
-		"读取开启动态的库中与关注实体关联的已完成资料，按进入动态时间倒序。libraries 可选一个或多个库 ID 或目录名，省略查询全部开启动态"+
-			"的库。结果包含 library_id 和 library_name，libraries 返回各库的新动态数及上次查看时间。since 省略使"+
-			"用各库网页上次查看时间；调用不更新查看时间。用 next_cursor 继续翻页。"+externalContentNotice,
+		"读取关注事件或事实任一端为关注实体的事件卡片，仅包含开启动态的库的出处资料。按最近新事实时间倒序，"+
+			"新增出处不改变排序。每张卡片包含 story、trigger_fact、recent_facts（最近 3 条）和 matched_follows。"+
+			"不记录已读状态，用 next_cursor 继续翻页。"+externalContentNotice,
 
 		object(map[string]any{
 			"libraries":  stringArray("库 ID 或英文目录名，可选多个；省略为全部开启动态的库"),
 			"cursor":     text("上一页返回的 next_cursor；继续读取同一窗口，直到没有 next_cursor"),
-			"since":      text("进入动态时间下限，RFC3339 或 YYYY-MM-DD；省略使用网页上次查看时间，返回此时间之后的文章"),
+			"since":      text("最近新事实时间下限，RFC3339 或 YYYY-MM-DD；省略返回全部匹配事件"),
 			"target_ids": stringArray("关注对象 ID 列表，省略查询全部关注；多个对象取并集"),
-			"limit":      integer("最多返回的资料数，默认 20，最大 100", 1, 100),
+			"limit":      integer("最多返回的事件数，默认 20，最大 100", 1, 100),
 		}), func(ctx context.Context, in types.FollowFeedRequest) (any, error) {
 			return services.Follows.Feed(ctx, in)
 		},
@@ -329,9 +328,9 @@ func registerTools(server *mcp.Server, services Services) {
 	addTool(
 		server,
 		"follow",
-		"关注指定实体，重复关注幂等，实际新增关注时写入操作日志。实体已合并时关注最终保留档案。返回关注对象的类型、ID、名称、关注时间和近 7 天资料数。"+externalContentNotice,
+		"关注指定事件或实体，重复关注幂等，实际新增时写入操作日志。已合并的 ID 解析为最终保留对象。返回类型、ID、名称和关注时间。"+externalContentNotice,
 		object(
-			map[string]any{"target_type": enum("关注对象类型，必填", "entity"), "target_id": text("关注对象 ID，必填")},
+			map[string]any{"target_type": enum("关注对象类型，必填", "entity", "story"), "target_id": text("关注对象 ID，必填")},
 			"target_type",
 			"target_id",
 		),
@@ -342,9 +341,9 @@ func registerTools(server *mcp.Server, services Services) {
 	addTool(
 		server,
 		"unfollow",
-		"取消指定实体的关注，重复取消幂等，实际删除关注时写入操作日志。实体已合并时取消最终保留档案的关注。返回请求对象和 following=false。"+externalContentNotice,
+		"取消指定事件或实体的关注，重复取消幂等，实际删除时写入操作日志。已合并的 ID 解析为最终保留对象。返回请求对象和 following=false。"+externalContentNotice,
 		object(
-			map[string]any{"target_type": enum("关注对象类型，必填", "entity"), "target_id": text("关注对象 ID，必填")},
+			map[string]any{"target_type": enum("关注对象类型，必填", "entity", "story"), "target_id": text("关注对象 ID，必填")},
 			"target_type",
 			"target_id",
 		),

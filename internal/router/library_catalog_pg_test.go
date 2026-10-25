@@ -169,6 +169,20 @@ func TestMultipleLibraryReadSearchAndFeed(t *testing.T) {
 		entry := types.Entry{ID: library.SystemRole + "-entry", SpaceID: 1, LibraryID: library.ID, Title: "catalogneedle shared", Type: "manual", SourceKind: map[string]string{"personal": "mine", "ai-output": "report", "official": "article", "media": "article", "references": "article"}[library.SystemRole], ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", VaultBody: "Full original body"}
 		require.NoError(t, f.db.Create(&entry).Error)
 		require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: entry.ID, EntityID: entity.ID, CreatedAt: time.Now().Add(-time.Second)}).Error)
+		if library.Template == types.TemplateExternalTimely {
+			stamp := time.Now().UTC().Add(-time.Second)
+			require.NoError(t, f.db.Create(&types.Story{
+				ID: entry.ID, SpaceID: 1, Title: entry.Title, FirstFactAt: stamp, LastFactAt: stamp,
+			}).Error)
+			require.NoError(t, f.db.Create(&types.Fact{
+				ID: entry.ID, SpaceID: 1, StoryID: entry.ID, Title: entry.Title, Subject: "Multi entity",
+				Action: "released", SubjectEntityID: &entity.ID, CreatedAt: stamp,
+			}).Error)
+			require.NoError(t, f.db.Create(&types.EntryFact{
+				SpaceID: 1, EntryID: entry.ID, FactID: entry.ID,
+				Role: "source", Quote: "Full original body", CreatedAt: stamp,
+			}).Error)
+		}
 		detail := personalRequest(t, f.router, http.MethodGet, "/api/v1/entries/"+entry.ID, "", f.key, true)
 		require.Equal(t, http.StatusOK, detail.Code, detail.Body.String())
 		require.Contains(t, detail.Body.String(), library.ID)
@@ -211,5 +225,5 @@ func TestMultipleLibraryReadSearchAndFeed(t *testing.T) {
 	require.NoError(t, f.db.Model(&types.Library{}).Where("system_role='personal'").Update("feed_enabled", true).Error)
 	feed, err = follows.Feed(f.ctx, types.FollowFeedRequest{})
 	require.NoError(t, err)
-	require.Len(t, feed.Results, 3)
+	require.Len(t, feed.Results, 2, "enabling a library without facts does not produce event cards")
 }

@@ -17,7 +17,6 @@ var Rules = map[string]Rule{
 	"entity_merge_records":          {Sidecar: "id space_id keep_entity_id merge_entity_id actor created_at"},
 	"entity_merge_suggestions":      {Sidecar: "id space_id new_entity_id candidate_entity_id entry_id reason status created_at decided_at"},
 	"follow_feed_states":            {Sidecar: "space_id last_viewed_at"},
-	"follows":                       {Sidecar: "space_id target_type target_id created_at", Regenerated: "entity_id topic_id"},
 	"image_embeddings":              {Regenerated: "entry_id space_id library_id attachment_path model_id dimension embedding content_hash created_at updated_at"},
 	"entry_entities":                {Sidecar: "space_id entry_id entity_id created_at"},
 	"entry_processing_spans":        {Sidecar: "id entry_id attempt span_id parent_span_id name kind status input output metadata error_code error_message error_detail started_at finished_at duration_ms created_at updated_at"},
@@ -44,6 +43,11 @@ var Rules = map[string]Rule{
 	"topic_backfill_jobs":           {Sidecar: "id space_id topic_id topic_name topic_description status total processed failed_entries failed_batches created_at updated_at"},
 	"topics":                        {Sidecar: "id space_id name description library_ids created_at updated_at"},
 	"users":                         {Configuration: "id username email password_hash avatar space_id is_active created_at updated_at deleted_at"},
+
+	"follows": {
+		Sidecar:     "space_id target_type target_id created_at",
+		Regenerated: "entity_id topic_id story_id",
+	},
 }
 
 var entryPreservationRule = Rule{

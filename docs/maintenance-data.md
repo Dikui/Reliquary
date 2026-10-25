@@ -46,9 +46,7 @@
 | `public.evaluation_run_results` | `run_id`、`question_id`、`question`、`snapshot`、`results`、`metrics`、`hits`、`error` | 无 | 无 | 无 |
 | `public.evaluation_runs` | `id`、`space_id`、`set_id`、`set_snapshot`、`options`、`snapshot`、`status`、`summary`、`error`、`created_at`、`finished_at` | 无 | 无 | 无 |
 | `public.evaluation_sets` | `id`、`space_id`、`name`、`description`、`created_at`、`updated_at` | 无 | 无 | 无 |
-| `public.follow_feed_library_states` | `space_id`、`library_id`、`last_viewed_at` | 无 | 无 | 无 |
-| `public.follow_feed_states` | `space_id`、`last_viewed_at` | 无 | 无 | 无 |
-| `public.follows` | `space_id`、`target_type`、`target_id`、`created_at` | 无 | `entity_id`、`topic_id` | 无 |
+| `public.follows` | `space_id`、`target_type`、`target_id`、`created_at` | 无 | `entity_id`、`story_id` | 无 |
 | `public.image_embeddings` | 无 | 无 | `entry_id`、`space_id`、`library_id`、`attachment_path`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
 | `public.ingest_assets` | `id`、`space_id`、`name`、`file_type`、`size`、`path`、`created_at`、`referenced_at`、`entry_id` | 无 | 无 | 无 |
 | `public.ingest_discards` | `space_id`、`normalized_url`、`entry_id`、`discarded_at`、`reason`、`library_id`、`fingerprint` | 无 | 无 | 无 |
@@ -137,9 +135,7 @@
 | `entity_embedding_rebuild_runs` | 无 | `id`、`space_id`、`status`、`reason`、`error`、`model_id`、`dimension`、`profile_hash`、`processed_count`、`total_count`、`model_calls`、`attempts`、`attempt_id`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 |
 | `entity_merge_records` | 无 | `id`、`space_id`、`keep_entity_id`、`merge_entity_id`、`actor`、`created_at` | 无 | 无 |
 | `entity_merge_suggestions` | 无 | `id`、`space_id`、`new_entity_id`、`candidate_entity_id`、`entry_id`、`reason`、`status`、`created_at`、`decided_at` | 无 | 无 |
-| `follow_feed_library_states` | 无 | `space_id`、`library_id`、`last_viewed_at` | 无 | 无 |
-| `follow_feed_states` | 无 | `space_id`、`last_viewed_at` | 无 | 无 |
-| `follows` | 无 | `space_id`、`target_type`、`target_id`、`created_at` | `entity_id`、`topic_id` | 无 |
+| `follows` | 无 | `space_id`、`target_type`、`target_id`、`created_at` | `entity_id`、`story_id` | 无 |
 | `image_embeddings` | 无 | 无 | `entry_id`、`space_id`、`library_id`、`attachment_path`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
 | `ingest_assets` | 无 | `id`、`space_id`、`name`、`file_type`、`size`、`path`、`created_at`、`referenced_at`、`entry_id` | 无 | 无 |
 | `ingest_discards` | 无 | `space_id`、`normalized_url`、`entry_id`、`discarded_at`、`reason` | 无 | 无 |
@@ -290,7 +286,7 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
 
 仅用文件库重建在 Import 成功后、索引重建和任何副本 flush 前，重新 Load 尚未覆盖的原副本，逐表核对当前数据库的所有不可再生行、条数与 JSONB null 类型。只使用前文已列出的凭据暂停及任务恢复转换，其他差异直接报错并保留原文件；缺失、多出的持久表也拒绝。不能以 Import 返回的已修改内存行或重新导出的副本作为原始基线。原文件、资源和附件仍先由 Load 核对全部哈希。
 
-导入保持所有业务主键和时间戳，并在同一事务中恢复依赖顺序；`follows` 生成列由 PostgreSQL 重算，历史 `follow_ready_at` 保留，不把恢复误判为新文章。全部 serial sequence 重设到已恢复最大 ID。重建先恢复原始行和全文 chunks，不调用不可用的模型；模型准备完成后通过现有全部向量重建入口恢复向量。
+导入保持所有业务主键和时间戳，并在同一事务中恢复依赖顺序；`follows` 生成列由 PostgreSQL 重算，历史 `follow_ready_at` 只作为旧字段保留，不参与事件动态排序。结构版本 45 删除空间与分库查看状态；旧副本导入不重建已读时间，事件关注在事件导入后恢复。全部 serial sequence 重设到已恢复最大 ID。重建先恢复原始行和全文 chunks，不调用不可用的模型；模型准备完成后通过现有全部向量重建入口恢复向量。
 
 打包最后在原数据库的凭据内存集合下执行 secret-scan，扫描原始文件、Docker save 中的 gzip 层、Git bundle 解压后的全部对象及标准输入的解码 PostgreSQL 导出。不写出或打印核对集合；发现匹配只报告安全的相对文件位置并拒绝打包。密码哈希不加入集合。短凭据不进行任意子串替换，避免破坏主键和普通文字；敏感字段与整个值相等的文本仍剔除，打包扫描对短凭据也不放宽，有泄漏就停止。
 

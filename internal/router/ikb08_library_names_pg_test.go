@@ -93,7 +93,7 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 				require.Greater(t, assertNames(request(http.MethodGet, path, "", language)), 0, path)
 			}
 			require.Greater(t,
-				assertNames(request(http.MethodPost, "/api/v1/follows/feed", `{"include_seen":true}`, language)),
+				assertNames(request(http.MethodPost, "/api/v1/follows/feed", `{}`, language)),
 				0)
 		})
 	}

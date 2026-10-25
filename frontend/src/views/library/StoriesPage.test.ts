@@ -23,6 +23,8 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
       }],
     }
     const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+      '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+      '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
       './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
       'vue-router': { useRoute: () => route, useRouter: () => ({ replace() {} }) },
       '@/api/stories': { getStory: async (id: string) => { reads.push(id); return { success: true, data: detail } } },
@@ -65,7 +67,9 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
         }],
       }
       const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
-        './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
+        '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+      '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
+      './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
         'vue-router': { useRoute: () => route, useRouter: () => ({ replace() {} }) },
         '@/api/stories': { getStory: async () => ({ success: true, data: detail }) },
       })
@@ -110,6 +114,8 @@ for (const merged of [false, true]) {
     }], mentions: [] }
     let first = true
     const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+      '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+      '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
       './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
       'vue-router': { useRoute: () => route, useRouter: () => ({ replace: (value: { hash: string }) => { route.params.storyId = 'story'; route.hash = value.hash } }) },
       '@/api/stories': {
@@ -149,7 +155,9 @@ test('linked fact endpoints open their entity, unlinked ones stay plain text', a
     }],
   }
   const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
-    './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
+    '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+      '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
+      './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
     'vue-router': { useRoute: () => route, useRouter: () => ({ replace() {} }) },
     '@/api/stories': { getStory: async () => ({ success: true, data: detail }) },
   })
@@ -181,6 +189,8 @@ for (const missingAnchor of [false, true]) {
     const route = reactive({ params: { storyId: 'old-story' }, query: { page: '3' }, hash: '#fact-old-fact' })
     const destinations: unknown[] = []
     const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+      '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+      '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
       './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
       'vue-router': { useRoute: () => route, useRouter: () => ({ replace: (value: unknown) => destinations.push(value) }) },
       '@/api/stories': {
@@ -202,5 +212,44 @@ for (const missingAnchor of [false, true]) {
       assert.ok(visibleText(root).includes('Manually corrected'))
       assert.equal(descendants(root).some(node => node.props.role === 'alert'), false)
     } finally { app.unmount(); await settle(); globalThis.document = previousDocument }
+  })
+}
+
+for (const selectedID of ['', 'story']) {
+  test(`story ${selectedID ? 'detail' : 'list'} exposes the shared follow and unfollow control`, async () => {
+    const previousDocument = globalThis.document
+    globalThis.document = { title: '' } as Document
+    const route = reactive({ params: { storyId: selectedID }, query: {}, hash: '' })
+    const store = reactive({ targetsLoaded: true, targetsLoading: false, targetsError: false, followed: false,
+      isFollowing: () => store.followed, isPending: () => false, loadTargets: async () => {}, refreshAfterTargetChange: async () => {},
+      setFollowing: async (type: string, id: string, name: string, value: boolean) => { assert.deepEqual([type, id, name], ['story', 'story', 'Progress']); store.followed = value },
+    })
+    const modules = {
+      '@/stores/follows': { useFollowStore: () => store },
+      'tdesign-vue-next': { MessagePlugin: { success() {} } },
+      'vue-router': { useRoute: () => route, useRouter: () => ({ replace() {} }) },
+    }
+    const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)
+    const story = { id: 'story', title: 'Progress', first_fact_at: arrivedAt, last_fact_at: arrivedAt }
+    const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+      ...modules,
+      '@/components/FollowToggle.vue': { __esModule: true, default: toggle },
+      './components/GroupingCorrection.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+      '@/api/stories': { listStories: async () => ({ success: true, data: { items: [story], total: 1 } }), getStory: async () => ({ success: true, data: { story, facts: [], mentions: [], related_stories: [] } }) },
+    })
+    const root = element('root'), app = renderer.createApp(component)
+    app.use(createI18n({ legacy: false, locale: 'en-US', messages })); registerPrimitives(app)
+    app.component('router-link', defineComponent({ setup: (_props, { slots }) => () => h('a', slots.default?.()) }))
+    for (const name of ['t-empty', 't-pagination']) app.component(name, defineComponent({ setup: () => () => null }))
+    try {
+      app.mount(root); await settle()
+      let button = descendants(root).find(node => node.props['aria-label'] === 'Follow Progress')!
+      assert.ok(button)
+      await button.props.onClick(); await settle()
+      button = descendants(root).find(node => node.props['aria-label'] === 'Unfollow Progress')!
+      assert.equal(button.props['aria-pressed'], true)
+      await button.props.onClick(); await settle()
+      assert.equal(store.followed, false)
+    } finally { app.unmount(); globalThis.document = previousDocument }
   })
 }

@@ -100,6 +100,14 @@ func mergeStoryInto(tx *gorm.DB, spaceID uint64, fromID, intoID string) error {
 	return refreshStoryTimes(tx, spaceID, intoID)
 }
 
-// transferMergedStoryFollows is the transactional integration point for task 13.
-// Story follows do not exist yet. Transfer and deduplication must join this transaction when added.
-func transferMergedStoryFollows(_ *gorm.DB, _ uint64, _, _ string) error { return nil }
+// transferMergedStoryFollows preserves the earliest follow time within the merge transaction.
+func transferMergedStoryFollows(tx *gorm.DB, spaceID uint64, fromID, intoID string) error {
+	if err := tx.Exec(`INSERT INTO follows(space_id,target_type,target_id,created_at)
+ SELECT space_id,'story',?,created_at FROM follows
+ WHERE space_id=? AND target_type='story' AND target_id=?
+ ON CONFLICT(space_id,target_type,target_id) DO UPDATE
+ SET created_at=LEAST(follows.created_at,EXCLUDED.created_at)`, intoID, spaceID, fromID).Error; err != nil {
+		return err
+	}
+	return tx.Where("space_id=? AND target_type='story' AND target_id=?", spaceID, fromID).Delete(&types.Follow{}).Error
+}

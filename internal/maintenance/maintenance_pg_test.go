@@ -62,6 +62,10 @@ resolution_method,created_at) VALUES('alias',1,'organization','entity-a','A Inc'
 	}
 	for _, statement := range statements {
 		statement = strings.ReplaceAll(statement, "\n", "")
+		if strings.Contains(statement, "INSERT INTO follow_feed_states(") &&
+			!db.Migrator().HasTable("follow_feed_states") {
+			continue
+		}
 		if !db.Migrator().HasColumn("entities", "description") && strings.Contains(statement, "INSERT INTO entities(") {
 			statement = strings.ReplaceAll(statement, "entity_type,description,created_at", "entity_type,created_at")
 			statement = strings.ReplaceAll(statement, "'organization','Owner description'", "'organization'")
@@ -393,7 +397,7 @@ func TestReplicaAtomicDebouncedChangesAndAppendOnlyLogs(t *testing.T) {
 		`UPDATE entity_aliases SET alias='New Alias' WHERE id='alias'`,
 		`UPDATE entity_merge_records SET actor='reviewed owner' WHERE id='merge'`,
 		`UPDATE entry_entities SET created_at=now() WHERE entity_id='entity-a'`,
-		`UPDATE follow_feed_states SET last_viewed_at=now()`,
+		`UPDATE follows SET created_at=now()`,
 		`UPDATE entries SET source_unverified=false WHERE id='article'`,
 		`UPDATE entries SET metadata=jsonb_set(metadata,'{intake,reason}','"new reason"') WHERE id='pending'`,
 		`UPDATE entry_repost_sources SET author='new author'`,

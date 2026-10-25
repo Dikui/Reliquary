@@ -155,6 +155,11 @@ var entryNamingExceptions = map[string]entryNamingException{
 	"internal/types/task_dead_letter.go":                                    {Reason: "死信持久 scope 取值保持不变", Tokens: []string{"knowledge"}},
 	"internal/types/task_queue_test.go":                                     {Reason: "固定原契约或持久值的兼容断言；历史迁移夹具使用对应旧结构", Tokens: []string{"knowledge"}},
 	"internal/utils/presign_test.go":                                        {Reason: "文件库路径的既有目录值保持不变，验证旧资源仍可访问", Tokens: []string{"knowledge"}},
+
+	"frontend/src/views/library/FollowControls.test.ts": {
+		Reason: "保留实体关注控件的既有 i18n 键回归",
+		Tokens: []string{"knowledgeWorkbench"},
+	},
 }
 
 func retiredEntryIdentifier(word string) bool {

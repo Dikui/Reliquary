@@ -118,6 +118,12 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 	}
 	require.NoError(t, f.db.Create(&entity).Error)
 	require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: source.ID, EntityID: entity.ID}).Error)
+	story := seedFollowStory(t, f, "entry-contract-story", source.CreatedAt)
+	fact := seedFollowFact(t, f, story.ID, "entry-contract-fact", source.CreatedAt, &entity.ID, nil, "")
+	require.NoError(t, f.db.Create(&types.EntryFact{
+		SpaceID: 1, EntryID: source.ID, FactID: fact.ID, Role: "source",
+		Quote: "searchfixture original text", CreatedAt: source.CreatedAt,
+	}).Error)
 	_, err := follows.Follow(f.ctx, types.FollowTargetEntity, entity.ID)
 	require.NoError(t, err)
 	query := map[string]any{"query": "searchfixture", "libraries": []string{f.library.ID}}
@@ -132,6 +138,12 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 	mcpFeed := call("follow_feed", feedInput)
 	require.NotEmpty(t, httpFeed["results"])
 	require.NotEmpty(t, mcpFeed["results"])
+	for _, feed := range []map[string]any{httpFeed, mcpFeed} {
+		card := feed["results"].([]any)[0].(map[string]any)
+		require.Equal(t, story.ID, card["story"].(map[string]any)["id"])
+		require.Equal(t, fact.ID, card["trigger_fact"].(map[string]any)["id"])
+	}
+
 	require.Contains(t, httpCall("GET", "/contract/entries/"+source.ID, nil)["data"], "id")
 	require.NotEmpty(t, call("get_entry", map[string]any{"id": source.ID})["header"])
 	_, err = client.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_article", Arguments: map[string]any{"id": source.ID}})

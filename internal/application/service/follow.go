@@ -5,7 +5,6 @@ import (
 	"errors"
 	"reliquary/internal/types"
 	"strings"
-	"time"
 
 	werrors "reliquary/internal/errors"
 
@@ -33,8 +32,8 @@ func followSpace(ctx context.Context) (uint64, error) {
 }
 
 func validateFollowTarget(targetType, targetID string) error {
-	if targetType != types.FollowTargetEntity {
-		return werrors.NewBadRequestError("target_type must be entity")
+	if targetType != types.FollowTargetEntity && targetType != types.FollowTargetStory {
+		return werrors.NewBadRequestError("target_type must be entity or story")
 	}
 	if strings.TrimSpace(targetID) == "" || len(targetID) > 36 {
 		return werrors.NewBadRequestError("a target_id of at most 36 characters is required")
@@ -44,6 +43,16 @@ func validateFollowTarget(targetType, targetID string) error {
 
 // resolveFollowTarget locks the object against a concurrent merge or deletion.
 func resolveFollowTarget(tx *gorm.DB, spaceID uint64, targetType, targetID string) (*types.FollowTarget, error) {
+	if targetType == types.FollowTargetStory {
+		if err := lockEntitySpace(tx, spaceID); err != nil {
+			return nil, err
+		}
+		story, err := canonicalStory(tx, spaceID, targetID)
+		if err != nil {
+			return nil, err
+		}
+		return &types.FollowTarget{TargetType: targetType, TargetID: story.ID, Name: story.Title}, nil
+	}
 	if targetType == types.FollowTargetEntity {
 		if err := lockEntitySpaceShared(tx, spaceID); err != nil {
 			return nil, err
@@ -66,7 +75,7 @@ func resolveFollowTarget(tx *gorm.DB, spaceID uint64, targetType, targetID strin
 		return nil, werrors.NewBadRequestError("entity merge cycle")
 	}
 
-	return nil, werrors.NewBadRequestError("target_type must be entity")
+	return nil, werrors.NewBadRequestError("target_type must be entity or story")
 }
 
 func (s *FollowService) Follow(ctx context.Context, targetType, targetID string) (*types.FollowTarget, error) {
@@ -157,26 +166,24 @@ func (s *FollowService) Unfollow(ctx context.Context, targetType, targetID strin
 	})
 }
 
-const followEligibleSQL = `k.deleted_at IS NULL AND EXISTS (SELECT 1 FROM libraries fl WHERE fl.id=k.library_id AND fl.deleted_at IS NULL AND fl.feed_enabled=true)
-    AND k.parse_status='completed' AND k.enable_status='enabled'
-    AND COALESCE(k.metadata #>> '{intake,decision}','approved')='approved'`
-
-const followMatchSQL = `(f.target_type='entity' AND EXISTS (SELECT 1 FROM entry_entities ke
-    WHERE ke.space_id=k.space_id AND ke.entry_id=k.id AND ke.entity_id=f.target_id))`
-
 func (s *FollowService) ListFollows(ctx context.Context) ([]types.FollowTarget, error) {
 	spaceID, err := followSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
-	cutoff := time.Now().UTC()
 	result := []types.FollowTarget{}
-	err = s.db.WithContext(ctx).Raw(`SELECT f.target_type,f.target_id,f.created_at,
-        e.canonical_name AS name,
-        (SELECT count(*) FROM entries k WHERE k.space_id=f.space_id AND `+followEligibleSQL+`
-            AND k.created_at>=? AND k.created_at<=? AND `+followMatchSQL+`) AS recent_entry_count
-        FROM follows f LEFT JOIN entities e ON f.target_type='entity' AND e.space_id=f.space_id AND e.id=f.target_id
-        WHERE f.space_id=? AND f.target_type='entity' AND e.merged_into_id=''
-        ORDER BY name,f.target_type,f.target_id`, cutoff.AddDate(0, 0, -7), cutoff, spaceID).Scan(&result).Error
+	err = s.followTargets(ctx, spaceID).Scan(&result).Error
 	return result, err
+}
+
+func (s *FollowService) followTargets(ctx context.Context, spaceID uint64) *gorm.DB {
+	return s.db.WithContext(ctx).Table("follows follow").
+		Select("follow.target_type,follow.target_id,follow.created_at,COALESCE(e.canonical_name,st.title) AS name").
+		Joins(`LEFT JOIN entities e ON follow.target_type='entity'
+ AND e.space_id=follow.space_id AND e.id=follow.target_id`).
+		Joins(`LEFT JOIN stories st ON follow.target_type='story'
+ AND st.space_id=follow.space_id AND st.id=follow.target_id`).
+		Where(`follow.space_id=? AND ((follow.target_type='entity' AND e.merged_into_id='')
+ OR (follow.target_type='story' AND st.merged_into_id=''))`, spaceID).
+		Order("name,follow.target_type,follow.target_id")
 }

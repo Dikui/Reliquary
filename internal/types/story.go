@@ -47,6 +47,7 @@ type EntryFact struct {
 type FactSource struct {
 	EntryID     string `json:"entry_id"`
 	LibraryID   string `json:"library_id"`
+	LibraryName string `json:"library_name,omitempty"`
 	Title       string `json:"title"`
 	OriginalURL string `json:"original_url"`
 	Role        string `json:"role"`

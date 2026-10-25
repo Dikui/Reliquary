@@ -32,18 +32,32 @@ func mcpFollowArticle(t *testing.T, f *mcpFixture, title string, collected time.
 	if entityID != "" {
 		require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: types.SingleSpaceID, EntryID: article.ID, EntityID: entityID, CreatedAt: collected}).Error)
 	}
+	story := types.Story{ID: article.ID, SpaceID: 1, Title: title, FirstFactAt: collected, LastFactAt: collected}
+	require.NoError(t, f.db.Create(&story).Error)
+	fact := types.Fact{
+		ID: article.ID, SpaceID: 1, StoryID: story.ID, Title: title,
+		Subject: "Acme", Action: "released", CreatedAt: collected,
+	}
+	if entityID != "" {
+		fact.SubjectEntityID = &entityID
+	}
+	require.NoError(t, f.db.Create(&fact).Error)
+	require.NoError(t, f.db.Create(&types.EntryFact{
+		SpaceID: 1, EntryID: article.ID, FactID: fact.ID, Role: "source",
+		Quote: "Original follow evidence.", CreatedAt: collected,
+	}).Error)
 	return article
 }
 
 func mcpFeedIDs(result *types.FollowFeedResponse) []string {
 	ids := make([]string, 0, len(result.Results))
 	for _, item := range result.Results {
-		ids = append(ids, item.EntryID)
+		ids = append(ids, item.Story.ID)
 	}
 	return ids
 }
 
-func mcpMatchedIDs(item *types.FollowFeedArticle) []string {
+func mcpMatchedIDs(item types.FollowFeedCard) []string {
 	ids := make([]string, 0, len(item.MatchedFollows))
 	for _, target := range item.MatchedFollows {
 		ids = append(ids, target.TargetID)
@@ -74,9 +88,6 @@ func TestMCPFollowToolsValidateArgumentsWithoutWrites(t *testing.T) {
 	var count int64
 	require.NoError(t, f.db.Model(&types.OperationLog{}).Count(&count).Error)
 	require.Zero(t, count)
-	state, err := service.NewFollowService(f.db).State(f.ctx)
-	require.NoError(t, err)
-	require.Nil(t, state.LastViewedAt)
 }
 
 func TestMCPFollowMergedEntityIDResolvesToRetainedTarget(t *testing.T) {
@@ -122,7 +133,7 @@ func TestMCPFollowMergedEntityIDResolvesToRetainedTarget(t *testing.T) {
 	}
 }
 
-func TestMCPFollowFeedCursorAllArticlesAndUnchangedCheckpoint(t *testing.T) {
+func TestMCPFollowFeedCursorAllStoriesReadOnly(t *testing.T) {
 	f := newMCPFixture(t)
 	entity := mcpFollowTargets(t, f)
 	client := f.connect(t, "2025-11-25")
@@ -134,23 +145,14 @@ func TestMCPFollowFeedCursorAllArticlesAndUnchangedCheckpoint(t *testing.T) {
 		article := mcpFollowArticle(t, f, "Pagination article", date, entity.ID, "")
 		expected = append(expected, article.ID)
 	}
-	follows := service.NewFollowService(f.db)
-	checkpoint := date.Add(-time.Second)
-	_, err := follows.MarkViewed(f.ctx, &checkpoint)
-	require.NoError(t, err)
 	var page types.FollowFeedResponse
 	mcpCall(t, client, "follow_feed", map[string]any{"target_ids": []string{entity.ID}, "limit": 2}, &page)
-	cutoff := page.ViewedAt
 	var actual []string
 	pages := 0
 	for {
 		pages++
-		require.Equal(t, cutoff, page.ViewedAt)
 		require.EqualValues(t, 7, page.Total)
 		actual = append(actual, mcpFeedIDs(&page)...)
-		state, err := follows.State(f.ctx)
-		require.NoError(t, err)
-		require.Equal(t, checkpoint.UnixMicro(), state.LastViewedAt.UnixMicro())
 		if page.NextCursor == "" {
 			break
 		}

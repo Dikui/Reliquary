@@ -12,6 +12,7 @@ export interface Story {
 export interface FactSource {
   entry_id: string
   library_id: string
+  library_name?: string
   title: string
   original_url: string
   role: 'source' | 'mention'

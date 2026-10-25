@@ -21,6 +21,11 @@ func TestStoryConsolidateMergesDuplicateRootsAndRetainsLinksHTTP(t *testing.T) {
 	a := groupingDetail(t, f, groupingList(t, f).Items[0].ID)
 	groupingIngest(t, f, "root-b", "2026-10-21")
 	b := groupingDetail(t, f, groupingList(t, f).Items[0].ID)
+	follows := service.NewFollowService(f.db)
+	_, err := follows.Follow(f.ctx, "story", b.Story.ID)
+	require.NoError(t, err)
+	_, err = follows.Follow(f.ctx, "story", a.Story.ID)
+	require.NoError(t, err)
 	rootCalls := 0
 	model.groupRespond = func(ctx context.Context, messages []chat.Message) string {
 		purpose, _ := types.LLMCallMetadataFromContext(ctx)
@@ -67,6 +72,13 @@ func TestStoryConsolidateMergesDuplicateRootsAndRetainsLinksHTTP(t *testing.T) {
 	require.Equal(t, bridge, detail.Facts[0].Sources[1].EntryID)
 	require.False(t, detail.Facts[0].ManualCorrected)
 	require.False(t, detail.Story.ManualCorrected)
+	listed, err := follows.ListFollows(f.ctx)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Equal(t, a.Story.ID, listed[0].TargetID)
+	var feed types.FollowFeedResponse
+	mcpCall(t, f.connect(t, "2025-11-25"), "follow_feed", map[string]any{}, &feed)
+	require.Equal(t, []string{a.Story.ID}, mcpFeedIDs(&feed))
 	var fromMCP types.StoryDetail
 	mcpCall(t, f.connect(t, "2025-11-25"), "get_story", map[string]any{"id": b.Story.ID}, &fromMCP)
 	require.Equal(t, detail, fromMCP)
