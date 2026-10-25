@@ -19,6 +19,7 @@ const listLocation = computed(() => ({ path: '/platform/stories', query: route.q
 const timestamp = (value: string) => new Date(value).toLocaleString(locale.value, { timeZoneName: 'short' })
 const occurrenceTime = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : timestamp(value)
 const entryLocation = (id: string) => ({ path: '/platform/entries', query: { entry_id: id } })
+const entityLocation = (id: string) => ({ path: '/platform/entries', query: { tab: 'entities', entity_id: id } })
 function changePage(value: number) {
   void router.replace({ query: { ...route.query, page: value > 1 ? String(value) : undefined } })
 }
@@ -91,13 +92,13 @@ onUnmounted(() => { disposed = true; version++ })
           </dl>
           <h2>{{ t('stories.timeline') }}</h2>
           <ol v-if="detail.facts.length" class="records timeline">
-            <li v-for="fact in detail.facts" :key="fact.id" class="record">
+            <li v-for="fact in detail.facts" :key="fact.id" :id="`fact-${fact.id}`" class="record">
               <p class="muted"><time v-if="fact.occurred_at" :datetime="fact.occurred_at">{{ occurrenceTime(fact.occurred_at) }}</time><span v-else>{{ t('stories.unknownTime') }}</span></p>
               <h3>{{ fact.title }}</h3>
               <dl class="frame">
-                <dt>{{ t('stories.subject') }}</dt><dd>{{ fact.subject }}</dd>
+                <dt>{{ t('stories.subject') }}</dt><dd><router-link v-if="fact.subject_entity_id" :to="entityLocation(fact.subject_entity_id)">{{ fact.subject }}</router-link><template v-else>{{ fact.subject }}</template></dd>
                 <dt>{{ t('stories.action') }}</dt><dd>{{ fact.action }}</dd>
-                <dt v-if="fact.object">{{ t('stories.object') }}</dt><dd v-if="fact.object">{{ fact.object }}</dd>
+                <dt v-if="fact.object">{{ t('stories.object') }}</dt><dd v-if="fact.object"><router-link v-if="fact.object_entity_id" :to="entityLocation(fact.object_entity_id)">{{ fact.object }}</router-link><template v-else>{{ fact.object }}</template></dd>
                 <dt v-if="fact.conditions">{{ t('stories.conditions') }}</dt><dd v-if="fact.conditions">{{ fact.conditions }}</dd>
               </dl>
               <h4>{{ t('stories.sources') }}</h4>

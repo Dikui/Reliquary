@@ -468,3 +468,5 @@ evaluation_sets 在 spaces 之后，questions 在 sets 之后，answers 在 ques
 ## 结构版本 39：事实、事件与出处
 
 `stories` 的 `id space_id title first_fact_at last_fact_at`、`facts` 的 `id space_id story_id title subject action object conditions occurred_at created_at`、`entry_facts` 的 `space_id entry_id fact_id role quote manual created_at` 全部属于 Sidecar。登记入口为 `PersistentTables`，分别保存到 `data/stories.json`、`data/facts.json` 与 `data/entry_facts.json`。事件先于事实导入，资料与事实先于关联导入。发生时间按原日期或 RFC3339 文本逐项保留，不转换为统一时间戳。旧版本升级只投影三个空表；当前版本的事实、事件、引文与人工标记必须逐项保留。
+
+结构版本 40 的事实 `subject_entity_id`、`object_entity_id` 及 `entity_candidates`、`entity_candidate_occurrences` 全部字段归 Sidecar。候选审核状态、目标实体和出现在哪个事实端点的记录随显式维护副本往返；实体先于事实、候选与事实先于出现记录导入。旧结构副本只补 NULL 端点和空候选表，已存在的非空数据不作为迁移默认值忽略。

@@ -1,5 +1,24 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  "entityCandidates": {
+    "title": "待确认实体",
+    "description": "按事实端点出现次数排序，查看事实后决定是否收录。",
+    "status": "处理状态",
+    "pending": "待处理",
+    "ignored": "已忽略",
+    "empty": "没有待确认实体。",
+    "count": "出现 {count} 次",
+    "subject": "主体",
+    "object": "对象",
+    "approve": "通过为实体",
+    "alias": "并为别名",
+    "ignore": "忽略",
+    "target": "选择已有实体",
+    "ignoreHint": "忽略后仍保留并累积出现记录，可切换到已忽略列表再次通过。",
+    "approveSaved": "已通过并挂接事实端点",
+    "aliasSaved": "已新增别名并挂接事实端点",
+    "ignoreSaved": "已忽略，出现记录继续保留"
+  },
   stories: {
     "title": "事件",
     "detail": "事件详情",
@@ -703,6 +722,10 @@ export default {
     "ingest_discard": "丢弃资料",
 
 
+    "approve_entity_candidate": "通过待确认实体",
+    "alias_entity_candidate": "待确认实体并为别名",
+    "ignore_entity_candidate": "忽略待确认实体",
+    "add_entity_alias": "手动新增实体别名",
     "merge_entities": "合并实体",
 
 

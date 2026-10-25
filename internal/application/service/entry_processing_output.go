@@ -34,7 +34,10 @@ func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	if materialCanProduceFact(l, k) {
 		prompt += `
 仅当本篇报道一次具体发生时，额外输出一个 fact 对象：{"title":"事实标题","subject":"主体","action":"本次动作","object":"对象","conditions":"条件",
-"occurred_at":"RFC3339 或 YYYY-MM-DD，未知用空字符串","quote":"一句逐字原文"}。
+"occurred_at":"RFC3339 或 YYYY-MM-DD，未知用空字符串","quote":"一句逐字原文",
+"subject_entity_id":"已有实体 ID 或空字符串","object_entity_id":"已有实体 ID 或空字符串",
+"subject_type":"organization / person / other","object_type":"organization / person / other"}。
+端点 ID 只能来自 entity_options；没有 ID 时标明类型，产品和模型用 other。署名作者不作为事实端点提取。
 综合稿、评论、教程不输出事实，fact 为 null。提取本次动作而非背景动作，一篇资料最多一个事实。
 quote 必须逐字出自正文，不含段落编号，不翻译、不改写、不拼接。`
 	} else {

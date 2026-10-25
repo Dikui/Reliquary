@@ -25,6 +25,8 @@ export interface StoryFact {
   action: string
   object: string
   conditions: string
+  subject_entity_id: string | null
+  object_entity_id: string | null
   // Calendar date (YYYY-MM-DD) or RFC3339 instant; null means unknown.
   occurred_at: string | null
   created_at: string

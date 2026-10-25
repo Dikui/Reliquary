@@ -1,6 +1,7 @@
 package maintenance
 
 func projectStorySnapshot(snapshot *Snapshot, targetVersion int64) {
+	projectEntityCandidatesSnapshot(snapshot, targetVersion)
 	if snapshot.schemaVersion >= 39 || targetVersion < 39 {
 		return
 	}
@@ -12,6 +13,7 @@ func projectStorySnapshot(snapshot *Snapshot, targetVersion int64) {
 }
 
 func projectStoryManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	expected, actual = projectEntityCandidatesManifest(expected, actual)
 	if expected.SchemaVersion >= 39 || actual.SchemaVersion < 39 {
 		return expected, actual
 	}

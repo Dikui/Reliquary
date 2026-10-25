@@ -15,13 +15,17 @@ import (
 
 // The model may propose one fact per material. Invalid facts do not discard its overview.
 type understandingFact struct {
-	Title      string `json:"title"`
-	Subject    string `json:"subject"`
-	Action     string `json:"action"`
-	Object     string `json:"object"`
-	Conditions string `json:"conditions"`
-	OccurredAt string `json:"occurred_at"`
-	Quote      string `json:"quote"`
+	Title           string `json:"title"`
+	Subject         string `json:"subject"`
+	Action          string `json:"action"`
+	Object          string `json:"object"`
+	Conditions      string `json:"conditions"`
+	OccurredAt      string `json:"occurred_at"`
+	Quote           string `json:"quote"`
+	SubjectEntityID string `json:"subject_entity_id"`
+	ObjectEntityID  string `json:"object_entity_id"`
+	SubjectType     string `json:"subject_type"`
+	ObjectType      string `json:"object_type"`
 }
 
 func materialCanProduceFact(library *types.Library, entry *types.Entry) bool {
@@ -29,8 +33,21 @@ func materialCanProduceFact(library *types.Library, entry *types.Entry) bool {
 }
 
 func parseUnderstandingFact(raw json.RawMessage) *understandingFact {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil {
+		return nil
+	}
 	var fact understandingFact
-	if json.Unmarshal(raw, &fact) != nil {
+	// Optional endpoint fields cannot invalidate otherwise valid evidence.
+	for key, target := range map[string]*string{
+		"subject_entity_id": &fact.SubjectEntityID, "object_entity_id": &fact.ObjectEntityID,
+		"subject_type": &fact.SubjectType, "object_type": &fact.ObjectType,
+	} {
+		_ = json.Unmarshal(fields[key], target)
+		delete(fields, key)
+	}
+	core, _ := json.Marshal(fields)
+	if json.Unmarshal(core, &fact) != nil {
 		return nil
 	}
 	return &fact
@@ -80,6 +97,9 @@ func (s *entryService) saveUnderstandingFact(
 		return nil
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockEntitySpace(tx, entry.SpaceID); err != nil {
+			return err
+		}
 		var current types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("space_id=? AND id=?", entry.SpaceID, entry.ID).First(&current).Error; err != nil {
@@ -110,7 +130,16 @@ func (s *entryService) saveUnderstandingFact(
 			Title: fact.Title, Subject: fact.Subject, Action: fact.Action, Object: fact.Object,
 			Conditions: fact.Conditions, OccurredAt: factOccurrenceTime(fact.OccurredAt), CreatedAt: now,
 		}
+		var options articleProcessingInput
+		if err := loadUnderstandingOptions(ctx, tx, entry.SpaceID, &options); err != nil {
+			return err
+		}
+		stored.SubjectEntityID = resolveFactEntity(fact.Subject, fact.SubjectEntityID, options.EntityOptions)
+		stored.ObjectEntityID = resolveFactEntity(fact.Object, fact.ObjectEntityID, options.EntityOptions)
 		if err := tx.Create(&stored).Error; err != nil {
+			return err
+		}
+		if err := recordFactCandidates(tx, stored, fact); err != nil {
 			return err
 		}
 		return tx.Create(&types.EntryFact{

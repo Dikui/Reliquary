@@ -34,7 +34,7 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
     '@/api/entities': api,
     '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
     '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
-    './EntityEditor.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) } }
+    './EntityCandidates.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) }, './EntityEditor.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) } }
   function evaluate(code: string) { const module = { exports: {} as any }; const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText; new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports); return module.exports }
   const component = evaluate(script.content).default; component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup; let state: any

@@ -84,3 +84,5 @@ EntryProcessingStatus uses the existing success outline tag for confirmed storag
 Entity details retain the shared metadata controls and source-material list. The retired relationship list, graph canvas and relationship-type editor are removed; no replacement visual controls are introduced in this change.
 
 Material lists and search retain the existing library scope, publication date and star controls. Classification tags, topic controls, similar-report disclosures and the self-check pages are removed. Shared TDesign controls, spacing and feedback retain their established owners.
+
+Entity candidates extend the entity workbench as a compact occurrence-ranked list and a bordered fact review area. The existing type, action and source-link hierarchy, TDesign selects and buttons, locale bundles and semantic theme tokens remain the visual owners. Pending and ignored states share the same layout; review errors remain next to their action without replacing the fact evidence.

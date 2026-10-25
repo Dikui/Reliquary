@@ -26,6 +26,7 @@ var OperationTypes = []string{
 	"review_supplement_url", "review_admit_unverified",
 	"star", "unstar", "merge_entities",
 	"follow", "unfollow",
+	"approve_entity_candidate", "alias_entity_candidate", "ignore_entity_candidate", "add_entity_alias",
 }
 
 type OperationLogPage struct {

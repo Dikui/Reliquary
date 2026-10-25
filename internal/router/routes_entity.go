@@ -10,6 +10,9 @@ func RegisterEntityRoutes(r *gin.RouterGroup, h *handler.EntityHandler) {
 	if h == nil {
 		return
 	}
+	r.GET("/entity-candidates", h.Candidates)
+	r.GET("/entity-candidates/:candidate_id", h.CandidateDetail)
+	r.POST("/entity-candidates/:candidate_id/:action", h.ReviewCandidate)
 	group := r.Group("/entities")
 	group.GET("", h.Entities)
 	group.POST("", h.SaveEntity)

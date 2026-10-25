@@ -237,7 +237,9 @@ func segmentSummaryPrompt() string {
 "summary":{"overview":"中文一句话概述"},"domain_ids":[],"entity_ids":[]}。
 领域与实体各选 0–3 个，只能从各段已选 ID 中选择。
 若 fact_allowed=true，从各段 fact 中选择整篇报道的本次发生，最多输出一个 fact。
-fact 包含 title、subject、action、object、conditions、occurred_at、quote。
+fact 包含 title、subject、action、object、conditions、occurred_at、quote，
+以及 subject_entity_id、object_entity_id、subject_type、object_type。
+保留所选事实的端点 ID 与类型，ID 只能来自 entity_options，无 ID 时类型为 organization、person 或 other。
 quote 必须完整照抄所选 fact 的引文。综合稿、评论、教程或没有合适事实时输出 fact:null。
 若 fact_allowed=false，必须输出 fact:null。`
 }
@@ -292,6 +294,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 			}
 			checked.DomainIDs = acceptedUnderstandingIDs(checked.DomainIDs, domains)
 			checked.EntityIDs = acceptedUnderstandingIDs(checked.EntityIDs, entities)
+			qualifyFactEntityIDs(checked.Fact, options.EntityOptions)
 			summary = checked
 		}
 		return err

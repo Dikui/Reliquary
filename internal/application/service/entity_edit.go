@@ -84,6 +84,16 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 		if err := saveEntityAlias(tx, keep, merged.CanonicalName, "merge"); err != nil {
 			return err
 		}
+		for _, column := range []string{"subject_entity_id", "object_entity_id"} {
+			if err := tx.Model(&types.Fact{}).Where("space_id=? AND "+column+"=?", spaceID, merged.ID).
+				Update(column, keep.ID).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(&types.EntityCandidate{}).Where("space_id=? AND entity_id=?", spaceID, merged.ID).
+			Update("entity_id", keep.ID).Error; err != nil {
+			return err
+		}
 		actor, _ := types.PrincipalFromContext(ctx)
 		record := types.EntityMergeRecord{
 			ID:            uuid.NewString(),
@@ -250,6 +260,20 @@ func (s *EntityService) SaveEntity(ctx context.Context, id string, input types.E
 		if err := tx.Save(&entity).Error; err != nil {
 			return err
 		}
+		var oldAliases []types.EntityAlias
+		if err := tx.Where("space_id=? AND entity_id=?", spaceID, entity.ID).Find(&oldAliases).Error; err != nil {
+			return err
+		}
+		oldKeys := map[string]bool{}
+		for _, alias := range oldAliases {
+			oldKeys[alias.NormalizedAlias] = true
+		}
+		addedAliases := []string{}
+		for _, alias := range input.Aliases {
+			if !oldKeys[types.NormalizeEntityKey(alias)] {
+				addedAliases = append(addedAliases, alias)
+			}
+		}
 		if err := tx.Where("space_id=? AND entity_id=?",
 			spaceID,
 			entity.ID).Delete(&types.EntityAlias{}).Error; err != nil {
@@ -261,6 +285,13 @@ func (s *EntityService) SaveEntity(ctx context.Context, id string, input types.E
 			}
 		}
 		entity.Aliases = input.Aliases
+		if id != "" && len(addedAliases) > 0 {
+			if err := backfillFactAliases(ctx, tx, entity, addedAliases); err != nil {
+				return err
+			}
+			return NewOperationLogService(tx).RecordTx(ctx, tx, "add_entity_alias", entity.ID,
+				oldAliases, map[string]any{"aliases": entity.Aliases, "added_aliases": addedAliases})
+		}
 		return nil
 	})
 	if err != nil {
@@ -289,6 +320,10 @@ func (s *EntityService) DeleteEntity(ctx context.Context, id string) error {
 		) {
 			return werrors.NewNotFoundError("entity not found")
 		} else if err != nil {
+			return err
+		}
+		if err := tx.Model(&types.EntityCandidate{}).Where("space_id=? AND entity_id=?", spaceID, id).
+			Updates(map[string]any{"status": "pending", "entity_id": nil, "updated_at": time.Now()}).Error; err != nil {
 			return err
 		}
 		// Old merge URLs must not resolve to a deleted target.

@@ -1,5 +1,24 @@
 import { ikb18En } from './ikb18'
 export default {
+  "entityCandidates": {
+    "title": "Entity candidates",
+    "description": "Sorted by fact endpoint occurrences. Review the facts before adding an entity.",
+    "status": "Review status",
+    "pending": "Pending",
+    "ignored": "Ignored",
+    "empty": "No entity candidates.",
+    "count": "Occurrences: {count}",
+    "subject": "Subject",
+    "object": "Object",
+    "approve": "Approve as entity",
+    "alias": "Merge as alias",
+    "ignore": "Ignore",
+    "target": "Choose an existing entity",
+    "ignoreHint": "Ignored names keep their occurrences. Switch to Ignored to approve them later.",
+    "approveSaved": "Entity approved and fact endpoints linked",
+    "aliasSaved": "Alias added and fact endpoints linked",
+    "ignoreSaved": "Candidate ignored; occurrences retained"
+  },
   stories: {
     "title": "Stories",
     "detail": "Story details",
@@ -703,6 +722,10 @@ export default {
     "ingest_discard": "Discard material",
 
 
+    "approve_entity_candidate": "Approve entity candidate",
+    "alias_entity_candidate": "Merge entity candidate as alias",
+    "ignore_entity_candidate": "Ignore entity candidate",
+    "add_entity_alias": "Add entity alias",
     "merge_entities": "Merge entities",
 
 

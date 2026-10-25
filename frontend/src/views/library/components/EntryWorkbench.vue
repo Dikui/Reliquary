@@ -30,6 +30,7 @@
         </div>
       </t-loading>
     </section>
+    <EntityCandidates @changed="refreshAll" />
     <EntityEditor v-if="editorVisible" :entity="editingEntity" @close="editorVisible = false" @saved="entitySaved" />
     <t-dialog v-model:visible="deleteVisible" :header="t('entityMaintenance.delete')" :footer="false" :close-on-overlay-click="false" :close-btn="!deleting" :close-on-esc-keydown="!deleting" width="min(480px, 95vw)">
       <p>{{ t('entityMaintenance.deleteHint', { name: selectedEntity?.canonical_name }) }}</p>
@@ -48,6 +49,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { ENTITY_TYPES, deleteEntity, getEntity, listEntities, mergeEntities, type Entity, type EntityEntry, type EntityType } from '@/api/entities'
 import type { SourceLocation } from '@/types/search'
 import EntityEditor from './EntityEditor.vue'
+import EntityCandidates from './EntityCandidates.vue'
 import FollowToggle from '@/components/FollowToggle.vue'
 import { useFollowStore } from '@/stores/follows'
 

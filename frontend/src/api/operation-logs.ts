@@ -16,6 +16,10 @@ export const OPERATION_TYPES = [
   'merge_entities',
   'follow',
   'unfollow',
+  'approve_entity_candidate',
+  'alias_entity_candidate',
+  'ignore_entity_candidate',
+  'add_entity_alias',
 ] as const
 export type OperationType = typeof OPERATION_TYPES[number]
 export interface OperationLog { id: string; actor: string; actor_name?: string; operation_type: OperationType; object_id: string; before: unknown; after: unknown; created_at: string }

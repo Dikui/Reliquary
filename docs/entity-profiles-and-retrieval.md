@@ -6,7 +6,7 @@
 
 首次启动新实体功能时，导入参照 AIHOT taxonomy 整理的 18 个机构及机构别名，排除产品与模型名。导入标记单独持久化，重复启动不重复导入，用户删除的预设机构不会自动恢复。后续变化由人工维护。
 
-规范化 key 依次执行 NFKC、去首尾空白、小写、删除全部 Unicode 空白。别名按实体内的规范化 key 去重。不同实体可以具有相同别名，规范化匹配和多重命中的处理由后续事实端点功能使用。
+规范化 key 依次执行 NFKC、去首尾空白、小写、删除全部 Unicode 空白。别名按实体内的规范化 key 去重。不同实体可以具有相同别名，事实端点的规范化匹配只接受唯一命中。
 
 资料详情的摘要区域可编辑涉及的实体，选择 0–3 个已有机构或人物。保存后返回 `entities_manual=true`，空选择同样记录为人工修改。资料重处理或重建库保留该选择。删除资料仅撤除关联，不删除名录中的实体。
 
@@ -52,3 +52,23 @@ HTTP 使用 `GET/POST /api/v1/domains`、`PATCH/DELETE /api/v1/domains/:domain_i
 领域页的“对已有资料重新判定领域”打开共享批量任务流程，范围为全部库的已有资料。也可通过 `POST /api/v1/entries/batches/preview` 和 `POST /api/v1/entries/batches` 提交 `action=reclassify_domains`，沿用预览指纹与固定名单。后台逐项运行，跳过人工修改过领域的资料，只更新领域，不重建索引或覆盖标题、概述及实体。进度与失败重试沿用批次接口。
 
 调用统计使用 `entry_understanding`，长文合并继续使用 `segment_merge`。迁移 38 仅增加标题和概述的人工标记，并允许新的调用用途；不删除已有资料。回滚会移除新增的人工标记，并把该用途的历史调用映射为原用途，不保留这个用途区分。
+
+## 事实端点与待确认实体
+
+时效型资料理解的 `fact` 可带 `subject_entity_id`、`object_entity_id`，以及无 ID 时的 `subject_type`、`object_type`（`organization`、`person`、`other`）。ID 必须在提供给模型的现有实体选项内，保存前再核对当前目录。无有效 ID 时，端点文字按规范化 key 精确匹配规范名和别名；句中提及和同时命中多个实体都不挂接。不自动增加别名。
+
+未挂接且标为机构或人物的端点按规范化 key 归入待确认实体，记录事实 ID 和主体或对象端。产品、模型等其他类型、仅有署名作者的资料和不产生事实的库不生成候选。每条出现记录对应一个事实的一端，重复处理不增加次数；同一名字出现在事实两端计两次。
+
+实体页下方的待确认列表按出现次数降序排列，可查看事实框架并进入其事件。默认只显示待处理项，可以切换到已忽略项。通过会创建实体；并为别名会为选中的现有实体新增别名。这两种操作仅按该候选的出现记录挂 ID。忽略只改变处理状态，同名新事实继续追加记录，之后仍可通过或并为别名。已经通过或并为别名的同名新端点正常使用实体目录匹配。
+
+在实体编辑器新增别名时，对尚未挂接的历史端点按该别名精确回填一次，已挂接端点保留，多重命中仍不挂接。通过、并为别名、忽略和手动新增别名均写操作日志。现有实体合并同时转移事实端点和已处理候选的目标 ID；删除实体后端点留空，其已处理候选回到待处理状态，出现记录保留。
+
+| 操作 | HTTP 接口 |
+| --- | --- |
+| 按出现次数查询 | `GET /api/v1/entity-candidates?status=pending&limit=50&offset=0` |
+| 候选与出现的事实 | `GET /api/v1/entity-candidates/:id?limit=50&offset=0` |
+| 通过为新实体 | `POST /api/v1/entity-candidates/:id/approve` |
+| 并为已有实体的别名 | `POST /api/v1/entity-candidates/:id/alias`，请求 `{"entity_id":"目标 ID"}` |
+| 忽略 | `POST /api/v1/entity-candidates/:id/ignore` |
+
+列表状态可为 `pending`、`ignored`、`approved`、`aliased` 或 `all`，默认 `pending`。分页 `limit` 为 1–100，`offset` 为非负数。列表 `data` 为 `{items,total}`；详情为 `{candidate,occurrences,total}`，每条出现记录包含 `fact`、`endpoint`、`created_at`。候选包含 `occurrence_count` 与可空的 `entity_id`。事件详情 HTTP 与 MCP 的事实均包含可空的 `subject_entity_id`、`object_entity_id`。

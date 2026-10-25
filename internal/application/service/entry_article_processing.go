@@ -133,6 +133,7 @@ func qualifyUnderstandingChoices(result *articleProcessingResult, input articleP
 	}
 	result.DomainIDs = acceptedUnderstandingIDs(result.DomainIDs, domains)
 	result.EntityIDs = acceptedUnderstandingIDs(result.EntityIDs, entities)
+	qualifyFactEntityIDs(result.Fact, input.EntityOptions)
 }
 
 func acceptedUnderstandingIDs(ids []string, options map[string]bool) []string {

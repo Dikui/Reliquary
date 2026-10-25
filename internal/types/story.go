@@ -13,14 +13,16 @@ type Story struct {
 
 // Fact describes one occurrence and belongs to exactly one story.
 type Fact struct {
-	ID         string `json:"id"          gorm:"primaryKey"`
-	SpaceID    uint64 `json:"space_id"`
-	StoryID    string `json:"story_id"`
-	Title      string `json:"title"`
-	Subject    string `json:"subject"`
-	Action     string `json:"action"`
-	Object     string `json:"object"`
-	Conditions string `json:"conditions"`
+	ID              string  `json:"id"          gorm:"primaryKey"`
+	SpaceID         uint64  `json:"space_id"`
+	StoryID         string  `json:"story_id"`
+	Title           string  `json:"title"`
+	Subject         string  `json:"subject"`
+	Action          string  `json:"action"`
+	Object          string  `json:"object"`
+	Conditions      string  `json:"conditions"`
+	SubjectEntityID *string `json:"subject_entity_id"`
+	ObjectEntityID  *string `json:"object_entity_id"`
 	// OccurredAt preserves YYYY-MM-DD or RFC3339 precision; nil means unknown.
 	OccurredAt *string   `json:"occurred_at"`
 	CreatedAt  time.Time `json:"created_at"`
