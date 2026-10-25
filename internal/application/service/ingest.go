@@ -73,6 +73,12 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		}
 		return result, err
 	}
+	// Serialize explicit mention writes with manual fact merges before taking any entry row locks.
+	if request.MentionedFactIDs != nil {
+		if err := lockEntitySpace(s.db.WithContext(ctx), spaceID); err != nil {
+			return nil, err
+		}
+	}
 	now := time.Now()
 	kind := "article"
 	if library.Template == types.TemplateOwn {

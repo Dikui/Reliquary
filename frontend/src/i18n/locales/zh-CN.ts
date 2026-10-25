@@ -19,6 +19,23 @@ export default {
     "aliasSaved": "已新增别名并挂接事实端点",
     "ignoreSaved": "已忽略，出现记录继续保留"
   },
+  groupingCorrection: {
+    "manual": "人工纠正过",
+    "move": "移动事实",
+    "split": "拆出新事件",
+    "mergeFacts": "合并事实",
+    "mergeStories": "合并事件",
+    "storyTarget": "目标事件",
+    "factTarget": "保留的事实",
+    "title": "新事件标题",
+    "hint": "纠正后，所选事实与关联资料不会再被自动归组覆盖。",
+    "mergeHint": "出处、引文与提及将转移到保留项，旧链接仍可使用。合并后无法自动撤销。",
+    "failed": "纠正保存失败，已保留所选内容，请重试。",
+    "saved": "已保存归组纠正",
+    "empty": "已加载的事件中没有可选目标，请加载更多事件或选择另一事件。",
+    "required": "请选择目标，或输入 1 至 255 字的单行标题。",
+    "loadFailed": "无法加载目标，请重试。"
+  },
   stories: {
     "mentions": "提及它的资料",
     "mentionsHint": "这些资料讨论了事件中的事实，不作为出处证据。",
@@ -729,6 +746,10 @@ export default {
     "approve_entity_candidate": "通过待确认实体",
     "alias_entity_candidate": "待确认实体并为别名",
     "ignore_entity_candidate": "忽略待确认实体",
+    "move_fact": "移动事实",
+    "split_fact": "拆出新事件",
+    "merge_facts": "合并事实",
+    "merge_stories": "合并事件",
     "add_entity_alias": "手动新增实体别名",
     "merge_entities": "合并实体",
 

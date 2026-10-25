@@ -19,6 +19,23 @@ export default {
     "aliasSaved": "Alias added and fact endpoints linked",
     "ignoreSaved": "Candidate ignored; occurrences retained"
   },
+  groupingCorrection: {
+    "manual": "Manually corrected",
+    "move": "Move fact",
+    "split": "Split into new story",
+    "mergeFacts": "Merge facts",
+    "mergeStories": "Merge stories",
+    "storyTarget": "Destination story",
+    "factTarget": "Fact to retain",
+    "title": "New story title",
+    "hint": "This correction protects the selected facts and their materials from automatic regrouping.",
+    "mergeHint": "Sources, quotations and mentions move to the retained item. Old links continue to work. This merge cannot be undone automatically.",
+    "failed": "Could not save the correction. Your selection is retained; try again.",
+    "saved": "Grouping correction saved",
+    "empty": "No eligible targets in the loaded stories. Load more stories or choose another story.",
+    "required": "Choose a destination or enter a single-line title of 1 to 255 characters.",
+    "loadFailed": "Could not load destinations. Try again."
+  },
   stories: {
     "mentions": "Materials mentioning this story",
     "mentionsHint": "These materials discuss the facts and do not serve as source evidence.",
@@ -729,6 +746,10 @@ export default {
     "approve_entity_candidate": "Approve entity candidate",
     "alias_entity_candidate": "Merge entity candidate as alias",
     "ignore_entity_candidate": "Ignore entity candidate",
+    "move_fact": "Move fact",
+    "split_fact": "Split into new story",
+    "merge_facts": "Merge facts",
+    "merge_stories": "Merge stories",
     "add_entity_alias": "Add entity alias",
     "merge_entities": "Merge entities",
 

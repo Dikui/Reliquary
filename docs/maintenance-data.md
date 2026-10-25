@@ -473,3 +473,6 @@ evaluation_sets 在 spaces 之后，questions 在 sets 之后，answers 在 ques
 
 
 结构版本 41 的 `grouping_decisions` 全部字段归 Sidecar，保存到 `data/grouping_decisions.json`，在资料和事实之后导入。`fact_embeddings` 全部字段归 Regenerated，不进入副本；召回时按当前共享向量模型和维度、事实内容哈希补算。旧结构副本升级只增加空判定表和可重建缓存，不忽略已有判定记录的变化。
+
+
+结构版本 42 的 `entries.grouping_manual`、`facts.manual_corrected`、`facts.merged_into_id`、`stories.manual_corrected` 与 `stories.merged_into_id` 全部归 Sidecar，随现有资料、事实、事件文件保存。不增加表间导入依赖，跳转由应用在同一空间内维护。旧副本只补 false 和空字符串；任何非默认保护标记或跳转丢失均核对失败。降级丢失保护和跳转字段，不能撤销先前已执行的归组操作。

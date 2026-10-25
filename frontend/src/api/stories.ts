@@ -1,9 +1,11 @@
-import { get } from '@/utils/request'
+import { get, post } from '@/utils/request'
 
 export interface Story {
   id: string
   title: string
   first_fact_at: string
+  manual_corrected: boolean
+  merged_into_id: string
   last_fact_at: string
 }
 
@@ -19,6 +21,8 @@ export interface FactSource {
 
 export interface StoryFact {
   id: string
+  manual_corrected: boolean
+  merged_into_id: string
   story_id: string
   title: string
   subject: string
@@ -41,3 +45,15 @@ export const listStories = (limit = 20, offset = 0) =>
   get<StoryEnvelope<StoryPage>>(`/api/v1/stories?limit=${limit}&offset=${offset}`)
 export const getStory = (id: string) =>
   get<StoryEnvelope<StoryDetail>>(`/api/v1/stories/${encodeURIComponent(id)}`)
+
+export type CorrectionAction = 'move' | 'split' | 'mergeFacts' | 'mergeStories'
+export const getFact = (id: string) =>
+  get<StoryEnvelope<StoryFact>>(`/api/v1/facts/${encodeURIComponent(id)}`)
+export const moveFact = (id: string, storyID: string) =>
+  post<StoryEnvelope<StoryFact>>(`/api/v1/facts/${encodeURIComponent(id)}/move`, { story_id: storyID })
+export const splitFact = (id: string, title: string) =>
+  post<StoryEnvelope<StoryFact>>(`/api/v1/facts/${encodeURIComponent(id)}/split`, { title })
+export const mergeFacts = (id: string, keepID: string) =>
+  post<StoryEnvelope<StoryFact>>(`/api/v1/facts/${encodeURIComponent(id)}/merge`, { keep_fact_id: keepID })
+export const mergeStories = (id: string, keepID: string) =>
+  post<StoryEnvelope<StoryDetail>>(`/api/v1/stories/${encodeURIComponent(id)}/merge`, { keep_story_id: keepID })

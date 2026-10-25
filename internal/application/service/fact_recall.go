@@ -66,7 +66,10 @@ func (s *entryService) recallFacts(
 	date *time.Time,
 ) ([]recalledFact, error) {
 	facts := []types.Fact{}
-	q := s.db.WithContext(ctx).Table("facts f").Select("f.*").Where("f.space_id=?", entry.SpaceID)
+	q := s.db.WithContext(ctx).
+		Table("facts f").
+		Select("f.*").
+		Where("f.space_id=? AND f.merged_into_id=''", entry.SpaceID)
 	if date != nil {
 		q = q.Where(`COALESCE(substring(f.occurred_at,1,10)::date,
    (SELECT min(NULLIF(substring(e.metadata#>>'{intake,source_info,published_at}',1,10),'')::date)

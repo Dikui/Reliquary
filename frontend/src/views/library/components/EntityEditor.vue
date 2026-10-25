@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
+import ModalDialog from '@/components/ModalDialog.vue'
 import { createEntity, updateEntity, ENTITY_TYPES, type Entity, type EntityType } from '@/api/entities'
 
 const props = defineProps<{ entity: Entity | null }>()
@@ -46,7 +47,7 @@ async function save() {
 </script>
 
 <template>
-  <t-dialog :visible="true" :header="t(entity ? 'entityMaintenance.edit' : 'entityMaintenance.create')" :footer="false" :close-on-overlay-click="false" :close-btn="!saving" :close-on-esc-keydown="!saving" width="min(520px, 95vw)" @close="close">
+  <ModalDialog :visible="true" :header="t(entity ? 'entityMaintenance.edit' : 'entityMaintenance.create')" :busy="saving" :footer="false" width="min(520px, 95vw)" @close="close">
     <form class="entity-editor" novalidate @submit.prevent="save">
       <label for="entity-canonical-name">{{ t('entityMaintenance.name') }}</label>
       <input id="entity-canonical-name" class="entity-editor__control" type="text" v-model="name" @compositionstart="composing = true" @compositionend="composing = false" :maxlength="512" :disabled="saving" :aria-invalid="!!error" :aria-describedby="error ? 'entity-editor-error' : undefined" />
@@ -59,11 +60,11 @@ async function save() {
       <p v-if="error" id="entity-editor-error" role="alert">{{ error }}</p>
       <div class="entity-editor__actions"><t-button variant="outline" :disabled="saving" @click="close">{{ t('common.cancel') }}</t-button><t-button type="submit" :loading="saving">{{ t('common.save') }}</t-button></div>
     </form>
-  </t-dialog>
-  <t-dialog v-model:visible="discardVisible" @close="cancelDiscard" :header="t('entityMaintenance.discardTitle')" :footer="false" width="min(420px, 95vw)">
+  </ModalDialog>
+  <ModalDialog v-model:visible="discardVisible" @close="cancelDiscard" :header="t('entityMaintenance.discardTitle')" :footer="false" width="min(420px, 95vw)">
     <p>{{ t('entityMaintenance.discardHint') }}</p>
     <div class="entity-editor__actions"><t-button variant="outline" @click="cancelDiscard">{{ t('common.cancel') }}</t-button><t-button theme="danger" @click="discardChanges">{{ t('entityMaintenance.discard') }}</t-button></div>
-  </t-dialog>
+  </ModalDialog>
 </template>
 
 <style scoped>

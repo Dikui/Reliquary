@@ -4,11 +4,13 @@ import "time"
 
 // Story groups facts about one developing occurrence.
 type Story struct {
-	ID          string    `json:"id"            gorm:"primaryKey"`
-	SpaceID     uint64    `json:"space_id"`
-	Title       string    `json:"title"`
-	FirstFactAt time.Time `json:"first_fact_at"`
-	LastFactAt  time.Time `json:"last_fact_at"`
+	ID              string    `json:"id"            gorm:"primaryKey"`
+	SpaceID         uint64    `json:"space_id"`
+	Title           string    `json:"title"`
+	FirstFactAt     time.Time `json:"first_fact_at"`
+	LastFactAt      time.Time `json:"last_fact_at"`
+	ManualCorrected bool      `json:"manual_corrected"`
+	MergedIntoID    string    `json:"merged_into_id"`
 }
 
 // Fact describes one occurrence and belongs to exactly one story.
@@ -23,6 +25,8 @@ type Fact struct {
 	Conditions      string  `json:"conditions"`
 	SubjectEntityID *string `json:"subject_entity_id"`
 	ObjectEntityID  *string `json:"object_entity_id"`
+	ManualCorrected bool    `json:"manual_corrected"`
+	MergedIntoID    string  `json:"merged_into_id"`
 	// OccurredAt preserves YYYY-MM-DD or RFC3339 precision; nil means unknown.
 	OccurredAt *string   `json:"occurred_at"`
 	CreatedAt  time.Time `json:"created_at"`

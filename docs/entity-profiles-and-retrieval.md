@@ -72,3 +72,29 @@ HTTP 使用 `GET/POST /api/v1/domains`、`PATCH/DELETE /api/v1/domains/:domain_i
 | 忽略 | `POST /api/v1/entity-candidates/:id/ignore` |
 
 列表状态可为 `pending`、`ignored`、`approved`、`aliased` 或 `all`，默认 `pending`。分页 `limit` 为 1–100，`offset` 为非负数。列表 `data` 为 `{items,total}`；详情为 `{candidate,occurrences,total}`，每条出现记录包含 `fact`、`endpoint`、`created_at`。候选包含 `occurrence_count` 与可空的 `entity_id`。事件详情 HTTP 与 MCP 的事实均包含可空的 `subject_entity_id`、`object_entity_id`。
+
+
+## 人工归组纠正
+
+事件详情页提供移动事实、拆出新事件、合并事实和合并事件。拆出时指定新事件标题；合并时明确选择保留项。事实文字与发生时间采用保留事实的值，其他报道的说法和引文按原资料保留。
+
+| 操作 | HTTP 接口与请求 |
+| --- | --- |
+| 事实详情与旧事实 ID 解析 | `GET /api/v1/facts/:id` |
+| 移动事实 | `POST /api/v1/facts/:id/move`，`{"story_id":"目标事件"}` |
+| 拆出新事件 | `POST /api/v1/facts/:id/split`，`{"title":"新事件标题"}` |
+| 合并事实 | `POST /api/v1/facts/:id/merge`，`{"keep_fact_id":"保留事实"}` |
+| 合并事件 | `POST /api/v1/stories/:id/merge`，`{"keep_story_id":"保留事件"}` |
+
+移动、拆出与事实合并返回规范事实及出处，事件合并返回保留事件详情。旧事实与事件保留 `merged_into_id`，详情接口解析到最终保留项；多次合并继续保留旧链接，重复提交同一合并不重复写日志。事件页同步解析旧事件地址及 `#fact-<ID>` 锚点。自动召回排除已合并的事实记录。
+
+事实合并在事务中转移出处与逐字引文、提及和待确认实体出现记录。出现记录按候选、保留事实和端点去重，保留最早出现时间；当规范化名字唯一对应保留事实的另一端时调整端点，避免倒置描述使后续审批挂错位置；提及与出处重合时保留出处。事件合并转移事实。纠正不创建新事实时间，事件首次与最近时间由保留事实的原创建时间重新计算。
+
+持久保护契约供后续修订和 consolidate 工作复用：
+
+- `facts.manual_corrected=true`：此事实经过人工归组纠正，自动任务不得移动或合并它。
+- `stories.manual_corrected=true`：事件归组被人工改变，自动事件合并不得覆盖该决定。
+- `entries.grouping_manual=true`：资料的归组经过人工纠正。关联被撤除后也须保留该标记，自动归组不得重新决定其归属。
+- 涉及事实的当前出处和提及均设 `entry_facts.manual=true`。通用资料保存不能写回旧的 `grouping_manual`。自动归组提交前再次检查当前资料标记，并在同一空间事务屏障内解析候选的最新事实与事件。
+
+这三个持久标记随详情接口返回；MCP 的事件和资料读取也返回对应标记。四类纠正分别记录 `move_fact`、`split_fact`、`merge_facts`、`merge_stories` 操作日志，记录操作者及前后归属。上述保护契约不包含定期 consolidate 或修订撤证实现。

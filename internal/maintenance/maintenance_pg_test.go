@@ -183,6 +183,12 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
  review_result,review_confidence,applied_result,reason,created_at)
  VALUES('decision',1,'article','fact',0.76,'chat','same_occurrence',0.9,
  'unrelated',0.88,'unrelated','review_disagreed',now());
+ UPDATE entries SET grouping_manual=true WHERE id='article';
+ UPDATE facts SET manual_corrected=true WHERE id='fact';
+ UPDATE facts SET merged_into_id='fact' WHERE id='fact-date';
+ UPDATE stories SET manual_corrected=true WHERE id='story';
+ INSERT INTO stories(id,space_id,title,first_fact_at,last_fact_at,merged_into_id,manual_corrected)
+ VALUES('old-story',1,'Merged',now(),now(),'story',true);
  INSERT INTO fact_embeddings(space_id,fact_id,model_id,dimension,content_hash,embedding)
  VALUES(1,'fact','embed',3,'cache','[1,0,0]');
  `).Error)

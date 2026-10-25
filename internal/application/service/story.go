@@ -9,14 +9,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// StoryService reads stories and the source evidence for their fact timelines.
+// StoryService reads fact timelines and applies deliberate grouping corrections.
 type StoryService struct{ db *gorm.DB }
 
-// NewStoryService constructs the event timeline reader.
+// NewStoryService constructs the story timeline and correction service.
 func NewStoryService(db *gorm.DB) *StoryService { return &StoryService{db: db} }
 
 func (s *StoryService) visibleFacts(ctx context.Context, spaceID uint64) *gorm.DB {
-	return s.db.WithContext(ctx).Table("facts f").Where("f.space_id=?", spaceID).
+	return s.db.WithContext(ctx).Table("facts f").Where("f.space_id=? AND f.merged_into_id=''", spaceID).
 		Where(`EXISTS (SELECT 1 FROM entry_facts ef JOIN entries e ON e.id=ef.entry_id AND e.space_id=ef.space_id
  WHERE ef.space_id=f.space_id AND ef.fact_id=f.id AND ef.role='source' AND e.deleted_at IS NULL)`)
 }
@@ -50,13 +50,11 @@ func (s *StoryService) StoryDetail(ctx context.Context, id string) (*types.Story
 		return nil, err
 	}
 	detail := &types.StoryDetail{Facts: []types.StoryFact{}, Mentions: []types.FactSource{}}
-	err = s.db.WithContext(ctx).Where("space_id=? AND id=?", spaceID, id).First(&detail.Story).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, werrors.NewNotFoundError("story not found")
-	}
+	detail.Story, err = canonicalStory(s.db.WithContext(ctx), spaceID, id)
 	if err != nil {
 		return nil, err
 	}
+	id = detail.Story.ID
 	facts := []types.Fact{}
 	err = s.visibleFacts(ctx, spaceID).Select("f.*").Where("f.story_id=?", id).
 		Order(`COALESCE(CASE WHEN length(f.occurred_at)=10

@@ -37,6 +37,7 @@ for (const [locale, messages] of [['zh-CN', zhCN], ['en-US', enUS]] as const) {
     })
     const editor = compile(new URL('./EntityEditor.vue', import.meta.url), {
       '@/api/entities': entityTypes,
+      '@/components/ModalDialog.vue': defineComponent({ props: ['visible'], setup: (props, { slots }) => () => props.visible === false ? null : h('div', slots.default?.()) }),
       '@/components/SafeTextarea.vue': { __esModule: true, default: textarea },
       'tdesign-vue-next': { MessagePlugin: {} },
       'vue-router': { onBeforeRouteLeave() {}, onBeforeRouteUpdate() {} },

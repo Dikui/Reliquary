@@ -92,7 +92,7 @@ func factOccurrenceTime(value string) *string {
 func (s *entryService) saveUnderstandingFact(
 	ctx context.Context, library *types.Library, entry *types.Entry, body string, result *articleProcessingResult,
 ) error {
-	if hasExplicitFactMentions(entry) {
+	if hasExplicitFactMentions(entry) || entry.GroupingManual {
 		return nil
 	}
 	fact := qualifyUnderstandingFact(library, entry, body, result.Fact)
@@ -118,7 +118,7 @@ func (s *entryService) saveUnderstandingFact(
 			Where("space_id=? AND id=?", entry.SpaceID, entry.ID).First(&current).Error; err != nil {
 			return err
 		}
-		if current.SourceBodyHash != entry.SourceBodyHash {
+		if current.SourceBodyHash != entry.SourceBodyHash || current.GroupingManual {
 			return nil
 		}
 		var count int64
@@ -130,6 +130,14 @@ func (s *entryService) saveUnderstandingFact(
 		if count > 0 {
 			return nil
 		}
+		// A correction can finish while the model is running; resolve its retained target under the same space lock.
+		if plan.candidate != nil {
+			candidate, err := canonicalFact(tx, entry.SpaceID, plan.candidate.ID)
+			if err != nil {
+				return err
+			}
+			plan.candidate = &candidate
+		}
 
 		for _, decision := range plan.decisions {
 			if err := tx.Create(&decision).Error; err != nil {
@@ -140,8 +148,12 @@ func (s *entryService) saveUnderstandingFact(
 		now := time.Now()
 		for _, decision := range plan.decisions {
 			if decision.AppliedResult == groupingMention {
+				candidate, err := canonicalFact(tx, entry.SpaceID, decision.CandidateFactID)
+				if err != nil {
+					return err
+				}
 				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&types.EntryFact{
-					SpaceID: entry.SpaceID, EntryID: entry.ID, FactID: decision.CandidateFactID,
+					SpaceID: entry.SpaceID, EntryID: entry.ID, FactID: candidate.ID,
 					Role: "mention", CreatedAt: now,
 				}).Error; err != nil {
 					return err

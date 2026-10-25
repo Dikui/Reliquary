@@ -12,6 +12,7 @@ import (
 
 // EntryReadResult exposes the database-owned header and a Unicode-safe body slice.
 type EntryReadResult struct {
+	GroupingManual   bool               `json:"grouping_manual"`
 	LibraryID        string             `json:"library_id"`
 	LibraryName      string             `json:"library_name"`
 	SourceID         string             `json:"source_id,omitempty"`
@@ -58,6 +59,7 @@ func (s *entryService) ReadEntry(ctx context.Context, id string, offset, length 
 	}
 	sort.Strings(header.Entities)
 	result := &EntryReadResult{
+		GroupingManual:   entry.GroupingManual,
 		LibraryID:        entry.LibraryID,
 		LibraryName:      entry.LibraryName,
 		SourceID:         entry.SourceID,

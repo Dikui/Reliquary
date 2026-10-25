@@ -140,6 +140,7 @@ type Entry struct {
 	// Description of the entry
 	Description          string        `json:"description"`
 	CannotBeFact         bool          `json:"cannot_be_fact,omitempty" gorm:"-"`
+	GroupingManual       bool          `json:"grouping_manual" gorm:"not null;default:false"`
 	SourceUnverified     bool          `json:"source_unverified" gorm:"not null;default:false"`
 	ReviewKind           string        `json:"review_kind,omitempty" gorm:"-"`
 	SourceKind           string        `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`

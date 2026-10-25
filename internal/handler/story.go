@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// StoryHandler exposes read-only story lists and fact timelines.
+// StoryHandler exposes story timelines and manual grouping corrections.
 type StoryHandler struct{ service *service.StoryService }
 
 // NewStoryHandler constructs the HTTP story handler.
@@ -43,6 +43,33 @@ func (h *StoryHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": detail})
 }
 
+// Fact resolves a retained or merged fact ID.
+func (h *StoryHandler) Fact(c *gin.Context) {
+	item, err := h.service.FactDetail(c.Request.Context(), c.Param("fact_id"))
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
+}
+
+// Move corrects the story containing one fact.
+func (h *StoryHandler) Move(c *gin.Context) {
+	var input struct {
+		StoryID string `json:"story_id" binding:"required,max=36"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		_ = c.Error(werrors.NewBadRequestError("story_id required"))
+		return
+	}
+	item, err := h.service.MoveFact(c.Request.Context(), c.Param("fact_id"), input.StoryID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
+}
+
 // Decisions reads candidate scores and the outcome of verification.
 func (h *StoryHandler) Decisions(c *gin.Context) {
 	decisions, err := h.service.GroupingDecisions(c.Request.Context(), c.Param("id"))
@@ -51,4 +78,55 @@ func (h *StoryHandler) Decisions(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": decisions})
+}
+
+// Split creates a separate story for one fact.
+func (h *StoryHandler) Split(c *gin.Context) {
+	var input struct {
+		Title string `json:"title" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		_ = c.Error(werrors.NewBadRequestError("title required"))
+		return
+	}
+	item, err := h.service.SplitFact(c.Request.Context(), c.Param("fact_id"), input.Title)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
+}
+
+// MergeFacts consolidates evidence under the selected retained fact.
+func (h *StoryHandler) MergeFacts(c *gin.Context) {
+	var input struct {
+		KeepFactID string `json:"keep_fact_id" binding:"required,max=36"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		_ = c.Error(werrors.NewBadRequestError("keep_fact_id required"))
+		return
+	}
+	item, err := h.service.MergeFacts(c.Request.Context(), c.Param("fact_id"), input.KeepFactID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
+}
+
+// MergeStories retains the chosen story and its combined timeline.
+func (h *StoryHandler) MergeStories(c *gin.Context) {
+	var input struct {
+		KeepStoryID string `json:"keep_story_id" binding:"required,max=36"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		_ = c.Error(werrors.NewBadRequestError("keep_story_id required"))
+		return
+	}
+	item, err := h.service.MergeStories(c.Request.Context(), c.Param("story_id"), input.KeepStoryID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
 }

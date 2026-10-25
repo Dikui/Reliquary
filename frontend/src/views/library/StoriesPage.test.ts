@@ -30,6 +30,7 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
         }],
       }
       const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+        './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
         'vue-router': { useRoute: () => route, useRouter: () => ({ replace() {} }) },
         '@/api/stories': { getStory: async () => ({ success: true, data: detail }) },
       })
@@ -61,6 +62,45 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
   }
 }
 
+for (const merged of [false, true]) {
+  test(`fact anchors scroll the story container after its timeline renders, merged=${merged}`, async () => {
+    const previousDocument = globalThis.document
+    globalThis.document = { title: '' } as Document
+    const route = reactive({ params: { storyId: merged ? 'old-story' : 'story' }, query: {}, hash: merged ? '#fact-old-fact' : '#fact-target' })
+    const scrolls: unknown[] = []
+    let resolveDetail!: (value: unknown) => void
+    const detail = { story: { id: 'story', title: 'Story', first_fact_at: arrivedAt, last_fact_at: arrivedAt }, facts: [{
+      id: 'target', title: 'Second fact', subject: 'Aurora', action: 'released', object: '', conditions: '', sources: [],
+    }], mentions: [] }
+    let first = true
+    const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+      './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
+      'vue-router': { useRoute: () => route, useRouter: () => ({ replace: (value: { hash: string }) => { route.params.storyId = 'story'; route.hash = value.hash } }) },
+      '@/api/stories': {
+        getStory: () => { if (first) { first = false; return new Promise(resolve => { resolveDetail = resolve }) } return Promise.resolve({ success: true, data: detail }) },
+        getFact: async () => ({ success: true, data: { id: 'target', story_id: 'story' } }),
+      },
+    })
+    const root = element('root'), app = renderer.createApp(component)
+    app.use(createI18n({ legacy: false, locale: 'en-US', messages }))
+    registerPrimitives(app)
+    for (const name of ['router-link', 't-empty', 't-pagination']) app.component(name, defineComponent({ setup: (_props, { slots }) => () => h('div', slots.default?.()) }))
+    try {
+      app.mount(root); await settle()
+      const page = descendants(root).find(node => node.tag === 'main')!
+      Object.assign(page, { scrollTop: 80, clientTop: 2, getBoundingClientRect: () => ({ top: 40 }), scrollTo: (options: unknown) => scrolls.push(options) })
+      page.querySelectorAll = () => descendants(page).filter(node => node.props.id).map(node => Object.assign(node, {
+        id: node.props.id, getBoundingClientRect: () => ({ top: 950 }),
+      }))
+      assert.deepEqual(scrolls, [], 'no scrolling before the asynchronous facts are rendered')
+      resolveDetail({ success: true, data: detail }); await settle()
+      assert.equal(route.hash, '#fact-target')
+      assert.ok(visibleText(root).includes('Second fact'))
+      assert.deepEqual(scrolls, [{ top: 988, behavior: 'auto' }], 'the offset belongs to the internal page, including its existing scroll and border')
+    } finally { app.unmount(); await settle(); globalThis.document = previousDocument }
+  })
+}
+
 test('linked fact endpoints open their entity, unlinked ones stay plain text', async () => {
   const previousDocument = globalThis.document
   globalThis.document = { title: '' } as Document
@@ -73,6 +113,7 @@ test('linked fact endpoints open their entity, unlinked ones stay plain text', a
     }],
   }
   const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+    './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
     'vue-router': { useRoute: () => route, useRouter: () => ({ replace() {} }) },
     '@/api/stories': { getStory: async () => ({ success: true, data: detail }) },
   })
@@ -96,3 +137,34 @@ test('linked fact endpoints open their entity, unlinked ones stay plain text', a
     globalThis.document = previousDocument
   }
 })
+
+for (const missingAnchor of [false, true]) {
+  test(`merged links resolve the story and fact together, unknown anchor=${missingAnchor}`, async () => {
+    const previousDocument = globalThis.document
+    globalThis.document = { title: '' } as Document
+    const route = reactive({ params: { storyId: 'old-story' }, query: { page: '3' }, hash: '#fact-old-fact' })
+    const destinations: unknown[] = []
+    const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+      './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
+      'vue-router': { useRoute: () => route, useRouter: () => ({ replace: (value: unknown) => destinations.push(value) }) },
+      '@/api/stories': {
+        getStory: async () => ({ success: true, data: { story: { id: 'kept-story', title: 'Retained story', first_fact_at: arrivedAt, last_fact_at: arrivedAt, manual_corrected: true }, facts: [], mentions: [] } }),
+        getFact: async () => {
+          if (missingAnchor) throw { status: 404 }
+          return { success: true, data: { id: 'kept-fact', story_id: 'kept-story' } }
+        },
+      },
+    })
+    const root = element('root'), app = renderer.createApp(component)
+    app.use(createI18n({ legacy: false, locale: 'en-US', messages }))
+    registerPrimitives(app)
+    for (const name of ['router-link', 't-empty', 't-pagination']) app.component(name, defineComponent({ setup: (_props, { slots }) => () => h('div', slots.default?.()) }))
+    try {
+      app.mount(root); await settle()
+      assert.deepEqual(destinations, [{ path: '/platform/stories/kept-story', query: { page: '3' }, hash: missingAnchor ? '#fact-old-fact' : '#fact-kept-fact' }])
+      assert.ok(visibleText(root).includes('Retained story'))
+      assert.ok(visibleText(root).includes('Manually corrected'))
+      assert.equal(descendants(root).some(node => node.props.role === 'alert'), false)
+    } finally { app.unmount(); await settle(); globalThis.document = previousDocument }
+  })
+}

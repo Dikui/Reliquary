@@ -88,8 +88,12 @@ func (s *entryService) saveExplicitFactMentions(ctx context.Context, entry *type
 		return err
 	}
 	for _, id := range ids {
+		fact, err := canonicalFact(s.db.WithContext(ctx), entry.SpaceID, id)
+		if err != nil {
+			return err
+		}
 		if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&types.EntryFact{
-			SpaceID: entry.SpaceID, EntryID: entry.ID, FactID: id, Role: "mention", CreatedAt: time.Now(),
+			SpaceID: entry.SpaceID, EntryID: entry.ID, FactID: fact.ID, Role: "mention", CreatedAt: time.Now(),
 		}).Error; err != nil {
 			return err
 		}

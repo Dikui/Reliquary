@@ -1,10 +1,19 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getStory, listStories, type Story, type StoryDetail } from '@/api/stories'
+import { getFact, getStory, listStories, type CorrectionAction, type Story, type StoryDetail, type StoryFact } from '@/api/stories'
 
+import GroupingCorrection from './components/GroupingCorrection.vue'
+
+const correction = ref<{ action: CorrectionAction; fact?: StoryFact } | null>(null)
+const pageElement = ref<HTMLElement | null>(null)
 const { t, locale } = useI18n()
+const factActions = computed(() => [
+  { action: 'move' as const, label: t('groupingCorrection.move') },
+  { action: 'split' as const, label: t('groupingCorrection.split') },
+  { action: 'mergeFacts' as const, label: t('groupingCorrection.mergeFacts') },
+])
 const route = useRoute(), router = useRouter()
 const pageSize = 20
 const selectedID = computed(() => typeof route.params.storyId === 'string' ? route.params.storyId : '')
@@ -30,7 +39,20 @@ async function load() {
     if (id) {
       const response = await getStory(id)
       if (!response.success) throw new Error(t('stories.loadFailed'))
-      if (ticket === version && !disposed) detail.value = response.data
+      if (ticket === version && !disposed) {
+        detail.value = response.data
+        let destinationID = response.data.story.id, hash = route.hash
+        const match = /^#fact-([^#]+)$/.exec(route.hash || '')
+        if (match && !response.data.facts.some(fact => fact.id === match[1])) {
+          try {
+            const retained = await getFact(match[1])
+            if (retained.success) { destinationID = retained.data.story_id; hash = `#fact-${retained.data.id}` }
+          } catch { /* An unknown fact anchor does not make an existing story unavailable. */ }
+        }
+        if (ticket === version && !disposed && (destinationID !== id || hash !== route.hash)) {
+          void router.replace({ path: `/platform/stories/${encodeURIComponent(destinationID)}`, query: route.query, hash })
+        }
+      }
     } else {
       const response = await listStories(pageSize, (page.value - 1) * pageSize)
       if (!response.success) throw new Error(t('stories.loadFailed'))
@@ -44,21 +66,34 @@ async function load() {
     notFound.value = (e as { status?: number })?.status === 404
     error.value = t(notFound.value ? 'stories.notFound' : 'stories.loadFailed')
   } finally {
-    if (ticket === version && !disposed) loading.value = false
+    if (ticket === version && !disposed) {
+      loading.value = false
+      await nextTick()
+      const container = pageElement.value, match = /^#fact-([^#]+)$/.exec(route.hash || '')
+      if (ticket === version && !disposed && container && match) {
+        const target = Array.from(container.querySelectorAll<HTMLElement>('[id]')).find(node => node.id === `fact-${match[1]}`)
+        if (target) container.scrollTo({ top: container.scrollTop + target.getBoundingClientRect().top - container.getBoundingClientRect().top - container.clientTop, behavior: 'auto' })
+      }
+    }
   }
 }
-watch(() => [selectedID.value, page.value], () => {
-  detail.value = null; items.value = []
+watch(() => [selectedID.value, page.value, route.hash], () => {
+  correction.value = null; detail.value = null; items.value = []
   void load()
 }, { immediate: true })
 watch(() => [locale.value, detail.value?.story.title, selectedID.value], () => {
   document.title = `${selectedID.value ? detail.value?.story.title || t('stories.detail') : t('stories.title')} · Reliquary`
 }, { immediate: true })
+async function corrected(target: { storyID: string; factID?: string }) {
+  correction.value = null
+  if (target.storyID === selectedID.value) await load()
+  else await router.push({ path: `/platform/stories/${encodeURIComponent(target.storyID)}`, query: route.query, hash: target.factID ? `#fact-${target.factID}` : '' })
+}
 onUnmounted(() => { disposed = true; version++ })
 </script>
 
 <template>
-  <main class="stories-page">
+  <main ref="pageElement" class="stories-page">
     <header>
       <router-link v-if="selectedID" :to="listLocation">{{ t('stories.back') }}</router-link>
       <div class="heading">
@@ -90,11 +125,15 @@ onUnmounted(() => { disposed = true; version++ })
             <dt>{{ t('stories.firstFact') }}</dt><dd><time :datetime="detail.story.first_fact_at">{{ timestamp(detail.story.first_fact_at) }}</time></dd>
             <dt>{{ t('stories.lastFact') }}</dt><dd><time :datetime="detail.story.last_fact_at">{{ timestamp(detail.story.last_fact_at) }}</time></dd>
           </dl>
-          <h2>{{ t('stories.timeline') }}</h2>
+          <p v-if="detail.story.manual_corrected" class="muted">{{ t('groupingCorrection.manual') }}</p>
+          <t-button variant="outline" @click="correction = { action: 'mergeStories' }">{{ t('groupingCorrection.mergeStories') }}</t-button>
+          <h2 class="timeline-title">{{ t('stories.timeline') }}</h2>
           <ol v-if="detail.facts.length" class="records timeline">
             <li v-for="fact in detail.facts" :key="fact.id" :id="`fact-${fact.id}`" class="record">
               <p class="muted"><time v-if="fact.occurred_at" :datetime="fact.occurred_at">{{ occurrenceTime(fact.occurred_at) }}</time><span v-else>{{ t('stories.unknownTime') }}</span></p>
               <h3>{{ fact.title }}</h3>
+              <p v-if="fact.manual_corrected" class="muted">{{ t('groupingCorrection.manual') }}</p>
+              <div class="fact-actions"><t-button v-for="item in factActions" :key="item.action" variant="text" @click="correction = { action: item.action, fact }">{{ item.label }}</t-button></div>
               <dl class="frame">
                 <dt>{{ t('stories.subject') }}</dt><dd><router-link v-if="fact.subject_entity_id" :to="entityLocation(fact.subject_entity_id)">{{ fact.subject }}</router-link><template v-else>{{ fact.subject }}</template></dd>
                 <dt>{{ t('stories.action') }}</dt><dd>{{ fact.action }}</dd>
@@ -125,6 +164,7 @@ onUnmounted(() => { disposed = true; version++ })
       </t-loading>
     </section>
     <t-pagination v-if="!selectedID && total > 0" :current="page" :page-size="pageSize" :total="total" :show-page-size="false" @current-change="changePage" />
+    <GroupingCorrection v-if="correction && detail" :key="`${correction.action}:${correction.fact?.id || detail.story.id}`" :action="correction.action" :story="detail.story" :fact="correction.fact" @cancel="correction = null" @saved="corrected" />
   </main>
 </template>
 
@@ -142,6 +182,8 @@ p { margin: 8px 0; }
 .records { display: grid; gap: 16px; }
 .record { padding: 20px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-medium); background: var(--td-bg-color-container); overflow-wrap: anywhere; }
 .mentions { margin-top: 24px; }
+.timeline-title { margin-top: 20px; }
+.fact-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .timeline .record { border-inline-start: 3px solid var(--td-brand-color); }
 .times, .frame { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 16px; font-size: 13px; }
 dt, .muted { color: var(--td-text-color-secondary); }
