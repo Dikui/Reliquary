@@ -37,6 +37,7 @@ export default {
     "loadFailed": "无法加载目标，请重试。"
   },
   stories: {
+    "related": "相关事件",
     "mentions": "提及它的资料",
     "mentionsHint": "这些资料讨论了事件中的事实，不作为出处证据。",
     "noMentions": "暂无提及它的资料。",

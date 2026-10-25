@@ -153,6 +153,7 @@ type mcpFixture struct {
 	server      *httptest.Server
 	root        string
 	diagnostics *diagnostics.Service
+	models      interfaces.ModelService
 }
 
 func (f *mcpFixture) seedProcessingModels(t *testing.T) {
@@ -239,6 +240,7 @@ func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture
 	return &mcpFixture{
 		personalAuthFixture: f, ctx: ctx, library: library, articles: articles, files: files,
 		vault: vault, documents: documents, queue: queue, server: server, root: root, diagnostics: diagnosticStore,
+		models: models,
 	}
 }
 

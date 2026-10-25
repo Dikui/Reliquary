@@ -63,9 +63,10 @@ type StoryFact struct {
 
 // StoryDetail is the story header and its chronological timeline.
 type StoryDetail struct {
-	Story    Story        `json:"story"`
-	Facts    []StoryFact  `json:"facts"`
-	Mentions []FactSource `json:"mentions"`
+	Story          Story        `json:"story"`
+	Facts          []StoryFact  `json:"facts"`
+	Mentions       []FactSource `json:"mentions"`
+	RelatedStories []Story      `json:"related_stories"`
 }
 
 // StoryQuery selects a bounded page from the story list.

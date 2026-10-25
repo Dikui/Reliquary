@@ -50,7 +50,11 @@ func (s *StoryService) StoryDetail(ctx context.Context, id string) (*types.Story
 	if err != nil {
 		return nil, err
 	}
-	detail := &types.StoryDetail{Facts: []types.StoryFact{}, Mentions: []types.FactSource{}}
+	detail := &types.StoryDetail{
+		Facts:          []types.StoryFact{},
+		Mentions:       []types.FactSource{},
+		RelatedStories: []types.Story{},
+	}
 	detail.Story, err = canonicalStory(s.db.WithContext(ctx), spaceID, id)
 	if err != nil {
 		return nil, err
@@ -87,6 +91,18 @@ func (s *StoryService) StoryDetail(ctx context.Context, id string) (*types.Story
 		Where("f.space_id=? AND f.story_id=? AND ef.role='mention'", spaceID, id).
 		Where("f.id IN (?)", s.visibleFacts(ctx, spaceID).Select("f.id")).
 		Order("ef.entry_id,ef.created_at").Scan(&detail.Mentions).Error
+	if err != nil {
+		return nil, err
+	}
+	// Only direct neighbours are returned. Recount live evidence on every read so
+	// revisions and deletions take effect immediately, independently of the hourly sweep.
+	err = s.db.WithContext(ctx).Table("story_links links").Select("related.*").
+		Joins(`JOIN stories related ON related.space_id=links.space_id
+ AND related.id=CASE WHEN links.story_id=? THEN links.other_story_id ELSE links.story_id END`, id).
+		Where("links.space_id=? AND (links.story_id=? OR links.other_story_id=?)", spaceID, id, id).
+		Where("related.merged_into_id=''").
+		Where(`(links.story_id,links.other_story_id) IN (?)`, bridgePairs(s.db.WithContext(ctx), spaceID, 2)).
+		Order("related.last_fact_at DESC,related.id").Scan(&detail.RelatedStories).Error
 	if err != nil {
 		return nil, err
 	}

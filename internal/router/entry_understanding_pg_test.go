@@ -33,7 +33,8 @@ func (m *understandingChat) Chat(
 	messages []chat.Message,
 	_ *chat.ChatOptions,
 ) (*types.ChatResponse, error) {
-	if purpose, _ := types.LLMCallMetadataFromContext(ctx); purpose == "fact_grouping" {
+	if purpose, _ := types.LLMCallMetadataFromContext(ctx); purpose == "fact_grouping" ||
+		purpose == "story_consolidation" {
 		if m.groupRespond != nil {
 			return &types.ChatResponse{Content: m.groupRespond(ctx, messages)}, nil
 		}

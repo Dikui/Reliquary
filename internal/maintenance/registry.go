@@ -22,6 +22,14 @@ type PersistentTable struct {
 const RegistryVersion = 1
 
 var PersistentTables = map[string]PersistentTable{
+	"story_bridge_evidence": {
+		Columns: Rule{Sidecar: "decision_id space_id source_fact_id source_created_at"},
+		File:    "data/story_bridge_evidence.json", After: []string{"grouping_decisions", "facts"}, Since: 44,
+	},
+	"story_links": {
+		Columns: Rule{Sidecar: "space_id story_id other_story_id"},
+		File:    "data/story_links.json", After: []string{"stories"}, Since: 44,
+	},
 	"grouping_decisions": {
 		Columns: Rule{Sidecar: "id space_id entry_id candidate_fact_id similarity model_id result confidence " +
 			"review_result review_confidence applied_result reason created_at"},

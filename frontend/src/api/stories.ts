@@ -38,7 +38,7 @@ export interface StoryFact {
   no_source: boolean
 }
 
-export interface StoryDetail { story: Story; facts: StoryFact[]; mentions: FactSource[] }
+export interface StoryDetail { story: Story; facts: StoryFact[]; mentions: FactSource[]; related_stories: Story[] }
 export interface StoryPage { items: Story[]; total: number }
 interface StoryEnvelope<T> { success: boolean; data: T }
 

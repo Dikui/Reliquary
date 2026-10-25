@@ -10,6 +10,41 @@ const messages = { 'en-US': en, 'zh-CN': zh }
 const arrivedAt = '2026-10-24T16:00:00Z'
 
 for (const locale of ['en-US', 'zh-CN'] as const) {
+  test(`${locale}: related stories are links with only one level of expansion`, async () => {
+    const previousDocument = globalThis.document
+    globalThis.document = { title: '' } as Document
+    const route = reactive({ params: { storyId: 'story' }, query: { page: '2' }, hash: '' })
+    const reads: string[] = []
+    const detail = {
+      story: { id: 'story', title: 'Model release', first_fact_at: arrivedAt, last_fact_at: arrivedAt },
+      facts: [], mentions: [], related_stories: [{
+        id: 'nearby/story', title: 'Independent evaluation', first_fact_at: arrivedAt, last_fact_at: arrivedAt,
+        related_stories: [{ id: 'distant', title: 'Second level must stay hidden' }],
+      }],
+    }
+    const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
+      './components/GroupingCorrection.vue': defineComponent({ setup: () => () => null }),
+      'vue-router': { useRoute: () => route, useRouter: () => ({ replace() {} }) },
+      '@/api/stories': { getStory: async (id: string) => { reads.push(id); return { success: true, data: detail } } },
+    })
+    const root = element('root'), app = renderer.createApp(component)
+    app.use(createI18n({ legacy: false, locale, messages }))
+    registerPrimitives(app)
+    app.component('router-link', defineComponent({ props: ['to'], setup: (props, { slots }) => () => h('a', { to: props.to }, slots.default?.()) }))
+    for (const name of ['t-empty', 't-pagination']) app.component(name, defineComponent({ setup: () => () => null }))
+    try {
+      app.mount(root); await settle()
+      const links = descendants(root).filter(node => node.tag === 'a' && visibleText(node) === 'Independent evaluation')
+      assert.equal(links.length, 1)
+      assert.deepEqual(links[0].props.to, { path: '/platform/stories/nearby%2Fstory', query: { page: '2' } })
+      assert.ok(visibleText(root).includes(locale === 'en-US' ? 'Related stories' : '相关事件'))
+      assert.ok(!visibleText(root).includes('Second level must stay hidden'))
+      assert.deepEqual(reads, ['story'])
+    } finally { app.unmount(); await settle(); globalThis.document = previousDocument }
+  })
+}
+
+for (const locale of ['en-US', 'zh-CN'] as const) {
   for (const scenario of [
     { name: 'date', occurredAt: '2026-10-20', expected: '2026-10-20' },
     {

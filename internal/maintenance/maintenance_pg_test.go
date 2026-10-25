@@ -190,6 +190,9 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
  UPDATE stories SET manual_corrected=true WHERE id='story';
  INSERT INTO stories(id,space_id,title,first_fact_at,last_fact_at,merged_into_id,manual_corrected)
  VALUES('old-story',1,'Merged',now(),now(),'story',true);
+ INSERT INTO story_links(space_id,story_id,other_story_id) VALUES(1,'old-story','story');
+ INSERT INTO story_bridge_evidence(decision_id,space_id,source_fact_id,source_created_at)
+ SELECT 'decision',1,'fact',created_at FROM entry_facts WHERE entry_id='article' AND fact_id='fact';
  INSERT INTO fact_embeddings(space_id,fact_id,model_id,dimension,content_hash,embedding)
  VALUES(1,'fact','embed',3,'cache','[1,0,0]');
  `).Error)

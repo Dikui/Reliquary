@@ -151,6 +151,14 @@ onUnmounted(() => { disposed = true; version++ })
             </li>
           </ol>
           <t-empty v-else :description="t('stories.noFacts')" />
+          <section v-if="detail.related_stories?.length" class="related" :aria-label="t('stories.related')">
+            <h2>{{ t('stories.related') }}</h2>
+            <ul class="records">
+              <li v-for="story in detail.related_stories" :key="story.id" class="record">
+                <router-link :to="{ path: `/platform/stories/${encodeURIComponent(story.id)}`, query: route.query }">{{ story.title }}</router-link>
+              </li>
+            </ul>
+          </section>
           <section class="mentions" :aria-label="t('stories.mentions')">
             <h2>{{ t('stories.mentions') }}</h2>
             <p class="muted">{{ t('stories.mentionsHint') }}</p>
@@ -182,7 +190,7 @@ p { margin: 8px 0; }
 .records, .sources { list-style: none; padding: 0; margin: 0; }
 .records { display: grid; gap: 16px; }
 .record { padding: 20px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-medium); background: var(--td-bg-color-container); overflow-wrap: anywhere; }
-.mentions { margin-top: 24px; }
+.mentions, .related { margin-top: 24px; }
 .timeline-title { margin-top: 20px; }
 .fact-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .timeline .record { border-inline-start: 3px solid var(--td-brand-color); }

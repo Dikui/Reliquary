@@ -37,6 +37,7 @@ export default {
     "loadFailed": "Could not load destinations. Try again."
   },
   stories: {
+    "related": "Related stories",
     "mentions": "Materials mentioning this story",
     "mentionsHint": "These materials discuss the facts and do not serve as source evidence.",
     "noMentions": "No materials mention this story yet.",

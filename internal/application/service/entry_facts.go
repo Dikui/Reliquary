@@ -169,10 +169,11 @@ func (s *entryService) saveUnderstandingFact(
 			if plan.result == groupingSameOccurrence && fact != nil && materialCanProduceFact(library, current) {
 				role, quote = "source", fact.Quote
 			}
-			return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&types.EntryFact{
+			link := types.EntryFact{
 				SpaceID: entry.SpaceID, EntryID: entry.ID, FactID: plan.candidate.ID,
 				Role: role, Quote: quote, CreatedAt: now,
-			}).Error
+			}
+			return saveGroupingEvidence(tx, link, plan.decisions)
 		}
 		if fact == nil || !materialCanProduceFact(library, current) {
 			return nil
@@ -215,10 +216,10 @@ func (s *entryService) saveUnderstandingFact(
 		if err := recordFactCandidates(tx, stored, fact); err != nil {
 			return err
 		}
-		return tx.Create(&types.EntryFact{
+		return saveGroupingEvidence(tx, types.EntryFact{
 			SpaceID: entry.SpaceID, EntryID: entry.ID, FactID: stored.ID,
 			Role: "source", Quote: fact.Quote, CreatedAt: now,
-		}).Error
+		}, plan.decisions)
 	})
 }
 

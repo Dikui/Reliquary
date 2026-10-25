@@ -101,6 +101,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewEntityService))
 	must(container.Provide(service.NewDomainService))
 	must(container.Provide(service.NewStoryService))
+	must(container.Provide(service.NewStoryConsolidator))
 	must(container.Provide(service.NewFollowService))
 	must(container.Provide(service.NewOperationLogService))
 	must(container.Provide(service.NewEmbeddingRebuilder))
@@ -124,6 +125,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 
 	must(container.Provide(service.NewHousekeepingService))
 	must(container.Invoke(startHousekeepingService))
+	must(container.Invoke(startStoryConsolidation))
 	logger.Debugf(ctx, "[Container] Entry housekeeping runner registered")
 
 	// HTTP handlers layer
