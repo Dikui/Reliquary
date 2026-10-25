@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reliquary/internal/application/repository"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
 	"strings"
@@ -81,6 +82,7 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		entry.CustomMetadata = existing.CustomMetadata
 		entry.EntitiesManual = existing.EntitiesManual
 		entry.DomainsManual = existing.DomainsManual
+		entry.GroupingManual = existing.GroupingManual
 		entry.TitleManual, entry.DescriptionManual = existing.TitleManual, existing.DescriptionManual
 		if existing.DescriptionManual {
 			entry.Description, entry.StructuredSummary = existing.Description, existing.StructuredSummary
@@ -211,6 +213,9 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		if err := s.cleanupLibraryRebuild(ctx, existing); err != nil {
 			return nil, err
 		}
+		if err := repository.WithdrawEntryFacts(ctx, s.db, entry.SpaceID, []string{entry.ID}); err != nil {
+			return nil, err
+		}
 		if err := advanceSegmentGeneration(entry, "processing"); err != nil {
 			return nil, err
 		}
@@ -226,7 +231,7 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 			return nil, err
 		}
 	}
-	if request.MentionedFactIDs != nil {
+	if request.MentionedFactIDs != nil && existing == nil {
 		if err := s.saveExplicitFactMentions(ctx, entry, *request.MentionedFactIDs); err != nil {
 			return nil, err
 		}

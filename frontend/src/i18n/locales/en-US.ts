@@ -54,6 +54,7 @@ export default {
     "object": "Object",
     "conditions": "Conditions",
     "sources": "Source materials and quotations",
+    "noSource": "No source",
     "empty": "No stories yet. Facts found in timely external materials will appear here.",
     "noFacts": "There are no visible facts in this story.",
     "loadFailed": "Could not load stories. Try again.",

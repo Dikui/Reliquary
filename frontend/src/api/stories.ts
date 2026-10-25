@@ -35,6 +35,7 @@ export interface StoryFact {
   occurred_at: string | null
   created_at: string
   sources: FactSource[]
+  no_source: boolean
 }
 
 export interface StoryDetail { story: Story; facts: StoryFact[]; mentions: FactSource[] }

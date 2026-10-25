@@ -71,7 +71,7 @@ func (s *StoryService) FactDetail(ctx context.Context, id string) (*types.StoryF
 			return &item, nil
 		}
 	}
-	return &types.StoryFact{Fact: fact, Sources: []types.FactSource{}}, nil
+	return nil, werrors.NewNotFoundError("fact is hidden without source evidence")
 }
 
 func markGroupingManual(tx *gorm.DB, spaceID uint64, factIDs []string) error {

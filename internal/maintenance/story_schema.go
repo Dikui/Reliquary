@@ -1,6 +1,7 @@
 package maintenance
 
 func projectStorySnapshot(snapshot *Snapshot, targetVersion int64) {
+	projectFactEvidenceSnapshot(snapshot, targetVersion)
 	projectManualGroupingSnapshot(snapshot, targetVersion)
 	projectGroupingSnapshot(snapshot, targetVersion)
 	projectEntityCandidatesSnapshot(snapshot, targetVersion)
@@ -15,6 +16,7 @@ func projectStorySnapshot(snapshot *Snapshot, targetVersion int64) {
 }
 
 func projectStoryManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	expected, actual = projectFactEvidenceManifest(expected, actual)
 	expected, actual = projectGroupingManifest(expected, actual)
 	expected, actual = projectEntityCandidatesManifest(expected, actual)
 	expected, actual = projectManualGroupingManifest(expected, actual)

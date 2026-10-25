@@ -16,6 +16,9 @@ import (
 
 var ErrEntryNotFound = errors.New("entry not found")
 
+// ErrEntrySuperseded prevents an older worker snapshot from overwriting a source revision.
+var ErrEntrySuperseded = errors.New("entry source version superseded")
+
 // likeEscapeChar is the SQL ESCAPE character paired with escapeLikeKeyword.
 const likeEscapeChar = `\`
 
@@ -260,6 +263,9 @@ func (r *entryRepository) UpdateEntry(ctx context.Context, entry *types.Entry) e
 			Where("space_id=? AND id=?", entry.SpaceID, entry.ID).First(&current).Error; err != nil {
 			return err
 		}
+		if !entry.SameSourceVersion(&current) {
+			return ErrEntrySuperseded
+		}
 		if current.TitleManual && !entry.TitleSpecified {
 			entry.Title, entry.FileName = current.Title, current.FileName
 		}
@@ -310,6 +316,9 @@ func (r *entryRepository) DeleteEntryList(ctx context.Context, spaceID uint64, i
 		return nil
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := WithdrawEntryFacts(ctx, tx, spaceID, ids); err != nil {
+			return err
+		}
 		var articles []types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("space_id=? AND id IN ?", spaceID, ids).Order("id").Find(&articles).Error; err != nil {
 			return err

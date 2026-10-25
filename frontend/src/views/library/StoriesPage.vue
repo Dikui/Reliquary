@@ -141,6 +141,7 @@ onUnmounted(() => { disposed = true; version++ })
                 <dt v-if="fact.conditions">{{ t('stories.conditions') }}</dt><dd v-if="fact.conditions">{{ fact.conditions }}</dd>
               </dl>
               <h4>{{ t('stories.sources') }}</h4>
+              <p v-if="fact.no_source" class="muted">{{ t('stories.noSource') }}</p>
               <ul class="sources">
                 <li v-for="source in fact.sources" :key="source.entry_id">
                   <router-link :to="entryLocation(source.entry_id)">{{ source.title }}</router-link>

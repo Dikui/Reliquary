@@ -160,6 +160,12 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 
 先 `initialize`，随后请求 `/mcp`，使用 Bearer API Key、`Accept: application/json, text/event-stream` 和协商的 `MCP-Protocol-Version`。`list_libraries` 返回库用途、模板、审核和来源说明、去重说明及 `accepted_fields`。`check_urls` 参数与 HTTP 相同。图片上传走 HTTP，已有资料的正文和图片更新使用 `update_entry_content`。
 
+## 修订和删除的事实证据
+
+资料发生实际修订或显式正文更新时，同一事务先撤除该资料的全部出处与提及，再从资料理解重跑。未变化的提交和旧修订不撤证。AI产出修订后，显式提及 ID 保留在提交元数据中，由本次后台处理重新挂接；调用方可传空数组清空。资料删除任务执行时也撤除关联，不把软删除资料当作出处。
+
+出处撤光的自动事实从事件列表、时间线和 MCP 读取中隐藏，但保留事实与事件 ID 并继续参与召回。判为同一次发生后，新引文挂回原事实，不改变事件最近新事实时间。人工纠正过的事实仍可见，响应中的 `no_source=true` 表示“无出处”；资料的 `grouping_manual` 保护继续有效，修订不会恢复已失效的人工引文。隐藏事实的直接事实读取返回 404。
+
 ## AI产出收录
 
 AI产出和其他库共用 HTTP `POST /api/v1/ingest` 与 MCP `ingest`。每项指定 `library: "ai-output"` 或对应库 ID，提交 `title`、`content` 与 `acquisition: "model_written"`：

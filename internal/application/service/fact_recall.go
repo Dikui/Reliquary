@@ -74,7 +74,8 @@ func (s *entryService) recallFacts(
 		q = q.Where(`COALESCE(substring(f.occurred_at,1,10)::date,
    (SELECT min(NULLIF(substring(e.metadata#>>'{intake,source_info,published_at}',1,10),'')::date)
     FROM entry_facts ef JOIN entries e ON e.id=ef.entry_id AND e.space_id=ef.space_id
-    WHERE ef.fact_id=f.id AND ef.space_id=f.space_id AND ef.role='source')) BETWEEN ?::date AND ?::date`,
+    WHERE ef.fact_id=f.id AND ef.space_id=f.space_id AND ef.role='source' AND e.deleted_at IS NULL),
+   f.recall_date) BETWEEN ?::date AND ?::date`,
 			date.AddDate(0, 0, -14).Format(time.DateOnly), date.AddDate(0, 0, 14).Format(time.DateOnly))
 	}
 	if err := q.Order("f.id").Scan(&facts).Error; err != nil {

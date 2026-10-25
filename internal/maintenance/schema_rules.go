@@ -91,6 +91,12 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 				copy[table] = rule
 			}
 		}
+		if migration.Version < 43 {
+			if rule, ok := copy["facts"]; ok {
+				rule.Sidecar = strings.TrimSpace(strings.ReplaceAll(" "+rule.Sidecar+" ", " recall_date ", " "))
+				copy["facts"] = rule
+			}
+		}
 		if migration.Version < 40 {
 			if rule, ok := copy["facts"]; ok {
 				for _, column := range []string{"subject_entity_id", "object_entity_id"} {

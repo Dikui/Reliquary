@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reliquary/internal/application/repository"
 	"sort"
 	"strings"
 	"time"
@@ -687,6 +688,10 @@ func (s *entryService) dequeueEntryTasks(ctx context.Context, entryID string) {
 
 func (s *entryService) ProcessManualUpdate(ctx context.Context, t *taskqueue.Task) (returnErr error) {
 	defer func() {
+		if errors.Is(returnErr, repository.ErrEntrySuperseded) {
+			returnErr = nil
+			return
+		}
 		if secutils.IsPermanentImageError(returnErr) {
 			returnErr = fmt.Errorf("%w: %w", returnErr, taskqueue.SkipRetry)
 		}

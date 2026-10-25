@@ -185,6 +185,7 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
  'unrelated',0.88,'unrelated','review_disagreed',now());
  UPDATE entries SET grouping_manual=true WHERE id='article';
  UPDATE facts SET manual_corrected=true WHERE id='fact';
+ UPDATE facts SET recall_date='2026-10-20' WHERE id='fact';
  UPDATE facts SET merged_into_id='fact' WHERE id='fact-date';
  UPDATE stories SET manual_corrected=true WHERE id='story';
  INSERT INTO stories(id,space_id,title,first_fact_at,last_fact_at,merged_into_id,manual_corrected)

@@ -415,6 +415,9 @@ func TestRecallGroupingExplicitMentionsCanBeRetainedAndCleared(t *testing.T) {
 	second := ingestRevisionHTTP(t, f, item)[0]
 	require.Equal(t, "accepted", second["status"])
 	require.Equal(t, first["entry_id"], second["entry_id"])
+	require.Empty(t, groupingDetail(t, f, story.ID).Mentions, "revision withdraws the old mention immediately")
+	require.NoError(t, f.articles.(interfaces.EntryService).ProcessManualUpdate(f.ctx,
+		f.queue.tasks[len(f.queue.tasks)-1]))
 	require.Len(t, groupingDetail(t, f, story.ID).Mentions, 1)
 	item["mentioned_fact_ids"] = []string{}
 	third := ingestRevisionHTTP(t, f, item)[0]

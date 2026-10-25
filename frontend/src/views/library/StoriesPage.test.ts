@@ -26,7 +26,7 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
         story: { id: 'story', title: 'Model release', first_fact_at: arrivedAt, last_fact_at: arrivedAt },
         facts: [{
           id: 'fact', title: 'Release', subject: 'Aurora', action: 'released', object: 'Model A', conditions: '',
-          occurred_at: scenario.occurredAt, created_at: arrivedAt, sources: [],
+          occurred_at: scenario.occurredAt, created_at: arrivedAt, sources: [], manual_corrected: true, no_source: true,
         }],
       }
       const component = loadComponent(new URL('./StoriesPage.vue', import.meta.url), {
@@ -45,6 +45,7 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
         app.mount(root)
         await settle()
         const times = descendants(root).filter(node => node.tag === 'time')
+        assert.ok(visibleText(root).includes(locale === 'en-US' ? 'No source' : '无出处'))
         assert.equal(times.length, 3)
         assert.equal(times[2].props.datetime, scenario.occurredAt)
         assert.equal(visibleText(times[2]), scenario.expected)

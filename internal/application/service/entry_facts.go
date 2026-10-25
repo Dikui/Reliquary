@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"reliquary/internal/application/repository"
 	"reliquary/internal/types"
 	"strings"
 	"time"
@@ -92,8 +94,21 @@ func factOccurrenceTime(value string) *string {
 func (s *entryService) saveUnderstandingFact(
 	ctx context.Context, library *types.Library, entry *types.Entry, body string, result *articleProcessingResult,
 ) error {
-	if hasExplicitFactMentions(entry) || entry.GroupingManual {
+	if entry.GroupingManual {
 		return nil
+	}
+	if hasExplicitFactMentions(entry) {
+		return s.withCurrentFactEntry(ctx, entry, func(tx *gorm.DB, current *types.Entry) error {
+			var metadata struct {
+				IDs []string `json:"mentioned_fact_ids"`
+			}
+			if err := json.Unmarshal(current.Metadata, &metadata); err != nil {
+				return err
+			}
+			writer := *s
+			writer.db = tx
+			return writer.saveExplicitFactMentions(ctx, current, metadata.IDs)
+		})
 	}
 	fact := qualifyUnderstandingFact(library, entry, body, result.Fact)
 	var existing int64
@@ -109,18 +124,7 @@ func (s *entryService) saveUnderstandingFact(
 	if err != nil {
 		return err
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockEntitySpace(tx, entry.SpaceID); err != nil {
-			return err
-		}
-		var current types.Entry
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("space_id=? AND id=?", entry.SpaceID, entry.ID).First(&current).Error; err != nil {
-			return err
-		}
-		if current.SourceBodyHash != entry.SourceBodyHash || current.GroupingManual {
-			return nil
-		}
+	return s.withCurrentFactEntry(ctx, entry, func(tx *gorm.DB, current *types.Entry) error {
 		var count int64
 		if err := tx.Model(&types.EntryFact{}).Where("space_id=? AND entry_id=? AND (role='source' OR manual=true)",
 			entry.SpaceID, entry.ID).Count(&count).Error; err != nil {
@@ -162,7 +166,7 @@ func (s *entryService) saveUnderstandingFact(
 		}
 		if plan.candidate != nil && (plan.result == groupingSameOccurrence || plan.result == groupingMention) {
 			role, quote := "mention", ""
-			if plan.result == groupingSameOccurrence && fact != nil && materialCanProduceFact(library, &current) {
+			if plan.result == groupingSameOccurrence && fact != nil && materialCanProduceFact(library, current) {
 				role, quote = "source", fact.Quote
 			}
 			return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&types.EntryFact{
@@ -170,10 +174,10 @@ func (s *entryService) saveUnderstandingFact(
 				Role: role, Quote: quote, CreatedAt: now,
 			}).Error
 		}
-		if fact == nil || !materialCanProduceFact(library, &current) {
+		if fact == nil || !materialCanProduceFact(library, current) {
 			return nil
 		}
-		source, err := entrySourceInfo(&current)
+		source, err := entrySourceInfo(current)
 		if err != nil {
 			return err
 		}
@@ -215,5 +219,32 @@ func (s *entryService) saveUnderstandingFact(
 			SpaceID: entry.SpaceID, EntryID: entry.ID, FactID: stored.ID,
 			Role: "source", Quote: fact.Quote, CreatedAt: now,
 		}).Error
+	})
+}
+
+// Model calls run outside this transaction. Check their source version again
+// under the same barrier used by revision, deletion and manual correction.
+func (s *entryService) withCurrentFactEntry(ctx context.Context, entry *types.Entry,
+	write func(*gorm.DB, *types.Entry) error,
+) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockEntitySpace(tx, entry.SpaceID); err != nil {
+			return err
+		}
+		var current types.Entry
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("space_id=? AND id=?", entry.SpaceID, entry.ID).First(&current).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return repository.ErrEntrySuperseded
+			}
+			return err
+		}
+		if !entry.SameSourceVersion(&current) || current.ParseStatus == types.ParseStatusDeleting {
+			return repository.ErrEntrySuperseded
+		}
+		if current.GroupingManual {
+			return nil
+		}
+		return write(tx, &current)
 	})
 }

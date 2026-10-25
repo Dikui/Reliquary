@@ -17,8 +17,9 @@ func NewStoryService(db *gorm.DB) *StoryService { return &StoryService{db: db} }
 
 func (s *StoryService) visibleFacts(ctx context.Context, spaceID uint64) *gorm.DB {
 	return s.db.WithContext(ctx).Table("facts f").Where("f.space_id=? AND f.merged_into_id=''", spaceID).
-		Where(`EXISTS (SELECT 1 FROM entry_facts ef JOIN entries e ON e.id=ef.entry_id AND e.space_id=ef.space_id
- WHERE ef.space_id=f.space_id AND ef.fact_id=f.id AND ef.role='source' AND e.deleted_at IS NULL)`)
+		Where(`(f.manual_corrected OR EXISTS
+ (SELECT 1 FROM entry_facts ef JOIN entries e ON e.id=ef.entry_id AND e.space_id=ef.space_id
+ WHERE ef.space_id=f.space_id AND ef.fact_id=f.id AND ef.role='source' AND e.deleted_at IS NULL))`)
 }
 
 // ListStories orders by the arrival of the most recent new fact, independently of its occurrence date.
@@ -74,6 +75,7 @@ func (s *StoryService) StoryDetail(ctx context.Context, id string) (*types.Story
 		if err != nil {
 			return nil, err
 		}
+		item.NoSource = len(item.Sources) == 0
 		detail.Facts = append(detail.Facts, item)
 	}
 
@@ -83,6 +85,7 @@ func (s *StoryService) StoryDetail(ctx context.Context, id string) (*types.Story
 		Joins("JOIN facts f ON f.id=ef.fact_id AND f.space_id=ef.space_id").
 		Joins("JOIN entries e ON e.id=ef.entry_id AND e.space_id=ef.space_id AND e.deleted_at IS NULL").
 		Where("f.space_id=? AND f.story_id=? AND ef.role='mention'", spaceID, id).
+		Where("f.id IN (?)", s.visibleFacts(ctx, spaceID).Select("f.id")).
 		Order("ef.entry_id,ef.created_at").Scan(&detail.Mentions).Error
 	if err != nil {
 		return nil, err

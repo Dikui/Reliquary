@@ -476,3 +476,5 @@ evaluation_sets 在 spaces 之后，questions 在 sets 之后，answers 在 ques
 
 
 结构版本 42 的 `entries.grouping_manual`、`facts.manual_corrected`、`facts.merged_into_id`、`stories.manual_corrected` 与 `stories.merged_into_id` 全部归 Sidecar，随现有资料、事实、事件文件保存。不增加表间导入依赖，跳转由应用在同一空间内维护。旧副本只补 false 和空字符串；任何非默认保护标记或跳转丢失均核对失败。降级丢失保护和跳转字段，不能撤销先前已执行的归组操作。
+
+结构版本 43 的 `facts.recall_date` 归 Sidecar，随 `data/facts.json` 保存。撤证时保存的已知发布日期不能在出处删除后重新推导。旧副本只补 null，非空日期必须逐项保留并核对；降级会丢失该回退日期，不撤销已经发生的资料修订或删除。

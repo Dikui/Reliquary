@@ -57,7 +57,8 @@ type FactSource struct {
 // StoryFact pairs a timeline fact with its source evidence.
 type StoryFact struct {
 	Fact
-	Sources []FactSource `json:"sources" gorm:"-"`
+	Sources  []FactSource `json:"sources" gorm:"-"`
+	NoSource bool         `json:"no_source" gorm:"-"`
 }
 
 // StoryDetail is the story header and its chronological timeline.

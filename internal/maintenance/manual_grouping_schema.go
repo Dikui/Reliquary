@@ -13,10 +13,16 @@ var manualGroupingDefaults = map[string]map[string]any{
 }
 
 func projectManualGroupingSnapshot(snapshot *Snapshot, targetVersion int64) {
-	if snapshot.schemaVersion >= 42 || targetVersion < 42 {
+	projectColumnDefaultsSnapshot(snapshot, targetVersion, 42, manualGroupingDefaults)
+}
+
+func projectColumnDefaultsSnapshot(snapshot *Snapshot, targetVersion, introduced int64,
+	columns map[string]map[string]any,
+) {
+	if snapshot.schemaVersion >= introduced || targetVersion < introduced {
 		return
 	}
-	for table, defaults := range manualGroupingDefaults {
+	for table, defaults := range columns {
 		for _, row := range snapshot.Tables[table] {
 			for field, value := range defaults {
 				if _, ok := row[field]; !ok {
@@ -28,10 +34,16 @@ func projectManualGroupingSnapshot(snapshot *Snapshot, targetVersion int64) {
 }
 
 func projectManualGroupingManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
-	if expected.SchemaVersion >= 42 || actual.SchemaVersion < 42 {
+	return projectColumnDefaultsManifest(expected, actual, 42, manualGroupingDefaults)
+}
+
+func projectColumnDefaultsManifest(expected, actual *Manifest, introduced int64,
+	columns map[string]map[string]any,
+) (*Manifest, *Manifest) {
+	if expected.SchemaVersion >= introduced || actual.SchemaVersion < introduced {
 		return expected, actual
 	}
-	for table, defaults := range manualGroupingDefaults {
+	for table, defaults := range columns {
 		old, ok := expected.Tables[table]
 		if !ok {
 			continue

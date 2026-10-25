@@ -54,6 +54,7 @@ export default {
     "object": "对象",
     "conditions": "条件",
     "sources": "出处资料与引文",
+    "noSource": "无出处",
     "empty": "暂无事件。外部时效型库的资料理解发现事实后会显示在这里。",
     "noFacts": "本事件暂无可查看的事实。",
     "loadFailed": "事件加载失败，请重试。",

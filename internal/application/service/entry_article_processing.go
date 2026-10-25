@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/infrastructure/docparser"
@@ -346,6 +347,9 @@ func (s *entryService) callArticleProcessingPart(ctx context.Context, library *t
 }
 
 func (s *entryService) markArticleProcessingFailed(ctx context.Context, k *types.Entry, err error) {
+	if errors.Is(err, repository.ErrEntrySuperseded) {
+		return
+	}
 	if ctx.Err() != nil {
 		return
 	}

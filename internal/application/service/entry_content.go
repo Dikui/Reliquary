@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reliquary/internal/application/repository"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
 	"strings"
@@ -148,6 +149,9 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 	if err := s.cleanupLibraryRebuild(ctx, entry); err != nil {
 		return nil, err
 	}
+	if err := repository.WithdrawEntryFacts(ctx, s.db, spaceID, []string{id}); err != nil {
+		return nil, err
+	}
 	change, err := s.vault.beginArticleContentUpdate(entry, content)
 	if err != nil {
 		return nil, err
@@ -179,14 +183,14 @@ func (s *entryService) updateEntryContent(ctx context.Context, id string, reques
 		}
 	}
 	entry.SourceBodyHash = sourceBodyHash(canonical)
-	if err := s.repo.UpdateEntry(ctx, entry); err != nil {
-		return nil, err
-	}
 	if err := s.repo.UpdateEntryColumns(ctx, id, map[string]any{
 		"source_body_hash": entry.SourceBodyHash, "pending_subtasks_count": 0,
 		"acquisition":            entry.Acquisition,
 		"last_ingest_api_key_id": keyID, "last_ingest_api_key_name": keyName,
 	}); err != nil {
+		return nil, err
+	}
+	if err := s.repo.UpdateEntry(ctx, entry); err != nil {
 		return nil, err
 	}
 	if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest", id, before, map[string]any{"action": "update_content", "content_hash": entry.ContentHash, "acquisition": acquisition}); err != nil {

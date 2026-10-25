@@ -41,7 +41,7 @@ var PersistentTables = map[string]PersistentTable{
 	},
 	"facts": {
 		Columns: Rule{Sidecar: "id space_id story_id title subject action object conditions occurred_at created_at " +
-			"subject_entity_id object_entity_id manual_corrected merged_into_id"},
+			"subject_entity_id object_entity_id manual_corrected merged_into_id recall_date"},
 		File: "data/facts.json", After: []string{"stories", "entities"}, Since: 39,
 	},
 	"entry_facts": {
