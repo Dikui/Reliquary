@@ -74,7 +74,7 @@ func TestOfflineReembedPersistsAuditWithoutExportOnCompletionCancellationAndFail
 					Title: id, SourceKind: "mine", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled",
 					VaultBody: "Original material " + id,
 					StructuredSummary: &types.EntrySummary{
-						Overview: "Original summary " + id, Points: []string{}, KeyTerms: []string{},
+						Overview: "Original summary " + id,
 					},
 				}).Error)
 			}

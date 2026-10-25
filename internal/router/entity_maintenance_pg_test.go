@@ -199,7 +199,7 @@ func (m *retiredExtractionChat) Chat(ctx context.Context,
 		return nil, fmt.Errorf("retired identity judgment called")
 	}
 	response, err := m.mcpFixtureChat.Chat(ctx, messages, options)
-	if err == nil && stage == "article_processing" {
+	if err == nil && stage == "entry_understanding" {
 		var result map[string]any
 		if err := json.Unmarshal([]byte(response.Content), &result); err != nil {
 			return nil, err
@@ -345,7 +345,7 @@ vault_body) VALUES('legacy-material',
 		}
 	}
 	require.NoError(t, migration.Migrate(36))
-	require.NoError(t, migration.Migrate(37))
+	require.NoError(t, migration.Up())
 	require.NoError(t, service.EnsurePersonalSpace(context.Background(), f.db))
 	RegisterFollowRoutes(f.router.Group("/api/v1"), handler.NewFollowHandler(service.NewFollowService(f.db)))
 	read := personalRequest(t, f.router, http.MethodGet, "/api/v1/entries/legacy-material", "", f.key, true)

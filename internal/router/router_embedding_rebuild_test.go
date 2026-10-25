@@ -74,7 +74,7 @@ func TestEmbeddingRebuildHTTPProgressPauseResumeAndRetry(t *testing.T) {
 	require.NoError(t, db.Create(&types.Entry{
 		ID: "rebuild-http-entry", SpaceID: 1, LibraryID: "http-library", Type: types.EntryTypeManual,
 		Title: "HTTP", SourceKind: "mine", ParseStatus: types.ParseStatusCompleted,
-		StructuredSummary: &types.EntrySummary{Overview: "HTTP summary", Points: []string{}, KeyTerms: []string{}},
+		StructuredSummary: &types.EntrySummary{Overview: "HTTP summary"},
 		VaultBody:         "HTTP original material",
 	}).Error)
 

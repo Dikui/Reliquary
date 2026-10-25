@@ -8,28 +8,15 @@ import (
 )
 
 type EntrySummary struct {
-	Overview string   `json:"overview" yaml:"overview"`
-	Points   []string `json:"points" yaml:"points"`
-	KeyTerms []string `json:"key_terms" yaml:"key_terms"`
+	Overview string `json:"overview" yaml:"overview"`
 }
 
-// RenderText supplies deterministic Markdown for existing previews and keyword search.
+// RenderText supplies the overview for previews and keyword search.
 func (s *EntrySummary) RenderText() string {
 	if s == nil {
 		return ""
 	}
-	var b strings.Builder
-	b.WriteString("## 概述\n\n")
-	b.WriteString(strings.TrimSpace(s.Overview))
-	b.WriteString("\n\n## 要点\n\n")
-	for _, point := range s.Points {
-		b.WriteString("- ")
-		b.WriteString(strings.TrimSpace(point))
-		b.WriteByte('\n')
-	}
-	b.WriteString("\n## 关键名词\n\n")
-	b.WriteString(strings.Join(s.KeyTerms, "、"))
-	return strings.TrimSpace(b.String())
+	return strings.TrimSpace(s.Overview)
 }
 
 func (s EntrySummary) Value() (driver.Value, error) { return json.Marshal(s) }

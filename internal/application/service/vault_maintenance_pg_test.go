@@ -101,8 +101,6 @@ func createMaintenanceMineFixture(t *testing.T, ctx context.Context, documents *
 		CollectedAt: time.Now().UTC().Format(time.RFC3339Nano),
 		Summary: &types.EntrySummary{
 			Overview: "Personal operating procedure",
-			Points:   []string{"Preserve the full procedure"},
-			KeyTerms: []string{"Recovery"},
 		},
 	}
 	body := "# Personal tutorial\n\nmaintenanceminefixture full original procedure.\n"

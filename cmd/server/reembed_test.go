@@ -87,7 +87,7 @@ func TestReembedHistoricalFailedRunReportsItsOwnStatusAndExitError(t *testing.T)
 	require.NoError(t, db.Create(&types.Entry{
 		ID: "cli-entry", SpaceID: 1, LibraryID: "cli-library", Type: types.EntryTypeManual,
 		Title: "CLI material", SourceKind: "mine", ParseStatus: types.ParseStatusCompleted,
-		StructuredSummary: &types.EntrySummary{Overview: "CLI summary", Points: []string{}, KeyTerms: []string{}},
+		StructuredSummary: &types.EntrySummary{Overview: "CLI summary"},
 		VaultBody:         "Original CLI material",
 	}).Error)
 

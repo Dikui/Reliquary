@@ -264,7 +264,7 @@ type taskTransactionInterruptedChat struct {
 
 func (m *taskTransactionInterruptedChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
-	if stage == "article_processing" && m.interrupted.CompareAndSwap(false, true) {
+	if stage == "entry_understanding" && m.interrupted.CompareAndSwap(false, true) {
 		close(m.entered)
 		<-ctx.Done()
 		return nil, ctx.Err()

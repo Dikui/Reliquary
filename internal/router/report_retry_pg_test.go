@@ -60,7 +60,7 @@ type reportProcessingFixture struct {
 }
 
 func (m *reportProcessingFixture) Chat(ctx context.Context, messages []chat.Message, options *chat.ChatOptions) (*types.ChatResponse, error) {
-	if stage, _ := types.LLMCallMetadataFromContext(ctx); stage == "article_processing" && m.fail.Load() {
+	if stage, _ := types.LLMCallMetadataFromContext(ctx); stage == "entry_understanding" && m.fail.Load() {
 		return nil, errors.New("generation unavailable")
 	}
 	return m.mcpFixtureChat.Chat(ctx, messages, options)

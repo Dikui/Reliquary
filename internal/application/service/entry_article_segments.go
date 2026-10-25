@@ -8,7 +8,6 @@ import (
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
-	"reliquary/internal/utils"
 )
 
 // SegmentContribution is the extension boundary for ikb-11. New extractors
@@ -36,6 +35,9 @@ type articleProcessingProvenance struct {
 
 func (s *entryService) prepareArticleProcessing(ctx context.Context, library *types.Library, k *types.Entry) (articleProcessingInput, string, *types.Model, error) {
 	input := articleProcessingInput{Title: articleTitleForProcessing(k)}
+	if err := loadUnderstandingOptions(ctx, s.db, k.SpaceID, &input); err != nil {
+		return input, "", nil, err
+	}
 	source, err := entrySourceInfo(k)
 	if err != nil {
 		return input, "", nil, err
@@ -116,6 +118,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 	}
 	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{
 		input, prompt, segmentSummaryPrompt(), segmentModelIdentity(model), budget,
+		ctx.Value(domainReclassificationKey{}),
 	})
 	if err != nil {
 		return nil, err
@@ -160,6 +163,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 				return err
 			}
 			result.Title, result.Summary = summary.Title, summary.Summary
+			result.DomainIDs, result.EntityIDs = summary.DomainIDs, summary.EntityIDs
 		}
 		data, err := json.Marshal(result)
 		if err != nil {
@@ -203,6 +207,8 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 	merged := &articleProcessingResult{
 		Title:      parts[0].Title,
 		Summary:    parts[0].Summary,
+		DomainIDs:  parts[0].DomainIDs,
+		EntityIDs:  parts[0].EntityIDs,
 		Entities:   []articleProcessingEntity{},
 		Provenance: p,
 		Extensions: map[string][]SegmentContribution{},
@@ -222,17 +228,29 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 }
 
 func segmentSummaryPrompt() string {
-	return config.Prompt("summary_merge") + `只输出 JSON {"title":"资料标题","summary":{"overview":"一句话概述","points":["原文支持的要点"],"key_terms":["关键名词"]}}。`
+	return config.Prompt("summary_merge") + `只输出 JSON {"title":"中文资料标题",
+"summary":{"overview":"中文一句话概述"},"domain_ids":[],"entity_ids":[]}。
+领域与实体各选 0–3 个，只能从各段已选 ID 中选择。`
 }
 
 func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types.Library, k *types.Entry, parts []*articleProcessingResult, model *types.Model) (*articleProcessingResult, error) {
 	ctx = types.WithModelCallEntry(ctx, k.ID)
 	summaries := make([]any, len(parts))
 	for i, part := range parts {
-		summaries[i] = map[string]any{"segment": i + 1, "summary": part.Summary}
+		summaries[i] = map[string]any{
+			"segment": i + 1, "title": part.Title, "summary": part.Summary,
+			"domain_ids": part.DomainIDs, "entity_ids": part.EntityIDs,
+		}
 	}
 	title := articleTitleForProcessing(k)
-	input, _ := json.Marshal(map[string]any{"title": title, "segments": summaries})
+	var options articleProcessingInput
+	if err := loadUnderstandingOptions(ctx, s.db, k.SpaceID, &options); err != nil {
+		return nil, err
+	}
+	input, _ := json.Marshal(map[string]any{
+		"title": title, "segments": summaries,
+		"domain_options": options.DomainOptions, "entity_options": options.EntityOptions,
+	})
 	_, _, completion := s.articleProcessingLimits(model)
 	if model.Parameters.ContextWindow > 0 && len([]rune(string(input)))+len([]rune(segmentSummaryPrompt()))+completion+modelOutputCorrectionReserve > model.Parameters.ContextWindow {
 		return nil, errors.New("各段摘要超过合并模型上下文，请提高模型上下文或减少分段数")
@@ -249,21 +267,22 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 	}
 	var summary *articleProcessingResult
 	err = chatWithOutputValidation(types.WithLLMCallMetadata(ctx, "article_summary_merge", ""), llm, []chat.Message{{Role: "system", Content: segmentSummaryPrompt()}, {Role: "user", Content: string(input)}}, &chat.ChatOptions{Temperature: 0, MaxTokens: completion, MaxCompletionTokens: completion}, func(raw string) error {
-		var output struct {
-			Title   string              `json:"title"`
-			Summary *types.EntrySummary `json:"summary"`
-		}
-		if err := utils.ParseLLMJsonResponse(raw, &output); err != nil {
-			return err
-		}
-		encoded, _ := json.Marshal(map[string]any{
-			"title": output.Title, "summary": output.Summary, "entities": []any{},
-		})
-		checked, err := parseArticleProcessingResult(string(encoded))
-		if err == nil && title == "" && checked.Title == "" {
+		checked, err := parseArticleProcessingResult(raw)
+		if err == nil && checked.Title == "" {
 			return errors.New("summary merge output is missing a generated title")
 		}
 		if err == nil {
+			domains, entities := map[string]bool{}, map[string]bool{}
+			for _, part := range parts {
+				for _, id := range part.DomainIDs {
+					domains[id] = true
+				}
+				for _, id := range part.EntityIDs {
+					entities[id] = true
+				}
+			}
+			checked.DomainIDs = acceptedUnderstandingIDs(checked.DomainIDs, domains)
+			checked.EntityIDs = acceptedUnderstandingIDs(checked.EntityIDs, entities)
 			summary = checked
 		}
 		return err

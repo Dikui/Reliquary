@@ -12,23 +12,26 @@ import (
 // ModelCallPurpose is the stable accounting vocabulary shared by all callers.
 type ModelCallPurpose string
 
+// Supported purposes distinguish material understanding from historical processing calls.
 const (
-	CallPurposeIntakeReview      ModelCallPurpose = "intake_review"
-	CallPurposeArticleProcessing ModelCallPurpose = "article_processing"
-	CallPurposeSegmentMerge      ModelCallPurpose = "segment_merge"
-	CallPurposeImageDescription  ModelCallPurpose = "image_description"
-	CallPurposeEntityResolution  ModelCallPurpose = "entity_resolution"
-	CallPurposeEntityEmbedding   ModelCallPurpose = "entity_name_embedding"
-	CallPurposeBodyEmbedding     ModelCallPurpose = "body_embedding"
-	CallPurposeRerank            ModelCallPurpose = "rerank"
-	CallPurposeEvaluation        ModelCallPurpose = "evaluation_generation"
-	CallPurposeOther             ModelCallPurpose = "other"
+	CallPurposeIntakeReview       ModelCallPurpose = "intake_review"
+	CallPurposeArticleProcessing  ModelCallPurpose = "article_processing"
+	CallPurposeEntryUnderstanding ModelCallPurpose = "entry_understanding"
+	CallPurposeSegmentMerge       ModelCallPurpose = "segment_merge"
+	CallPurposeImageDescription   ModelCallPurpose = "image_description"
+	CallPurposeEntityResolution   ModelCallPurpose = "entity_resolution"
+	CallPurposeEntityEmbedding    ModelCallPurpose = "entity_name_embedding"
+	CallPurposeBodyEmbedding      ModelCallPurpose = "body_embedding"
+	CallPurposeRerank             ModelCallPurpose = "rerank"
+	CallPurposeEvaluation         ModelCallPurpose = "evaluation_generation"
+	CallPurposeOther              ModelCallPurpose = "other"
 )
 
 // ModelCallPurposes lists the supported purposes for new model calls.
 var ModelCallPurposes = []ModelCallPurpose{
 	CallPurposeIntakeReview,
 	CallPurposeArticleProcessing,
+	CallPurposeEntryUnderstanding,
 	CallPurposeSegmentMerge,
 	CallPurposeImageDescription,
 	CallPurposeEntityResolution,
@@ -45,6 +48,8 @@ func NormalizeModelCallPurpose(stage string, tier ModelTier) ModelCallPurpose {
 		return CallPurposeIntakeReview
 	case "article_processing":
 		return CallPurposeArticleProcessing
+	case "entry_understanding":
+		return CallPurposeEntryUnderstanding
 	case "article_summary_merge", "segment_merge":
 		return CallPurposeSegmentMerge
 	case "image_description", "image_caption":

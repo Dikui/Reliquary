@@ -239,7 +239,7 @@ func (f *mcpFixture) seedArticle(t *testing.T, title, mode, body string) *types.
 		ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: f.library.ID,
 		Type: "url", Title: title, SourceKind: "article", Source: "https://example.org/" + uuid.NewString(),
 		ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled",
-		StructuredSummary: &types.EntrySummary{Overview: "MCP source summary", Points: []string{"one", "two", "three"}, KeyTerms: []string{"MCP"}},
+		StructuredSummary: &types.EntrySummary{Overview: "MCP source summary"},
 		CollectReason:     "供 MCP 检索", CreatedAt: time.Now().UTC(),
 	}
 

@@ -45,6 +45,8 @@ func escapeLikeKeyword(keyword string) string {
 // User star choices, collection reasons and the correction marker are owned by dedicated
 // editing methods, so background snapshots cannot overwrite those columns.
 var omitFieldsOnUpdate = []string{
+	"title_manual",
+	"description_manual",
 	"entities_manual",
 	"domains_manual",
 	"SourceID",
@@ -251,8 +253,33 @@ func (r *entryRepository) UpdateEntry(ctx context.Context, entry *types.Entry) e
 	if entry.CustomMetadata == nil {
 		omit = append(append([]string{}, omitFieldsOnUpdate...), "custom_metadata")
 	}
-	err := r.db.WithContext(ctx).Omit(omit...).Save(entry).Error
-	return err
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var current types.Entry
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("space_id=? AND id=?", entry.SpaceID, entry.ID).First(&current).Error; err != nil {
+			return err
+		}
+		if current.TitleManual && !entry.TitleSpecified {
+			entry.Title, entry.FileName = current.Title, current.FileName
+		}
+		if current.DescriptionManual && !entry.DescriptionSpecified {
+			entry.Description, entry.StructuredSummary = current.Description, current.StructuredSummary
+		}
+		if err := tx.Omit(omit...).Save(entry).Error; err != nil {
+			return err
+		}
+		manual := map[string]any{}
+		if entry.TitleSpecified {
+			manual["title_manual"] = true
+		}
+		if entry.DescriptionSpecified {
+			manual["description_manual"] = true
+		}
+		if len(manual) > 0 {
+			return tx.Model(entry).Updates(manual).Error
+		}
+		return nil
+	})
 }
 
 // UpdateEntryBatch updates entry items in batch

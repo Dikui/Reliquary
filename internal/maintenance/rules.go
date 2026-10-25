@@ -48,7 +48,8 @@ var Rules = map[string]Rule{
 
 var entryPreservationRule = Rule{
 	Header: "title content_type source_unverified starred collect_reason structured_summary created_at acquisition",
-	Sidecar: "source_id source_revision entities_manual domains_manual source_ref source_body_hash " +
+	Sidecar: "source_id source_revision entities_manual domains_manual title_manual description_manual " +
+		"source_ref source_body_hash " +
 		"identifier graph id space_id library_id " +
 		"type description source_kind vault_path vault_body agent_summary agent_tags source_name source " +
 		"parse_status enable_status file_name file_type file_size file_path file_hash storage_size metadata " +

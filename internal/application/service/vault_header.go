@@ -65,15 +65,9 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 	if len(h.Entities) > 0 {
 		writeVaultList(&b, "entities", h.Entities, true)
 	}
-	if h.Summary != nil && (h.Summary.Overview != "" || len(h.Summary.Points) > 0 || len(h.Summary.KeyTerms) > 0) {
+	if h.Summary != nil && h.Summary.Overview != "" {
 		b.WriteString("summary:\n")
 		scalar("  overview", h.Summary.Overview)
-		if len(h.Summary.Points) > 0 {
-			writeVaultList(&b, "  points", h.Summary.Points, false)
-		}
-		if len(h.Summary.KeyTerms) > 0 {
-			writeVaultList(&b, "  key_terms", h.Summary.KeyTerms, false)
-		}
 	}
 	fmt.Fprintf(&b, "starred: %t\n", h.Starred)
 	scalar("collect_reason", h.CollectReason)

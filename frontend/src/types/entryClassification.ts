@@ -2,7 +2,7 @@ import type { Domain } from '@/api/domains'
 import type { Entity } from '@/api/entities'
 import type { Acquisition } from './ingest'
 
-export interface StructuredSummary { overview: string; points: string[]; key_terms: string[] }
+export interface StructuredSummary { overview: string }
 export interface ClassifiedEntry {
   summary_status?: string
   error_message?: string

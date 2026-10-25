@@ -78,7 +78,7 @@ function articleComponent() {
 }
 const article: SearchEntry = {
   entry_id: 'a', title: 'Launch article', source: 'article', published_at: '2026-10-11T08:00:00Z',
-   summary: { overview: 'Launch overview', points: ['Useful point'], key_terms: ['Launch term'] },
+   summary: { overview: 'Launch overview' },
   entities: [{ id: 'e1', canonical_name: 'Launch Labs', entity_type: 'organization', aliases: ['LL'] }],
   snippets: [0, 1, 2, 3].map(index => ({ chunk_id: `c${index}`, chunk_index: index, content: `Launch snippet ${index} <script>`, score: 0.9, match_type: 'keyword' })),
   score: 0.9,  vault_path: 'articles/2026-10/a.md', original_url: 'https://example.com/a',
@@ -101,8 +101,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     }, api.searchEntries, locale)
     const image = locale === 'zh-CN' ? '[图片]' : '[Image]'
     assert.ok(result.html.includes(`Overview ${image}`))
-    assert.match(result.html, /<li[^>]*>\*literal\*<\/li>/)
-    assert.match(result.html, /<li[^>]*>\*\*literal\*\*<\/li>/)
     assert.deepEqual(loadedSummary, summary)
     assert.match(result.html, /<mark class="search-highlight">Launch<\/mark> heading/)
     assert.ok(result.html.includes(`code ${image} ${image} HTML`))
@@ -194,7 +192,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: article results show summary, attribution, safe link and at most three highlighted snippets`, async () => {
     const html = await render(articleComponent(), { article, query: 'Launch' }, locale)
-    for (const text of ['Launch article', 'Launch overview', 'Useful point', 'Launch term', 'Launch Labs', article.vault_path, messages[locale].knowledgeSearch.sources.article]) assert.ok(html.includes(text), text)
+    for (const text of ['Launch article', 'Launch overview', 'Launch Labs', article.vault_path, messages[locale].knowledgeSearch.sources.article]) assert.ok(html.includes(text), text)
     assert.match(html, /href="https:\/\/example.com\/a"/)
     assert.match(html, /<mark class="search-highlight">Launch<\/mark> snippet 0/)
     assert.doesNotMatch(html, /snippet 3|<script>/)

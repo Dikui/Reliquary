@@ -669,13 +669,22 @@ const reparseConfirmStore = useReparseConfirmStore();
 const batchResultId = ref('');
 const batchDialogVisible = ref(false);
 const batchSelection = ref<EntryBatchSelection>();
+const batchInitialAction = ref<'reclassify_domains'>();
+const batchScopeLabel = ref('');
 const batchSelectedIds = ref<string[]>([]);
 const batchLibraryIds = computed(() => [...new Set(cardList.value.filter((item: EntryCard) => batchSelectedIds.value.includes(item.id)).map((item: EntryCard) => item.library_id))].filter(Boolean) as string[]);
 function batchCreated(id: string) { batchResultId.value = id; void router.replace({ query: { ...route.query, batch_id: id } }); }
 watch(() => route.query.batch_id, id => { if (typeof id === 'string' && id && id !== batchResultId.value) { batchResultId.value = id; batchDialogVisible.value = true; } }, { immediate: true });
 function openBatch() {
+  batchInitialAction.value = undefined; batchScopeLabel.value = '';
   batchResultId.value = '';
   batchSelectedIds.value = [...selectedIds.value]; batchSelection.value = { filters: JSON.parse(JSON.stringify(filterParams.value)) };
+  batchDialogVisible.value = true;
+}
+function openDomainReclassification() {
+  batchResultId.value = ''; batchSelectedIds.value = [];
+  batchSelection.value = { filters: {} };
+  batchInitialAction.value = 'reclassify_domains'; batchScopeLabel.value = t('domains.reclassifyScope');
   batchDialogVisible.value = true;
 }
 async function batchChanged() { clearSelection(); resetPage(); await handlePendingChanged(); }
@@ -1013,7 +1022,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
           @open-source="openSourceDoc" />
       </div>
 
-      <DomainsManager v-if="activeLibraryTab === 'domains'" />
+      <DomainsManager v-if="activeLibraryTab === 'domains'" @reclassify="openDomainReclassification" />
 
       <PendingReviews v-if="activeLibraryTab === 'reviews' && libraryId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="handlePendingChanged" @refreshed="pendingCounts.refresh()" />
 
@@ -1147,7 +1156,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </template>
 
       <!-- Document content drawer -->
-      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :domain-options="filterDomains.map(item => ({ value: item.id, label: item.name }))" :entity-options="filterEntityOptions" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
+      <EntryBatchDialog :initial-action="batchInitialAction" :scope-label="batchScopeLabel" v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :domain-options="filterDomains.map(item => ({ value: item.id, label: item.name }))" :entity-options="filterEntityOptions" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
     <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
         :libraryId="libraryId" @openEntry="openSourceDoc" @openEntity="openArticleEntity"
         @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @review-changed="handleReviewChanged">

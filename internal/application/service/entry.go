@@ -391,10 +391,14 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 	// if need other fields update, please add here
 	if entry.Title != "" {
 		record.Title = entry.Title
+		record.TitleSpecified = true
 	}
 	if entry.DescriptionSpecified {
 		record.Description = entry.Description
+		record.DescriptionSpecified = true
+		record.StructuredSummary = nil
 		if record.Description != "" {
+			record.StructuredSummary = &types.EntrySummary{Overview: entry.Description}
 			record.SummaryStatus = types.SummaryStatusCompleted
 		} else {
 			record.SummaryStatus = types.SummaryStatusNone

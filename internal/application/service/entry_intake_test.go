@@ -253,7 +253,7 @@ func (m intakeChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.C
 		return nil, m.err
 	}
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
-	if stage == "article_processing" {
+	if stage == "entry_understanding" {
 		return &types.ChatResponse{Content: validProcessingFixture()}, nil
 	}
 	return &types.ChatResponse{Content: reviewFixtureContent(m.response, messages)}, nil

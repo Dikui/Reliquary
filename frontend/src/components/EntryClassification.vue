@@ -28,8 +28,6 @@ const originalURL = computed(() => {
     <a v-if="originalURL" class="original-link" :href="originalURL" target="_blank" rel="noopener noreferrer" @click.stop>{{ t('library.originalArticle') }}: {{ originalURL }}</a>
     <div v-if="entry.structured_summary" class="structured-summary">
       <div class="summary-overview"><strong>{{ t('library.summaryOverview') }}</strong><p>{{ plainText(entry.structured_summary.overview) }}</p></div>
-      <div class="summary-points"><strong>{{ t('library.summaryPoints') }}</strong><ul><li v-for="(point, index) in entry.structured_summary.points" :key="index">{{ plainText(point) }}</li></ul></div>
-      <div class="summary-key-terms"><strong>{{ t('library.summaryKeyTerms') }}</strong><span>{{ entry.structured_summary.key_terms.map(plainText).join(' · ') }}</span></div>
     </div>
     <p v-else-if="entry.description" class="summary-description">{{ plainText(entry.description) }}</p>
     <div v-if="entry.domains?.length" class="classification-relations"><strong>{{ t('domains.title') }}</strong><t-tag v-for="domain in entry.domains" :key="domain.id" size="small" variant="light-outline" :title="domain.definition">{{ domain.name }}</t-tag></div>
@@ -42,9 +40,7 @@ const originalURL = computed(() => {
 .classification-tags, .classification-relations { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .structured-summary { display: grid; gap: 10px; margin: 14px 0; }
 strong { color: var(--td-text-color-primary); font-weight: 600; }
-p, ul { margin: 4px 0 0; }
-ul { padding-left: 20px; }
-.summary-key-terms { display: flex; flex-wrap: wrap; gap: 6px; }
+p { margin: 4px 0 0; }
 .entity-relations button { border: 0; border-radius: var(--td-radius-small); background: var(--td-bg-color-secondarycontainer); color: var(--td-brand-color); padding: 2px 6px; font: inherit; cursor: pointer; }
 .entity-relations button:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 .entity-relations button:hover, .original-link:hover { text-decoration: underline; }

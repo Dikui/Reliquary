@@ -5,6 +5,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { deleteDomain, listDomains, type Domain } from '@/api/domains'
 import DomainEditor from './DomainEditor.vue'
 
+const emit = defineEmits<{ reclassify: [] }>()
 const { t } = useI18n()
 const domains = ref<Domain[]>([]), loading = ref(false), error = ref('')
 const editorVisible = ref(false), editing = ref<Domain | null>(null)
@@ -40,7 +41,7 @@ onBeforeUnmount(() => { active = false; request++ })
 
 <template>
   <section class="domains-manager">
-    <header><div><h2>{{ t('domains.title') }}</h2><p>{{ t('domains.description') }}</p></div><t-button @click="edit(null)">{{ t('domains.create') }}</t-button></header>
+    <header><div><h2>{{ t('domains.title') }}</h2><p>{{ t('domains.description') }}</p></div><div class="domains-manager__actions"><t-button variant="outline" @click="emit('reclassify')">{{ t('domains.reclassify') }}</t-button><t-button @click="edit(null)">{{ t('domains.create') }}</t-button></div></header>
     <p v-if="error" role="alert">{{ error }} <t-button variant="text" :loading="loading" @click="load">{{ t('common.retry') }}</t-button></p>
     <t-loading :loading="loading" show-overlay>
       <t-empty v-if="!domains.length && !loading && !error" :description="t('domains.empty')" />

@@ -39,6 +39,7 @@ func TestIngestContractMigrationUpDownUpAndPreservation(t *testing.T) {
 	// Every preexisting table, row and column remains exact, including nonregenerable data.
 	projectRetiredSnapshot(before, after.schemaVersion)
 	projectDomainSnapshot(before, after.schemaVersion)
+	projectUnderstandingSnapshot(before, after.schemaVersion)
 	for table, rows := range before.Tables {
 		if table == "schema_migrations" || table == "library_relation_types" {
 			continue

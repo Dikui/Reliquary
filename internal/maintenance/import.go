@@ -268,6 +268,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	}
 	projectRetiredSnapshot(snapshot, targetVersion)
 	projectDomainSnapshot(snapshot, targetVersion)
+	projectUnderstandingSnapshot(snapshot, targetVersion)
 	order, err := replicaImportOrder(db, snapshot)
 	if err != nil {
 		return nil, err

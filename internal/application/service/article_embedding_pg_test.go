@@ -85,7 +85,7 @@ func TestArticleChunkPrefixDoesNotEnterStoredBodyOrFullText(t *testing.T) {
 		if chunk.ChunkType == types.ChunkTypeParentText {
 			continue
 		}
-		prefix := article.Title + " · Acme · 2026-10-01\n"
+		prefix := "Vector context.md · Acme · 2026-10-01\n"
 		require.Contains(t, inputs, prefix+chunk.Content)
 		require.NotContains(t, chunk.Content, prefix)
 		require.NotContains(t, chunk.ContextHeader, " · ")
@@ -132,7 +132,7 @@ func TestArticleChunkPrefixOmitsMissingPublicationDate(t *testing.T) {
 	require.NotEmpty(t, chunks)
 	for _, chunk := range chunks {
 		if chunk.ChunkType != types.ChunkTypeParentText {
-			require.Contains(t, e.recorded(), article.Title+" · Undated publisher\n"+chunk.Content)
+			require.Contains(t, e.recorded(), "Undated article.md · Undated publisher\n"+chunk.Content)
 		}
 	}
 	var date struct{ SearchPublishedAt *time.Time }
@@ -196,13 +196,14 @@ func TestImportedDocumentHasSummaryVectorsAndReportsKeepChunkPrefixes(t *testing
 	for _, pair := range []struct {
 		entry          *types.Entry
 		label          string
+		sourceTitle    string
 		summaryVectors int64
-	}{{mine, "本人", 1}, {report.Entry, "整理结果", 0}} {
+	}{{mine, "本人", "Personal notebook", 1}, {report.Entry, "整理结果", "Synthesis", 0}} {
 		var chunks []types.Chunk
 		require.NoError(t, h.db.Where("entry_id=?", pair.entry.ID).Find(&chunks).Error)
 		require.NotEmpty(t, chunks)
 		for _, chunk := range chunks {
-			require.Contains(t, e.recorded(), pair.entry.Title+" · "+pair.label+"\n"+chunk.Content)
+			require.Contains(t, e.recorded(), pair.sourceTitle+" · "+pair.label+"\n"+chunk.Content)
 			require.NotContains(t, chunk.Content, pair.label)
 		}
 		var count int64
@@ -211,7 +212,7 @@ func TestImportedDocumentHasSummaryVectorsAndReportsKeepChunkPrefixes(t *testing
 	}
 }
 
-func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t *testing.T) {
+func TestEntryHeaderFullTextIncludesEntitiesAliasesAndOverview(t *testing.T) {
 	h, _ := newArticleIndexingHarness(t)
 	h.processor.output = articleProcessingOutput(
 		t,
@@ -227,7 +228,8 @@ func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t
 	require.NoError(t, err)
 	intake.SourceInfo.Publisher, intake.SourceInfo.Author = "Publishermarker", "Authormarker"
 	require.NoError(t, article.SetIntakeMetadata(intake))
-	article.StructuredSummary = &types.EntrySummary{Overview: "Overviewmarker", Points: []string{"Pointmarker"}, KeyTerms: []string{"Termmarker"}}
+	article.Title = "Headermarker"
+	article.StructuredSummary = &types.EntrySummary{Overview: "Overviewmarker"}
 	require.NoError(t, h.db.Save(article).Error)
 	var vectors int64
 	require.NoError(t, h.db.Table("article_embeddings").Where("entry_id=?", article.ID).Count(&vectors).Error)
@@ -243,8 +245,6 @@ func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t
 		"Publishermarker",
 		"Authormarker",
 		"Overviewmarker",
-		"Pointmarker",
-		"Termmarker",
 		"Entitymarker",
 		"Aliasmarker",
 	} {

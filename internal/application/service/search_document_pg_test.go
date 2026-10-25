@@ -11,7 +11,7 @@ import (
 func TestImportedDocumentSearchUsesSummaryFilters(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	mine := h.add(t, "imported", "mine", "2026-10-01", "tutorial", "semanticlaunch", 0)
-	mine.StructuredSummary = &types.EntrySummary{Overview: "semanticlaunch", Points: []string{"Recorded procedure"}}
+	mine.StructuredSummary = &types.EntrySummary{Overview: "semanticlaunch"}
 	mine.Description = mine.StructuredSummary.RenderText()
 	mine.Starred = true
 	require.NoError(t, h.db.Save(mine).Error)

@@ -108,7 +108,7 @@ Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名�
 
 Embedding 模型编辑提供支持图片开关和 Jina 请求格式，模型卡显示图片能力。库模型页签使用 EmbeddingRebuild 展示全部向量重建的总数、完成数、失败数及暂停、继续、失败重试动作。检索结果与全局快捷搜索共用 SearchImage，沿用附件鉴权与主题变量，缩略图保留固定区域并提供加载和失败状态。大图预览共用 ImagePreview 与 TDesign ImageViewer，打开移入焦点，Esc、关闭按钮和遮罩关闭后返回触发元素。新增设置沿用现有 TDesign 行布局，不另建外观体系。
 
-文章列表和详情共用 EntryClassification 展示处理方式、概述、要点、关键名词和实体。列表用紧凑字号保留三部分摘要，卡片随内容自然增高。实体是可聚焦的按钮。所有文章显示可换行的安全原文链接和已保存的 Markdown 正文。
+文章列表和详情共用 EntryClassification 展示处理方式、概述、领域和涉及的实体。列表用紧凑字号显示一句话概述，卡片随内容自然增高。实体是可聚焦的按钮。所有文章显示可换行的安全原文链接和已保存的 Markdown 正文。
 
 知识检索页使用 /platform/search。查询框配合库、发布时间和星标筛选；资料逐篇显示。每篇文章只展示一条主结果，最多三个命中片段，文章提供原文入口。缺失发布时间的排除数量在结果区说明。全局搜索继续作为快捷入口，API 集成页的 Playground 使用相同参数。筛选与结果沿用现有主题变量，窄屏自然换行。
 
@@ -157,4 +157,4 @@ Source: CONTEXT.md and docs/adr/0016-store-and-track-event-layer.md. `/platform/
 
 Material details show domains through EntryClassification. EntryDomainsEditor and EntryEntitiesEditor use EntryAssociationsEditor for 0–3 selections, a manual marker, busy state, inline errors, retry and draft protection. Empty selections are also manual choices. Saved association events update only the association fields, preserving the current title and library label.
 
-The material list has one grouped TDesign Select for entities and domains. It uses distinct entity and domain values and persists entity_ids and domain_ids in the URL. Entity conditions intersect with domain conditions; options within either kind are alternatives, matching the existing search contract. Publication dates, library scope and stars still compose with those conditions. Bulk scope summaries include both kinds and the server counts the same filters. Returning from maintenance refreshes available options. No event filtering or domain reclassification controls are introduced before their corresponding implementation tasks.
+The material list has one grouped TDesign Select for entities and domains. It uses distinct entity and domain values and persists entity_ids and domain_ids in the URL. Entity conditions intersect with domain conditions; options within either kind are alternatives, matching the existing search contract. Publication dates, library scope and stars still compose with those conditions. Bulk scope summaries include both kinds and the server counts the same filters. Returning from maintenance refreshes available options. Domain reclassification opens EntryBatchDialog with all existing materials across all libraries. The preview fixes membership on submission and names skipped manual domain choices. The background task changes only domains, exposes per-item results and retries, and preserves titles, overviews, entities, content and indexes. Event filters remain a later task.

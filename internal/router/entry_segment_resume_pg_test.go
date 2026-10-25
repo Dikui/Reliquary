@@ -23,7 +23,7 @@ type resumeHTTPChat struct {
 
 func (m *resumeHTTPChat) Chat(ctx context.Context, messages []chat.Message, options *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
-	if stage != "article_processing" {
+	if stage != "entry_understanding" {
 		return m.mcpFixtureChat.Chat(ctx, messages, options)
 	}
 	var input struct {

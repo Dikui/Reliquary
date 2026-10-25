@@ -143,8 +143,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const result = descendants(mounted.root).find(node => node.props['data-article-id'] === 'new')!
       const image = locale === 'zh-CN' ? '[图片]' : '[Image]'
       assert.ok(visibleText(result).includes(`Overview ${image}`))
-      assert.ok(visibleText(result).includes('Point'))
-      assert.ok(visibleText(result).includes('Term'))
+      assert.equal(visibleText(result).includes('Point'), false)
+      assert.equal(visibleText(result).includes('Term'), false)
       const snippet = descendants(result).find(node => node.tag === 'span' && node.props.innerHTML)?.props.innerHTML
       assert.ok(snippet.includes(`code ${image} ${image} HTML`))
       assert.match(snippet, /Feed heading/)

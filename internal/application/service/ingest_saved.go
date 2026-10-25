@@ -81,8 +81,17 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		entry.CustomMetadata = existing.CustomMetadata
 		entry.EntitiesManual = existing.EntitiesManual
 		entry.DomainsManual = existing.DomainsManual
+		entry.TitleManual, entry.DescriptionManual = existing.TitleManual, existing.DescriptionManual
+		if existing.DescriptionManual {
+			entry.Description, entry.StructuredSummary = existing.Description, existing.StructuredSummary
+		}
 		entry.RelatedEntryID = existing.RelatedEntryID
-		if request.Title == "" {
+		original, err := existing.IntakeMetadata()
+		if err != nil {
+			return nil, err
+		}
+		sameSourceTitle := original != nil && original.SourceTitle != "" && original.SourceTitle == request.Title
+		if request.Title == "" || existing.TitleManual || sameSourceTitle {
 			entry.Title, entry.FileName = existing.Title, existing.FileName
 		}
 		if request.SourceRef == "" {
@@ -120,6 +129,9 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 	}
 	if intake == nil {
 		intake = &types.EntryIntakeMetadata{Source: "ingest"}
+	}
+	if request.Title != "" {
+		intake.SourceTitle = request.Title
 	}
 	intake.Decision, intake.Reason, intake.OriginalPath, intake.UserRejected = "approved", "", "", false
 	intake.SourceInfo.OriginalURL = entry.Source
@@ -176,6 +188,7 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 		oldSource, _ := json.Marshal(before.SourceInfo)
 		newSource, _ := json.Marshal(after.SourceInfo)
 		if strings.TrimSuffix(existing.VaultBody, "\n") == strings.TrimSuffix(body, "\n") && existing.Title == entry.Title && existing.Acquisition == entry.Acquisition &&
+			before.SourceTitle == after.SourceTitle &&
 			existing.SourceRef == entry.SourceRef && existing.Identifier == entry.Identifier &&
 			existing.CollectReason == entry.CollectReason &&
 			existing.AgentSummary == entry.AgentSummary && bytes.Equal(existing.AgentTags, entry.AgentTags) &&

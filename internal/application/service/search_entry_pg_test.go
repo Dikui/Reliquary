@@ -98,7 +98,7 @@ func (h *entrySearchFixture) add(t *testing.T, id, source, date, contentType, se
 		VaultPath: source + "/" + id + ".md",
 	}
 	if source == "article" {
-		article.StructuredSummary = &types.EntrySummary{Overview: semantic, Points: []string{"Evidence point"}, KeyTerms: []string{"Termneedle" + id}}
+		article.StructuredSummary = &types.EntrySummary{Overview: semantic}
 		article.Description = article.StructuredSummary.RenderText()
 	} else {
 	}
@@ -180,7 +180,6 @@ func TestEntrySearchPostgresHeaderTermsAndAssociations(t *testing.T) {
 	for _, term := range []string{
 		"Canonicalneedle",
 		"Aliasneedle",
-		"Termneedlesummary",
 		"Publisherneedlesummary",
 		"Authorneedlesummary",
 	} {

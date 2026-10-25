@@ -1,6 +1,9 @@
 import { ikb18En } from './ikb18'
 export default {
   domains: {
+    reclassify: 'Reclassify domains for existing materials',
+    reclassifyScope: 'Existing materials in all libraries',
+    reclassifyHint: 'Reclassify in the background using the current domains. Skip manually edited domain choices. Only domains change; titles, overviews, entities, content and indexes are retained. Model calls may incur charges.',
     "title": "Domains",
     "description": "Maintain shared directions and a one-sentence definition for each. Adding a domain does not change existing materials.",
     "create": "Add domain",
@@ -96,6 +99,7 @@ export default {
   "snapshotHint": "The server fixes the matching set when you confirm submission. Newly collected materials will not join this batch.",
   "action": "Action",
   "actions": {
+    "reclassify_domains": 'Reclassify domains for existing materials',
     "delete": "Delete",
     "reprocess": "Reprocess",
     "review": "Historical review",
@@ -141,6 +145,7 @@ export default {
     "warning": "Completed with warning"
   },
   "reasons": {
+    "domains_manual": 'Domains manually edited',
       material_busy: 'Material is reserved by another batch',
     "unavailable": "Material unavailable",
     "deleting": "Material is being deleted",
@@ -407,7 +412,8 @@ export default {
     "purposes": {
 
         "intakeReview": "Intake review",
-        "processing": "Material processing",
+        "processing": "Material understanding",
+        "articleProcessing": "Historical call: material processing",
         "segmentMerge": "Segment merge",
         "imageDescription": "Image description",
         "entityResolution": "Historical call: entity resolution",
@@ -844,8 +850,6 @@ export default {
 
 
     summaryOverview: "Overview",
-    summaryPoints: "Key points",
-    summaryKeyTerms: "Key terms",
     articleEntities: "Entities",
 
     reportAssociations: "Related content",

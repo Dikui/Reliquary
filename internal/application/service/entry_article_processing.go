@@ -25,12 +25,9 @@ import (
 
 func articleProcessingPrompt() string {
 	return config.Prompt("article_processing") + `
-输出所有字段，格式：{"title":"资料标题",
-"summary":{"overview":"一句话概述",
-"points":["要点一",
-"要点二",
-"要点三"],
-"key_terms":["关键名词"]}}
+输出所有字段，格式：{"title":"中文资料标题",
+"summary":{"overview":"中文一句话概述"},"domain_ids":[],"entity_ids":[]}。
+domain_ids 和 entity_ids 分别只能选 domain_options、entity_options 中的 ID，各选 0–3 个，不匹配时返回空数组。
 segment 是本段在整篇资料中的位置。只分析本段，context_before 仅作衔接上下文。`
 }
 
@@ -46,6 +43,8 @@ type articleProcessingResult struct {
 	Title            string                           `json:"title,omitempty"`
 	Images           []types.ProcessingImage          `json:"images_result,omitempty"`
 	Summary          *types.EntrySummary              `json:"summary"`
+	DomainIDs        []string                         `json:"domain_ids"`
+	EntityIDs        []string                         `json:"entity_ids"`
 	Entities         []articleProcessingEntity        `json:"entities"`
 	Provenance       *articleProcessingProvenance     `json:"provenance,omitempty"`
 	Extensions       map[string][]SegmentContribution `json:"extensions,omitempty"`
@@ -54,14 +53,16 @@ type articleProcessingResult struct {
 }
 
 type articleProcessingInput struct {
-	Images        []processingImageInput `json:"images"`
-	Author        string                 `json:"author"`
-	Segment       any                    `json:"segment,omitempty"`
-	Title         string                 `json:"title"`
-	Publisher     string                 `json:"publisher"`
-	PublishedAt   string                 `json:"published_at"`
-	Body          string                 `json:"body"`
-	BodyTruncated bool                   `json:"body_truncated"`
+	DomainOptions []understandingDomainOption `json:"domain_options"`
+	EntityOptions []understandingEntityOption `json:"entity_options"`
+	Images        []processingImageInput      `json:"images"`
+	Author        string                      `json:"author"`
+	Segment       any                         `json:"segment,omitempty"`
+	Title         string                      `json:"title"`
+	Publisher     string                      `json:"publisher"`
+	PublishedAt   string                      `json:"published_at"`
+	Body          string                      `json:"body"`
+	BodyTruncated bool                        `json:"body_truncated"`
 }
 
 func articleTitleForProcessing(k *types.Entry) string {
@@ -74,24 +75,74 @@ func articleTitleForProcessing(k *types.Entry) string {
 }
 
 func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) {
+	var fields map[string]json.RawMessage
+	if err := utils.ParseLLMJsonResponse(raw, &fields); err != nil {
+		return nil, fmt.Errorf("entry understanding output is not valid JSON: %w", err)
+	}
+	domainIDs, entityIDs := understandingIDs(fields["domain_ids"]), understandingIDs(fields["entity_ids"])
+	delete(fields, "domain_ids")
+	delete(fields, "entity_ids")
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		return nil, err
+	}
 	var result articleProcessingResult
-	if err := utils.ParseLLMJsonResponse(raw, &result); err != nil {
+	if err := json.Unmarshal(encoded, &result); err != nil {
 		return nil, fmt.Errorf("article processing output is not valid JSON: %w", err)
 	}
 	result.Title = strings.TrimSpace(result.Title)
+	result.DomainIDs, result.EntityIDs = domainIDs, entityIDs
 	if len([]rune(result.Title)) > 255 || strings.ContainsAny(result.Title, "\r\n\x00") {
 		return nil, errors.New("article processing title must be a single line of at most 255 characters without NUL")
 	}
 	if result.Summary == nil ||
-		strings.TrimSpace(result.Summary.Overview) == "" || result.Summary.Points == nil || result.Summary.KeyTerms == nil {
+		strings.TrimSpace(result.Summary.Overview) == "" {
 		return nil, errors.New("article processing output is missing required fields")
 	}
-	for _, point := range result.Summary.Points {
-		if strings.TrimSpace(point) == "" {
-			return nil, errors.New("article processing summary contains an empty point")
+	result.Summary.Overview = strings.TrimSpace(result.Summary.Overview)
+	return &result, nil
+}
+
+// Invalid items are discarded independently, including values of the wrong JSON type.
+func understandingIDs(raw json.RawMessage) []string {
+	var values []json.RawMessage
+	_ = json.Unmarshal(raw, &values)
+	ids := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		var id string
+		if json.Unmarshal(value, &id) == nil && id != "" && !seen[id] {
+			ids = append(ids, id)
+			seen[id] = true
 		}
 	}
-	return &result, nil
+	return ids
+}
+
+func qualifyUnderstandingChoices(result *articleProcessingResult, input articleProcessingInput) {
+	domains, entities := map[string]bool{}, map[string]bool{}
+	for _, option := range input.DomainOptions {
+		domains[option.ID] = true
+	}
+	for _, option := range input.EntityOptions {
+		entities[option.ID] = true
+	}
+	result.DomainIDs = acceptedUnderstandingIDs(result.DomainIDs, domains)
+	result.EntityIDs = acceptedUnderstandingIDs(result.EntityIDs, entities)
+}
+
+func acceptedUnderstandingIDs(ids []string, options map[string]bool) []string {
+	accepted := []string{}
+	for _, id := range ids {
+		if options[id] {
+			accepted = append(accepted, id)
+			delete(options, id)
+			if len(accepted) == 3 {
+				break
+			}
+		}
+	}
+	return accepted
 }
 
 const modelOutputCorrectionReserve = 512
@@ -227,7 +278,7 @@ func (s *entryService) processingImageDataURI(ctx context.Context, library *type
 
 func (s *entryService) callArticleProcessingPart(ctx context.Context, library *types.Library, k *types.Entry, body string, stored []docparser.StoredImage, segment any, imageRefs ...[]docparser.MarkdownImageReference) (*articleProcessingResult, error) {
 	ctx = types.WithModelCallEntry(ctx, k.ID)
-	ctx = types.WithLLMCallMetadata(ctx, "article_processing", "")
+	ctx = types.WithLLMCallMetadata(ctx, "entry_understanding", "")
 	input, prompt, model, err := s.prepareArticleProcessing(ctx, library, k)
 	if err != nil {
 		return nil, err
@@ -274,10 +325,11 @@ func (s *entryService) callArticleProcessingPart(ctx context.Context, library *t
 		if err != nil {
 			return err
 		}
-		if input.Title == "" && result.Title == "" {
+		if result.Title == "" {
 			return errors.New("article processing output is missing a generated title")
 		}
 		result.Images = imageRecords
+		qualifyUnderstandingChoices(result, input)
 		return nil
 	})
 	if err != nil {
@@ -374,7 +426,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		k.Title, k.FileName = current.Title, current.FileName
 		k.SourceUnverified = current.SourceUnverified
 	}
-	if articleTitleForProcessing(k) == "" && result.Title != "" {
+	if result.Title != "" {
 		k.Title = result.Title
 		k.FileName = sanitizeManualDownloadFilename(k.Title)
 	}
@@ -385,6 +437,9 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		return err
 	}
 	if s.db != nil {
+		if err := s.saveUnderstandingChoices(ctx, k, result, false); err != nil {
+			return err
+		}
 		result.Entities = nil
 		result.ResolvedEntities = nil
 		if err := s.saveProcessingOutput(ctx, k, body, result); err != nil {

@@ -1,6 +1,9 @@
 import { ikb18Zh } from './ikb18'
 export default {
   domains: {
+    reclassify: '对已有资料重新判定领域',
+    reclassifyScope: '所有库的已有资料',
+    reclassifyHint: '使用当前领域清单在后台重新判定，跳过人工修改过领域的资料。只更新领域，保留标题、概述、实体、正文与索引；可能产生模型费用。',
     "title": "领域",
     "description": "维护资料的方向清单与一句定义，所有库共用。新增领域不会自动修改已有资料。",
     "create": "新增领域",
@@ -96,6 +99,7 @@ export default {
   "snapshotHint": "服务器将在确认提交时固定匹配集合。新入库资料不会加入本批次。",
   "action": "操作",
   "actions": {
+    "reclassify_domains": '对已有资料重新判定领域',
     "delete": "删除",
     "reprocess": "重新处理",
     "review": "历史审核",
@@ -141,6 +145,7 @@ export default {
     "warning": "完成但有警告"
   },
   "reasons": {
+    "domains_manual": '领域已人工修改',
       material_busy: '资料已被其他批次占用',
     "unavailable": "资料不存在或不可用",
     "deleting": "资料正在删除",
@@ -407,7 +412,8 @@ export default {
     "purposes": {
 
         "intakeReview": "收录审核",
-        "processing": "资料处理",
+        "processing": "资料理解",
+        "articleProcessing": "历史调用：资料处理",
         "segmentMerge": "分段合并",
         "imageDescription": "图片说明",
         "entityResolution": "历史调用：实体归一",
@@ -2355,8 +2361,6 @@ export default {
 
 
     summaryOverview: "概述",
-    summaryPoints: "要点",
-    summaryKeyTerms: "关键名词",
     articleEntities: "实体",
 
     reportAssociations: "关联内容",

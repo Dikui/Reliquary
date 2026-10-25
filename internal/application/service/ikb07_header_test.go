@@ -22,7 +22,7 @@ func TestIKB07AllHeaderFieldsHaveOneOrder(t *testing.T) {
 
 		Entities: []string{"[[B]]", "[[A]]"},
 
-		Summary:          &types.EntrySummary{Overview: "概述", Points: []string{"要点"}, KeyTerms: []string{"名词"}},
+		Summary:          &types.EntrySummary{Overview: "概述"},
 		CollectReason:    "理由",
 		Acquisition:      "verbatim",
 		SourceRef:        "source",

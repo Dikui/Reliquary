@@ -49,14 +49,11 @@ func (m *correctedProcessingChat) Chat(ctx context.Context, messages []chat.Mess
 	if err != nil {
 		return nil, err
 	}
-	if m.calls[stage] == 1 {
-		result.Summary.Points = result.Summary.Points[:1]
-	}
 	raw, err := json.Marshal(result)
 	return &types.ChatResponse{Content: "```json\n" + string(raw) + "\n```"}, err
 }
 
-func TestProcessingModelOutputAcceptsFencesAndSinglePointSummary(t *testing.T) {
+func TestProcessingModelOutputAcceptsFencedUnderstanding(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	h.service.config.ArticleProcessing.MaxBodyChars = 140
 	k := segmentedEntry(t, h)
@@ -69,21 +66,20 @@ func TestProcessingModelOutputAcceptsFencesAndSinglePointSummary(t *testing.T) {
 	require.True(t, approved)
 	result, err := h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
-	require.Len(t, result.Summary.Points, 1)
 	require.Equal(t, "Acme announces a widget", result.Title, "the merge returns a title for the whole document")
 	require.Equal(t, 1, model.calls["article_summary_merge"])
 	var run entrySegmentRun
 	require.NoError(t, h.db.Where("entry_id=? AND phase=?", k.ID, "processing").First(&run).Error)
 	var parts []segmentCheckpoint
 	require.NoError(t, json.Unmarshal(run.Plan, &parts))
-	require.Equal(t, len(parts), model.calls["article_processing"], "a single supported point is valid")
+	require.Equal(t, len(parts), model.calls["entry_understanding"], "each segment supplies an overview")
 }
 
 func TestSummaryMergeReservesSpaceForOutputCorrection(t *testing.T) {
 	h, model := segmentedHarness(t)
 	k := segmentedEntry(t, h)
 	parts := []*articleProcessingResult{{Summary: &types.EntrySummary{
-		Overview: strings.Repeat("x", 400), Points: []string{"one", "two", "three"}, KeyTerms: []string{},
+		Overview: strings.Repeat("x", 400),
 	}}}
 	metadata := &types.Model{Parameters: types.ModelParameters{ContextWindow: 1024, MaxOutputTokens: 16}}
 	_, err := h.service.mergeSegmentSummaries(h.ctx, h.library, k, parts, metadata)
@@ -106,7 +102,9 @@ func (m *articleProcessingChat) Chat(ctx context.Context, messages []chat.Messag
 	}
 	var input articleProcessingInput
 	var output map[string]any
-	if stage == "article_processing" && json.Unmarshal([]byte(messages[len(messages)-1].Content), &input) == nil && json.Unmarshal([]byte(m.output), &output) == nil {
+	if stage == "entry_understanding" &&
+		json.Unmarshal([]byte(messages[len(messages)-1].Content), &input) == nil &&
+		json.Unmarshal([]byte(m.output), &output) == nil {
 		captions := []extractedImage{}
 		for _, image := range input.Images {
 			captions = append(captions, extractedImage{Index: image.Index, Description: "Fixture chart shows deployment counts."})
@@ -352,7 +350,7 @@ func TestAllTemplatesIgnoreOpenEntityExtraction(t *testing.T) {
 	}
 }
 
-func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t *testing.T) {
+func TestArticleUnderstandingRetainsFullMarkdownAndBuildsVectors(t *testing.T) {
 	h := newArticleProcessingHarness(t, true)
 	h.processor.output = articleProcessingOutput(
 		t,
@@ -365,11 +363,9 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 		10,
 	) + ")"
 	article := h.upload(t, "first-event", body)
-	require.Equal(t, "first-event.md", article.Title, "processing preserves the supplied title")
+	require.Equal(t, "Acme announces a widget", article.Title, "understanding generates the display title")
 
 	require.NotNil(t, article.StructuredSummary)
-	require.Len(t, article.StructuredSummary.Points, 3)
-	require.NotEmpty(t, article.StructuredSummary.KeyTerms)
 	require.Contains(t, article.Description, article.StructuredSummary.Overview)
 	var chunks, links int64
 	require.NoError(t, h.db.Model(&types.Chunk{}).Where("entry_id=?", article.ID).Count(&chunks).Error)

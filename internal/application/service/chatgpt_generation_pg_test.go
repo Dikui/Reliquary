@@ -49,7 +49,7 @@ func (r chatGPTGenerationRequest) stage() string {
 	case strings.HasPrefix(r.Instructions, intakeReviewPrompt()):
 		return "intake_review"
 	case strings.HasPrefix(r.Instructions, articleProcessingPrompt()):
-		return "article_processing"
+		return "entry_understanding"
 	case strings.HasPrefix(r.Instructions, "Decide whether the source mention is the exact same real-world entity"):
 		return "entity_resolution"
 	default:
@@ -140,7 +140,7 @@ func newChatGPTGenerationHarness(t *testing.T, reply func(chatGPTGenerationReque
 		h.calls = append(h.calls, request)
 		h.mu.Unlock()
 		output, code := reply(request)
-		if code == "" && request.stage() == "article_processing" {
+		if code == "" && request.stage() == "entry_understanding" {
 			var input articleProcessingInput
 			var result map[string]any
 			if json.Unmarshal([]byte(request.userText()), &input) == nil && json.Unmarshal([]byte(output), &result) == nil {
@@ -220,7 +220,7 @@ func chatGPTGenerationSuccess(t *testing.T, request chatGPTGenerationRequest) (s
 	switch request.stage() {
 	case "intake_review":
 		return `{"approved":true,"reason":"Complete original publication"}`, ""
-	case "article_processing":
+	case "entry_understanding":
 		return articleProcessingOutput(t,
 				[]legacyEntityCandidate{{
 					Name:       "Fixture Acme",
@@ -246,7 +246,6 @@ func TestChatGPTGenerationRunsProcessingWithoutEntityJudgement(t *testing.T) {
 	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
 
 	require.NotNil(t, article.StructuredSummary)
-	require.Len(t, article.StructuredSummary.Points, 3)
 	intake, err := article.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
@@ -261,7 +260,7 @@ func TestChatGPTGenerationRunsProcessingWithoutEntityJudgement(t *testing.T) {
 		for _, input := range request.Input {
 			require.NotEqual(t, "system", input.Role)
 		}
-		if request.stage() == "article_processing" {
+		if request.stage() == "entry_understanding" {
 			require.True(t, strings.HasPrefix(request.Instructions, libraryProcessingPrompt(h.library, &types.Entry{})))
 			require.Len(t, request.Input, 1)
 			require.Len(t, request.Input[0].Content, 2)
@@ -269,7 +268,7 @@ func TestChatGPTGenerationRunsProcessingWithoutEntityJudgement(t *testing.T) {
 			require.Equal(t, image, request.Input[0].Content[1].ImageURL)
 		}
 	}
-	require.Equal(t, []string{"article_processing"}, stages)
+	require.Equal(t, []string{"entry_understanding"}, stages)
 	policy, err := h.policy.Get(h.ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, policy.DailyUsed)
@@ -279,7 +278,7 @@ func TestChatGPTGenerationRunsProcessingWithoutEntityJudgement(t *testing.T) {
 
 func TestChatGPTQuotaDefersEnrichmentAndPreservesSearchableBody(t *testing.T) {
 	for _, code := range []string{"subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable"} {
-		for _, stage := range []string{"article_processing"} {
+		for _, stage := range []string{"entry_understanding"} {
 			t.Run(code+"/"+stage, func(t *testing.T) {
 				var quota atomic.Bool
 				quota.Store(true)
@@ -347,7 +346,7 @@ func TestChatGPTQuotaIsHandledAfterIngestAndKeepsBodySearchable(t *testing.T) {
 	var quota atomic.Bool
 	quota.Store(true)
 	h := newChatGPTGenerationHarness(t, func(request chatGPTGenerationRequest) (string, string) {
-		if quota.Load() && request.stage() == "article_processing" {
+		if quota.Load() && request.stage() == "entry_understanding" {
 			return "", "subscription_sharing_usage_limit_exceeded"
 		}
 		return chatGPTGenerationSuccess(t, request)

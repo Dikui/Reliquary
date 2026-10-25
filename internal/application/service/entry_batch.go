@@ -103,7 +103,7 @@ func validateBatchRequest(req types.EntryBatchRequest) error {
 		return apperrors.NewBadRequestError("select either ids or filters")
 	}
 	switch req.Action {
-	case "delete", "reprocess":
+	case "delete", "reprocess", "reclassify_domains":
 	case "star":
 		if req.Starred == nil {
 			return apperrors.NewBadRequestError("starred is required")
@@ -200,10 +200,12 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 		blocked := false
 		if entry.ParseStatus == types.ParseStatusDeleting {
 			reason = "deleting"
-		} else if busy[entry.LibraryID] && (req.Action == "review" || req.Action == "reprocess") {
+		} else if req.Action == "reclassify_domains" && entry.DomainsManual {
+			reason = "domains_manual"
+		} else if busy[entry.LibraryID] && batchProcessesEntries(req.Action) {
 			reason = "library_busy"
 			blocked = true
-		} else if (req.Action == "review" || req.Action == "reprocess") &&
+		} else if batchProcessesEntries(req.Action) &&
 			(entry.ParseStatus == types.ParseStatusPending || entry.ParseStatus == types.ParseStatusProcessing ||
 				entry.ParseStatus == types.ParseStatusFinalizing) {
 			reason = "processing"
@@ -211,7 +213,7 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 		}
 		if reason == "" {
 			switch req.Action {
-			case "review", "reprocess":
+			case "review", "reprocess", "reclassify_domains":
 				library, e := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
 				if e != nil {
 					return nil, nil, e
@@ -583,6 +585,35 @@ func (s *entryService) executeBatchItem(ctx context.Context, p types.EntryBatchP
 		return err
 	case "star":
 		return s.withTaskObject(ctx, item.EntryID, func(ctx context.Context) error { _, err := s.SetStarred(ctx, item.EntryID, *req.Starred); return err })
+	case "reclassify_domains":
+		if current.DomainsManual {
+			item.Status, item.Message = "skipped", "domains_manual"
+			return nil
+		}
+		library, err := s.libraryService.GetLibraryByID(ctx, current.LibraryID)
+		if err != nil {
+			return err
+		}
+		body, available, err := s.reprocessStoredBody(ctx, &current)
+		if err != nil {
+			return err
+		}
+		if !available {
+			return errors.New("material body unavailable")
+		}
+		ctx = context.WithValue(ctx, domainReclassificationKey{}, fmt.Sprintf("%s:%d", p.BatchID, item.Attempt))
+		result, err := s.callArticleProcessing(ctx, library, &current, body, nil)
+		if err != nil {
+			return err
+		}
+		if err := s.saveUnderstandingChoices(ctx, &current, result, true); err != nil {
+			if errors.Is(err, errManualDomainChoice) {
+				item.Status, item.Message = "skipped", "domains_manual"
+				return nil
+			}
+			return err
+		}
+		return nil
 	case "reprocess", "review":
 		run := fmt.Sprintf("%s:%d", p.BatchID, item.Attempt)
 		child := types.EntryListReparsePayload{SpaceID: p.SpaceID, LibraryID: item.LibraryID, Initiator: p.Initiator}
@@ -656,7 +687,7 @@ func (s *entryService) RetryEntryBatch(ctx context.Context, id string) (*types.E
 				}
 				busy := false
 				var err error
-				if payload.Request.Action == "review" || payload.Request.Action == "reprocess" {
+				if batchProcessesEntries(payload.Request.Action) {
 					busy, err = copy.libraryBatchBusy(ctx, payload.SpaceID, item.LibraryID, id)
 				}
 				if err != nil {
@@ -690,6 +721,10 @@ func (s *entryService) RetryEntryBatch(ctx context.Context, id string) (*types.E
 		return nil, err
 	}
 	return s.GetEntryBatchResult(ctx, id, 1, 20)
+}
+
+func batchProcessesEntries(action string) bool {
+	return action == "review" || action == "reprocess" || action == "reclassify_domains"
 }
 
 // Recover ledger state after a terminal dispatcher failure without interrupting live children.

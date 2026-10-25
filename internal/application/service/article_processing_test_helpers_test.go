@@ -33,14 +33,9 @@ func validProcessingFixture() string {
 		"title": "Acme announces a widget",
 		"summary": map[string]interface{}{
 			"overview": "Acme reports an original product announcement and its deployment capabilities.",
-			"points": []string{
-				"The product has been announced.",
-				"Deployment capabilities are described.",
-				"Original measurements are supplied.",
-			},
-			"key_terms": []string{"Acme", "widget"},
 		},
-		"entities": []interface{}{},
+		"domain_ids": []string{},
+		"entity_ids": []string{},
 	}
 	raw, _ := json.Marshal(result)
 	return string(raw)

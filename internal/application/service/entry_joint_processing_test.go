@@ -57,7 +57,7 @@ func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message,
 	if stage == "article_summary_merge" {
 		return &types.ChatResponse{Content: validProcessingFixture()}, nil
 	}
-	if stage != "article_processing" {
+	if stage != "entry_understanding" {
 		return &types.ChatResponse{Content: `{"decision":"new","confidence":1}`}, nil
 	}
 	m.calls++

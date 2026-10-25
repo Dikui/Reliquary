@@ -38,7 +38,7 @@ func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts 
 		}
 		return &types.ChatResponse{Content: "```json\n" + validProcessingFixture() + "\n```"}, nil
 	}
-	if stage != "intake_review" && stage != "article_processing" {
+	if stage != "intake_review" && stage != "entry_understanding" {
 		return &types.ChatResponse{Content: `{"decision":"new","confidence":1}`}, nil
 	}
 	if stage == "intake_review" && strings.Contains(messages[0].Content, "你负责全文汇总审核") {
@@ -66,7 +66,7 @@ func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts 
 	if err := json.Unmarshal([]byte(messages[len(messages)-1].Content), &input); err != nil {
 		return nil, err
 	}
-	if stage != "intake_review" && stage != "article_processing" {
+	if stage != "intake_review" && stage != "entry_understanding" {
 		return &types.ChatResponse{Content: `{"decision":"new","confidence":1}`}, nil
 	}
 	if m.calls == nil {
@@ -144,9 +144,9 @@ func TestSegmentProcessingRetryAndMerge(t *testing.T) {
 	m.fail = 0
 	result, err := restarted.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, m.calls["article_processing"][1])
-	require.Equal(t, 1, m.calls["article_processing"][2])
-	require.Equal(t, 2, m.calls["article_processing"][3])
+	require.Equal(t, 1, m.calls["entry_understanding"][1])
+	require.Equal(t, 1, m.calls["entry_understanding"][2])
+	require.Equal(t, 2, m.calls["entry_understanding"][3])
 	require.Equal(t, 1, m.mergeCalls)
 	require.Empty(t, result.Entities)
 
@@ -156,12 +156,12 @@ func TestSegmentProcessingRetryAndMerge(t *testing.T) {
 	require.Equal(t, 1, m.mergeCalls)
 	_, err = restarted.callArticleProcessing(h.ctx, h.library, k, body+" changed", nil)
 	require.NoError(t, err)
-	require.Equal(t, 2, m.calls["article_processing"][1])
+	require.Equal(t, 2, m.calls["entry_understanding"][1])
 	require.Equal(t, 2, m.mergeCalls)
 	h.service.config.ArticleProcessing.SegmentOverlapChars = 3
 	_, err = restarted.callArticleProcessing(h.ctx, h.library, k, body+" changed", nil)
 	require.NoError(t, err)
-	require.Equal(t, 3, m.calls["article_processing"][1])
+	require.Equal(t, 3, m.calls["entry_understanding"][1])
 	require.Equal(t, 3, m.mergeCalls)
 }
 
@@ -209,7 +209,7 @@ func TestShortArticleStillOneCall(t *testing.T) {
 	k := segmentedEntry(t, h)
 	_, err := h.service.callArticleProcessing(h.ctx, h.library, k, "Short complete body", nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, m.calls["article_processing"][1])
+	require.Equal(t, 1, m.calls["entry_understanding"][1])
 	require.Zero(t, m.mergeCalls)
 }
 
@@ -254,18 +254,18 @@ func TestSegmentEvidenceNumberingFitsModelContext(t *testing.T) {
 	models.metadata.Parameters.ContextWindow = 16000
 	_, err := h.service.callArticleProcessing(h.ctx, h.library, k, strings.Repeat("- x\n", 1500), nil)
 	require.NoError(t, err)
-	require.Greater(t, len(m.calls["article_processing"]), 1)
+	require.Greater(t, len(m.calls["entry_understanding"]), 1)
 	require.Equal(t, 1, m.mergeCalls)
 }
 
 func TestSegmentExplicitCompletedReparseStartsNewRun(t *testing.T) {
 	h, m := segmentedHarness(t)
 	article := h.upload(t, "explicit-rerun", "# Original\n\n"+strings.Repeat("Complete original material. ", 15))
-	firstCalls := m.calls["article_processing"][1]
+	firstCalls := m.calls["entry_understanding"][1]
 	_, err := h.service.ReparseEntry(h.ctx, article.ID, nil)
 	require.NoError(t, err)
 	h.drain(t)
-	require.Equal(t, firstCalls+1, m.calls["article_processing"][1])
+	require.Equal(t, firstCalls+1, m.calls["entry_understanding"][1])
 	var runs int64
 	require.NoError(t, h.db.Model(&entrySegmentRun{}).Where("entry_id=? AND phase='processing'", article.ID).Count(&runs).Error)
 	require.EqualValues(t, 2, runs)
@@ -290,8 +290,8 @@ func TestSegmentLongIngestCommitsBeforeProcessingAndResumes(t *testing.T) {
 	require.Equal(t, "completed", plan[0].Status)
 	m.fail = 0
 	require.NoError(t, h.service.ProcessManualUpdate(h.ctx, h.queue.tasks[0]))
-	require.Equal(t, 1, m.calls["article_processing"][1])
-	require.Equal(t, 2, m.calls["article_processing"][2])
+	require.Equal(t, 1, m.calls["entry_understanding"][1])
+	require.Equal(t, 2, m.calls["entry_understanding"][2])
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, result.EntryID).ParseStatus)
 }
 
@@ -314,7 +314,7 @@ func TestSegmentAsyncReviewRejectionCannotBlockStoredBody(t *testing.T) {
 	require.Empty(t, intake.Reason)
 	require.Equal(t, "approved", intake.Decision)
 	require.Empty(t, m.calls["intake_review"])
-	require.NotEmpty(t, m.calls["article_processing"])
+	require.NotEmpty(t, m.calls["entry_understanding"])
 }
 
 func TestSegmentUnverifiedFingerprintRepeatsOldWorkAndThenRetainsVerifiedCheckpoints(t *testing.T) {
@@ -335,14 +335,14 @@ func TestSegmentUnverifiedFingerprintRepeatsOldWorkAndThenRetainsVerifiedCheckpo
 	require.NoError(t, h.db.Model(&entrySegmentRun{}).Where("entry_id=? AND phase='processing'", k.ID).Update("plan_hash", legacy).Error)
 	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.Error(t, err)
-	require.Equal(t, 2, model.calls["article_processing"][1], "unverified checkpoints cannot bypass verification")
+	require.Equal(t, 2, model.calls["entry_understanding"][1], "unverified checkpoints cannot bypass verification")
 	var upgraded entrySegmentRun
 	require.NoError(t, h.db.Where("entry_id=? AND phase='processing'", k.ID).Order("created_at DESC,id DESC").First(&upgraded).Error)
 	require.NotEqual(t, legacy, upgraded.PlanHash)
 	model.fail = 0
 	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
-	require.Equal(t, 2, model.calls["article_processing"][1], "resuming retains verified checkpoints")
+	require.Equal(t, 2, model.calls["entry_understanding"][1], "resuming retains verified checkpoints")
 	var runs int64
 	require.NoError(t, h.db.Model(&entrySegmentRun{}).Where("entry_id=? AND phase='processing'", k.ID).Count(&runs).Error)
 	require.EqualValues(t, 2, runs)

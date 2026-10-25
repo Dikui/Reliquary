@@ -18,7 +18,7 @@ type cancelOwnSegmentChat struct {
 func (m *cancelOwnSegmentChat) Chat(ctx context.Context, messages []chat.Message, options *chat.ChatOptions) (*types.ChatResponse, error) {
 	response, err := m.segmentedChat.Chat(ctx, messages, options)
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
-	if err == nil && stage == "article_processing" && m.onResult != nil {
+	if err == nil && stage == "entry_understanding" && m.onResult != nil {
 		m.onResult()
 		m.onResult = nil
 	}
@@ -39,12 +39,12 @@ func TestOwnCancellationStopsBeforeTheNextSegmentAndResumes(t *testing.T) {
 	models.summaryStateModelService.model = m
 	_, err := h.service.callArticleProcessing(h.ctx, h.library, k, k.VaultBody, nil)
 	require.ErrorIs(t, err, context.Canceled)
-	require.Len(t, m.calls["article_processing"], 1)
+	require.Len(t, m.calls["entry_understanding"], 1)
 	require.Equal(t, types.ParseStatusCancelled, h.article(t, k.ID).ParseStatus)
 	_, err = h.service.ReparseEntry(h.ctx, k.ID, nil)
 	require.NoError(t, err)
 	h.drain(t)
-	require.Equal(t, 1, m.calls["article_processing"][1])
+	require.Equal(t, 1, m.calls["entry_understanding"][1])
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, k.ID).ParseStatus)
 }
 
@@ -71,9 +71,9 @@ func TestOwnReprocessAfterFailureAndCancellationReusesCompletedSegments(t *testi
 	m.fail = 0
 	h.drain(t)
 	require.Equal(t, types.ParseStatusCompleted, h.article(t, k.ID).ParseStatus)
-	require.Equal(t, 1, m.calls["article_processing"][1])
-	require.Equal(t, 1, m.calls["article_processing"][2])
-	require.Equal(t, 2, m.calls["article_processing"][3])
+	require.Equal(t, 1, m.calls["entry_understanding"][1])
+	require.Equal(t, 1, m.calls["entry_understanding"][2])
+	require.Equal(t, 2, m.calls["entry_understanding"][3])
 }
 
 func TestGeneratedReparseRunsProcessing(t *testing.T) {
@@ -84,7 +84,7 @@ func TestGeneratedReparseRunsProcessing(t *testing.T) {
 	k := segmentedEntry(t, h)
 	k.SourceKind, k.ParseStatus, k.EnableStatus = "report", types.ParseStatusCompleted, "enabled"
 	k.VaultBody, k.Description = "# Caller report\n\nOriginal report material.", "Caller summary"
-	k.StructuredSummary = &types.EntrySummary{Overview: "Caller overview", Points: []string{"One", "Two", "Three"}, KeyTerms: []string{}}
+	k.StructuredSummary = &types.EntrySummary{Overview: "Caller overview"}
 	k.SummaryStatus = types.SummaryStatusCompleted
 	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, k))
 	_, err := h.service.ReparseEntry(h.ctx, k.ID, nil)

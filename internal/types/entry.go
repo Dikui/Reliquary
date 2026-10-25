@@ -157,6 +157,9 @@ type Entry struct {
 	LastIngestAPIKeyName string        `json:"last_ingest_api_key_name" gorm:"type:text;not null;default:''"`
 	RelatedEntryID       string        `json:"related_entry_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
 	StructuredSummary    *EntrySummary `json:"structured_summary" gorm:"type:jsonb"`
+	TitleManual          bool          `json:"-"                          gorm:"not null;default:false"`
+	DescriptionManual    bool          `json:"-"                          gorm:"not null;default:false"`
+	TitleSpecified       bool          `json:"-" gorm:"-"`
 	DomainsManual        bool          `json:"domains_manual" gorm:"not null;default:false"`
 	Domains              []Domain      `json:"domains" gorm:"-"`
 	EntitiesManual       bool          `json:"entities_manual" gorm:"not null;default:false"`
@@ -305,6 +308,7 @@ type SourceInfo struct {
 // bodies stay in object storage; this only contains the audit/display fields.
 
 type EntryIntakeMetadata struct {
+	SourceTitle  string           `json:"source_title,omitempty"`
 	ModelCalls   []ModelCallCount `json:"model_calls,omitempty"`
 	Source       string           `json:"source"`
 	OriginalPath string           `json:"original_path,omitempty"`

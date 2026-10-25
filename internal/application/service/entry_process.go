@@ -550,8 +550,10 @@ func (s *entryService) reparseEntry(
 func resetEntryForReparse(entry *types.Entry, library *types.Library) {
 	entry.ParseStatus = types.ParseStatusPending
 	entry.EnableStatus = "disabled"
-	entry.Description = ""
-	entry.StructuredSummary = nil
+	if !entry.DescriptionManual {
+		entry.Description = ""
+		entry.StructuredSummary = nil
+	}
 	entry.SummaryStatus = types.SummaryStatusPending
 	entry.ProcessedAt = nil
 	entry.ErrorMessage = ""

@@ -121,8 +121,8 @@ function summaryFields(root: Element, localizedImage: string, structured: boolea
   assert.doesNotMatch(text, /# Summary|\*\*bold\*\*|!\[chart\]|<img|summary-link|summary-chart|summary-photo/)
   assert.ok(descendants(overview).every(node => node.tag !== 'a' && node.tag !== 'img' && !node.props.innerHTML))
   if (structured) {
-    assert.ok(visibleText(descendants(root).find(node => hasClass(node, 'summary-points'))!).includes('Point point link'))
-    assert.ok(visibleText(descendants(root).find(node => hasClass(node, 'summary-key-terms'))!).includes(`**Term** · ${localizedImage}`))
+    assert.equal(descendants(root).some(node => hasClass(node, 'summary-points')), false)
+    assert.equal(descendants(root).some(node => hasClass(node, 'summary-key-terms')), false)
   }
 }
 

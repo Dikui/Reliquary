@@ -101,5 +101,5 @@ func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 	queued := len(queue.tasks)
 	require.NoError(t, svc.ProcessManualUpdate(ctx, queue.tasks[0]))
 	require.Len(t, queue.tasks, queued, "duplicate processing must not spawn more tasks")
-	require.Equal(t, []string{"article_processing"}, model.stages)
+	require.Equal(t, []string{"entry_understanding"}, model.stages)
 }
