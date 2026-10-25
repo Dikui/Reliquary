@@ -64,7 +64,7 @@ const listModules = {
   '@/components/EntryUpdateNotice.vue': emptyModule,
   '@/utils/markdownPlainText': markdownPlainText,
   '@/utils/files': { formatFileSize: () => '100 B', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': emptyModule, './DocumentMenuDelete.vue': emptyModule,
-  '@/components/PersonalDocumentDelete.vue': emptyModule, '@/components/EntryProcessingTimeline.vue': emptyModule, '@/components/EntryEntitiesEditor.vue': { __esModule: true, default: { setup: () => () => null } }, '@/components/EntryClassification.vue': classificationModule, '@/components/EntryStarToggle.vue': emptyModule,
+  '@/components/PersonalDocumentDelete.vue': emptyModule, '@/components/EntryProcessingTimeline.vue': emptyModule, '@/components/EntryDomainsEditor.vue': { __esModule: true, default: { setup: () => () => null } }, '@/components/EntryEntitiesEditor.vue': { __esModule: true, default: { setup: () => () => null } }, '@/components/EntryClassification.vue': classificationModule, '@/components/EntryStarToggle.vue': emptyModule,
 }
 const props = { selectedIds: new Set(), batchMode: false, traceAvailableById: {}, traceVisibleIds: {} }
 

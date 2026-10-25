@@ -130,7 +130,7 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
-    '@/components/ReviewActions.vue': options.reviewActions || emptyModule, '@/components/EntryArticleJudgments.vue': options.articleJudgments || emptyModule, '@/components/EntryEntitiesEditor.vue': options.entityEditor || emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule, '@/components/EntryStarToggle.vue': emptyModule,
+    '@/components/ReviewActions.vue': options.reviewActions || emptyModule, '@/components/EntryArticleJudgments.vue': options.articleJudgments || emptyModule, '@/components/EntryDomainsEditor.vue': { __esModule: true, default: { setup: () => () => null } }, '@/components/EntryEntitiesEditor.vue': options.entityEditor || emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule, '@/components/EntryStarToggle.vue': emptyModule,
     '@/components/EntryUpdateNotice.vue': emptyModule,
     '@/components/ReportAssociations.vue': emptyModule,
     '@/components/DocumentPreview.vue': emptyModule,
@@ -776,7 +776,23 @@ test('saving entities preserves loaded detail and card display fields until and 
   const details = await loader.load('material')
   const card = { id: 'material', ...record, file_name: 'Material title', display_name: 'Material title', entities: [], entities_manual: false }
   const requests: unknown[] = []
+  const associationEditor = compileSFC('./EntryAssociationsEditor.vue').create({
+    '@/composables/useDialogDraft': { useDialogDraft: () => ({discardVisible: ref(false),close() {},cancelDiscard() {},discardChanges() {}}) },
+    'tdesign-vue-next': { MessagePlugin: { success() {} } },
+  })
+  const associationSetup = associationEditor.setup
+  associationEditor.setup = (props: object, context: object) => {
+    const state = associationSetup(props, context)
+    onServerPrefetch(async () => {
+      state.open()
+      await nextTick()
+      state.selected.value = ['institute']
+      await state.save()
+    })
+    return state
+  }
   const editor = compileSFC('./EntryEntitiesEditor.vue').create({
+    './EntryAssociationsEditor.vue': { __esModule: true, default: associationEditor },
     '@/api/entities': {
       listEntities: () => envelope(entities),
       setEntryEntities: (id: string, selected: string[]) => {
@@ -787,17 +803,6 @@ test('saving entities preserves loaded detail and card display fields until and 
     },
     'tdesign-vue-next': { MessagePlugin: { success() {} } },
   })
-  const setup = editor.setup
-  editor.setup = (props: object, context: object) => {
-    const state = setup(props, context)
-    onServerPrefetch(async () => {
-      state.open()
-      await nextTick()
-      state.selected.value = ['institute']
-      await state.save()
-    })
-    return state
-  }
   const events: Record<string, unknown>[] = []
   await renderDetails([], 'zh-CN', {
     loadedDetails: details, entityEditor: { __esModule: true, default: editor },

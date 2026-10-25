@@ -47,6 +47,7 @@ func batchFilter(f *types.EntryBatchFilters) (types.EntryListFilter, error) {
 	out = types.EntryListFilter{
 		LibraryIDs:      f.Libraries,
 		EntityIDs:       f.EntityIDs,
+		DomainIDs:       f.DomainIDs,
 		IncludeRejected: f.IncludeRejected,
 		Keyword:         f.Keyword,
 		FileType:        f.FileType,

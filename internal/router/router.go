@@ -35,6 +35,7 @@ type RouterParams struct {
 	MaintenanceHandler      *handler.MaintenanceHandler `optional:"true"`
 	SearchHandler           *handler.SearchHandler
 	EvaluationHandler       *handler.EvaluationHandler `optional:"true"`
+	DomainHandler           *handler.DomainHandler     `optional:"true"`
 	EntityHandler           *handler.EntityHandler
 	EmbeddingRebuildHandler *handler.EmbeddingRebuildHandler `optional:"true"`
 	FollowHandler           *handler.FollowHandler           `optional:"true"`
@@ -159,6 +160,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		}
 		v1.GET("/search/options", params.SearchHandler.Options)
 		RegisterEntityRoutes(v1, params.EntityHandler)
+		RegisterDomainRoutes(v1, params.DomainHandler)
 		RegisterEmbeddingRebuildRoutes(v1, params.EmbeddingRebuildHandler)
 		if params.FollowHandler != nil {
 			RegisterFollowRoutes(v1, params.FollowHandler)

@@ -345,6 +345,7 @@ vault_body) VALUES('legacy-material',
 		}
 	}
 	require.NoError(t, migration.Migrate(36))
+	require.NoError(t, migration.Migrate(37))
 	require.NoError(t, service.EnsurePersonalSpace(context.Background(), f.db))
 	RegisterFollowRoutes(f.router.Group("/api/v1"), handler.NewFollowHandler(service.NewFollowService(f.db)))
 	read := personalRequest(t, f.router, http.MethodGet, "/api/v1/entries/legacy-material", "", f.key, true)

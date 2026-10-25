@@ -89,6 +89,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const api = evaluateFile('../../api/library.ts', { '../utils/request': transport })
   const store = evaluateFile('../../stores/entry.ts', {})
   const hook = evaluateFile('../../composables/useLibrary.ts', {
+    '@/api/domains': { listDomains: async () => ({ success: true, data: [] }) },
     '@/api/entities': { listEntities: async () => ({ success: true, data: [{ id: 'entity-1', canonical_name: 'Target Entity' }] }) },
 
     '@/api/library': api, '@/stores/entry': store,
@@ -99,6 +100,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const empty = moduleOf(defineComponent({ setup: () => () => null }))
   let backendAvailable = !unavailable
   const modules: Record<string, any> = {
+    '@/api/domains': { listDomains: async () => ({ success: true, data: [] }) },
     '@/api/entities': { listEntities: async () => ({ success: true, data: [{ id: 'entity-1', canonical_name: 'Target Entity' }] }) },
 
     '@/utils/bodyReference': bodyReference,

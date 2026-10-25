@@ -95,6 +95,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	RegisterSystemRoutes(v1, system, guards)
 	RegisterModelRoutes(v1, params.ModelHandler, nil, guards)
 	RegisterEntityRoutes(v1, params.EntityHandler)
+	RegisterDomainRoutes(v1, handler.NewDomainHandler(service.NewDomainService(db)))
 	RegisterEntryRoutes(v1, params.EntryHandler, guards)
 	RegisterLibraryRoutes(v1, params.LibraryHandler, guards)
 	f := &personalAuthFixture{db: db, router: r, params: params}

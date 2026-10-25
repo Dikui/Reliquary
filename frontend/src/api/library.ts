@@ -51,7 +51,7 @@ export function listEntryFiles(
     page: number;
     page_size: number;
     libraries?: string[];
-    entity_ids?: string[]; published_from?: string; published_to?: string;
+    entity_ids?: string[]; domain_ids?: string[]; published_from?: string; published_to?: string;
     keyword?: string;
     file_type?: string;
     starred?: boolean;
@@ -66,6 +66,7 @@ export function listEntryFiles(
   query.append('page', String(params.page));
   query.append('page_size', String(params.page_size));
   if (params.libraries?.length) query.set('libraries', params.libraries.join(','));
+  if (params.domain_ids?.length) query.set('domain_ids', params.domain_ids.join(','));
   if (params.entity_ids?.length) query.set('entity_ids', params.entity_ids.join(','));
   if (params.published_from) query.set('published_from', params.published_from);
   if (params.published_to) query.set('published_to', params.published_to);

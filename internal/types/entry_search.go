@@ -11,6 +11,7 @@ type EntrySearchRequest struct {
 	VectorSet     string   `json:"vector_set,omitempty"`
 	Libraries     []string `json:"libraries"`
 	Query         string   `json:"query"`
+	DomainIDs     []string `json:"domain_ids,omitempty"`
 	EntityIDs     []string `json:"entity_ids,omitempty"`
 	Sources       []string `json:"sources,omitempty"`
 	Starred       *bool    `json:"starred,omitempty"`

@@ -1,5 +1,27 @@
 import { ikb18En } from './ikb18'
 export default {
+  domains: {
+    "title": "Domains",
+    "description": "Maintain shared directions and a one-sentence definition for each. Adding a domain does not change existing materials.",
+    "create": "Add domain",
+    "edit": "Edit domain",
+    "delete": "Delete domain",
+    "name": "Name",
+    "definition": "One-sentence definition",
+    "empty": "No domains yet. Add a direction to get started.",
+    "saved": "Domain saved",
+    "deleted": "Domain deleted",
+    "fieldsRequired": "Enter a name and a one-sentence definition",
+    "requestFailed": "Request failed. Try again.",
+    "deleteHint": "Delete “{name}” and remove it from all materials. Material content is retained. This cannot be undone.",
+    "editEntry": "Edit domains",
+    "entryHint": "Select 0–3 domains. Saving marks this choice as manually edited.",
+    "mixedFilter": "Entities and domains",
+    "discardTitle": "Discard changes?",
+    "discardHint": "Unsaved changes will be lost.",
+    "discard": "Discard changes",
+    "choiceSaved": "Material associations saved"
+  },
  entityMaintenance: {
   "type": "Type",
   "person": "Person",

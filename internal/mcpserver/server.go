@@ -40,6 +40,7 @@ type Services struct {
 	Libraries   interfaces.LibraryService
 	Entries     EntryService
 	Search      interfaces.SearchService
+	Domains     *service.DomainService
 	Entities    *service.EntityService
 	Follows     *service.FollowService
 }
@@ -240,6 +241,7 @@ func registerTools(server *mcp.Server, services Services) {
 
 		object(map[string]any{
 			"entity_ids":     stringArray("实体 ID 列表"),
+			"domain_ids":     stringArray("领域 ID 列表，与实体条件取交集"),
 			"query":          text("查询文本，必填"),
 			"libraries":      stringArray("必填，库 ID 或目录名，可选多个"),
 			"sources":        stringArray("来源类型：article、mine（用户文档）、report（整理结果）"),
@@ -258,6 +260,14 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in entryInput) (any, error) {
 			return services.Entries.ReadEntry(ctx, in.ID, in.Offset, in.Length)
 		})
+
+	if services.Domains != nil {
+		addTool(server, "list_domains", "列出共享领域的 ID、名称与一句定义，可用于 search 的 domain_ids 筛选。"+externalContentNotice,
+			object(map[string]any{}), func(ctx context.Context, _ struct{}) (any, error) {
+				items, err := services.Domains.ListDomains(ctx)
+				return map[string]any{"domains": items}, err
+			})
+	}
 
 	addTool(server, "list_entities", "查询个人空间人工维护的机构、人物，名称和别名支持模糊查询，类型可选。返回 entities 数组及每个实体的别名。"+externalContentNotice,
 		object(map[string]any{

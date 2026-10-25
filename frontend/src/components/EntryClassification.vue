@@ -32,6 +32,7 @@ const originalURL = computed(() => {
       <div class="summary-key-terms"><strong>{{ t('library.summaryKeyTerms') }}</strong><span>{{ entry.structured_summary.key_terms.map(plainText).join(' · ') }}</span></div>
     </div>
     <p v-else-if="entry.description" class="summary-description">{{ plainText(entry.description) }}</p>
+    <div v-if="entry.domains?.length" class="classification-relations"><strong>{{ t('domains.title') }}</strong><t-tag v-for="domain in entry.domains" :key="domain.id" size="small" variant="light-outline" :title="domain.definition">{{ domain.name }}</t-tag></div>
     <div v-if="!hideRelations && entry.entities?.length" class="classification-relations entity-relations"><strong>{{ t('library.articleEntities') }}</strong><span v-for="entity in entry.entities" :key="entity.id" class="relation-target"><button type="button" @click.stop="emit('open-entity', entity.id)">{{ entity.canonical_name }}</button><FollowToggle v-if="followable" target-type="entity" :target-id="entity.id" :name="entity.canonical_name" compact /></span></div>
   </div>
 </template>

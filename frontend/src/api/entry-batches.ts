@@ -2,7 +2,7 @@ import { get, post } from '@/utils/request'
 export type EntryBatchAction = 'delete' | 'reprocess' | 'review' | 'star'
 export interface EntryBatchFilters {
   parse_status?: string; source?: string; source_kind?: string; start_time?: string; end_time?: string
-  libraries?: string[]; entity_ids?: string[]; published_from?: string; published_to?: string
+  libraries?: string[]; entity_ids?: string[]; domain_ids?: string[]; published_from?: string; published_to?: string
   include_rejected?: boolean; keyword?: string; file_type?: string; starred?: boolean
 }
 export interface EntryBatchSelection { ids?: string[]; filters?: EntryBatchFilters }

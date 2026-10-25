@@ -6,6 +6,7 @@ const TypeEntryBatch = "entry:batch"
 
 type EntryBatchFilters struct {
 	Libraries       []string `json:"libraries,omitempty"`
+	DomainIDs       []string `json:"domain_ids,omitempty"`
 	EntityIDs       []string `json:"entity_ids,omitempty"`
 	PublishedFrom   string   `json:"published_from,omitempty"`
 	PublishedTo     string   `json:"published_to,omitempty"`

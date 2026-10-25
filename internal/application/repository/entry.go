@@ -46,6 +46,7 @@ func escapeLikeKeyword(keyword string) string {
 // editing methods, so background snapshots cannot overwrite those columns.
 var omitFieldsOnUpdate = []string{
 	"entities_manual",
+	"domains_manual",
 	"SourceID",
 	"SourceRevision",
 	"SourceRef",
@@ -128,6 +129,10 @@ func (r *entryRepository) ListEntryByLibraryID(
 func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB {
 	if len(filter.LibraryIDs) > 0 {
 		query = query.Where("library_id IN ?", filter.LibraryIDs)
+	}
+	if len(filter.DomainIDs) > 0 {
+		query = query.Where(`EXISTS (SELECT 1 FROM entry_domains links
+ WHERE links.space_id=entries.space_id AND links.entry_id=entries.id AND links.domain_id IN ?)`, filter.DomainIDs)
 	}
 	if len(filter.EntityIDs) > 0 {
 		query = query.Where("EXISTS (SELECT 1 FROM entry_entities links WHERE links.space_id=entries.space_id AND links.entry_id=entries.id AND links.entity_id IN ?)", filter.EntityIDs)

@@ -87,6 +87,7 @@ const (
 // under a library. Empty / zero fields mean "no filter on that dimension".
 type EntryListFilter struct {
 	LibraryIDs      []string
+	DomainIDs       []string
 	EntityIDs       []string
 	PublishedFrom   time.Time
 	PublishedTo     time.Time // Exclusive end of the selected publication day.
@@ -156,6 +157,8 @@ type Entry struct {
 	LastIngestAPIKeyName string        `json:"last_ingest_api_key_name" gorm:"type:text;not null;default:''"`
 	RelatedEntryID       string        `json:"related_entry_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
 	StructuredSummary    *EntrySummary `json:"structured_summary" gorm:"type:jsonb"`
+	DomainsManual        bool          `json:"domains_manual" gorm:"not null;default:false"`
+	Domains              []Domain      `json:"domains" gorm:"-"`
 	EntitiesManual       bool          `json:"entities_manual" gorm:"not null;default:false"`
 	Entities             []Entity      `json:"entities" gorm:"-"`
 	// DescriptionSpecified distinguishes an explicitly supplied empty description

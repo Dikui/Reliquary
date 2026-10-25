@@ -46,7 +46,7 @@ func projectIngestManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 	defaults := map[string]any{}
 	for field, value := range map[string]any{
 		"source_ref": "", "source_body_hash": "", "identifier": "", "graph": nil,
-		"source_id": "", "source_revision": nil, "entities_manual": false,
+		"source_id": "", "source_revision": nil, "entities_manual": false, "domains_manual": false,
 	} {
 		if !has(old.Columns, field) && has(current.Columns, field) {
 			defaults[field] = value

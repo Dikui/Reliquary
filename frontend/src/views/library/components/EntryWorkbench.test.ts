@@ -48,7 +48,7 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: the library header entry is named Entities`, async () => {
     const page = readFileSync(new URL('../Library.vue', import.meta.url), 'utf8')
-    const entry = page.match(/<button\b[^>]*@click="activeLibraryTab = 'entities'"[^>]*>[\s\S]*?<\/button>/)?.[0]
+    const entry = page.match(/<button\b[^>]*@click="selectLibraryTab\('entities'\)"[^>]*>[\s\S]*?<\/button>/)?.[0]
     assert.ok(entry, 'expected the real entity entry button in the library header')
     const compiled = compileTemplate({ id: 'entity-header-entry', filename: 'Library.vue', source: entry, ssr: true, ssrCssVars: [] })
     assert.deepEqual(compiled.errors, [])

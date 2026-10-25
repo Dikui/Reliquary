@@ -23,6 +23,7 @@ import { useI18n } from 'vue-i18n';
 import RepostSources from '@/views/library/components/RepostSources.vue';
 import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue';
 import EntryClassification from '@/components/EntryClassification.vue';
+import EntryDomainsEditor from '@/components/EntryDomainsEditor.vue';
 import EntryEntitiesEditor from '@/components/EntryEntitiesEditor.vue';
 import EntryProcessingStatus from '@/components/EntryProcessingStatus.vue';
 import { entryProcessingState } from '@/utils/entryProcessingStatus';
@@ -1338,6 +1339,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             </div>
           </details>
           <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
+          <EntryDomainsEditor :key="`domains-${details.id}`" :entry-id="details.id" :domains="details.domains || []" :manual="details.domains_manual" @saved="applyProcessingState" />
           <EntryEntitiesEditor :key="details.id" :entry-id="details.id" :entities="details.entities || []" :manual="details.entities_manual" @saved="applyProcessingState" />
         <EntryUpdateNotice :has-update="details.has_update" :latest-entry-id="details.latest_entry_id" />
           <EntryStarToggle v-if="isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" />

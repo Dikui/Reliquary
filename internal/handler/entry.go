@@ -521,7 +521,7 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 		ParseStatus: c.Query("parse_status"),
 		Source:      c.Query("source"),
 	}
-	for key, target := range map[string]*[]string{"entity_ids": &filter.EntityIDs} {
+	for key, target := range map[string]*[]string{"domain_ids": &filter.DomainIDs, "entity_ids": &filter.EntityIDs} {
 		seen := map[string]bool{}
 		for _, raw := range c.QueryArray(key) {
 			for _, value := range strings.Split(raw, ",") {

@@ -24,7 +24,10 @@ func EnsurePersonalSpace(ctx context.Context, db *gorm.DB) error {
 			return err
 		}
 		if len(spaces) == 1 && spaces[0].ID == types.SingleSpaceID {
-			return ensurePresetEntities(tx, types.SingleSpaceID)
+			if err := ensurePresetEntities(tx, types.SingleSpaceID); err != nil {
+				return err
+			}
+			return ensurePresetDomains(tx, types.SingleSpaceID)
 		}
 		if len(spaces) != 0 {
 			return fmt.Errorf("expected only personal workspace %d, found %d workspaces", types.SingleSpaceID, len(spaces))
@@ -36,7 +39,10 @@ func EnsurePersonalSpace(ctx context.Context, db *gorm.DB) error {
 		if err != nil {
 			return err
 		}
-		return ensurePresetEntities(tx, types.SingleSpaceID)
+		if err := ensurePresetEntities(tx, types.SingleSpaceID); err != nil {
+			return err
+		}
+		return ensurePresetDomains(tx, types.SingleSpaceID)
 	})
 	if err != nil {
 		return err

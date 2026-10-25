@@ -32,6 +32,8 @@ import DocumentListView from './components/DocumentListView.vue';
 import DocumentCardView from './components/DocumentCardView.vue';
 import EntryBatchDialog from '@/components/EntryBatchDialog.vue';
 import type { EntryBatchSelection } from '@/api/entry-batches';
+import { listDomains, type Domain } from '@/api/domains';
+import DomainsManager from './components/DomainsManager.vue';
 import { listEntities, type Entity } from '@/api/entities';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import EntryWorkbench from './components/EntryWorkbench.vue';
@@ -65,7 +67,7 @@ const referencedEntryId = ref(typeof route.query.entry_id === 'string' ? route.q
 const activeReference = ref<SourceLocation | undefined>(parseReference(route.query.reference));
 const libraryLoading = ref(false);
 const docListLoading = ref(true);
-const validTabs = ['documents', 'reviews', 'entities'] as const
+const validTabs = ['documents', 'reviews', 'entities', 'domains'] as const
 type KbTab = typeof validTabs[number]
 const initTab = validTabs.includes(route.query.tab as any) ? (route.query.tab as KbTab) : 'documents'
 const activeLibraryTab = ref<KbTab>(initTab);
@@ -153,6 +155,8 @@ const starredOptions = computed(() => [
   { value: 'false', label: t('articleJudgments.unstarredOnly') },
 ]);
 const selectedEntityId = ref('');
+const selectedDomainIds = ref<string[]>((initialDocumentFilters.domainIds || '').split(',').filter(Boolean));
+const filterDomains = ref<Domain[]>([]);
 const selectedEntityIds = ref<string[]>((initialDocumentFilters.entityIds || '').split(',').filter(Boolean));
 const filterEntities = ref<Entity[]>([]), filterEntitiesLoading = ref(false), filterEntitiesError = ref(''), moreFilterEntities = ref(false);
 const filterEntityOptions = computed(() => {
@@ -160,19 +164,43 @@ const filterEntityOptions = computed(() => {
   for (const id of selectedEntityIds.value) if (!options.some(option => option.value === id)) options.push({ value: id, label: id });
   return options;
 });
+const selectedClassification = computed({
+  get: () => [...selectedEntityIds.value.map(id => `entity:${id}`), ...selectedDomainIds.value.map(id => `domain:${id}`)],
+  set: (values: string[]) => {
+    selectedEntityIds.value = values.filter(value => value.startsWith('entity:')).map(value => value.slice(7));
+    selectedDomainIds.value = values.filter(value => value.startsWith('domain:')).map(value => value.slice(7));
+  },
+});
+const classificationOptions = computed(() => {
+  const domains = filterDomains.value.map(item => ({ value: item.id, label: item.name }));
+  for (const id of selectedDomainIds.value) if (!domains.some(item => item.value === id)) domains.push({ value: id, label: id });
+  return [
+    { group: t('library.articleEntities'), children: filterEntityOptions.value.map(item => ({ value: `entity:${item.value}`, label: item.label })) },
+    { group: t('domains.title'), children: domains.map(item => ({ value: `domain:${item.value}`, label: item.label })) },
+  ];
+});
 let filterEntitiesRequest = 0;
 async function loadFilterEntities(more = false) {
   const current = ++filterEntitiesRequest;
   filterEntitiesLoading.value = true; filterEntitiesError.value = '';
   try {
-    const response = await listEntities({ limit: 100, offset: more ? filterEntities.value.length : 0 });
+    const [response, domains] = await Promise.all([
+      listEntities({ limit: 100, offset: more ? filterEntities.value.length : 0 }), listDomains(),
+    ]);
+    if (!domains.success) throw new Error(domains.error || t('domains.requestFailed'));
+    if (current === filterEntitiesRequest) filterDomains.value = domains.data;
     if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed'));
     if (current === filterEntitiesRequest) { filterEntities.value = more ? [...filterEntities.value, ...response.data] : response.data; moreFilterEntities.value = response.data.length === 100; }
   } catch (cause) { if (current === filterEntitiesRequest) filterEntitiesError.value = cause instanceof Error ? cause.message : t('knowledgeWorkbench.requestFailed'); }
   finally { if (current === filterEntitiesRequest) filterEntitiesLoading.value = false; }
 }
 onMounted(() => { void loadFilterEntities(); });
-watch(activeLibraryTab, tab => { if (tab === 'documents') void loadFilterEntities(); });
+watch(activeLibraryTab, (tab, previous) => {
+  if (tab === 'documents') {
+    void loadFilterEntities();
+    if (previous === 'domains') void loadEntryFiles(libraryId.value);
+  }
+});
 onUnmounted(() => { filterEntitiesRequest++; });
 
 watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
@@ -225,6 +253,7 @@ const updatedTimeRange = ref<string[]>(
     ? [initialDocumentFilters.startDate, initialDocumentFilters.endDate] : [],
 );
 const documentFilters = computed<DocumentListFilters>(() => ({
+  ...(selectedDomainIds.value.length ? { domainIds: selectedDomainIds.value.join(',') } : {}),
   ...(selectedEntityIds.value.length ? { entityIds: selectedEntityIds.value.join(',') } : {}),
   keyword: docSearchKeyword.value.trim(),
   fileType: selectedFileType.value || '',
@@ -243,6 +272,7 @@ const filterParams = computed(() => {
   const [start, end] = updatedTimeRange.value || [];
   return {
     libraries: libraryScope.value,
+    domain_ids: selectedDomainIds.value.length ? selectedDomainIds.value : undefined,
     entity_ids: selectedEntityIds.value.length ? selectedEntityIds.value : undefined,
     published_from: publishedRange.value?.[0] || undefined, published_to: publishedRange.value?.[1] || undefined,
     keyword: docSearchKeyword.value ? docSearchKeyword.value.trim() : undefined,
@@ -315,9 +345,16 @@ const loadLibraryInfo = async (targetLibraryId: string, force = false) => {
 };
 
 // 唯一库加载后获取文章内容
+// Route guards resolve unsaved dialog drafts before a tab unmounts its content.
+function selectLibraryTab(tab: KbTab) {
+  const query = { ...route.query }
+  if (tab === 'documents') delete query.tab
+  else query.tab = tab
+  void router.replace({ query })
+}
 // Sync activeLibraryTab to URL query so it survives page refresh
 watch(() => route.query.tab, (tab) => {
-  activeLibraryTab.value = tab === 'entities' ? 'entities' : tab === 'reviews' ? 'reviews' : 'documents'
+  activeLibraryTab.value = tab === 'domains' ? 'domains' : tab === 'entities' ? 'entities' : tab === 'reviews' ? 'reviews' : 'documents'
 })
 watch(activeLibraryTab, (tab) => {
   if (route.query.tab === (tab === 'documents' ? undefined : tab)) return
@@ -359,6 +396,7 @@ watch(() => route.query, query => {
   if (!documentListFiltersEqual(documentFilters.value, restored)) {
     documentFiltersRestoredFromRoute = true;
     selectedEntityIds.value = (restored.entityIds || '').split(',').filter(Boolean);
+    selectedDomainIds.value = (restored.domainIds || '').split(',').filter(Boolean);
     docSearchKeyword.value = restored.keyword;
     selectedFileType.value = restored.fileType;
     selectedStarred.value = restored.starred;
@@ -910,7 +948,7 @@ const handleListAction = (
 
 // Clear selection on filter/library change to avoid acting on hidden items.
 watch(
-  [selectedEntityIds, docSearchKeyword, selectedFileType, selectedStarred, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, publishedRange, libraryId],
+  [selectedDomainIds, selectedEntityIds, docSearchKeyword, selectedFileType, selectedStarred, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, publishedRange, libraryId],
   () => {
     clearSelection();
   },
@@ -948,10 +986,11 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
               <span>{{ $t('library.title') }}</span>
               <t-icon name="chevron-right" class="breadcrumb-separator" />
                 <button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'documents' }]" :aria-pressed="activeLibraryTab === 'documents'"
-                  @click="activeLibraryTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</button>
-                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'reviews' }]" :aria-pressed="activeLibraryTab === 'reviews'" @click="activeLibraryTab = 'reviews'">{{ $t('knowledgeReview.title') }} <PendingCountBadge /></button>
+                  @click="selectLibraryTab('documents')">{{ $t('knowledgeEditor.document.title') }}</button>
+                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'reviews' }]" :aria-pressed="activeLibraryTab === 'reviews'" @click="selectLibraryTab('reviews')">{{ $t('knowledgeReview.title') }} <PendingCountBadge /></button>
                 <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'entities' }]" :aria-pressed="activeLibraryTab === 'entities'"
-                    @click="activeLibraryTab = 'entities'">{{ $t('knowledgeWorkbench.tabLabel') }}</button>
+                    @click="selectLibraryTab('entities')">{{ $t('knowledgeWorkbench.tabLabel') }}</button>
+                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'domains' }]" :aria-pressed="activeLibraryTab === 'domains'" @click="selectLibraryTab('domains')">{{ $t('domains.title') }}</button>
             </h2>
             <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
             <div class="library-title-actions">
@@ -974,6 +1013,8 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
           @open-source="openSourceDoc" />
       </div>
 
+      <DomainsManager v-if="activeLibraryTab === 'domains'" />
+
       <PendingReviews v-if="activeLibraryTab === 'reviews' && libraryId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="handlePendingChanged" @refreshed="pendingCounts.refresh()" />
 
       <template v-if="activeLibraryTab === 'documents'">
@@ -993,7 +1034,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 <div class="doc-filter-bar__filters">
                 <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
                 <div class="doc-filter-field">
-                  <t-select v-model="selectedEntityIds" multiple filterable clearable :options="filterEntityOptions" :loading="filterEntitiesLoading" :placeholder="t('library.articleEntities')" :aria-label="t('library.articleEntities')" class="doc-filter-field__control" />
+                  <t-select v-model="selectedClassification" multiple filterable clearable :options="classificationOptions" :loading="filterEntitiesLoading" :placeholder="t('domains.mixedFilter')" :aria-label="t('domains.mixedFilter')" class="doc-filter-field__control" />
                   <t-button v-if="moreFilterEntities" size="small" variant="text" :loading="filterEntitiesLoading" @click="loadFilterEntities(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
                   <p v-if="filterEntitiesError" role="alert">{{ filterEntitiesError }} <t-button size="small" variant="text" @click="loadFilterEntities()">{{ t('common.retry') }}</t-button></p>
                 </div>
@@ -1106,7 +1147,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </template>
 
       <!-- Document content drawer -->
-      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :entity-options="filterEntityOptions" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
+      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :domain-options="filterDomains.map(item => ({ value: item.id, label: item.name }))" :entity-options="filterEntityOptions" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
     <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
         :libraryId="libraryId" @openEntry="openSourceDoc" @openEntity="openArticleEntity"
         @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @review-changed="handleReviewChanged">

@@ -61,7 +61,9 @@
         "title": "",
         "type": "",
         "updated_at": "0001-01-01T00:00:00Z",
-        "vault_path": ""
+        "vault_path": "",
+        "domains_manual": false,
+        "domains": null
       }
     ],
     "library_groups": null
@@ -114,7 +116,9 @@
     "title": "",
     "type": "",
     "updated_at": "0001-01-01T00:00:00Z",
-    "vault_path": ""
+    "vault_path": "",
+    "domains_manual": false,
+    "domains": null
   },
   "read": {
     "acquisition": "",

@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { previewEntryBatch, submitEntryBatch, getEntryBatch, retryFailedEntryBatch, type EntryBatchAction, type EntryBatchSelection, type EntryBatchRequest, type EntryBatchPreview, type EntryBatch } from '@/api/entry-batches'
 import type { LibraryCatalogItem } from '@/api/library'
 import { entryChannelLabel, entryFileFormatLabel } from '@/utils/entrySourceLabels'
-const props = defineProps<{ visible: boolean; batchId?: string; ids?: string[]; selection?: EntryBatchSelection; scopeLabel?: string; libraries: LibraryCatalogItem[]; selectedLibraryIds?: string[]; initialAction?: EntryBatchAction; entityOptions?: { value: string; label: string }[] }>()
+const props = defineProps<{ visible: boolean; batchId?: string; ids?: string[]; selection?: EntryBatchSelection; scopeLabel?: string; libraries: LibraryCatalogItem[]; selectedLibraryIds?: string[]; initialAction?: EntryBatchAction; domainOptions?: { value: string; label: string }[]; entityOptions?: { value: string; label: string }[] }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean]; changed: []; created: [id: string] }>()
 const { t } = useI18n()
 const ready = ref(false), closeButton = ref<{ $el?: HTMLElement } | null>(null)
@@ -57,6 +57,7 @@ const filterSummary = computed(() => {
   const range = (from?: string, to?: string) => from || to ? `${from || t('entryBatch.anyDate')} → ${to || t('entryBatch.anyDate')}` : ''
   add(t('ikb18.scope'), names(f.libraries, props.libraries.map(lib => ({ value: lib.id, label: lib.display_name || lib.name }))) || t('ikb18.all'))
   add(t('entryBatch.entities'), names(f.entity_ids, props.entityOptions))
+  add(t('domains.title'), names(f.domain_ids, props.domainOptions))
   add(t('entryBatch.keyword'), f.keyword)
   if (f.starred !== undefined) add(t('articleJudgments.starLabel'), t(f.starred ? 'articleJudgments.starredOnly' : 'articleJudgments.unstarredOnly'))
   const statuses: Record<string, string> = { pending: t('library.parseStatusPending'), processing: t('library.parseStatusProcessing'), finalizing: t('library.parseStatusFinalizing'), completed: t('library.parseStatusCompleted'), failed: t('library.parseStatusFailed'), cancelled: t('library.parseStatusCancelled'), draft: t('library.parseStatusDraft'), rejected: t('library.intakeWaiting') }

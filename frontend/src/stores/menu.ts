@@ -7,6 +7,7 @@ export const useMenuStore = defineStore('menuStore', () => {
     { key: 'articles', title: i18n.global.t('menu.library'), icon: 'file', path: 'entries', tab: undefined },
     { key: 'search', title: i18n.global.t('menu.search'), icon: 'search', path: 'search', tab: undefined },
     { key: 'entities', title: i18n.global.t('knowledgeWorkbench.title'), icon: 'usergroup', path: 'entries', tab: 'entities' },
+    { key: 'domains', title: i18n.global.t('domains.title'), icon: 'tag', path: 'entries', tab: 'domains' },
     { key: 'follows', title: i18n.global.t('follows.title'), icon: 'heart', path: 'follows', tab: undefined },
     { key: 'pending', title: i18n.global.t('ingestDiagnostics.pending'), icon: 'task', path: 'entries', tab: 'reviews' },
     { key: 'diagnostics', title: i18n.global.t('ingestDiagnostics.diagnostics'), icon: 'tools', path: 'diagnostics', tab: undefined },
@@ -15,7 +16,7 @@ export const useMenuStore = defineStore('menuStore', () => {
     { key: 'settings', title: i18n.global.t('menu.settings'), icon: 'setting', path: 'settings', tab: undefined },
   ])
   const menuGroups = computed(() => [
-    { key: 'materials', title: i18n.global.t('ingestDiagnostics.materialManagement'), items: menuArr.value.filter(item => ['articles', 'search', 'entities', 'follows'].includes(item.key)) },
+    { key: 'materials', title: i18n.global.t('ingestDiagnostics.materialManagement'), items: menuArr.value.filter(item => ['articles', 'search', 'entities', 'domains', 'follows'].includes(item.key)) },
     { key: 'pending', title: i18n.global.t('ingestDiagnostics.pending'), items: menuArr.value.filter(item => item.key === 'pending') },
     { key: 'diagnostics', title: i18n.global.t('ingestDiagnostics.diagnostics'), items: menuArr.value.filter(item => ['diagnostics', 'evaluation', 'modelCalls'].includes(item.key)) },
     { key: 'configuration', title: i18n.global.t('ingestDiagnostics.configuration'), items: menuArr.value.filter(item => item.key === 'settings') },

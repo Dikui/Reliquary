@@ -45,7 +45,7 @@ func normalizeEntrySearch(request types.EntrySearchRequest) (entrySearchFilters,
 			return f, apperrors.NewBadRequestError("unsupported sources value: " + source)
 		}
 	}
-	for name, ids := range map[string][]string{"entity_ids": request.EntityIDs} {
+	for name, ids := range map[string][]string{"domain_ids": request.DomainIDs, "entity_ids": request.EntityIDs} {
 		if len(ids) > 100 {
 			return f, apperrors.NewBadRequestError(name + " accepts at most 100 IDs")
 		}
@@ -321,6 +321,10 @@ func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, lib
 	}
 	if len(f.request.Sources) > 0 {
 		query = query.Where("k.source_kind IN ?", f.request.Sources)
+	}
+	if len(f.request.DomainIDs) > 0 {
+		query = query.Where(`EXISTS (SELECT 1 FROM entry_domains kd
+ WHERE kd.space_id=k.space_id AND kd.entry_id=k.id AND kd.domain_id IN ?)`, f.request.DomainIDs)
 	}
 	if len(f.request.EntityIDs) > 0 {
 		query = query.Where(`EXISTS (SELECT 1 FROM entry_entities ke WHERE ke.space_id=k.space_id

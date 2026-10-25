@@ -1,5 +1,27 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  domains: {
+    "title": "领域",
+    "description": "维护资料的方向清单与一句定义，所有库共用。新增领域不会自动修改已有资料。",
+    "create": "新增领域",
+    "edit": "编辑领域",
+    "delete": "删除领域",
+    "name": "名称",
+    "definition": "一句定义",
+    "empty": "还没有领域，可新增一个方向。",
+    "saved": "领域已保存",
+    "deleted": "领域已删除",
+    "fieldsRequired": "请输入名称和一句定义",
+    "requestFailed": "请求失败，请重试",
+    "deleteHint": "删除“{name}”并移除所有资料上的该领域，资料正文保留。此操作无法撤销。",
+    "editEntry": "编辑领域",
+    "entryHint": "选择 0–3 个领域，保存后标为人工修改。",
+    "mixedFilter": "实体与领域",
+    "discardTitle": "放弃修改？",
+    "discardHint": "尚未保存的修改将丢失。",
+    "discard": "放弃修改",
+    "choiceSaved": "资料关联已保存"
+  },
  entityMaintenance: {
   "type": "类型",
   "person": "人物",

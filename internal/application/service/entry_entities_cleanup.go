@@ -15,6 +15,6 @@ func deleteEntryAssociations(ctx context.Context, db *gorm.DB, spaceID uint64, i
 		if err := tx.Where("space_id = ? AND entry_id IN ?", spaceID, ids).Delete(&types.EntryEntity{}).Error; err != nil {
 			return err
 		}
-		return nil
+		return tx.Where("space_id=? AND entry_id IN ?", spaceID, ids).Delete(&types.EntryDomain{}).Error
 	})
 }

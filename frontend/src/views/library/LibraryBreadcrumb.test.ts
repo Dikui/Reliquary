@@ -25,12 +25,12 @@ const exports = {} as { render(context: unknown, cache: unknown[]): any }
 new Function('require', 'exports', compiled)(require, exports)
 
 type Locale = 'zh-CN' | 'en-US'
-type KbTab = 'documents' | 'reviews' | 'entities'
+type KbTab = 'documents' | 'reviews' | 'entities' | 'domains'
 type LibraryInfo = { name: string } | null
-const tabs: KbTab[] = ['documents', 'reviews', 'entities']
+const tabs: KbTab[] = ['documents', 'reviews', 'entities', 'domains']
 const expectedLabels = {
-  'zh-CN': { root: '库', tabs: ['资料', '历史待审', '实体'] },
-  'en-US': { root: 'Library', tabs: ['Materials', 'Pending legacy materials', 'Entities'] },
+  'zh-CN': { root: '库', tabs: ['资料', '历史待审', '实体', '领域'] },
+  'en-US': { root: 'Library', tabs: ['Materials', 'Pending legacy materials', 'Entities', 'Domains'] },
 }
 const databaseNames: [string, LibraryInfo][] = [
   ['before the library loads', null],
@@ -51,6 +51,7 @@ function createHarness(locale: Locale, libraryInfo: LibraryInfo) {
   const context = {
     libraryInfo,
     activeLibraryTab: 'documents' as KbTab,
+    selectLibraryTab: (tab: KbTab) => { context.activeLibraryTab = tab },
     $t: (...args: Parameters<typeof i18n.global.t>) => i18n.global.t(...args),
   }
   let tree: any

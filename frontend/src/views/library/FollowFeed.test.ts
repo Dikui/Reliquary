@@ -99,6 +99,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   modules['@/components/EntryUpdateNotice.vue'] = modules['./EntryUpdateNotice.vue'] = empty
   modules['./BodyReference.vue'] = empty
   modules['@/components/EntryEntitiesEditor.vue'] = empty
+  modules['@/components/EntryDomainsEditor.vue'] = empty
   modules['@/utils/entrySourceLabels'] = entrySourceLabels
   modules['@/utils/markdownPlainText'] = markdownPlainText
   const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)
@@ -269,7 +270,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     try {
       await settle()
       const navigation = descendants(mounted.root).filter(node => node.tag === 'button' && hasClass(node, 'menu_item'))
-      assert.deepEqual(navigation.map(visibleText), [messages[locale].menu.library, messages[locale].menu.search, messages[locale].knowledgeWorkbench.title, `${messages[locale].follows.title}2`, messages[locale].ingestDiagnostics.pending, messages[locale].ingestDiagnostics.diagnostics, messages[locale].ikb19.evaluationTitle, messages[locale].ikb19.callsTitle, messages[locale].menu.settings])
+      assert.deepEqual(navigation.map(visibleText), [messages[locale].menu.library, messages[locale].menu.search, messages[locale].knowledgeWorkbench.title, messages[locale].domains.title, `${messages[locale].follows.title}2`, messages[locale].ingestDiagnostics.pending, messages[locale].ingestDiagnostics.diagnostics, messages[locale].ikb19.evaluationTitle, messages[locale].ikb19.callsTitle, messages[locale].menu.settings])
       assert.ok(env.calls.some(call => call.url === '/api/v1/follows/state'))
       assert.equal(descendants(mounted.root).find(node => hasClass(node, 'follow-badge'))!.text, '2')
       await env.store.markViewed(openedAt); await settle()

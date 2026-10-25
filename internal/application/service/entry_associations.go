@@ -62,6 +62,7 @@ func (s *entryService) loadEntryAssociations(ctx context.Context, spaceID uint64
 			continue
 		}
 		entry.Entities = []types.Entity{}
+		entry.Domains = []types.Domain{}
 		byID[entry.ID] = entry
 		ids = append(ids, entry.ID)
 	}
@@ -83,5 +84,21 @@ func (s *entryService) loadEntryAssociations(ctx context.Context, spaceID uint64
 			entry.Entities = append(entry.Entities, row.Entity)
 		}
 	}
+	var domainRows []struct {
+		EntryID string       `gorm:"column:entry_id"`
+		Domain  types.Domain `gorm:"embedded"`
+	}
+	if err := s.db.WithContext(ctx).Table("entry_domains AS links").Select("links.entry_id, d.*").
+		Joins("JOIN domains AS d ON d.space_id=links.space_id AND d.id=links.domain_id").
+		Where("links.space_id=? AND links.entry_id IN ?", spaceID, ids).
+		Order("d.name,d.id").Find(&domainRows).Error; err != nil {
+		return err
+	}
+	for _, row := range domainRows {
+		if entry := byID[row.EntryID]; entry != nil {
+			entry.Domains = append(entry.Domains, row.Domain)
+		}
+	}
+
 	return nil
 }

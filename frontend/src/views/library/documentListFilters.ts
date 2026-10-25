@@ -3,6 +3,7 @@ import { normalizeEntryFileType } from '../../utils/entrySourceLabels'
 import { SEARCH_SOURCES, type SearchSource } from '../../types/search'
 
 export interface DocumentListFilters {
+  domainIds?: string
   entityIds?: string
   keyword: string
   fileType: string
@@ -17,7 +18,7 @@ export interface DocumentListFilters {
 }
 
 const queryFields = {
-  entityIds: 'entity_ids', keyword: 'keyword', fileType: 'file_type', starred: 'starred',
+  domainIds: 'domain_ids', entityIds: 'entity_ids', keyword: 'keyword', fileType: 'file_type', starred: 'starred',
   parseStatus: 'parse_status', source: 'source', sourceKind: 'source_kind',
   startDate: 'start_date', endDate: 'end_date', publishedFrom: 'published_from', publishedTo: 'published_to',
 } as const
@@ -38,8 +39,10 @@ const date = (value: unknown): string => {
 }
 
 export function documentListFiltersFromQuery(query: LocationQuery): DocumentListFilters {
+  const domainIds = [...new Set(queryString(query.domain_ids).split(',').map(value => value.trim()).filter(Boolean))].slice(0, 100).join(',')
   const entityIds = [...new Set(queryString(query.entity_ids).split(',').map(value => value.trim()).filter(Boolean))].slice(0, 100).join(',')
   return {
+    ...(domainIds ? { domainIds } : {}),
     ...(entityIds ? { entityIds } : {}),
     keyword: queryString(query.keyword).trim(),
     fileType: normalizeEntryFileType(choice(query.file_type, fileTypes)),

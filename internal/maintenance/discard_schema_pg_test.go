@@ -38,6 +38,7 @@ func TestLibraryIntakeMigrationPreservesHistoricalRows(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, CompareManifest(bm, am))
 	projectRetiredSnapshot(before, after.schemaVersion)
+	projectDomainSnapshot(before, after.schemaVersion)
 	for table, rows := range before.Tables {
 		if table == "schema_migrations" || table == "library_relation_types" {
 			continue

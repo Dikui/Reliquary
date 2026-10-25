@@ -22,6 +22,24 @@ type PersistentTable struct {
 const RegistryVersion = 1
 
 var PersistentTables = map[string]PersistentTable{
+	"domains": {
+		Columns: Rule{Configuration: "id space_id name normalized_name definition created_at updated_at"},
+		File:    "config/domains.json",
+		After:   []string{"spaces"},
+		Since:   37,
+	},
+	"entry_domains": {
+		Columns: Rule{Sidecar: "space_id entry_id domain_id created_at"},
+		File:    "data/entry_domains.json",
+		After:   []string{"entries", "domains"},
+		Since:   37,
+	},
+	"domain_seed_imports": {
+		Columns: Rule{Sidecar: "space_id imported_at"},
+		File:    "data/domain_seed_imports.json",
+		After:   []string{"spaces", "domains"},
+		Since:   37,
+	},
 	"entity_seed_imports": {
 		Columns: Rule{Sidecar: "space_id imported_at"},
 		File:    "data/entity_seed_imports.json",

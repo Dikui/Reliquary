@@ -7,7 +7,10 @@ func projectEntitySeedManifest(expected, actual *Manifest) (*Manifest, *Manifest
 	if expected.SchemaVersion >= 36 || actual.SchemaVersion < 36 {
 		return expected, actual
 	}
-	const table = "entity_seed_imports"
+	return projectEmptyRegisteredTable(expected, actual, "entity_seed_imports")
+}
+
+func projectEmptyRegisteredTable(expected, actual *Manifest, table string) (*Manifest, *Manifest) {
 	if _, ok := expected.Tables[table]; ok {
 		return expected, actual
 	}

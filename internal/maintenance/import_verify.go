@@ -76,6 +76,7 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 		}
 	}
 	projectRetiredSnapshot(original, current.schemaVersion)
+	projectDomainSnapshot(original, current.schemaVersion)
 	differences := []string{}
 	for table, wanted := range original.Tables {
 		actual, present := current.Tables[table]

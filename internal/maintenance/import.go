@@ -267,6 +267,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 		projectVectorSnapshot(snapshot, now, now, vectorSnapshotLegacy(snapshot))
 	}
 	projectRetiredSnapshot(snapshot, targetVersion)
+	projectDomainSnapshot(snapshot, targetVersion)
 	order, err := replicaImportOrder(db, snapshot)
 	if err != nil {
 		return nil, err
