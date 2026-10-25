@@ -1049,7 +1049,7 @@ with mock.patch('subprocess.run') as docker:
         self.assertEqual(values["RELIQUARY_ADMIN_VAULT_DIR"], "/new-host/vault")
         self.assertNotIn("RELIQUARY_ADMIN_RESOURCES_DIR", values)
         self.assertNotIn("RELIQUARY_ADMIN_SERVER", values)
-        self.assertEqual(values["RELIQUARY_DIAGNOSTICS_DIR"], "${HOME}/Reliquary/logs/diagnostics")
+        self.assertNotIn("RELIQUARY_DIAGNOSTICS_DIR", values)
         self.assertEqual(values["FEATURE_CONFIG"], "preserved")
         runtime = self.host_context(RELIQUARY_ADMIN_DIRECT="1", **FakeContext.env).runtime_env()
         for key in ("REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD"):

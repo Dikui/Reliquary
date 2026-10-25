@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"reliquary/internal/application/service"
-	"reliquary/internal/diagnostics"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"strings"
@@ -36,14 +35,13 @@ type EntryService interface {
 }
 
 type Services struct {
-	Diagnostics *diagnostics.Service
-	Libraries   interfaces.LibraryService
-	Entries     EntryService
-	Search      interfaces.SearchService
-	Stories     *service.StoryService
-	Domains     *service.DomainService
-	Entities    *service.EntityService
-	Follows     *service.FollowService
+	Libraries interfaces.LibraryService
+	Entries   EntryService
+	Search    interfaces.SearchService
+	Stories   *service.StoryService
+	Domains   *service.DomainService
+	Entities  *service.EntityService
+	Follows   *service.FollowService
 }
 
 // Handler uses sessionless Streamable HTTP so every request carries its own
@@ -88,7 +86,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		io.Reader
 		io.Closer
 	}{&ingestBodyReader{Reader: types.NewIngestJSONReader(r.Body, types.MaxIngestMCPBytes), err: &readError}, r.Body}
-	h.transport.ServeHTTP(&ingestBodyErrorWriter{ResponseWriter: w, err: &readError}, r.WithContext(diagnostics.WithTransport(ctx, "mcp")))
+	h.transport.ServeHTTP(&ingestBodyErrorWriter{ResponseWriter: w, err: &readError}, r.WithContext(ctx))
 }
 
 // Preserve the bounded reader's precise error; the MCP SDK otherwise replaces
@@ -221,7 +219,6 @@ func contractFields(value any) any {
 }
 
 func registerTools(server *mcp.Server, services Services) {
-	registerIngestDiagnostics(server, services.Diagnostics)
 	if services.Libraries != nil {
 		addTool(
 			server,
@@ -517,10 +514,9 @@ func ingestImageSchema() map[string]any {
 func ingestSchema() map[string]any {
 	image := ingestImageSchema()
 	item := object(map[string]any{
-		"library":             text("必填，库 ID 或英文目录名；先调用 list_libraries"),
-		"recovery_failure_id": text("可选，关联修复的接收故障编号；不参与正文或去重"),
-		"mentioned_fact_ids":  stringArray("AI产出可选提及的已有事实 ID；提供空数组表示不提及，永不作为出处"),
-		"source_id":           text("可选稳定来源 ID，最多 2048 Unicode 码点；须与 source_revision 一起提供"),
+		"library":            text("必填，库 ID 或英文目录名；先调用 list_libraries"),
+		"mentioned_fact_ids": stringArray("AI产出可选提及的已有事实 ID；提供空数组表示不提及，永不作为出处"),
+		"source_id":          text("可选稳定来源 ID，最多 2048 Unicode 码点；须与 source_revision 一起提供"),
 		"source_revision": map[string]any{
 			"type": "integer", "minimum": 0,
 			"description": "同库同 source_id 单调递增的非负 int64；旧修订或相同修订返回 stale_revision",

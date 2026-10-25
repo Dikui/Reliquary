@@ -3,7 +3,6 @@ package container
 import (
 	"fmt"
 	"reliquary/internal/application/service"
-	"reliquary/internal/diagnostics"
 	"reliquary/internal/mcpserver"
 	"reliquary/internal/types/interfaces"
 )
@@ -16,7 +15,6 @@ func newMCPHandler(
 	domains *service.DomainService,
 	stories *service.StoryService,
 	follows *service.FollowService,
-	diagnostic *diagnostics.Service,
 ) (*mcpserver.Handler, error) {
 	entries, ok := entry.(mcpserver.EntryService)
 	if !ok {
@@ -24,14 +22,13 @@ func newMCPHandler(
 	}
 	return mcpserver.New(
 		mcpserver.Services{
-			Libraries:   libraries,
-			Entries:     entries,
-			Search:      search,
-			Entities:    entities,
-			Domains:     domains,
-			Stories:     stories,
-			Follows:     follows,
-			Diagnostics: diagnostic,
+			Libraries: libraries,
+			Entries:   entries,
+			Search:    search,
+			Entities:  entities,
+			Domains:   domains,
+			Stories:   stories,
+			Follows:   follows,
 		},
 	), nil
 }

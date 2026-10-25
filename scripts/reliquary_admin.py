@@ -355,7 +355,7 @@ class Context:
         self.env = {**read_env(self.root / ".env"), **self.env, **(overrides or {})}
         # Compose does not expand expressions in values supplied through its
         # process environment. Resolve host paths before they override .env.
-        for key in ("RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "RELIQUARY_DIAGNOSTICS_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY",
+        for key in ("RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY",
                     "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
             if self.env.get(key):
                 self.env[key] = str(host_path(self.env[key], self.env, self.root))
@@ -1016,11 +1016,11 @@ def restored_environment(ctx, package, env_path=None):
     values.update({"SYSTEM_AES_KEY": secrets.token_hex(16), "JWT_SECRET": secrets.token_hex(32), "DB_PASSWORD": secrets.token_urlsafe(32)})
     values.setdefault("VAULT_ROOT", "/data/vault")
     values.setdefault("LOCAL_STORAGE_BASE_DIR", "/data/files")
-    values.update(RELIQUARY_VAULT_DIR="${HOME}/Reliquary/vault", RELIQUARY_FILES_DIR="${HOME}/Reliquary/files", RELIQUARY_DIAGNOSTICS_DIR="${HOME}/Reliquary/logs/diagnostics", BACKUP_DIR="${HOME}/Backups/Reliquary")
+    values.update(RELIQUARY_VAULT_DIR="${HOME}/Reliquary/vault", RELIQUARY_FILES_DIR="${HOME}/Reliquary/files", BACKUP_DIR="${HOME}/Backups/Reliquary")
     for key in ("COMPOSE_FILE", "COMPOSE_PROJECT_NAME"):
         values.pop(key, None)
     # Keep the new destination's actual connection and ports when supplied.
-    for key in ("DB_HOST", "DB_PORT", "DB_USER", "DB_NAME", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PORT", "APP_PORT", "FRONTEND_PORT", "VAULT_ROOT", "LOCAL_STORAGE_BASE_DIR", "OLLAMA_BASE_URL", "RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "RELIQUARY_DIAGNOSTICS_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY", "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
+    for key in ("DB_HOST", "DB_PORT", "DB_USER", "DB_NAME", "REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD", "REDIS_PORT", "APP_PORT", "FRONTEND_PORT", "VAULT_ROOT", "LOCAL_STORAGE_BASE_DIR", "OLLAMA_BASE_URL", "RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY", "RELIQUARY_ADMIN_VAULT_DIR", "RELIQUARY_ADMIN_RESOURCES_DIR"):
         if key in ctx.env:
             values[key] = ctx.env[key]
     if env_path:

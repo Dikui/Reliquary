@@ -10,10 +10,17 @@ import (
 	"github.com/gin-gonic/gin"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
+	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
 )
+
+// uploadReadFailure logs the failed upload without keeping its bytes.
+func (h *EntryHandler) uploadReadFailure(c *gin.Context, name string, data []byte, err error) {
+	logger.Warnf(c.Request.Context(), "ingest image upload read failed: file=%s bytes=%d error=%v", utils.SanitizeForLog(name), len(data), err)
+	c.Error(werrors.NewInternalServerError("Unable to read uploaded image"))
+}
 
 func (h *EntryHandler) ingestService(c *gin.Context) interfaces.IngestService {
 	collector, ok := h.kgService.(interfaces.IngestService)

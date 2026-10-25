@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
-	"reliquary/internal/diagnostics"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
 )
@@ -214,13 +213,6 @@ func TestIngestContentDuplicatePreservesCanonicalImageFingerprint(t *testing.T) 
 
 func TestIngestAuditFailureRollsBackCollectionAndReason(t *testing.T) {
 	h, _ := newIngestHarness(t)
-	diagnosticRoot := t.TempDir()
-	diag, err := diagnostics.New(diagnosticRoot, diagnostics.DefaultRetention, diagnostics.DefaultMaxBytes)
-	require.NoError(t, err)
-	diag.SetVersion("fixture@revision")
-	closeDiagnostics := diag.Start(context.Background())
-	t.Cleanup(func() { require.NoError(t, closeDiagnostics()) })
-	h.service.SetIngestDiagnostics(diag)
 	request := &types.IngestRequest{Library: "official", Acquisition: "verbatim", Publisher: "Acme", URL: "https://example.org/audit-existing", Content: "The original article is retained for an audit failure test."}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
@@ -237,30 +229,9 @@ func TestIngestAuditFailureRollsBackCollectionAndReason(t *testing.T) {
 	failed, err := h.service.IngestBatch(h.ctx, &types.IngestBatchRequest{Items: []types.IngestRequest{success, {Content: "Refused sibling must never be retained"}, *request}})
 	require.NoError(t, err)
 	require.Equal(t, "accepted", failed.Items[0].Status)
-	require.Nil(t, failed.Items[0].Diagnostics)
 	require.Equal(t, "invalid", failed.Items[1].Status)
-	require.Nil(t, failed.Items[1].Diagnostics)
 	require.Equal(t, "invalid", failed.Items[2].Status)
-	require.NotNil(t, failed.Items[2].Diagnostics)
-	failure, err := diag.Get(h.ctx, failed.Items[2].Diagnostics.FailureID)
-	require.NoError(t, err)
-	require.Contains(t, failure.Reason, "audit unavailable")
-	require.Equal(t, "rolled_back", failure.Outcome)
-	require.Equal(t, "available", failure.PackageStatus)
-	require.Len(t, failure.Materials, 2)
-	require.Equal(t, 2, failure.ItemIndex)
-	_, original, err := diag.Read(h.ctx, failure.ID, failure.Materials[0].ID)
-	require.NoError(t, err)
-	var recovered types.IngestRequest
-	require.NoError(t, json.Unmarshal(original, &recovered))
-	require.Equal(t, request.Content, recovered.Content)
-	require.NotContains(t, string(original), success.Content)
-	require.NotContains(t, string(original), "Refused sibling")
-	_, image, err := diag.Read(h.ctx, failure.ID, failure.Materials[1].ID)
-	require.NoError(t, err)
-	wantImage, err := decodeIngestInline(request.Images[0].Data)
-	require.NoError(t, err)
-	require.Equal(t, wantImage, image)
+	require.Equal(t, "内部处理失败", failed.Items[2].Reason)
 	var count int64
 	require.NoError(t, h.db.Model(&types.Entry{}).Count(&count).Error)
 	require.EqualValues(t, 2, count)
@@ -269,28 +240,10 @@ func TestIngestAuditFailureRollsBackCollectionAndReason(t *testing.T) {
 	require.Empty(t, files.saved, "text remains in PostgreSQL; failed collection files are removed")
 	require.Equal(t, success.Content+"\n", h.article(t, failed.Items[0].EntryID).VaultBody)
 	require.NoError(t, h.db.Exec(`DROP TRIGGER fail_ingest_audit ON operation_logs`).Error)
-	recovered.RecoveryFailureID = failure.ID
-	// Missing provenance does not block the repaired submission.
-	recovered.URL, recovered.Publisher = "", ""
-	// A failed repair creates a child failure; rejecting its eventual repair
-	// must clear both snapshots, including the ancestor without a business row.
-	require.NoError(t, h.db.Exec(`CREATE OR REPLACE FUNCTION fail_ingest_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit unavailable'; END $$; CREATE TRIGGER fail_ingest_audit BEFORE INSERT ON operation_logs FOR EACH ROW EXECUTE FUNCTION fail_ingest_audit()`).Error)
-	second, err := h.service.IngestBatch(h.ctx, &types.IngestBatchRequest{Items: []types.IngestRequest{recovered}})
-	require.NoError(t, err)
-	require.NotNil(t, second.Items[0].Diagnostics)
-	childID := second.Items[0].Diagnostics.FailureID
-	child, err := diag.Get(h.ctx, childID)
-	require.NoError(t, err)
-	require.Equal(t, failure.ID, child.RecoveryFailureID)
-	require.NoError(t, h.db.Exec(`DROP TRIGGER fail_ingest_audit ON operation_logs`).Error)
-	recovered.RecoveryFailureID = childID
-	repaired, err := h.service.IngestBatch(h.ctx, &types.IngestBatchRequest{Items: []types.IngestRequest{recovered}})
+	// Nothing of the failed item is kept; the caller resubmits from its own copy.
+	repaired, err := h.service.IngestBatch(h.ctx, &types.IngestBatchRequest{Items: []types.IngestRequest{*request}})
 	require.NoError(t, err)
 	require.Equal(t, "accepted", repaired.Items[0].Status)
-	child, err = diag.Get(h.ctx, childID)
-	require.NoError(t, err)
-	require.Equal(t, repaired.Items[0].EntryID, child.RecoveryEntryID)
-
 }
 
 func TestAssembleIngestBodyExactFormat(t *testing.T) {

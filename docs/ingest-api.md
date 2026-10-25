@@ -16,7 +16,6 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `source_revision` | 与 `source_id` 一起提供的非负 int64 整数，可从 0 开始；同库同来源只接受严格增加的修订号 |
 | `source_ref` | 所有模板接受。可选字符串，去首尾空白，最多 2048 Unicode 码点。同库内用于唯一定位来源 |
 | `identifier` | 所有模板接受。可选 `scheme:value`，最多 2048 Unicode 码点。scheme 小写、DOI value 小写；其他 value 保留大小写 |
-| `recovery_failure_id` | 可选接收故障编号，用于关联修复请求与结果；不参与正文、来源身份或去重 |
 | `url` | 可选，缺来源不阻止保存。提供时必须为 HTTP/HTTPS，最多 2048 字节 |
 | `title` | 可选，最多 255 个码点；缺失不阻止保存，后台可补标题 |
 | `author`、`publisher`、`published_at` | 可选来源信息；日期使用 YYYY-MM-DD 或 RFC3339 |
@@ -27,7 +26,7 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 
 `kind`、`document_id`、`file`、`entry_id`、`missing` 和未知字段被拒绝。所有模板均接受可选 source_ref 和 identifier。
 
-技术故障的逐项结果可附带 `diagnostics: {failure_id, package_status, recorded}`；明确拒绝不保留故障包。`recorded=false` 表示未成功落盘。使用[接收故障查询接口](external-integration.md#接收故障与短期故障包)读取原始输入和图片，再通过本接口修正提交。`outcome=unknown` 时先核对现有资料与任务；`accepted` 表示正文、图片与后台任务已保存，不表示索引或模型处理已完成。
+技术故障的逐项结果为 `status=invalid`、`reason` 为“内部处理失败”，系统不保存失败条目的正文和图片，只记应用日志（见[接收故障](external-integration.md#接收故障)）；调用方用自己保留的原文重新提交。网络超时等结果不明时，先核对现有资料与任务；`accepted` 表示正文、图片与后台任务已保存，不表示索引或模型处理已完成。
 
 调用方应保留原文明确署名：`author` 填个人作者，`publisher` 填发布机构、媒体或平台账号，不用机构或转发账号替代文章作者，也不推测缺失的署名。正文保留作者观点和理解所需的回复、引用上下文。`verbatim` 不得删改主体；经过压缩、重述的材料应如实声明获取方式。提交原帖时保存原帖 URL，相关文章链接不能冒充原帖来源。客观机构新闻与外部个人观点按目标库用途分别收录。
 

@@ -20,7 +20,6 @@ import (
 // RouterParams 路由参数
 type RouterParams struct {
 	dig.In
-	IngestDiagnosticsHandler *handler.IngestDiagnosticsHandler `optional:"true"`
 
 	Config                  *config.Config
 	FileService             interfaces.FileService
@@ -140,11 +139,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 			params.FileService,
 			params.ResourceCatalog)
 		RegisterEntryRoutes(v1, params.EntryHandler, accessGuards)
-		if h := params.IngestDiagnosticsHandler; h != nil {
-			v1.GET("/diagnostics/ingest-failures", h.List)
-			v1.GET("/diagnostics/ingest-failures/:id", h.Get)
-			v1.GET("/diagnostics/ingest-failures/:id/materials/:material_id", h.Read)
-		}
 		if params.VaultHandler != nil {
 			v1.GET("/vault/status", params.VaultHandler.Status)
 			v1.POST("/vault/rebuild", params.VaultHandler.RebuildFiles)

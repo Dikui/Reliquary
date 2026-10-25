@@ -124,14 +124,14 @@ func TestLoggerOmitsRejectedIngestAndDiagnosticMaterialBodies(t *testing.T) {
 		require.ErrorContains(t, err, "private-error-fixture")
 		c.Error(errors.NewBadRequestError(err.Error()))
 	})
-	r.GET("/api/v1/diagnostics/ingest-failures/failure/materials/input", func(c *gin.Context) {
+	r.GET("/api/v1/model-calls/call", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"content": "private-diagnostic-fixture"})
 	})
 	r.GET("/health", func(c *gin.Context) { c.String(http.StatusOK, "public-response-fixture") })
 	r.GET("/public-error", func(c *gin.Context) { c.Error(errors.NewBadRequestError("public-error-fixture")) })
 	for _, request := range []*http.Request{
 		httptest.NewRequest(http.MethodPost, "/api/v1/ingest", strings.NewReader(original)),
-		httptest.NewRequest(http.MethodGet, "/api/v1/diagnostics/ingest-failures/failure/materials/input", nil),
+		httptest.NewRequest(http.MethodGet, "/api/v1/model-calls/call", nil),
 		httptest.NewRequest(http.MethodGet, "/health", nil),
 		httptest.NewRequest(http.MethodGet, "/public-error", nil),
 	} {
@@ -146,7 +146,7 @@ func TestLoggerOmitsRejectedIngestAndDiagnosticMaterialBodies(t *testing.T) {
 	}
 	logs := output.String()
 	require.Contains(t, logs, "/api/v1/ingest")
-	require.Contains(t, logs, "/api/v1/diagnostics/ingest-failures/failure/materials/input")
+	require.Contains(t, logs, "/api/v1/model-calls/call")
 	require.Contains(t, logs, "public-response-fixture", "the assertion must observe real access logs")
 	require.Contains(t, logs, `"error":{"code":1000}`, "private errors retain their structured code")
 	require.Contains(t, logs, "public-error-fixture", "ordinary paths retain their original error log")

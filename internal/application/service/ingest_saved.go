@@ -16,7 +16,6 @@ import (
 
 	werrors "reliquary/internal/errors"
 
-	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -241,11 +240,6 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 	}
 	if err := NewOperationLogService(s.db).RecordTx(ctx, s.db, "ingest", entry.ID, nil, map[string]any{"library_id": library.ID, "replaced": existing != nil, "acquisition": entry.Acquisition, "collect_reason": entry.CollectReason, "url": entry.Source}); err != nil {
 		return nil, err
-	}
-	if request.RecoveryFailureID != "" {
-		if err := s.db.WithContext(ctx).Model(entry).Update("metadata", gorm.Expr("jsonb_set(COALESCE(metadata,'{}'::jsonb),'{recovery_failure_id}',to_jsonb(?::text),true)", request.RecoveryFailureID)).Error; err != nil {
-			return nil, err
-		}
 	}
 	s.bindContentResources(ctx, entry.SpaceID, entry.ID, body)
 	if _, err := s.enqueueManualProcessing(ctx, entry, body, false); err != nil {

@@ -53,7 +53,6 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
           meta: { requiresInit: true, requiresAuth: true }
         },
         { path: 'stories/:storyId?', name: 'stories', component: () => import('../views/library/StoriesPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
-        { path: 'diagnostics', name: 'diagnostics', component: () => import('../views/insights/IngestFailuresPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
         { path: 'evaluation', name: 'evaluation', component: () => import('../views/insights/EvaluationPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
         { path: 'model-calls', name: 'modelCalls', component: () => import('../views/insights/ModelCallsPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
         {

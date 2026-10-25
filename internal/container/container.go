@@ -56,7 +56,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// Core infrastructure configuration
 	logger.Debugf(ctx, "[Container] Registering core infrastructure...")
 	must(container.Provide(config.LoadConfig))
-	must(container.Provide(newIngestDiagnostics))
 	must(container.Provide(initDatabase))
 	must(container.Provide(initFileService))
 	must(container.Provide(initAntsPool))
@@ -133,7 +132,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewSpaceHandler))
 	must(container.Provide(handler.NewLibraryHandler))
 	must(container.Provide(handler.NewEntryHandler))
-	must(container.Provide(handler.NewIngestDiagnosticsHandler))
 	must(container.Provide(handler.NewVaultHandler))
 	must(container.Provide(handler.NewMaintenanceHandler))
 	must(container.Provide(handler.NewSearchHandler))
@@ -160,7 +158,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// (which is not encoded in the local:// URL).
 	must(container.Invoke(registerModelLocalImageResolver))
 	must(container.Invoke(registerVaultIntegration))
-	must(container.Invoke(registerIngestDiagnostics))
 
 	// Router configuration
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")

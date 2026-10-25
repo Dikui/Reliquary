@@ -12,7 +12,6 @@ set -e
 MOUNT_DIRS=(
     "${LOCAL_STORAGE_BASE_DIR:-/data/files}"
     "${VAULT_ROOT:-/data/vault}"
-    "${RELIQUARY_DIAGNOSTICS_ROOT:-/data/diagnostics}"
 )
 
 for dir in "${MOUNT_DIRS[@]}"; do

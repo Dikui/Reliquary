@@ -153,9 +153,6 @@ func (s *entryService) deleteEntry(ctx context.Context, id string) error {
 		_, err := s.ReviewEntryIntake(ctx, id, "discard", types.SourceInfo{})
 		return err
 	}
-	if err := s.removeEntryDiagnosticMaterials(ctx, entry); err != nil {
-		return err
-	}
 
 	// Mark as deleting first to prevent async task conflicts
 	// This ensures that any running async tasks will detect the deletion and abort
@@ -397,12 +394,6 @@ func (s *entryService) deleteEntryList(ctx context.Context, ids []string) error 
 		}
 		if _, ok := types.PrincipalFromContext(ctx); !ok {
 			return errors.New("an authenticated user is required to delete rejected intake")
-		}
-	}
-
-	for _, entry := range entryList {
-		if err := s.removeEntryDiagnosticMaterials(ctx, entry); err != nil {
-			return err
 		}
 	}
 

@@ -16,7 +16,6 @@ import (
 // Config 应用程序总配置
 type Config struct {
 	FactGrouping      *FactGroupingConfig      `yaml:"fact_grouping" json:"fact_grouping"`
-	IngestDiagnostics *IngestDiagnosticsConfig `yaml:"ingest_diagnostics" json:"ingest_diagnostics"`
 	Vault             *VaultConfig             `yaml:"vault" json:"vault"`
 	ArticleProcessing *ArticleProcessingConfig `yaml:"article_processing" json:"article_processing"`
 	Server            *ServerConfig            `yaml:"server"           json:"server"`

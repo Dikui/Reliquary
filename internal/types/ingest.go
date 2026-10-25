@@ -1,9 +1,22 @@
 package types
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 )
+
+type privateIngestContentKey struct{}
+
+// WithPrivateIngestContent keeps submitted ingest content out of shared debug logs.
+func WithPrivateIngestContent(ctx context.Context) context.Context {
+	return context.WithValue(ctx, privateIngestContentKey{}, true)
+}
+
+func PrivateIngestContent(ctx context.Context) bool {
+	v, _ := ctx.Value(privateIngestContentKey{}).(bool)
+	return v
+}
 
 const (
 	MaxIngestBatchItems         = 50
@@ -23,7 +36,6 @@ const (
 // Agent annotations are stored separately from article metadata and processing input.
 type IngestRequest struct {
 	MentionedFactIDs   *[]string          `json:"mentioned_fact_ids,omitempty"`
-	RecoveryFailureID  string             `json:"recovery_failure_id,omitempty"`
 	RawInput           json.RawMessage    `json:"-"`
 	Library            string             `json:"library"`
 	SourceID           string             `json:"source_id,omitempty"`
@@ -84,22 +96,21 @@ type IngestImageFailure struct {
 }
 
 type IngestResult struct {
-	Diagnostics      *IngestDiagnosticReference `json:"diagnostics,omitempty"`
-	LibraryName      string                     `json:"library_name"`
-	SourceUnverified bool                       `json:"source_unverified"`
-	LibraryID        string                     `json:"library_id"`
-	SourceID         string                     `json:"source_id,omitempty"`
-	SourceRevision   *int64                     `json:"source_revision,omitempty"`
-	SourceRef        string                     `json:"source_ref,omitempty"`
-	Identifier       string                     `json:"identifier,omitempty"`
-	HasUpdate        bool                       `json:"has_update"`
-	LatestEntryID    string                     `json:"latest_entry_id,omitempty"`
-	Index            int                        `json:"index"`
-	EntryID          string                     `json:"entry_id"`
-	Status           string                     `json:"status"`
-	Message          string                     `json:"message"`
-	Reason           string                     `json:"reason"`
-	ImageFailures    []IngestImageFailure       `json:"image_failures"`
+	LibraryName      string               `json:"library_name"`
+	SourceUnverified bool                 `json:"source_unverified"`
+	LibraryID        string               `json:"library_id"`
+	SourceID         string               `json:"source_id,omitempty"`
+	SourceRevision   *int64               `json:"source_revision,omitempty"`
+	SourceRef        string               `json:"source_ref,omitempty"`
+	Identifier       string               `json:"identifier,omitempty"`
+	HasUpdate        bool                 `json:"has_update"`
+	LatestEntryID    string               `json:"latest_entry_id,omitempty"`
+	Index            int                  `json:"index"`
+	EntryID          string               `json:"entry_id"`
+	Status           string               `json:"status"`
+	Message          string               `json:"message"`
+	Reason           string               `json:"reason"`
+	ImageFailures    []IngestImageFailure `json:"image_failures"`
 }
 
 type IngestBatchRequest struct {

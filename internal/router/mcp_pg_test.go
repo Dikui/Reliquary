@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,8 +11,6 @@ import (
 	"reliquary/internal/application/service/file"
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/config"
-	"reliquary/internal/diagnostics"
-	"reliquary/internal/handler"
 	"reliquary/internal/mcpserver"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
@@ -143,17 +140,16 @@ func (q *mcpFixtureQueue) EnqueueTx(ctx context.Context, tx *gorm.DB, task *task
 
 type mcpFixture struct {
 	*personalAuthFixture
-	ctx         context.Context
-	library     *types.Library
-	articles    mcpserver.EntryService
-	files       interfaces.FileService
-	vault       *service.VaultService
-	documents   *service.VaultDocumentService
-	queue       *mcpFixtureQueue
-	server      *httptest.Server
-	root        string
-	diagnostics *diagnostics.Service
-	models      interfaces.ModelService
+	ctx       context.Context
+	library   *types.Library
+	articles  mcpserver.EntryService
+	files     interfaces.FileService
+	vault     *service.VaultService
+	documents *service.VaultDocumentService
+	queue     *mcpFixtureQueue
+	server    *httptest.Server
+	root      string
+	models    interfaces.ModelService
 }
 
 func (f *mcpFixture) seedProcessingModels(t *testing.T) {
@@ -214,18 +210,9 @@ func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture
 	documents, err := service.NewVaultDocumentService(f.db, models, engine, root)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, documents.Close()) })
-	diagnosticStore, err := diagnostics.New(t.TempDir(), diagnostics.DefaultRetention, diagnostics.DefaultMaxBytes)
-	require.NoError(t, err)
-	closeDiagnostics := diagnosticStore.Start(context.Background())
-	t.Cleanup(func() { require.NoError(t, closeDiagnostics()) })
-	entry.(interface{ SetIngestDiagnostics(*diagnostics.Service) }).SetIngestDiagnostics(diagnosticStore)
-	diagnosticHandler := handler.NewIngestDiagnosticsHandler(diagnosticStore)
-	f.router.GET("/api/v1/diagnostics/ingest-failures", diagnosticHandler.List)
-	f.router.GET("/api/v1/diagnostics/ingest-failures/:id", diagnosticHandler.Get)
-	f.router.GET("/api/v1/diagnostics/ingest-failures/:id/materials/:material_id", diagnosticHandler.Read)
 	articles := entry.(mcpserver.EntryService)
 	adapter := mcpserver.New(mcpserver.Services{
-		Diagnostics: diagnosticStore, Libraries: bases, Entries: articles,
+		Libraries: bases, Entries: articles,
 		Search: service.NewSearchService(bases, f.params.SpaceService, models, f.db),
 
 		Entities: service.NewEntityService(f.db,
@@ -239,7 +226,7 @@ func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture
 	t.Cleanup(server.Close)
 	return &mcpFixture{
 		personalAuthFixture: f, ctx: ctx, library: library, articles: articles, files: files,
-		vault: vault, documents: documents, queue: queue, server: server, root: root, diagnostics: diagnosticStore,
+		vault: vault, documents: documents, queue: queue, server: server, root: root,
 		models: models,
 	}
 }
@@ -580,9 +567,6 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 			"discard_pending",
 			"set_star",
 			"check_urls",
-			"list_ingest_failures",
-			"get_ingest_failure",
-			"read_ingest_failure_material",
 		},
 		names)
 	_, err = client.CallTool(context.Background(), &mcp.CallToolParams{Name: "write_report", Arguments: map[string]any{"title": "Removed report entry point", "markdown": "# Report"}})
@@ -655,103 +639,4 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	listed, err := latest.ListTools(context.Background(), nil)
 	require.NoError(t, err)
 	require.Len(t, listed.Tools, len(names))
-}
-
-func TestMCPAndHTTPReadIngestFailureMaterials(t *testing.T) {
-	t.Setenv("RELIQUARY_COMMIT", "mcp-diagnostic-test")
-	f := newMCPFixture(t)
-	f.seedProcessingModels(t)
-	client := f.connect(t, "2025-11-25")
-	const source = "# 故障恢复🙂\n\n原始材料。\n\n![photo](https://example.org/photo.png)"
-	expectedImage := entryContentPNG(t, 24)
-	asset, err := f.articles.UploadIngestAsset(f.ctx, "photo.png", expectedImage)
-	require.NoError(t, err)
-	f.queue.mu.Lock()
-	f.queue.enqueueErr = errors.New("diagnostic fixture enqueue outage")
-	f.queue.mu.Unlock()
-	var submitted types.IngestBatchResult
-	mcpCall(t, client, "ingest", map[string]any{"items": []any{map[string]any{
-		"library": f.library.ID, "url": "https://example.org/diagnostic-fixture", "content": source,
-		"acquisition": "verbatim", "title": "Diagnostic rollback fixture", "publisher": "Fixture publisher",
-		"images": []any{map[string]any{"source_url": "https://example.org/photo.png", "asset_id": asset.AssetID}},
-	}}}, &submitted)
-	f.queue.mu.Lock()
-	f.queue.enqueueErr = nil
-	f.queue.mu.Unlock()
-	require.Len(t, submitted.Items, 1)
-	require.Equal(t, "invalid", submitted.Items[0].Status)
-	require.NotNil(t, submitted.Items[0].Diagnostics)
-	require.True(t, submitted.Items[0].Diagnostics.Recorded)
-	failureID := submitted.Items[0].Diagnostics.FailureID
-	var entries int64
-	require.NoError(t, f.db.Model(&types.Entry{}).Where("title=?", "Diagnostic rollback fixture").Count(&entries).Error)
-	require.Zero(t, entries, "failed enqueue must roll back the business entry")
-	// Simulate normal upload expiry: the diagnostic package must own its bytes.
-	var uploaded types.IngestAsset
-	require.NoError(t, f.db.First(&uploaded, "id=?", asset.AssetID).Error)
-	require.NoError(t, f.files.DeleteFile(f.ctx, uploaded.Path))
-	require.NoError(t, f.db.Delete(&uploaded).Error)
-
-	var listed types.FailurePage
-	mcpCall(t, client, "list_ingest_failures", map[string]any{"id": failureID, "page": 1, "page_size": 20}, &listed)
-	require.Equal(t, 1, listed.Total)
-	require.Equal(t, failureID, listed.Items[0].ID)
-	var detail types.IngestFailure
-	mcpCall(t, client, "get_ingest_failure", map[string]any{"id": failureID}, &detail)
-	require.Equal(t, "mcp", detail.Transport)
-	require.Equal(t, "rolled_back", detail.Outcome)
-	require.Equal(t, "available", detail.PackageStatus)
-	var inputMaterial, imageMaterial types.FailureMaterial
-	for _, material := range detail.Materials {
-		if material.Source == "request" {
-			inputMaterial = material
-		}
-		if strings.HasPrefix(material.Type, "image/") {
-			imageMaterial = material
-		}
-	}
-	require.NotEmpty(t, inputMaterial.ID)
-	require.NotEmpty(t, imageMaterial.ID)
-	require.Equal(t, "asset_id:"+asset.AssetID, imageMaterial.Source)
-	var material types.FailureMaterialRead
-	mcpCall(t, client, "read_ingest_failure_material", map[string]any{"id": failureID, "material_id": inputMaterial.ID}, &material)
-	var original map[string]any
-	require.NoError(t, json.Unmarshal([]byte(material.Content), &original))
-	require.Equal(t, source, original["content"])
-	mcpCall(t, client, "read_ingest_failure_material", map[string]any{"id": failureID, "material_id": imageMaterial.ID}, &material)
-	require.Equal(t, "/api/v1/diagnostics/ingest-failures/"+failureID+"/materials/"+imageMaterial.ID, material.URL)
-
-	get := func(path, key string) *httptest.ResponseRecorder {
-		return personalRequest(t, f.router, http.MethodGet, path, "", key, false)
-	}
-	base := "/api/v1/diagnostics/ingest-failures/" + failureID
-	textResponse := get(base+"/materials/"+inputMaterial.ID+"?offset=0&length=9", f.key)
-	require.Equal(t, http.StatusOK, textResponse.Code, textResponse.Body.String())
-	var textEnvelope struct {
-		Success bool                      `json:"success"`
-		Data    types.FailureMaterialRead `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(textResponse.Body.Bytes(), &textEnvelope))
-	require.True(t, textEnvelope.Success)
-	_, rawInput, err := f.diagnostics.Read(f.ctx, failureID, inputMaterial.ID)
-	require.NoError(t, err)
-	require.Equal(t, string([]rune(string(rawInput))[:9]), textEnvelope.Data.Content)
-	require.Equal(t, 9, textEnvelope.Data.Length)
-	require.Equal(t, "private, no-store", textResponse.Header().Get("Cache-Control"))
-	imageResponse := get(base+"/materials/"+imageMaterial.ID, f.key)
-	require.Equal(t, http.StatusOK, imageResponse.Code)
-	require.Equal(t, expectedImage, imageResponse.Body.Bytes())
-	require.Equal(t, "image/png", imageResponse.Header().Get("Content-Type"))
-	require.Equal(t, "nosniff", imageResponse.Header().Get("X-Content-Type-Options"))
-	require.Equal(t, http.StatusNotFound, get(base+"/materials/"+uuid.NewString(), f.key).Code)
-	require.Equal(t, http.StatusUnauthorized, get(base, "invalid-key").Code)
-
-	foreign := context.WithValue(f.ctx, types.SpaceIDContextKey, uint64(types.SingleSpaceID+1))
-	_, attempt := f.diagnostics.Begin(foreign, []byte(`{"content":"foreign material"}`), 0, "", "")
-	other := attempt.Record(errors.New("foreign fixture outage"), "fixture", false, "rolled_back")
-	require.True(t, other.Recorded)
-	require.Equal(t, http.StatusNotFound, get("/api/v1/diagnostics/ingest-failures/"+other.FailureID, f.key).Code)
-	response, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_ingest_failure", Arguments: map[string]any{"id": other.FailureID}})
-	require.NoError(t, err)
-	require.True(t, response.IsError)
 }

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"reliquary/internal/diagnostics"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
@@ -41,12 +40,10 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 		return nil, err
 	}
 	spaceID, _ := types.SpaceIDFromContext(ctx)
-	diagnostics.SetStage(ctx, "library")
 	library, err := s.resolveIngestLibrary(ctx, request.Library)
 	if err != nil {
 		return nil, err
 	}
-	diagnostics.SetLibrary(ctx, library)
 	if err := s.validateFactMentions(ctx, library, request); err != nil {
 		return nil, err
 	}
@@ -171,11 +168,7 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 				reason = app.Message
 				message = "该条目无效，请检查获取方式、正文和图片后重试。"
 			}
-			diagnostic := item
 			item = ingestResult(nil, "invalid", message, reason, "")
-			if diagnostic != nil {
-				item.Diagnostics = diagnostic.Diagnostics
-			}
 		}
 		item.Index = i
 		result.Items = append(result.Items, *item)
@@ -321,11 +314,6 @@ func (s *entryService) resolveIngestImages(ctx context.Context, input []types.In
 			_, payload, _ := strings.Cut(ref, ",")
 			data, _ := base64.StdEncoding.DecodeString(payload)
 			mimeType := http.DetectContentType(data)
-			source := ingestImageSource(image)
-			if image.AssetID != "" {
-				source = "asset_id:" + image.AssetID
-			}
-			diagnostics.CaptureImage(ctx, fmt.Sprintf("image-%d", i), source, mimeType, data)
 			// Inputs are already validated; preserve upload limits and original bytes.
 			name := uuid.NewString() + vaultImageExtension("", mimeType)
 			refs[i], err = files.SaveBytes(ctx, data, spaceID, name, false)

@@ -21,7 +21,6 @@ func TestIngestContractFieldSetAndExample(t *testing.T) {
 	require.ElementsMatch(
 		t,
 		[]string{
-			"recovery_failure_id",
 			"mentioned_fact_ids",
 			"library",
 			"source_id",

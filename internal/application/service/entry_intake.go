@@ -250,9 +250,6 @@ func (s *entryService) ReviewEntryIntake(ctx context.Context, id, action string,
 		return nil, werrors.NewBadRequestError("rejecting intake deletes its stored source and requires confirmation")
 	}
 	if action == "reject" || action == "discard" {
-		if err := s.removeEntryDiagnosticMaterials(ctx, entry); err != nil {
-			return nil, err
-		}
 		discard := func(svc *entryService) error {
 			if svc.db != nil {
 				if err := svc.rememberIngestDiscard(ctx, entry, ingestDiscardReason(ctx)); err != nil {

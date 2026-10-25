@@ -9,12 +9,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reliquary/internal/diagnostics"
 	"reliquary/internal/infrastructure/docparser"
 	"strings"
 	"time"
 
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/logger"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
@@ -72,9 +72,9 @@ func (s *entryService) UploadIngestAsset(ctx context.Context, name string, data 
 		result, err := entryTaskTransaction(ctx, s, func(copy *entryService) (*types.IngestAssetResult, error) {
 			return copy.UploadIngestAsset(ctx, name, data)
 		})
-		if s.diagnostics != nil && technicalIngestError(err) {
-			ref := s.diagnostics.RecordUploadFailure(ctx, name, data, err, true)
-			return nil, werrors.NewInternalServerError("Image upload failed").WithDetails(map[string]any{"diagnostics": ref})
+		if technicalIngestError(err) {
+			logger.Errorf(ctx, "ingest image upload failed: file=%s bytes=%d error=%v", utils.SanitizeForLog(name), len(data), err)
+			return nil, werrors.NewInternalServerError("Image upload failed")
 		}
 		return result, err
 	}
@@ -138,7 +138,6 @@ func (s *entryService) loadIngestAsset(ctx context.Context, id string) (*types.I
 	if err := utils.ValidateIngestImage(data); err != nil {
 		return nil, nil, werrors.NewBadRequestError(err.Error())
 	}
-	diagnostics.CaptureImage(ctx, asset.Name, "asset_id:"+asset.ID, http.DetectContentType(data), data)
 	return &asset, data, nil
 }
 

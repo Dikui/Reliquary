@@ -23,7 +23,7 @@ const (
 )
 
 func omitContentBodies(path string) bool {
-	for _, prefix := range []string{"/mcp", "/api/v1/ingest", "/api/v1/diagnostics/", "/api/v1/entries", "/api/v1/model-calls"} {
+	for _, prefix := range []string{"/mcp", "/api/v1/ingest", "/api/v1/entries", "/api/v1/model-calls"} {
 		if path == prefix || strings.HasPrefix(path, prefix+"/") || strings.HasSuffix(prefix, "/") && strings.HasPrefix(path, prefix) {
 			return true
 		}
