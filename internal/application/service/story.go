@@ -68,19 +68,9 @@ func (s *StoryService) StoryDetail(ctx context.Context, id string) (*types.Story
 	if err != nil {
 		return nil, err
 	}
-	for _, fact := range facts {
-		item := types.StoryFact{Fact: fact, Sources: []types.FactSource{}}
-		err = s.db.WithContext(ctx).Table("entry_facts ef").
-			Select(`ef.entry_id,e.library_id,e.title,ef.role,ef.quote,ef.manual,
- COALESCE(e.metadata#>>'{intake,source_info,original_url}', e.metadata->>'original_url', '') AS original_url`).
-			Joins("JOIN entries e ON e.id=ef.entry_id AND e.space_id=ef.space_id AND e.deleted_at IS NULL").
-			Where("ef.space_id=? AND ef.fact_id=? AND ef.role='source'", spaceID, fact.ID).
-			Order("ef.created_at,ef.entry_id").Scan(&item.Sources).Error
-		if err != nil {
-			return nil, err
-		}
-		item.NoSource = len(item.Sources) == 0
-		detail.Facts = append(detail.Facts, item)
+	detail.Facts, err = factsWithSources(ctx, s.db, spaceID, facts)
+	if err != nil {
+		return nil, err
 	}
 
 	err = s.db.WithContext(ctx).Table("entry_facts ef").

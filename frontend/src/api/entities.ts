@@ -30,7 +30,7 @@ export interface EntityListParams {
   limit?: number
   offset?: number
 }
-function queryString(params?: EntityListParams & { status?: string }): string {
+function queryString(params?: EntityListParams | EntityFactParams): string {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params || {})) if (value !== undefined && value !== '') query.set(key, String(value))
   return query.size ? `?${query}` : ''
@@ -38,6 +38,26 @@ function queryString(params?: EntityListParams & { status?: string }): string {
 const base = '/api/v1/entities'
 export const listEntities = (params?: EntityListParams) => get<EntityEnvelope<Entity[]>>(`${base}${queryString(params)}`)
 export const getEntity = (id: string) => get<EntityEnvelope<EntityDetail>>(`${base}/${encodeURIComponent(id)}`)
+export interface EntityFactParams {
+  from?: string
+  to?: string
+  other_entity_id?: string
+  direction?: 'incoming' | 'outgoing'
+  limit?: number
+  offset?: number
+}
+export interface EntityGraphEdge {
+  subject_entity_id: string
+  object_entity_id: string
+  latest_action: string
+  fact_count: number
+}
+export interface EntityGraph { center: Entity; nodes: Entity[]; edges: EntityGraphEdge[] }
+export interface EntityFactPage { items: import('./stories').StoryFact[]; total: number }
+export const getEntityGraph = (id: string, params?: Pick<EntityFactParams, 'from' | 'to'>) =>
+  get<EntityEnvelope<EntityGraph>>(`${base}/${encodeURIComponent(id)}/graph${queryString(params)}`)
+export const getEntityFacts = (id: string, params?: EntityFactParams) =>
+  get<EntityEnvelope<EntityFactPage>>(`${base}/${encodeURIComponent(id)}/facts${queryString(params)}`)
 export const mergeEntities = (input: { keep_entity_id: string; merge_entity_id: string }) => post<EntityActionEnvelope>(`${base}/merge`, input)
 export interface EntityMergeRecord { id: string; keep_entity_id: string; merge_entity_id: string; actor?: string; created_at: string }
 export const listEntityMergeRecords = (id: string) => get<EntityEnvelope<EntityMergeRecord[]>>(`${base}/${encodeURIComponent(id)}/merge-records`)

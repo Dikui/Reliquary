@@ -81,7 +81,7 @@ TDesign owns buttons, inputs, date pickers, loading, empty states and pagination
 
 EntryProcessingStatus uses the existing success outline tag for confirmed storage and a separate neutral, active or error tag for background work. Cards, rows and details share these labels and the TDesign retry button. Labels wrap in narrow containers; the saved state does not change to an error color when enrichment fails. No new theme tokens are introduced.
 
-Entity details retain the shared metadata controls and source-material list. The retired relationship list, graph canvas and relationship-type editor are removed; no replacement visual controls are introduced in this change.
+Entity details retain the shared metadata controls and source-material list. EntityActivity derives a one-hop directed graph from visible facts, with native node and edge buttons and a fact sidebar. It reuses semantic borders and the green center accent, and uses the existing TDesign date range, selection, loading and pagination controls. Wide detail panels place graph and timeline beside each other; narrow panels stack them. Graph navigation adds no dependency, decorative motion or theme tokens.
 
 Material lists and search retain the existing library scope, publication date and star controls. Classification tags, topic controls, similar-report disclosures and the self-check pages are removed. Shared TDesign controls, spacing and feedback retain their established owners.
 

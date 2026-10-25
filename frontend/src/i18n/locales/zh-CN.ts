@@ -1,5 +1,24 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  entityActivity: {
+    "graph": "实体图谱",
+    "timeline": "事实时间线",
+    "from": "开始日期",
+    "to": "结束日期",
+    "period": "事实时间段",
+    "description": "仅展开一层。点关系查看该方向的事实，点邻居切换中心并查看其全部事实。",
+    "timeHint": "按发生时间筛选；发生时间未知时使用事实入库时间。日期范围包含首尾两天，按 UTC 计算。",
+    "graphFailed": "图谱加载失败，请重试。",
+    "factsFailed": "事实加载失败，请重试。",
+    "factCount": "{count} 条事实",
+    "centerOn": "以 {name} 为中心并查看全部事实",
+    "noEdges": "此时间段没有可见的双端实体关系。",
+    "noFacts": "没有符合筛选的可见事实。",
+    "allFacts": "全部事实",
+    "counterpart": "按另一端实体筛选",
+    "outgoing": "当前仅显示中心实体作为主体的事实。",
+    "incoming": "当前仅显示中心实体作为对象的事实。"
+  },
   "entityCandidates": {
     "title": "待确认实体",
     "description": "按事实端点出现次数排序，查看事实后决定是否收录。",

@@ -24,6 +24,7 @@
             <section v-else>
               <div class="entity-detail__header"><div><span class="eyebrow">{{ entityTypeLabel(selectedEntity.entity_type) }}</span><h3>{{ selectedEntity.canonical_name }}</h3><h4>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</h4><div v-if="selectedEntity.aliases?.length" class="chips"><span v-for="alias in selectedEntity.aliases" :key="alias" class="chip">{{ alias }}</span></div><p v-else class="muted">{{ t('knowledgeWorkbench.entities.noAliases') }}</p></div><div class="entity-detail__actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><t-button variant="outline" @click="openEditor(selectedEntity)">{{ t('entityMaintenance.edit') }}</t-button><t-button theme="danger" variant="text" @click="deleteVisible = true">{{ t('entityMaintenance.delete') }}</t-button><t-button variant="outline" @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</t-button></div></div>
               <t-alert v-if="entityDetailError" theme="error" :message="entityDetailError" role="alert"><template #operation><t-button variant="text" :loading="entityDetailLoading" @click="selectEntity(selectedEntity)">{{ t('knowledgeWorkbench.refresh') }}</t-button></template></t-alert>
+              <EntityActivity :entity="selectedEntity" @select="selectEntity" @open-source="id => emit('open-source', id)" />
               <t-loading :loading="entityDetailLoading" show-overlay><div class="entity-articles"><h4>{{ t('knowledgeWorkbench.entities.articles') }}</h4><a v-if="selectedEntity" :href="`/platform/entries?tab=documents&entity_ids=${encodeURIComponent(selectedEntity.id)}`">{{ t('entryBatch.manageRelated') }}</a><t-empty v-if="!entityEntries.length && !entityDetailLoading && !entityDetailError" :description="t('knowledgeWorkbench.entities.noArticles')" /><section v-for="group in entityLibraryGroups" :key="group.id" class="entity-library-group"><h5>{{ group.name }} ({{ group.entries.length }})</h5><ul><li v-for="article in group.entries" :key="article.id"><t-button variant="text" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('knowledgeWorkbench.entities.untitledArticle') }}</t-button><small>{{ formatDate(article.created_at) }}</small></li></ul></section></div></t-loading>
             </section>
           </div>
@@ -50,6 +51,7 @@ import { ENTITY_TYPES, deleteEntity, getEntity, listEntities, mergeEntities, typ
 import type { SourceLocation } from '@/types/search'
 import EntityEditor from './EntityEditor.vue'
 import EntityCandidates from './EntityCandidates.vue'
+import EntityActivity from './EntityActivity.vue'
 import FollowToggle from '@/components/FollowToggle.vue'
 import { useFollowStore } from '@/stores/follows'
 

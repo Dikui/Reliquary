@@ -1,5 +1,24 @@
 import { ikb18En } from './ikb18'
 export default {
+  entityActivity: {
+    "graph": "Entity graph",
+    "timeline": "Fact timeline",
+    "from": "Start date",
+    "to": "End date",
+    "period": "Fact period",
+    "description": "One hop only. Select a relationship for its directed timeline, or a neighbor to recenter and view all its facts.",
+    "timeHint": "Filter by occurrence time, falling back to fact arrival time when unknown. Date ranges include both days in UTC.",
+    "graphFailed": "Could not load the graph. Try again.",
+    "factsFailed": "Could not load the facts. Try again.",
+    "factCount": "{count} fact | {count} facts",
+    "centerOn": "Center on {name} and view all facts",
+    "noEdges": "No visible relationships with two entity endpoints in this period.",
+    "noFacts": "No visible facts match these filters.",
+    "allFacts": "All facts",
+    "counterpart": "Filter by the other entity",
+    "outgoing": "Showing facts with the center entity as subject.",
+    "incoming": "Showing facts with the center entity as object."
+  },
   "entityCandidates": {
     "title": "Entity candidates",
     "description": "Sorted by fact endpoint occurrences. Review the facts before adding an entity.",

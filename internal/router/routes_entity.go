@@ -21,5 +21,7 @@ func RegisterEntityRoutes(r *gin.RouterGroup, h *handler.EntityHandler) {
 	r.PUT("/entries/:id/entities", h.SetEntryEntities)
 	group.POST("/merge", h.MergeEntities)
 	group.GET("/:entity_id", h.EntityDetail)
+	group.GET("/:entity_id/graph", h.Graph)
+	group.GET("/:entity_id/facts", h.Facts)
 	group.GET("/:entity_id/merge-records", h.MergeRecords)
 }
