@@ -109,6 +109,12 @@ export function deleteDocument(documentId: string) {
   return del<{ success: boolean; data?: { document_id: string; status: 'deleted' }; message?: string }>(`/api/v1/documents/${encodeURIComponent(documentId)}`);
 }
 
+export interface DuplicateEntry { id: string; title: string; original_url: string; published_at: string; created_at: string }
+export interface DuplicateGroup { keep: DuplicateEntry; remove: DuplicateEntry[] }
+
+export const listLibraryDuplicates = (id: string) =>
+  get<{ success: boolean; data: DuplicateGroup[]; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}/duplicates`)
+
 // 批量删除（同一库内）。后端会校验所有 id 隶属于 library_id 且具有编辑权限。
 export function batchDeleteEntry(ids: string[]) {
   return post(`/api/v1/entries/batch-delete`, { ids });

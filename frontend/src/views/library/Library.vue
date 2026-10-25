@@ -37,6 +37,7 @@ import { listDomains, type Domain } from '@/api/domains';
 import DomainsManager from './components/DomainsManager.vue';
 import { listEntities, type Entity } from '@/api/entities';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
+import DuplicateCleanupDialog from './components/DuplicateCleanupDialog.vue';
 import EntryWorkbench from './components/EntryWorkbench.vue';
 import PendingReviews from './components/PendingReviews.vue';
 import PendingCountBadge from '@/components/PendingCountBadge.vue';
@@ -684,6 +685,15 @@ function openDomainReclassification() {
   batchDialogVisible.value = true;
 }
 async function batchChanged() { clearSelection(); resetPage(); await handlePendingChanged(); }
+const duplicateDialogVisible = ref(false);
+// Batch delete runs in the queue; poll briefly like single-entry delete until the list catches up.
+async function duplicatesDeleted(ids: string[]) {
+  await batchChanged();
+  for (let i = 0; i < 30 && (cardList.value || []).some((item: EntryCard) => ids.includes(item.id)); i++) {
+    await new Promise<void>(resolve => setTimeout(resolve, 400));
+    await loadEntryFiles(libraryId.value);
+  }
+}
 
 // Opens ONLY the trace drawer for this card — does NOT pop the
 // document detail drawer behind it. The trace drawer attaches to
@@ -1060,6 +1070,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 </div>
                 <div class="doc-filter-bar__trailing">
                   <t-button theme="primary" size="small" @click="openBatch">{{ t('entryBatch.title') }}</t-button>
+                  <t-button variant="outline" size="small" :disabled="!libraryCatalog.length" @click="duplicateDialogVisible = true">{{ t('duplicateCleanup.open') }}</t-button>
                   <t-button  variant="text" size="small" @click="commandPalette.openPalette(docSearchKeyword.trim())">
                     {{ $t('library.searchMessageContent') }}
                   </t-button>
@@ -1156,6 +1167,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </template>
 
       <!-- Document content drawer -->
+      <DuplicateCleanupDialog v-model:visible="duplicateDialogVisible" :libraries="libraryCatalog" :default-library-id="libraryScope.length === 1 ? libraryScope[0] : ''" @deleted="duplicatesDeleted" />
       <EntryBatchDialog :initial-action="batchInitialAction" :scope-label="batchScopeLabel" v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :domain-options="filterDomains.map(item => ({ value: item.id, label: item.name }))" :entity-options="filterEntityOptions" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" @changed="batchChanged" />
     <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
         :libraryId="libraryId" @openEntry="openSourceDoc" @openEntity="openArticleEntity"

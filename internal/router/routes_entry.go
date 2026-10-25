@@ -39,6 +39,7 @@ func RegisterEntryRoutes(r *gin.RouterGroup, handler *handler.EntryHandler, g *a
 		library.DELETE("", g.LibraryExists("id"), handler.ClearLibraryContents)
 	}
 	r.POST("/libraries/:id/rebuild", g.LibraryExists("id"), handler.RebuildLibrary)
+	r.GET("/libraries/:id/duplicates", g.LibraryExists("id"), handler.ListLibraryDuplicates)
 
 	// 条目路由组，按条目 ID 校验所属库。
 	kgrp := r.Group("/entries")

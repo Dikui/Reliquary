@@ -152,6 +152,14 @@ export default {
     discardTitle: 'Discard unsaved changes?', discardHint: 'Your unsaved body changes will be lost.', discard: 'Discard changes', keepEditing: 'Keep editing',
     uncertain: 'The save result could not be confirmed. Your draft is retained. You can retry; identical content will not be processed twice.',
   },
+  duplicateCleanup: {
+    open: 'Find duplicates', title: 'Clean up duplicate entries', library: 'Library', find: 'Find',
+    hint: 'Only entries in the same library with an identical body are matched, even from different sources. Each group keeps the earliest published entry, or the earliest ingested one when the date is missing. Partial overlap is not a duplicate. Deletion cannot be undone.',
+    none: 'No entries with an identical body were found in this library.', summary: '{groups} duplicate groups found; {count} entries will be deleted.',
+    keep: 'Keep', remove: 'Delete', published: 'Published {date}', ingested: 'No publication date, ingested {date}',
+    confirm: 'Delete {count} duplicate entries', deleted: 'Deletion of {count} duplicate entries submitted',
+    loadFailed: 'Failed to find duplicates', deleteFailed: 'Failed to delete duplicate entries',
+  },
   entryBatch: {
     scopeSummary: 'Scope summary',
     currentFilters: 'Current filters',

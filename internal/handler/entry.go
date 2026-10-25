@@ -1214,6 +1214,23 @@ func (h *EntryHandler) RebuildLibrary(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"success": true, "data": result})
 }
 
+// ListLibraryDuplicates previews identical-body groups; deletion uses batch-delete.
+func (h *EntryHandler) ListLibraryDuplicates(c *gin.Context) {
+	library, _, spaceID, err := h.validateLibraryAccess(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	ctx := context.WithValue(c.Request.Context(), types.SpaceIDContextKey, spaceID)
+	groups, err := h.kgService.ListLibraryDuplicates(ctx, library.ID)
+	if err != nil {
+		logger.ErrorWithFields(ctx, err, map[string]interface{}{"library_id": library.ID})
+		c.Error(errors.NewInternalServerError("Failed to list duplicate entries"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": groups})
+}
+
 // BatchReparseEntry godoc
 func (h *EntryHandler) BatchReparseEntry(c *gin.Context) {
 	ctx := c.Request.Context()

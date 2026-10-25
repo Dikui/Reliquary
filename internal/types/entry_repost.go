@@ -22,3 +22,18 @@ type EntryRepostSource struct {
 }
 
 func (EntryRepostSource) TableName() string { return "entry_repost_sources" }
+
+// DuplicateEntry is one member of a same-library identical-body group.
+type DuplicateEntry struct {
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	OriginalURL string    `json:"original_url"`
+	PublishedAt string    `json:"published_at"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// DuplicateGroup keeps the earliest entry and lists the copies to delete.
+type DuplicateGroup struct {
+	Keep   DuplicateEntry   `json:"keep"`
+	Remove []DuplicateEntry `json:"remove"`
+}

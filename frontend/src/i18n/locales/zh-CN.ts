@@ -152,6 +152,14 @@ export default {
     discardTitle: '放弃未保存的修改？', discardHint: '未保存的正文修改将丢失。', discard: '放弃修改', keepEditing: '继续编辑',
     uncertain: '未能确认保存结果，草稿已保留。可以重试，相同正文不会重复处理。',
   },
+  duplicateCleanup: {
+    open: '查找重复', title: '清理重复资料', library: '选择库', find: '查找',
+    hint: '只查同一库内正文完全相同的资料，来源不同也算重复。每组保留发布时间最早的一条，缺发布时间时按入库时间；部分重叠的资料不算重复。删除不可撤销。',
+    none: '本库未发现正文完全相同的资料。', summary: '发现 {groups} 组重复，将删除 {count} 条。',
+    keep: '保留', remove: '删除', published: '发布于 {date}', ingested: '无发布时间，入库于 {date}',
+    confirm: '删除 {count} 条重复资料', deleted: '已提交删除 {count} 条重复资料',
+    loadFailed: '查找重复失败', deleteFailed: '删除重复资料失败',
+  },
   entryBatch: {
     scopeSummary: '范围摘要',
     currentFilters: '当前筛选条件',
