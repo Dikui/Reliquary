@@ -46,7 +46,7 @@ const { menuGroups } = storeToRefs(useMenuStore())
 const sidebarCollapsed = computed(() => !props.mobileOverlay && uiStore.sidebarCollapsed)
 const active = (path: string, tab?: string) => path === 'entries'
   ? route.name === 'entries' && (tab ? route.query.tab === tab : !['entities', 'reviews', 'domains'].includes(String(route.query.tab)))
-  : route.path === `/platform/${path}`
+  : route.path === `/platform/${path}` || path === 'stories' && route.name === 'stories'
 function toggleNavigation() { if (props.mobileOverlay) emit('close'); else uiStore.toggleSidebar() }
 function navigate(path: string, tab?: string) {
   if (path === 'settings') uiStore.openSettings()

@@ -40,6 +40,7 @@ type Services struct {
 	Libraries   interfaces.LibraryService
 	Entries     EntryService
 	Search      interfaces.SearchService
+	Stories     *service.StoryService
 	Domains     *service.DomainService
 	Entities    *service.EntityService
 	Follows     *service.FollowService
@@ -260,6 +261,20 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in entryInput) (any, error) {
 			return services.Entries.ReadEntry(ctx, in.ID, in.Offset, in.Length)
 		})
+
+	if services.Stories != nil {
+		addTool(server, "list_stories", "列出事件 ID、标题、首次与最近新事实时间，按最近新事实时间倒序。"+externalContentNotice,
+			object(map[string]any{
+				"limit":  integer("返回条数，默认 20，最大 100", 1, 100),
+				"offset": integer("跳过的事件数，默认 0", 0, 0),
+			}),
+			func(ctx context.Context, in types.StoryQuery) (any, error) {
+				return services.Stories.ListStories(ctx, in)
+			})
+		addTool(server, "get_story", "读取事件与事实 ID、按发生时间排序的事实时间线、出处资料与逐字引文。"+externalContentNotice,
+			object(map[string]any{"id": text("事件 ID，必填")}, "id"),
+			func(ctx context.Context, in idInput) (any, error) { return services.Stories.StoryDetail(ctx, in.ID) })
+	}
 
 	if services.Domains != nil {
 		addTool(server, "list_domains", "列出共享领域的 ID、名称与一句定义，可用于 search 的 domain_ids 筛选。"+externalContentNotice,

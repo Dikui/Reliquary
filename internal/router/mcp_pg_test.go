@@ -222,6 +222,7 @@ func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture
 		Entities: service.NewEntityService(f.db,
 			models),
 		Domains: service.NewDomainService(f.db),
+		Stories: service.NewStoryService(f.db),
 		Follows: service.NewFollowService(f.db),
 	})
 	f.router.Any("/mcp", gin.WrapH(adapter))
@@ -552,6 +553,8 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 			"list_libraries",
 			"search",
 			"get_entry",
+			"list_stories",
+			"get_story",
 			"list_domains",
 			"list_entities",
 			"get_entity",

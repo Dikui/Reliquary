@@ -1,5 +1,24 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  stories: {
+    "title": "事件",
+    "detail": "事件详情",
+    "description": "按最近一次新事实时间排序，查看每件事的事实与出处。",
+    "back": "返回事件列表",
+    "firstFact": "首次事实",
+    "lastFact": "最近新事实",
+    "timeline": "事实时间线",
+    "unknownTime": "发生时间未知",
+    "subject": "主体",
+    "action": "动作",
+    "object": "对象",
+    "conditions": "条件",
+    "sources": "出处资料与引文",
+    "empty": "暂无事件。外部时效型库的资料理解发现事实后会显示在这里。",
+    "noFacts": "本事件暂无可查看的事实。",
+    "loadFailed": "事件加载失败，请重试。",
+    "notFound": "找不到此事件。请返回事件列表。"
+  },
   domains: {
     reclassify: '对已有资料重新判定领域',
     reclassifyScope: '所有库的已有资料',

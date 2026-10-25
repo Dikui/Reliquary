@@ -22,6 +22,18 @@ type PersistentTable struct {
 const RegistryVersion = 1
 
 var PersistentTables = map[string]PersistentTable{
+	"stories": {
+		Columns: Rule{Sidecar: "id space_id title first_fact_at last_fact_at"},
+		File:    "data/stories.json", After: []string{"spaces"}, Since: 39,
+	},
+	"facts": {
+		Columns: Rule{Sidecar: "id space_id story_id title subject action object conditions occurred_at created_at"},
+		File:    "data/facts.json", After: []string{"stories"}, Since: 39,
+	},
+	"entry_facts": {
+		Columns: Rule{Sidecar: "space_id entry_id fact_id role quote manual created_at"},
+		File:    "data/entry_facts.json", After: []string{"entries", "facts"}, Since: 39,
+	},
 	"domains": {
 		Columns: Rule{Configuration: "id space_id name normalized_name definition created_at updated_at"},
 		File:    "config/domains.json",

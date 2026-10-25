@@ -34,7 +34,10 @@ type articleProcessingProvenance struct {
 }
 
 func (s *entryService) prepareArticleProcessing(ctx context.Context, library *types.Library, k *types.Entry) (articleProcessingInput, string, *types.Model, error) {
-	input := articleProcessingInput{Title: articleTitleForProcessing(k)}
+	input := articleProcessingInput{
+		Title:       articleTitleForProcessing(k),
+		FactAllowed: materialCanProduceFact(library, k),
+	}
 	if err := loadUnderstandingOptions(ctx, s.db, k.SpaceID, &input); err != nil {
 		return input, "", nil, err
 	}
@@ -164,6 +167,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 			}
 			result.Title, result.Summary = summary.Title, summary.Summary
 			result.DomainIDs, result.EntityIDs = summary.DomainIDs, summary.EntityIDs
+			result.Fact = summary.Fact
 		}
 		data, err := json.Marshal(result)
 		if err != nil {
@@ -206,6 +210,7 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 	p := &articleProcessingProvenance{Entities: map[string][]int{}}
 	merged := &articleProcessingResult{
 		Title:      parts[0].Title,
+		Fact:       parts[0].Fact,
 		Summary:    parts[0].Summary,
 		DomainIDs:  parts[0].DomainIDs,
 		EntityIDs:  parts[0].EntityIDs,
@@ -230,7 +235,11 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 func segmentSummaryPrompt() string {
 	return config.Prompt("summary_merge") + `只输出 JSON {"title":"中文资料标题",
 "summary":{"overview":"中文一句话概述"},"domain_ids":[],"entity_ids":[]}。
-领域与实体各选 0–3 个，只能从各段已选 ID 中选择。`
+领域与实体各选 0–3 个，只能从各段已选 ID 中选择。
+若 fact_allowed=true，从各段 fact 中选择整篇报道的本次发生，最多输出一个 fact。
+fact 包含 title、subject、action、object、conditions、occurred_at、quote。
+quote 必须完整照抄所选 fact 的引文。综合稿、评论、教程或没有合适事实时输出 fact:null。
+若 fact_allowed=false，必须输出 fact:null。`
 }
 
 func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types.Library, k *types.Entry, parts []*articleProcessingResult, model *types.Model) (*articleProcessingResult, error) {
@@ -239,7 +248,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 	for i, part := range parts {
 		summaries[i] = map[string]any{
 			"segment": i + 1, "title": part.Title, "summary": part.Summary,
-			"domain_ids": part.DomainIDs, "entity_ids": part.EntityIDs,
+			"domain_ids": part.DomainIDs, "entity_ids": part.EntityIDs, "fact": part.Fact,
 		}
 	}
 	title := articleTitleForProcessing(k)
@@ -248,7 +257,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 		return nil, err
 	}
 	input, _ := json.Marshal(map[string]any{
-		"title": title, "segments": summaries,
+		"title": title, "segments": summaries, "fact_allowed": materialCanProduceFact(library, k),
 		"domain_options": options.DomainOptions, "entity_options": options.EntityOptions,
 	})
 	_, _, completion := s.articleProcessingLimits(model)

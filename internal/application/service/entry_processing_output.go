@@ -19,7 +19,7 @@ type extractedImage struct {
 	Description string `json:"description"`
 }
 
-func libraryProcessingPrompt(l *types.Library, _ *types.Entry) string {
+func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	prompt := articleProcessingPrompt() + "\n所属库：" + l.Name
 	switch {
 	case l.SystemRole == "media":
@@ -30,6 +30,15 @@ func libraryProcessingPrompt(l *types.Library, _ *types.Entry) string {
 		prompt += "\n" + config.Prompt("library_own")
 	default:
 		prompt += "\n" + config.Prompt("library_institutional")
+	}
+	if materialCanProduceFact(l, k) {
+		prompt += `
+仅当本篇报道一次具体发生时，额外输出一个 fact 对象：{"title":"事实标题","subject":"主体","action":"本次动作","object":"对象","conditions":"条件",
+"occurred_at":"RFC3339 或 YYYY-MM-DD，未知用空字符串","quote":"一句逐字原文"}。
+综合稿、评论、教程不输出事实，fact 为 null。提取本次动作而非背景动作，一篇资料最多一个事实。
+quote 必须逐字出自正文，不含段落编号，不翻译、不改写、不拼接。`
+	} else {
+		prompt += "\n本资料不得产生事实，fact 必须为 null。"
 	}
 	return prompt
 }
@@ -77,12 +86,13 @@ func articleEvidenceLocations(ids []int, blocks []types.SourceLocation) []types.
 }
 
 func qualifySegmentOutput(
-	_ *types.Library,
-	_ *types.Entry,
-	_ string,
+	library *types.Library,
+	entry *types.Entry,
+	body string,
 	_ types.ProcessingSegment,
 	result *articleProcessingResult,
 ) {
+	result.Fact = qualifyUnderstandingFact(library, entry, body, result.Fact)
 	// Ignore legacy segment payloads containing extracted names.
 	result.Entities = nil
 	result.ResolvedEntities = nil

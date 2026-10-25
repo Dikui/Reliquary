@@ -120,3 +120,12 @@ MCP 将同一对象作为 `ingest` 的 `arguments`。AI产出与其他模板共�
 HTTP、MCP 和文件库统一使用 Entry 命名。资料 ID 为 `entry_id`，列表为 `entry_ids`，更新指针为 `latest_entry_id`，关联资料为 `related_entry_id` 或 `related_entry_ids`。MCP 读取工具为 `get_entry`，实体详情返回 `entries`。不接受旧字段或旧工具名称的别名。资料对象与文件库表头自身的主键保持 `id`，读取 HTTP 路径保持 `/api/v1/entries/:id`。
 
 测评集与运行、检索记录、模型调用统计通过 HTTP 管理，分别见 [测评 API](search-evaluation-api.md) 与 [调用统计](model-calls.md)。当前没有这些管理操作的 MCP 工具。备份、恢复及队列重推由部署维护者执行，见 [个人使用](personal-use.md)。
+
+
+## 事件与事实读取
+
+HTTP `GET /api/v1/stories?limit=20&offset=0` 对应 MCP `list_stories`（参数 `limit`、`offset`）。默认 20 条，最多 100 条，按最近一次新事实时间倒序，返回 `items` 和 `total`。每项包括事件 `id`、`title`、`first_fact_at` 与 `last_fact_at`。
+
+HTTP `GET /api/v1/stories/:id` 对应 MCP `get_story`（必填参数 `id`）。返回 `story` 与 `facts`：事实带 `id`、`story_id`、标题、主体、动作、对象、条件、可空的 `occurred_at` 以及 `created_at`。`occurred_at` 为 `YYYY-MM-DD`、RFC3339 字符串或 null：只有日期时保留原日期，不做时区换算、不附加时刻；带时刻时按使用方时区展示。时间线按发生时间排序，缺发生时间时使用创建时间。每个事实的 `sources` 包含出处资料 ID、库 ID、标题、原文链接、角色、逐字引文和人工标记；可用 `get_entry` 继续读取出处全文。
+
+此阶段只有外部时效型库产生事实，每个事实独立建立一个事件；综合稿、评论、教程由资料理解返回空事实。程序丢弃不逐字出现在原文中的引文对应的事实；AI产出及其他模板库不产生事实。归组、提及、相关事件与筛选由后续工作接入。

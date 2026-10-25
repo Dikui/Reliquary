@@ -40,6 +40,7 @@ const (
 // articleProcessingResult keeps required fields nullable while decoding so an
 // omitted field is distinguishable from an intentionally empty array.
 type articleProcessingResult struct {
+	Fact             *understandingFact               `json:"fact,omitempty"`
 	Title            string                           `json:"title,omitempty"`
 	Images           []types.ProcessingImage          `json:"images_result,omitempty"`
 	Summary          *types.EntrySummary              `json:"summary"`
@@ -53,6 +54,7 @@ type articleProcessingResult struct {
 }
 
 type articleProcessingInput struct {
+	FactAllowed   bool                        `json:"fact_allowed"`
 	DomainOptions []understandingDomainOption `json:"domain_options"`
 	EntityOptions []understandingEntityOption `json:"entity_options"`
 	Images        []processingImageInput      `json:"images"`
@@ -80,6 +82,8 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 		return nil, fmt.Errorf("entry understanding output is not valid JSON: %w", err)
 	}
 	domainIDs, entityIDs := understandingIDs(fields["domain_ids"]), understandingIDs(fields["entity_ids"])
+	fact := parseUnderstandingFact(fields["fact"])
+	delete(fields, "fact")
 	delete(fields, "domain_ids")
 	delete(fields, "entity_ids")
 	encoded, err := json.Marshal(fields)
@@ -91,7 +95,7 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 		return nil, fmt.Errorf("article processing output is not valid JSON: %w", err)
 	}
 	result.Title = strings.TrimSpace(result.Title)
-	result.DomainIDs, result.EntityIDs = domainIDs, entityIDs
+	result.DomainIDs, result.EntityIDs, result.Fact = domainIDs, entityIDs, fact
 	if len([]rune(result.Title)) > 255 || strings.ContainsAny(result.Title, "\r\n\x00") {
 		return nil, errors.New("article processing title must be a single line of at most 255 characters without NUL")
 	}
@@ -442,6 +446,9 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		}
 		result.Entities = nil
 		result.ResolvedEntities = nil
+		if err := s.saveUnderstandingFact(ctx, library, k, body, result); err != nil {
+			return err
+		}
 		if err := s.saveProcessingOutput(ctx, k, body, result); err != nil {
 			return err
 		}

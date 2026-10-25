@@ -1,5 +1,24 @@
 import { ikb18En } from './ikb18'
 export default {
+  stories: {
+    "title": "Stories",
+    "detail": "Story details",
+    "description": "Ordered by the most recent new fact. Read each story with its source evidence.",
+    "back": "Back to stories",
+    "firstFact": "First fact",
+    "lastFact": "Latest new fact",
+    "timeline": "Fact timeline",
+    "unknownTime": "Occurrence time unknown",
+    "subject": "Subject",
+    "action": "Action",
+    "object": "Object",
+    "conditions": "Conditions",
+    "sources": "Source materials and quotations",
+    "empty": "No stories yet. Facts found in timely external materials will appear here.",
+    "noFacts": "There are no visible facts in this story.",
+    "loadFailed": "Could not load stories. Try again.",
+    "notFound": "Story not found. Return to the story list."
+  },
   domains: {
     reclassify: 'Reclassify domains for existing materials',
     reclassifyScope: 'Existing materials in all libraries',

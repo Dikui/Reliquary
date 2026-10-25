@@ -14,6 +14,7 @@ func newMCPHandler(
 	libraries interfaces.LibraryService,
 	entities *service.EntityService,
 	domains *service.DomainService,
+	stories *service.StoryService,
 	follows *service.FollowService,
 	diagnostic *diagnostics.Service,
 ) (*mcpserver.Handler, error) {
@@ -28,6 +29,7 @@ func newMCPHandler(
 			Search:      search,
 			Entities:    entities,
 			Domains:     domains,
+			Stories:     stories,
 			Follows:     follows,
 			Diagnostics: diagnostic,
 		},

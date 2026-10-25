@@ -163,6 +163,17 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
 	ctx := context.Background()
 	source := pgtest.Open(t)
 	seed(t, source)
+	require.NoError(t, source.Exec(`
+ INSERT INTO stories(id,space_id,title,first_fact_at,last_fact_at)
+ VALUES('story',1,'Preserved story','2026-10-20T12:00:00Z','2026-10-21T12:00:00Z');
+ INSERT INTO facts(id,space_id,story_id,title,subject,action,object,conditions,occurred_at,created_at)
+ VALUES('fact',1,'story','Preserved fact','Company A','released','Model A','Public preview',NULL,now()),
+ ('fact-date',1,'story','Date fact','Company A','released','Model B','','2026-10-20',now()),
+ ('fact-time',1,'story','Timed fact','Company A','released','Model C','','2026-10-19T08:30:12.345+08:00',now());
+ INSERT INTO entry_facts(space_id,entry_id,fact_id,role,quote,manual,created_at)
+ VALUES(1,'article','fact','source','Immutable body',true,now()),
+ (1,'pending','fact','mention','',false,now());
+ `).Error)
 	root := t.TempDir()
 	uploads := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(uploads, "1/pending"), 0o700))
