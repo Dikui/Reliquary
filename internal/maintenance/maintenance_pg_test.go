@@ -183,6 +183,8 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
  ('candidate-approved',1,'Approved','approved','person','approved','entity-a',now(),now());
  INSERT INTO entity_candidate_occurrences(space_id,candidate_id,fact_id,endpoint,created_at)
  VALUES(1,'candidate','fact','object',now()),(1,'candidate-approved','fact','subject',now());
+ INSERT INTO entity_candidate_entries(space_id,candidate_id,entry_id,quote,created_at)
+ VALUES(1,'candidate','article','Immutable body',now());
  INSERT INTO grouping_decisions(id,space_id,entry_id,candidate_fact_id,similarity,model_id,result,confidence,
  review_result,review_confidence,applied_result,reason,created_at)
  VALUES('decision',1,'article','fact',0.76,'chat','same_occurrence',0.9,

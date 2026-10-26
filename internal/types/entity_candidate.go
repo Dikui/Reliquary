@@ -25,6 +25,15 @@ type EntityCandidateOccurrence struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+// EntityCandidateEntry retains evidence from any material, including those without facts.
+type EntityCandidateEntry struct {
+	SpaceID     uint64    `json:"space_id"`
+	CandidateID string    `json:"candidate_id"`
+	EntryID     string    `json:"entry_id"`
+	Quote       string    `json:"quote"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 // EntityCandidatePage contains a bounded, occurrence-ranked list.
 type EntityCandidatePage struct {
 	Items []EntityCandidate `json:"items"`
@@ -33,9 +42,16 @@ type EntityCandidatePage struct {
 
 // EntityCandidateFact includes the recorded endpoint and its fact.
 type EntityCandidateFact struct {
-	Fact      Fact      `json:"fact"`
-	Endpoint  string    `json:"endpoint"`
-	CreatedAt time.Time `json:"created_at"`
+	Fact      *Fact                     `json:"fact,omitempty"`
+	Endpoint  string                    `json:"endpoint,omitempty"`
+	Entry     *EntityCandidateEntryInfo `json:"entry,omitempty"`
+	Quote     string                    `json:"quote,omitempty"`
+	CreatedAt time.Time                 `json:"created_at"`
+}
+
+type EntityCandidateEntryInfo struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
 }
 
 // EntityCandidateDetail retains review state alongside occurrence evidence.

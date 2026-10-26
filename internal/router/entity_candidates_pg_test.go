@@ -271,6 +271,67 @@ func TestEntityCandidatesApproveIgnoreAndAliasHTTP(t *testing.T) {
 	require.Equal(t, &target.ID, fourth.ObjectEntityID)
 }
 
+func TestMaterialEntityCandidatesReviewAndSourceLifecycleHTTP(t *testing.T) {
+	f := newCandidateFixture(t)
+	f.model.respond = func(_ context.Context, _ []chat.Message) string {
+		return `{"title":"研究资料","summary":{"overview":"New Institute 与 Researcher 发布研究。"},"entity_mentions":[{"name":"New Institute","type":"organization","quote":"New Institute and Researcher publish research."},{"name":"Researcher","type":"person","quote":"New Institute and Researcher publish research."}],"fact":null}`
+	}
+	process := func(ref string) string {
+		t.Helper()
+		result := ingestRevisionHTTP(t, f.mcpFixture, map[string]any{
+			"library": "references", "source_ref": ref, "title": ref,
+			"content": "New Institute and Researcher publish research.",
+		})[0]
+		require.Equal(t, "accepted", result["status"])
+		require.NoError(t, f.articles.(interfaces.EntryService).ProcessManualUpdate(f.ctx, f.queue.tasks[len(f.queue.tasks)-1]))
+		return result["entry_id"].(string)
+	}
+	normal, manual, full := process("normal"), process("manual"), process("full")
+	require.NoError(t, f.articles.(interfaces.EntryService).ProcessManualUpdate(f.ctx, f.queue.tasks[len(f.queue.tasks)-1]))
+	f.request(t, http.MethodPut, "/api/v1/entries/"+manual+"/entities", map[string]any{"entity_ids": []string{}}, 200)
+	target := f.entity(t, "Known Researcher")
+	for _, entity := range []types.Entity{target, f.entity(t, "First"), f.entity(t, "Second")} {
+		require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: full, EntityID: entity.ID}).Error)
+	}
+	items := f.candidates(t, "pending")
+	require.Len(t, items, 2)
+	for _, item := range items {
+		require.EqualValues(t, 3, item.OccurrenceCount)
+		var detail struct{ Data types.EntityCandidateDetail }
+		require.NoError(t, json.Unmarshal(f.request(t, http.MethodGet, "/api/v1/entity-candidates/"+item.ID+"?limit=2&offset=1", nil, 200), &detail))
+		require.EqualValues(t, 3, detail.Data.Total)
+		require.Len(t, detail.Data.Occurrences, 2)
+		for _, source := range detail.Data.Occurrences {
+			require.Nil(t, source.Fact)
+			require.NotNil(t, source.Entry)
+			require.NotEmpty(t, source.Entry.Title)
+			require.Equal(t, "New Institute and Researcher publish research.", source.Quote)
+		}
+		if item.Name == "New Institute" {
+			f.request(t, http.MethodPost, "/api/v1/entity-candidates/"+item.ID+"/approve", nil, 200)
+		} else {
+			f.request(t, http.MethodPost, "/api/v1/entity-candidates/"+item.ID+"/alias", map[string]string{"entity_id": target.ID}, 200)
+		}
+	}
+	for entryID, want := range map[string]int64{normal: 2, manual: 0, full: 3} {
+		var count int64
+		require.NoError(t, f.db.Model(&types.EntryEntity{}).Where("entry_id=?", entryID).Count(&count).Error)
+		require.Equal(t, want, count)
+	}
+	// A revised source loses its old candidate evidence before background processing.
+	revised := ingestRevisionHTTP(t, f.mcpFixture, map[string]any{
+		"library": "references", "source_ref": "normal", "title": "Revised", "content": "Revised material without named participants.",
+	})[0]
+	require.Equal(t, normal, revised["entry_id"])
+	for _, item := range f.candidates(t, "all") {
+		require.EqualValues(t, 2, item.OccurrenceCount)
+	}
+	deleteEvidenceEntry(t, f.mcpFixture, full)
+	for _, item := range f.candidates(t, "all") {
+		require.EqualValues(t, 1, item.OccurrenceCount)
+	}
+}
+
 func TestManualEntityAliasBackfillsOnlyExactUnlinkedEndpointsHTTP(t *testing.T) {
 	f := newCandidateFixture(t)
 	target := f.entity(t, "Known Institute")

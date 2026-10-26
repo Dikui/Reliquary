@@ -58,4 +58,14 @@ func TestEntityCandidatesMigrationPreservesFactsAndReplica(t *testing.T) {
 	changed, err := BuildManifest(ctx, db, root, "")
 	require.NoError(t, err)
 	require.Contains(t, CompareManifest(oldManifest, changed), "table facts")
+	// Adding material sources preserves every existing business row.
+	require.NoError(t, m.Migrate(45))
+	beforeEntries, err := Capture(ctx, db)
+	require.NoError(t, err)
+	require.NoError(t, m.Migrate(46))
+	afterEntries, err := Capture(ctx, db)
+	require.NoError(t, err)
+	require.Empty(t, afterEntries.Tables["entity_candidate_entries"])
+	delete(afterEntries.Tables, "entity_candidate_entries")
+	require.Equal(t, beforeEntries.Tables, afterEntries.Tables)
 }

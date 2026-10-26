@@ -21,7 +21,7 @@ export default {
   },
   "entityCandidates": {
     "title": "待确认实体",
-    "description": "按事实端点出现次数排序，查看事实后决定是否收录。",
+    "description": "按出现次数排序，查看来源资料或事实后决定是否收录。",
     "status": "处理状态",
     "pending": "待处理",
     "ignored": "已忽略",
@@ -34,8 +34,8 @@ export default {
     "ignore": "忽略",
     "target": "选择已有实体",
     "ignoreHint": "忽略后仍保留并累积出现记录，可切换到已忽略列表再次通过。",
-    "approveSaved": "已通过并挂接事实端点",
-    "aliasSaved": "已新增别名并挂接事实端点",
+    "approveSaved": "已通过并更新相关实体关联",
+    "aliasSaved": "已新增别名并更新相关实体关联",
     "ignoreSaved": "已忽略，出现记录继续保留"
   },
   groupingCorrection: {

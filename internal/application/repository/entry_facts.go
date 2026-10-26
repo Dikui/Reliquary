@@ -28,5 +28,8 @@ func WithdrawEntryFacts(ctx context.Context, tx *gorm.DB, spaceID uint64, ids []
 		spaceID, spaceID, ids).Error; err != nil {
 		return err
 	}
-	return tx.WithContext(ctx).Where("space_id=? AND entry_id IN ?", spaceID, ids).Delete(&types.EntryFact{}).Error
+	if err := tx.WithContext(ctx).Where("space_id=? AND entry_id IN ?", spaceID, ids).Delete(&types.EntryFact{}).Error; err != nil {
+		return err
+	}
+	return tx.WithContext(ctx).Where("space_id=? AND entry_id IN ?", spaceID, ids).Delete(&types.EntityCandidateEntry{}).Error
 }

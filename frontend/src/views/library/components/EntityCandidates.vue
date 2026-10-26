@@ -82,7 +82,17 @@ onBeforeUnmount(() => { active = false; listRequest++; detailRequest++; targetRe
       <h4>{{ selected.name }}</h4>
       <p v-if="detailError" role="alert">{{ detailError }} <t-button variant="text" :loading="detailLoading" @click="select(selected)">{{ t('common.retry') }}</t-button></p>
       <t-loading :loading="detailLoading">
-        <ul><li v-for="occurrence in detail?.occurrences" :key="`${occurrence.fact.id}:${occurrence.endpoint}`"><a :href="`/platform/stories/${encodeURIComponent(occurrence.fact.story_id)}#fact-${encodeURIComponent(occurrence.fact.id)}`">{{ occurrence.fact.title }}</a><span>{{ t(occurrence.endpoint === 'subject' ? 'entityCandidates.subject' : 'entityCandidates.object') }}</span><p>{{ occurrence.fact.subject }} · {{ occurrence.fact.action }} · {{ occurrence.fact.object }}</p></li></ul>
+        <ul>
+          <li v-for="occurrence in detail?.occurrences" :key="occurrence.entry ? `entry:${occurrence.entry.id}` : `fact:${occurrence.fact?.id}:${occurrence.endpoint}`">
+            <template v-if="occurrence.entry">
+              <a :href="`/platform/entries?entry_id=${encodeURIComponent(occurrence.entry.id)}`">{{ occurrence.entry.title }}</a>
+              <p>{{ occurrence.quote }}</p>
+            </template>
+            <template v-else-if="occurrence.fact">
+              <a :href="`/platform/stories/${encodeURIComponent(occurrence.fact.story_id)}#fact-${encodeURIComponent(occurrence.fact.id)}`">{{ occurrence.fact.title }}</a><span>{{ t(occurrence.endpoint === 'subject' ? 'entityCandidates.subject' : 'entityCandidates.object') }}</span><p>{{ occurrence.fact.subject }} · {{ occurrence.fact.action }} · {{ occurrence.fact.object }}</p>
+            </template>
+          </li>
+        </ul>
         <t-button v-if="detail && detail.occurrences.length < detail.total" variant="text" :loading="detailLoading" :disabled="busy" @click="select(selected, true)">{{ t('common.loadMore') }}</t-button>
       </t-loading>
       <div class="candidate-actions"><t-button :loading="busy" :disabled="busy" @click="review('approve')">{{ t('entityCandidates.approve') }}</t-button><t-button v-if="status === 'pending'" variant="outline" :disabled="busy" @click="review('ignore')">{{ t('entityCandidates.ignore') }}</t-button></div>

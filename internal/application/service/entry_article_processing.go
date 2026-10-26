@@ -19,6 +19,7 @@ import (
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -27,8 +28,11 @@ import (
 func articleProcessingPrompt() string {
 	return config.Prompt("article_processing") + `
 输出所有字段，格式：{"title":"中文资料标题",
-"summary":{"overview":"中文一句话概述"},"domain_ids":[],"entity_ids":[]}。
-domain_ids 和 entity_ids 分别只能选 domain_options、entity_options 中的 ID，各选 0–3 个，不匹配时返回空数组。
+"summary":{"overview":"中文一句话概述"},"domain_ids":[],
+"entity_mentions":[{"name":"原文中的机构或人物名称","type":"organization 或 person","entity_id":"匹配的已有实体 ID，未匹配留空","quote":"包含该名称的一句逐字原文"}]}。
+domain_ids 只能选 domain_options 中的 ID。领域和实体各选 0–3 个，没有依据时返回空数组。
+实体先按名称和别名匹配 entity_options，匹配不到仍输出原文名称，供人工确认新实体，不得硬选已有实体。
+quote 必须逐字来自正文并包含 name，不带段落编号。产品和模型本身不作为实体，不根据模型品牌推测机构名称。
 segment 是本段在整篇资料中的位置。只分析本段，context_before 仅作衔接上下文。`
 }
 
@@ -47,6 +51,7 @@ type articleProcessingResult struct {
 	Summary          *types.EntrySummary              `json:"summary"`
 	DomainIDs        []string                         `json:"domain_ids"`
 	EntityIDs        []string                         `json:"entity_ids"`
+	EntityMentions   []understandingEntityMention     `json:"entity_mentions"`
 	Entities         []articleProcessingEntity        `json:"entities"`
 	Provenance       *articleProcessingProvenance     `json:"provenance,omitempty"`
 	Extensions       map[string][]SegmentContribution `json:"extensions,omitempty"`
@@ -83,10 +88,12 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 		return nil, fmt.Errorf("entry understanding output is not valid JSON: %w", err)
 	}
 	domainIDs, entityIDs := understandingIDs(fields["domain_ids"]), understandingIDs(fields["entity_ids"])
+	mentions := understandingEntityMentions(fields["entity_mentions"])
 	fact := parseUnderstandingFact(fields["fact"])
 	delete(fields, "fact")
 	delete(fields, "domain_ids")
 	delete(fields, "entity_ids")
+	delete(fields, "entity_mentions")
 	encoded, err := json.Marshal(fields)
 	if err != nil {
 		return nil, err
@@ -97,6 +104,7 @@ func parseArticleProcessingResult(raw string) (*articleProcessingResult, error) 
 	}
 	result.Title = strings.TrimSpace(result.Title)
 	result.DomainIDs, result.EntityIDs, result.Fact = domainIDs, entityIDs, fact
+	result.EntityMentions = mentions
 	if len([]rune(result.Title)) > 255 || strings.ContainsAny(result.Title, "\r\n\x00") {
 		return nil, errors.New("article processing title must be a single line of at most 255 characters without NUL")
 	}
@@ -125,15 +133,28 @@ func understandingIDs(raw json.RawMessage) []string {
 }
 
 func qualifyUnderstandingChoices(result *articleProcessingResult, input articleProcessingInput) {
-	domains, entities := map[string]bool{}, map[string]bool{}
+	domains := map[string]bool{}
 	for _, option := range input.DomainOptions {
 		domains[option.ID] = true
 	}
-	for _, option := range input.EntityOptions {
-		entities[option.ID] = true
-	}
 	result.DomainIDs = acceptedUnderstandingIDs(result.DomainIDs, domains)
-	result.EntityIDs = acceptedUnderstandingIDs(result.EntityIDs, entities)
+	result.EntityIDs = []string{}
+	for i := range result.EntityMentions {
+		mention := &result.EntityMentions[i]
+		mention.EntityID = ""
+		options := []understandingEntityOption{}
+		for _, option := range input.EntityOptions {
+			if option.EntityType == mention.Type {
+				options = append(options, option)
+			}
+		}
+		if id := resolveFactEntity(mention.Name, "", options); id != nil {
+			mention.EntityID = *id
+			if !slices.Contains(result.EntityIDs, *id) {
+				result.EntityIDs = append(result.EntityIDs, *id)
+			}
+		}
+	}
 	qualifyFactEntityIDs(result.Fact, input.EntityOptions)
 }
 
@@ -335,6 +356,7 @@ func (s *entryService) callArticleProcessingPart(ctx context.Context, library *t
 			return errors.New("article processing output is missing a generated title")
 		}
 		result.Images = imageRecords
+		qualifyUnderstandingEntityMentions(result, body)
 		qualifyUnderstandingChoices(result, input)
 		return nil
 	})

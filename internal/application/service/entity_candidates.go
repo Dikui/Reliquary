@@ -18,7 +18,9 @@ func candidateQuery(tx *gorm.DB, spaceID uint64) *gorm.DB {
 
 func candidateCountSelect() string {
 	return `entity_candidates.*, (SELECT count(*) FROM entity_candidate_occurrences o
- WHERE o.space_id=entity_candidates.space_id AND o.candidate_id=entity_candidates.id) AS occurrence_count`
+ WHERE o.space_id=entity_candidates.space_id AND o.candidate_id=entity_candidates.id) +
+ (SELECT count(*) FROM entity_candidate_entries e
+ WHERE e.space_id=entity_candidates.space_id AND e.candidate_id=entity_candidates.id) AS occurrence_count`
 }
 
 // ListCandidates orders reviewed names by their recorded endpoint count.
@@ -68,7 +70,7 @@ func findCandidate(tx *gorm.DB, spaceID uint64, id string) (*types.EntityCandida
 	return &item, err
 }
 
-// CandidateDetail returns a bounded page of the facts containing this name.
+// CandidateDetail returns one bounded page across fact endpoints and material evidence.
 func (s *EntityService) CandidateDetail(
 	ctx context.Context,
 	id string,
@@ -87,15 +89,31 @@ func (s *EntityService) CandidateDetail(
 		Occurrences: []types.EntityCandidateFact{},
 		Total:       item.OccurrenceCount,
 	}
-	var occurrences []types.EntityCandidateOccurrence
-	err = s.db.WithContext(ctx).Where("space_id=? AND candidate_id=?", spaceID, id).
-		Order("created_at,fact_id,endpoint").Limit(limit).Offset(offset).Find(&occurrences).Error
+	var occurrences []struct {
+		FactID    string
+		EntryID   string
+		Title     string
+		Endpoint  string
+		Quote     string
+		CreatedAt time.Time
+	}
+	err = s.db.WithContext(ctx).Raw(`SELECT * FROM (
+ SELECT fact_id, '' AS entry_id, '' AS title, endpoint, '' AS quote, created_at
+ FROM entity_candidate_occurrences WHERE space_id=? AND candidate_id=?
+ UNION ALL
+ SELECT '' AS fact_id, ce.entry_id, e.title, '' AS endpoint, ce.quote, ce.created_at
+ FROM entity_candidate_entries ce JOIN entries e ON e.space_id=ce.space_id AND e.id=ce.entry_id
+ WHERE ce.space_id=? AND ce.candidate_id=?
+ ) sources ORDER BY created_at,fact_id,entry_id,endpoint LIMIT ? OFFSET ?`,
+		spaceID, id, spaceID, id, limit, offset).Scan(&occurrences).Error
 	if err != nil {
 		return nil, err
 	}
 	ids := []string{}
 	for _, occurrence := range occurrences {
-		ids = append(ids, occurrence.FactID)
+		if occurrence.FactID != "" {
+			ids = append(ids, occurrence.FactID)
+		}
 	}
 	facts := []types.Fact{}
 	if len(ids) > 0 {
@@ -108,14 +126,15 @@ func (s *EntityService) CandidateDetail(
 		byID[fact.ID] = fact
 	}
 	for _, occurrence := range occurrences {
-		result.Occurrences = append(
-			result.Occurrences,
-			types.EntityCandidateFact{
-				Fact:      byID[occurrence.FactID],
-				Endpoint:  occurrence.Endpoint,
-				CreatedAt: occurrence.CreatedAt,
-			},
-		)
+		source := types.EntityCandidateFact{CreatedAt: occurrence.CreatedAt}
+		if occurrence.FactID != "" {
+			fact := byID[occurrence.FactID]
+			source.Fact, source.Endpoint = &fact, occurrence.Endpoint
+		} else {
+			source.Entry = &types.EntityCandidateEntryInfo{ID: occurrence.EntryID, Title: occurrence.Title}
+			source.Quote = occurrence.Quote
+		}
+		result.Occurrences = append(result.Occurrences, source)
 	}
 	return result, nil
 }
@@ -210,6 +229,9 @@ func (s *EntityService) ReviewCandidate(
 					Update(endpoint+"_entity_id", *item.EntityID).Error; err != nil {
 					return err
 				}
+			}
+			if err := attachCandidateEntries(tx, *item); err != nil {
+				return err
 			}
 		}
 		return NewOperationLogService(tx).RecordTx(ctx, tx, action+"_entity_candidate", item.ID, before, item)

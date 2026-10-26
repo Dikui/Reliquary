@@ -56,6 +56,16 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(env.changes.length, 1)
     } finally { env.app.unmount() }
   })
+  test(`${locale}: document candidates show their source and literal evidence`, async () => {
+    const env = await mount(locale, { getEntityCandidate: async () => envelope({ candidate, total: 1, occurrences: [{ entry: { id: 'document', title: 'DeepSeek 文档' }, quote: 'DeepSeek 发布文档解析模型。' }] }) })
+    try {
+      await click(button(env.root, candidate.name))
+      const link = descendants(env.root).find(node => node.tag === 'a')!
+      assert.equal(link.props.href, '/platform/entries?entry_id=document')
+      assert.equal(visibleText(link), 'DeepSeek 文档')
+      assert.ok(visibleText(env.root).includes('DeepSeek 发布文档解析模型。'))
+    } finally { env.app.unmount() }
+  })
   test(`${locale}: failed alias review preserves target and supports retry`, async () => {
     let available = false
     const requests: unknown[][] = []

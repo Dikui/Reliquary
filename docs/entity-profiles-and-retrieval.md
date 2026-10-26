@@ -30,7 +30,7 @@
 
 新增和编辑使用 `canonical_name`、`entity_type`、`aliases`。规范名和单个别名上限 512 个字符。资料实体编辑使用 `{"entity_ids":[]}`；空数组表示明确移除全部实体。
 
-旧的简介编辑、身份模型、开放抽取、合并建议和实体名称向量维护接口及后台任务已移除。资料理解只从已有实体中选择涉及的实体，不创建实体。
+旧的简介编辑、身份模型、合并建议和实体名称向量维护接口及后台任务已移除。所有资料理解均提取有原文依据的机构和人物，优先匹配已有实体；未匹配的名称推荐到待确认列表，不自动创建正式实体。
 
 ## 升级的数据变化
 
@@ -61,21 +61,23 @@ HTTP 使用 `GET/POST /api/v1/domains`、`PATCH/DELETE /api/v1/domains/:domain_i
 
 时效型资料理解的 `fact` 可带 `subject_entity_id`、`object_entity_id`，以及无 ID 时的 `subject_type`、`object_type`（`organization`、`person`、`other`）。ID 必须在提供给模型的现有实体选项内，保存前再核对当前目录。无有效 ID 时，端点文字按规范化 key 精确匹配规范名和别名；句中提及和同时命中多个实体都不挂接。不自动增加别名。
 
-未挂接且标为机构或人物的端点按规范化 key 归入待确认实体，记录事实 ID 和主体或对象端。产品、模型等其他类型、仅有署名作者的资料和不产生事实的库不生成候选。每条出现记录对应一个事实的一端，重复处理不增加次数；同一名字出现在事实两端计两次。
+所有库的资料理解输出 `entity_mentions`，每项包含 `name`、`type`、`entity_id` 和 `quote`。名称必须出现在逐字引文中，引文必须出自正文。程序按规范化名称或别名匹配已有实体，不直接信任模型提供的 ID；无匹配的机构或人物进入待确认实体，记录资料 ID 与引文。每篇最多保留 3 个实体，长文合并只能选择已经核验的分段依据。
 
-实体页下方的待确认列表按出现次数降序排列，可查看事实框架并进入其事件。默认只显示待处理项，可以切换到已忽略项。通过会创建实体；并为别名会为选中的现有实体新增别名。这两种操作仅按该候选的出现记录挂 ID。忽略只改变处理状态，同名新事实继续追加记录，之后仍可通过或并为别名。已经通过或并为别名的同名新端点正常使用实体目录匹配。
+未挂接且标为机构或人物的事实端点也按规范化 key 归入同一待确认列表，记录事实 ID 和主体或对象端。产品和模型等其他类型不生成候选。资料来源按候选与资料去重，事实来源按候选、事实与端点去重；重复处理不增加次数。
+
+实体页下方的待确认列表按资料来源和事实端点的合计出现次数降序排列，可查看来源资料与引文，或事实框架与事件。默认只显示待处理项，可以切换到已忽略项。通过会创建实体；并为别名会为选中的现有实体新增别名。这两种操作仅按该候选的出现记录挂 ID，保留资料人工选择与最多 3 个实体的限制。忽略只改变处理状态，同名新来源继续追加记录，之后仍可通过或并为别名。已经通过或并为别名的同名名称正常使用实体目录匹配。重处理刷新资料候选来源，正文修订或删除撤销旧来源。
 
 在实体编辑器新增别名时，对尚未挂接的历史端点按该别名精确回填一次，已挂接端点保留，多重命中仍不挂接。通过、并为别名、忽略和手动新增别名均写操作日志。现有实体合并同时转移事实端点和已处理候选的目标 ID；删除实体后端点留空，其已处理候选回到待处理状态，出现记录保留。
 
 | 操作 | HTTP 接口 |
 | --- | --- |
 | 按出现次数查询 | `GET /api/v1/entity-candidates?status=pending&limit=50&offset=0` |
-| 候选与出现的事实 | `GET /api/v1/entity-candidates/:id?limit=50&offset=0` |
+| 候选与来源资料或事实 | `GET /api/v1/entity-candidates/:id?limit=50&offset=0` |
 | 通过为新实体 | `POST /api/v1/entity-candidates/:id/approve` |
 | 并为已有实体的别名 | `POST /api/v1/entity-candidates/:id/alias`，请求 `{"entity_id":"目标 ID"}` |
 | 忽略 | `POST /api/v1/entity-candidates/:id/ignore` |
 
-列表状态可为 `pending`、`ignored`、`approved`、`aliased` 或 `all`，默认 `pending`。分页 `limit` 为 1–100，`offset` 为非负数。列表 `data` 为 `{items,total}`；详情为 `{candidate,occurrences,total}`，每条出现记录包含 `fact`、`endpoint`、`created_at`。候选包含 `occurrence_count` 与可空的 `entity_id`。事件详情 HTTP 与 MCP 的事实均包含可空的 `subject_entity_id`、`object_entity_id`。
+列表状态可为 `pending`、`ignored`、`approved`、`aliased` 或 `all`，默认 `pending`。分页 `limit` 为 1–100，`offset` 为非负数。列表 `data` 为 `{items,total}`；详情为 `{candidate,occurrences,total}`，资料记录包含 `entry: {id,title}`、`quote`、`created_at`，事实记录包含 `fact`、`endpoint`、`created_at`，两类来源合并分页。候选包含 `occurrence_count` 与可空的 `entity_id`。事件详情 HTTP 与 MCP 的事实均包含可空的 `subject_entity_id`、`object_entity_id`。
 
 
 ## 人工归组纠正

@@ -21,7 +21,7 @@ export default {
   },
   "entityCandidates": {
     "title": "Entity candidates",
-    "description": "Sorted by fact endpoint occurrences. Review the facts before adding an entity.",
+    "description": "Sorted by occurrences. Review source materials or facts before adding an entity.",
     "status": "Review status",
     "pending": "Pending",
     "ignored": "Ignored",
@@ -34,8 +34,8 @@ export default {
     "ignore": "Ignore",
     "target": "Choose an existing entity",
     "ignoreHint": "Ignored names keep their occurrences. Switch to Ignored to approve them later.",
-    "approveSaved": "Entity approved and fact endpoints linked",
-    "aliasSaved": "Alias added and fact endpoints linked",
+    "approveSaved": "Entity approved and related links updated",
+    "aliasSaved": "Alias added and related links updated",
     "ignoreSaved": "Candidate ignored; occurrences retained"
   },
   groupingCorrection: {

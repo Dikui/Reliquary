@@ -167,6 +167,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 			}
 			result.Title, result.Summary = summary.Title, summary.Summary
 			result.DomainIDs, result.EntityIDs = summary.DomainIDs, summary.EntityIDs
+			result.EntityMentions = summary.EntityMentions
 			result.Fact = summary.Fact
 		}
 		data, err := json.Marshal(result)
@@ -209,14 +210,15 @@ func appendSegmentNumber(values []int, n int) []int {
 func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingResult {
 	p := &articleProcessingProvenance{Entities: map[string][]int{}}
 	merged := &articleProcessingResult{
-		Title:      parts[0].Title,
-		Fact:       parts[0].Fact,
-		Summary:    parts[0].Summary,
-		DomainIDs:  parts[0].DomainIDs,
-		EntityIDs:  parts[0].EntityIDs,
-		Entities:   []articleProcessingEntity{},
-		Provenance: p,
-		Extensions: map[string][]SegmentContribution{},
+		Title:          parts[0].Title,
+		Fact:           parts[0].Fact,
+		Summary:        parts[0].Summary,
+		DomainIDs:      parts[0].DomainIDs,
+		EntityIDs:      parts[0].EntityIDs,
+		EntityMentions: parts[0].EntityMentions,
+		Entities:       []articleProcessingEntity{},
+		Provenance:     p,
+		Extensions:     map[string][]SegmentContribution{},
 	}
 	for i, part := range parts {
 		n := i + 1
@@ -234,8 +236,9 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 
 func segmentSummaryPrompt() string {
 	return config.Prompt("summary_merge") + `只输出 JSON {"title":"中文资料标题",
-"summary":{"overview":"中文一句话概述"},"domain_ids":[],"entity_ids":[]}。
-领域与实体各选 0–3 个，只能从各段已选 ID 中选择。
+"summary":{"overview":"中文一句话概述"},"domain_ids":[],"entity_mentions":[]}。
+领域与实体各选 0–3 个。领域只能从各段已选 ID 中选择。
+entity_mentions 只能从各段提供的实体中选择，完整保留 name、type、entity_id、quote，不得改写名称或逐字引文。匹配不到已有实体的新名称也必须保留，供人工确认。
 若 fact_allowed=true，从各段 fact 中选择整篇报道的本次发生，最多输出一个 fact。
 fact 包含 title、subject、action、object、conditions、occurred_at、quote，
 以及 subject_entity_id、object_entity_id、subject_type、object_type。
@@ -250,7 +253,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 	for i, part := range parts {
 		summaries[i] = map[string]any{
 			"segment": i + 1, "title": part.Title, "summary": part.Summary,
-			"domain_ids": part.DomainIDs, "entity_ids": part.EntityIDs, "fact": part.Fact,
+			"domain_ids": part.DomainIDs, "entity_mentions": part.EntityMentions, "fact": part.Fact,
 		}
 	}
 	title := articleTitleForProcessing(k)
@@ -283,18 +286,15 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 			return errors.New("summary merge output is missing a generated title")
 		}
 		if err == nil {
-			domains, entities := map[string]bool{}, map[string]bool{}
+			domains := map[string]bool{}
 			for _, part := range parts {
 				for _, id := range part.DomainIDs {
 					domains[id] = true
 				}
-				for _, id := range part.EntityIDs {
-					entities[id] = true
-				}
 			}
 			checked.DomainIDs = acceptedUnderstandingIDs(checked.DomainIDs, domains)
-			checked.EntityIDs = acceptedUnderstandingIDs(checked.EntityIDs, entities)
-			qualifyFactEntityIDs(checked.Fact, options.EntityOptions)
+			qualifyMergedEntityMentions(checked, parts)
+			qualifyUnderstandingChoices(checked, options)
 			summary = checked
 		}
 		return err

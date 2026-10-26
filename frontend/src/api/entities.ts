@@ -78,8 +78,10 @@ export interface EntityCandidate {
 }
 export interface CandidatePage { items: EntityCandidate[]; total: number }
 export interface CandidateFact {
-  fact: Omit<import('./stories').StoryFact, 'sources'>
-  endpoint: 'subject' | 'object'
+  fact?: Omit<import('./stories').StoryFact, 'sources'>
+  endpoint?: 'subject' | 'object'
+  entry?: { id: string; title: string }
+  quote?: string
   created_at: string
 }
 export interface CandidateDetail { candidate: EntityCandidate; occurrences: CandidateFact[]; total: number }

@@ -110,6 +110,9 @@ func (s *entryService) saveUnderstandingChoices(
 				}
 			}
 		}
+		if !domainsOnly {
+			return refreshEntryEntityCandidates(tx, current, result.EntityMentions)
+		}
 		return nil
 	})
 }

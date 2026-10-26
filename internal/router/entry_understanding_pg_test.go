@@ -85,7 +85,7 @@ func TestEntryUnderstandingAllLibrariesValidateChoices(t *testing.T) {
 "entity_ids":["missing",
 %q,
 %q,
-null]}`, domains.Data[0].ID, domains.Data[0].ID, entity.Data.ID, entity.Data.ID)
+null],"entity_mentions":[{"name":"Understanding Inc","type":"organization","entity_id":%q,"quote":"Understanding Inc recorded original source measurements."},{"name":"Unlisted Research Institute","type":"organization","quote":"Unlisted Research Institute contributed data."}]}`, domains.Data[0].ID, domains.Data[0].ID, entity.Data.ID, entity.Data.ID, entity.Data.ID)
 	}
 	r := ingestAuthHTTPRouter(f)
 	for _, library := range []string{"official", "references", "personal", "ai-output"} {
@@ -94,7 +94,7 @@ null]}`, domains.Data[0].ID, domains.Data[0].ID, entity.Data.ID, entity.Data.ID)
 				"library":    library,
 				"source_ref": "stable-" + library,
 				"title":      "English source title",
-				"content":    "Original source measurements for " + library,
+				"content":    "Understanding Inc recorded original source measurements. Unlisted Research Institute contributed data.",
 			})[0]
 			require.Equal(t, "accepted", result["status"])
 			id := result["entry_id"].(string)
@@ -117,12 +117,17 @@ null]}`, domains.Data[0].ID, domains.Data[0].ID, entity.Data.ID, entity.Data.ID)
 			require.NotContains(t, response.Body.String(), `"key_terms"`)
 			again := ingestRevisionHTTP(t, f, map[string]any{
 				"library": library, "source_ref": "stable-" + library,
-				"title": "English source title", "content": "Original source measurements for " + library,
+				"title": "English source title", "content": "Understanding Inc recorded original source measurements. Unlisted Research Institute contributed data.",
 			})[0]
 			require.Equal(t, id, again["entry_id"])
 			require.Equal(t, "exists", again["status"])
 		})
 	}
+	var candidates struct{ Data types.EntityCandidatePage }
+	require.NoError(t, json.Unmarshal(call(http.MethodGet, "/api/v1/entity-candidates", ""), &candidates))
+	require.Len(t, candidates.Data.Items, 1)
+	require.Equal(t, "Unlisted Research Institute", candidates.Data.Items[0].Name)
+	require.EqualValues(t, 4, candidates.Data.Items[0].OccurrenceCount, "all four library types recommend unmatched entities")
 }
 
 func TestEntryUnderstandingPreservesManualFieldsAcrossReprocessingAndRevision(t *testing.T) {
@@ -500,12 +505,17 @@ func TestEntryUnderstandingCapsValidatedChoicesAndSupportsNoMatches(t *testing.T
 		domains = append(domains, domain.Data.ID)
 	}
 	model.respond = func(_ context.Context, _ []chat.Message) string {
+		mentions := []map[string]string{}
+		for i, id := range entities {
+			mentions = append(mentions, map[string]string{"name": fmt.Sprintf("Choice %d", i), "type": "organization", "entity_id": id, "quote": fmt.Sprintf("Choice %d", i)})
+		}
 		data, err := json.Marshal(
 			map[string]any{
-				"title":      "选择测试",
-				"summary":    map[string]string{"overview": "相关选择。"},
-				"domain_ids": append([]string{"missing"}, domains...),
-				"entity_ids": append([]string{"missing"}, entities...),
+				"title":           "选择测试",
+				"summary":         map[string]string{"overview": "相关选择。"},
+				"domain_ids":      append([]string{"missing"}, domains...),
+				"entity_ids":      append([]string{"missing"}, entities...),
+				"entity_mentions": mentions,
 			},
 		)
 		require.NoError(t, err)
@@ -526,7 +536,7 @@ false,
 		}
 		result := ingestRevisionHTTP(t, f, map[string]any{
 			"library": "references",
-			"content": fmt.Sprintf("Original measurements, no matches: %t.", noMatches),
+			"content": fmt.Sprintf("Choice 0, Choice 1, Choice 2, Choice 3. Original measurements, no matches: %t.", noMatches),
 		})[0]
 		require.NoError(
 			t,

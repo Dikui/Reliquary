@@ -49,6 +49,28 @@ func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *tes
 	require.NotEmpty(t, blocks)
 }
 
+func TestEntityMentionsRejectUnsupportedBindingsAndKeepNewNames(t *testing.T) {
+	result, err := parseArticleProcessingResult(`{"title":"DeepSeek 文档","summary":{"overview":"介绍文档解析。"},"entity_ids":["anthropic"],"entity_mentions":[
+{"name":"DeepSeek","type":"organization","entity_id":"anthropic","quote":"DeepSeek 发布文档解析模型。"},
+{"name":"Anthropic","type":"organization","entity_id":"anthropic","quote":"DeepSeek 发布文档解析模型。"},
+{"name":"虚构机构","type":"organization","quote":"虚构机构发布模型。"}]}`)
+	require.NoError(t, err)
+	qualifyUnderstandingEntityMentions(result, "DeepSeek 发布文档解析模型。")
+	options := articleProcessingInput{EntityOptions: []understandingEntityOption{
+		{ID: "anthropic", CanonicalName: "Anthropic", EntityType: "organization"},
+		{ID: "same-name-person", CanonicalName: "DeepSeek", EntityType: "person"},
+	}}
+	qualifyUnderstandingChoices(result, options)
+	require.Empty(t, result.EntityIDs, "an unrelated but valid ID cannot force a binding")
+	require.Len(t, result.EntityMentions, 1)
+	require.Equal(t, "DeepSeek", result.EntityMentions[0].Name)
+	require.Empty(t, result.EntityMentions[0].EntityID)
+
+	merged := &articleProcessingResult{EntityMentions: []understandingEntityMention{result.EntityMentions[0], {Name: "Anthropic", Type: "organization", Quote: "invented"}}}
+	qualifyMergedEntityMentions(merged, []*articleProcessingResult{result})
+	require.Equal(t, result.EntityMentions, merged.EntityMentions, "long-document merge keeps only verified segment evidence")
+}
+
 func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
 	if stage == "intake_review" {

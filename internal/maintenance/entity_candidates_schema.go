@@ -7,6 +7,11 @@ import (
 )
 
 func projectEntityCandidatesSnapshot(snapshot *Snapshot, targetVersion int64) {
+	if snapshot.schemaVersion < 46 && targetVersion >= 46 {
+		if _, ok := snapshot.Tables["entity_candidate_entries"]; !ok {
+			snapshot.Tables["entity_candidate_entries"] = []map[string]any{}
+		}
+	}
 	if snapshot.schemaVersion >= 40 || targetVersion < 40 {
 		return
 	}
@@ -25,6 +30,9 @@ func projectEntityCandidatesSnapshot(snapshot *Snapshot, targetVersion int64) {
 }
 
 func projectEntityCandidatesManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	if expected.SchemaVersion < 46 && actual.SchemaVersion >= 46 {
+		expected, actual = projectEmptyRegisteredTable(expected, actual, "entity_candidate_entries")
+	}
 	if expected.SchemaVersion >= 40 || actual.SchemaVersion < 40 {
 		return expected, actual
 	}
