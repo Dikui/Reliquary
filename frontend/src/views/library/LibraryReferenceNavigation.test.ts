@@ -16,6 +16,21 @@ test('a newer referenced-document navigation supersedes an older request', () =>
   assert.match(source, /if \(request !== autoOpenRequest\) return;/)
 })
 
+test('opening the same entity from a material restores its workbench view', () => {
+  const start = source.indexOf('const openArticleEntity =')
+  const end = source.indexOf('\n};', start) + '\n};'.length
+  const selectedEntityId = ref('entity-a'), activeLibraryTab = ref('entities')
+  const opened: string[] = []
+  let closed = false
+  const openArticleEntity = new Function('selectedEntityId', 'activeLibraryTab', 'entityWorkbenchRef', 'closeDoc', `${source.slice(start, end).replace('(id: string)', '(id)')}\nreturn openArticleEntity;`)(
+    selectedEntityId, activeLibraryTab, { value: { selectInitialEntity: (id: string) => opened.push(id) } }, () => { closed = true },
+  )
+  openArticleEntity('entity-a')
+  assert.deepEqual(opened, ['entity-a'])
+  assert.equal(activeLibraryTab.value, 'entities')
+  assert.equal(closed, true)
+})
+
 test('sidebar navigation and article tabs remain synchronized without remounting the page', async () => {
   const start = source.indexOf('watch(() => route.query.tab,')
   const end = source.indexOf('watch(() => libraryId.value,', start)

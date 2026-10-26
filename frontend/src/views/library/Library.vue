@@ -157,6 +157,7 @@ const starredOptions = computed(() => [
   { value: 'false', label: t('articleJudgments.unstarredOnly') },
 ]);
 const selectedEntityId = ref('');
+const entityWorkbenchRef = ref<InstanceType<typeof EntryWorkbench> | null>(null);
 const selectedDomainIds = ref<string[]>((initialDocumentFilters.domainIds || '').split(',').filter(Boolean));
 const filterDomains = ref<Domain[]>([]), filterDomainsLoaded = ref(false);
 const selectedEntityIds = ref<string[]>((initialDocumentFilters.entityIds || '').split(',').filter(Boolean));
@@ -201,7 +202,10 @@ watch(activeLibraryTab, (tab, previous) => {
 onUnmounted(() => { filterEntitiesRequest++; });
 
 watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
-const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeLibraryTab.value = 'entities'; closeDoc(); };
+const openArticleEntity = (id: string) => {
+  if (selectedEntityId.value === id) void entityWorkbenchRef.value?.selectInitialEntity(id);
+  selectedEntityId.value = id; activeLibraryTab.value = 'entities'; closeDoc();
+};
 const fileTypeOptions = computed(() => [
   { label: t('library.allFileTypes'), value: '' },
   { label: 'PDF', value: 'pdf' },
@@ -989,7 +993,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 <template>
   <div class="entry-layout">
       <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area">
-        <EntryWorkbench :initial-entity-id="selectedEntityId"
+        <EntryWorkbench ref="entityWorkbenchRef" :initial-entity-id="selectedEntityId"
           @open-source="openSourceDoc" />
       </div>
 

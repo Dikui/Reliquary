@@ -16,7 +16,7 @@ function button(root: Element, label: string) {
   return found
 }
 async function mount(locale: 'zh-CN' | 'en-US', api: Record<string, unknown> = {}) {
-  const calls: unknown[][] = [], toasts: string[] = [], changes: unknown[] = []
+  const calls: unknown[][] = [], toasts: string[] = [], changes: unknown[] = [], sources: string[] = []
   const component = loadComponent(new URL('./EntityCandidates.vue', import.meta.url), {
     '@/api/entities': {
       listEntityCandidates: async (...args: unknown[]) => { calls.push(['list', ...args]); return envelope({ items: [candidate, second], total: 2 }) },
@@ -27,7 +27,7 @@ async function mount(locale: 'zh-CN' | 'en-US', api: Record<string, unknown> = {
     },
     'tdesign-vue-next': { MessagePlugin: { success: (value: string) => toasts.push(value) } },
   })
-  const root = element('root'), app = renderer.createApp(component, { onChanged: () => changes.push(true) })
+  const root = element('root'), app = renderer.createApp(component, { onChanged: () => changes.push(true), onOpenSource: (id: string) => sources.push(id) })
   const messages = { 'en-US': en, 'zh-CN': zh }
   app.use(createI18n({ legacy: false, locale, messages }))
   registerPrimitives(app)
@@ -35,7 +35,7 @@ async function mount(locale: 'zh-CN' | 'en-US', api: Record<string, unknown> = {
   app.config.warnHandler = warning => { throw new Error(warning) }
   app.mount(root)
   await settle()
-  return { root, app, calls, toasts, changes, copy: messages[locale] }
+  return { root, app, calls, toasts, changes, sources, copy: messages[locale] }
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
@@ -83,8 +83,14 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     try {
       await click(button(env.root, candidate.name))
       const link = descendants(env.root).find(node => node.tag === 'a')!
-      assert.equal(link.props.href, '/platform/entries?entry_id=document')
+      assert.equal(link.props.href, '/platform/entries?tab=entities&entry_id=document')
       assert.equal(visibleText(link), 'DeepSeek 文档')
+      let prevented = false
+      link.props.onClick({ preventDefault() { prevented = true } })
+      await settle()
+      assert.equal(prevented, true)
+      assert.deepEqual(env.sources, ['document'])
+      assert.equal(button(env.root, candidate.name).props['aria-expanded'], true)
       assert.ok(visibleText(env.root).includes('DeepSeek 发布文档解析模型。'))
     } finally { env.app.unmount() }
   })

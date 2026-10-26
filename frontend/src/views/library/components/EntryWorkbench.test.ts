@@ -45,6 +45,15 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
   const errors: unknown[] = []; app.config.errorHandler = error => errors.push(error)
   const html = await renderToString(app); assert.deepEqual(errors, [], 'the real workbench template renders without exceptions'); return { html, requests, state }
 }
+test('opening an entity from candidate review restores the entity view', async () => {
+  await renderWorkbench({ scenario: async state => {
+    state.activeView.value = 'candidates'
+    await state.selectInitialEntity(entity.id)
+    assert.equal(state.activeView.value, 'entities')
+    assert.equal(state.selectedEntity.value.id, entity.id)
+    assert.equal(state.entityEntries.value[0].id, 'article-a')
+  } })
+})
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: the workbench renders only maintained entities`, async () => {
     const { html } = await renderWorkbench({ locale })

@@ -37,6 +37,8 @@ Reliquary serves a single user collecting source material and maintaining an ent
 | Operation | Pending | Success | Failure recovery |
 | --- | --- | --- | --- |
 | View entity | Clear the previous material list and show loading | Show aliases and materials involving the entity grouped by library | Keep selection, show inline error and allow refresh |
+| Switch entity workbench view | Use the Entities / Entity candidates buttons with a visible and accessible selected state | Preserve entity selection, candidate review state and loaded evidence while switching | Keep each view's existing error and retry controls |
+| Preview a candidate's source material | Open the shared material drawer over the entity workbench | Closing the drawer returns to the same candidate and review controls | Keep the workbench in place and show the drawer's existing loading error |
 | Filter entity list | Debounce search and invalidate older requests | Show the filtered list with explicit load more | Show inline error and allow refresh |
 | Merge entity | App-owned dialog names the retained entity and space-wide consequences; disable duplicate requests | Refresh the entity list and announce success | Keep selected target and show inline error |
 

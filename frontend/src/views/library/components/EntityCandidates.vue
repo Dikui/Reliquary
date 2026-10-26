@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { getEntityCandidate, listEntities, listEntityCandidates, reviewEntityCandidate, type CandidateDetail, type CandidateStatus, type Entity, type EntityCandidate, type EntityEnvelope } from '@/api/entities'
 
-const emit = defineEmits<{ changed: [] }>()
+const emit = defineEmits<{ changed: []; 'open-source': [entryId: string] }>()
 const { t, locale } = useI18n()
 const status = ref<CandidateStatus>('pending'), items = ref<EntityCandidate[]>([]), total = ref(0)
 const loading = ref(false), error = ref(''), selected = ref<EntityCandidate | null>(null)
@@ -106,7 +106,7 @@ onBeforeUnmount(() => { active = false; listRequest++; detailRequest++; targetRe
               <ul>
                 <li v-for="occurrence in detail?.occurrences" :key="occurrence.entry ? `entry:${occurrence.entry.id}` : `fact:${occurrence.fact?.id}:${occurrence.endpoint}`">
                   <template v-if="occurrence.entry">
-                    <a :href="`/platform/entries?entry_id=${encodeURIComponent(occurrence.entry.id)}`">{{ occurrence.entry.title }}</a>
+                    <a :href="`/platform/entries?tab=entities&entry_id=${encodeURIComponent(occurrence.entry.id)}`" @click.prevent="emit('open-source', occurrence.entry.id)">{{ occurrence.entry.title }}</a>
                     <p>{{ occurrence.quote }}</p>
                   </template>
                   <template v-else-if="occurrence.fact">
