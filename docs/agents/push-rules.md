@@ -28,6 +28,12 @@
 
 以下规则仅豁免已核实的本地 httptest 合成认证值：限定在 Aliyun 重排器测试文件中，且必须匹配 APIKey 的测试值格式和同一行 CustomHeaders 字段。它不放行其他文件或真实服务凭据。
 
+以下新增规则只匹配四处已核实的合成测试值或运行时随机生成表达式，按文件和整行限定；其他内容仍须扫描。
+
 ```safe-push-allow
 internal/models/rerank/aliyun_reranker_test.go ^[[:space:]]*APIKey:[[:space:]]*"test-[a-z]{3}",[[:space:]]*CustomHeaders:
+frontend/src/views/settings-behavior.test.ts ^        createAPIKey: async \(payload: object\) => \{ requests\.push\(\{ payload \}\); return \{ success: true, data: \{ token: '[t]est-key' \} \} \},$
+scripts/reliquary_admin.py ^    values\.update\(\{"SYSTEM_AES_KEY": secrets\.token_hex\(16\), "DB_PASSWORD": secrets\.token_urlsafe\(32\)\}\)$
+scripts/test-reliquary-admin.py ^        safe, required = admin\.sanitized_env\(\{"DB_PASSWORD": "[d]b-password", "CUSTOM_SERVICE_URL": "https[:]//user:pass@example\.com", "VAULT_ROOT": "/data/vault"\}\)$
+scripts/test-reliquary-admin.py ^        admin\.write_env\(self\.root / "\.env\.template", \{"RELIQUARY_ADMIN_VAULT_DIR": "/old-host/vault", "RELIQUARY_ADMIN_RESOURCES_DIR": "/old-host/uploads", "RELIQUARY_DIAGNOSTICS_DIR": "/old-host/diagnostics", "RELIQUARY_ADMIN_SERVER": "/old-host/server", "FEATURE_CONFIG": "preserved", "JWT_SECRET": "[r]etired-test-value"\}\)$
 ```
