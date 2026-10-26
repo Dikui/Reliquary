@@ -46,21 +46,6 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
   const html = await renderToString(app); assert.deepEqual(errors, [], 'the real workbench template renders without exceptions'); return { html, requests, state }
 }
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: the library header entry is named Entities`, async () => {
-    const page = readFileSync(new URL('../Library.vue', import.meta.url), 'utf8')
-    const entry = page.match(/<button\b[^>]*@click="selectLibraryTab\('entities'\)"[^>]*>[\s\S]*?<\/button>/)?.[0]
-    assert.ok(entry, 'expected the real entity entry button in the library header')
-    const compiled = compileTemplate({ id: 'entity-header-entry', filename: 'Library.vue', source: entry, ssr: true, ssrCssVars: [] })
-    assert.deepEqual(compiled.errors, [])
-    const module = { exports: {} as { ssrRender?: (...args: any[]) => any } }
-    const code = ts.transpileModule(compiled.code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-    new Function('require', 'module', 'exports', code)(require, module, module.exports)
-    const app = createSSRApp({ data: () => ({ activeLibraryTab: 'entities' }), ssrRender: module.exports.ssrRender })
-    app.use(createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } }))
-    const html = await renderToString(app)
-    assert.equal(html.match(/>([^<]*)<\/button>/)?.[1], locale === 'zh-CN' ? '实体' : 'Entities')
-    assert.doesNotMatch(html, /知识工作台|Entry workbench/i)
-  })
   test(`${locale}: the workbench renders only maintained entities`, async () => {
     const { html } = await renderWorkbench({ locale })
     assert.doesNotMatch(html, /name-embedding-rebuild|workbench-nav|merge-suggestions-test/)

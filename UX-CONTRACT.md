@@ -96,7 +96,7 @@ Article cards, rows, detail and the full search page share EntryClassification f
 
 Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名称为 Reliquary；Go/TypeScript 导出符号按语言惯例使用 Reliquary。登录页与侧栏共用 frontend/src/assets/img/reliquary.svg。
 
-资料页的根面包屑使用 library.title，中文显示“库”，英文显示“Library”。点击或键盘激活后进入 `/platform/libraries`，以卡片展示各库的名称和说明。点击卡片进入 `/platform/entries?libraries=<id>`，只显示目标库的资料。资料和历史待审共用 URL 中的库范围，单库时在面包屑显示库名，库信息使用该库的目录数据；实体与领域保持全局视图，不显示单库名称。修改范围同步 URL，缺少 libraries 参数表示全部库。刷新、前进和后退保持对应范围，不继承之前的本机范围。库设置仍从设置入口进入，不作为浏览库卡片的目标。
+侧栏的主入口显示“库”（Library），点击进入 `/platform/libraries`，以卡片展示各库的名称和说明。点击卡片进入 `/platform/entries?libraries=<id>`，只显示目标库的资料。库内内容上方不再显示“库 / 资料 / 历史待审 / 实体 / 领域”导航、信息图标、设置按钮或副标题；待审、实体和领域保留各自的侧栏入口。资料和历史待审共用 URL 中的库范围，库配置仍从侧栏底部的全局设置进入。修改范围同步 URL，缺少 libraries 参数表示全部库。刷新、前进和后退保持对应范围，不继承之前的本机范围。
 
 实体页面维护有明确名称的对象。实体详情显示规范名、别名以及跨库涉及该实体的资料，资料可通过原有详情入口打开。新增、编辑、删除和合并沿用 TDesign 组件与中英文文案，不再提供待合并建议和名称向量重建。
 

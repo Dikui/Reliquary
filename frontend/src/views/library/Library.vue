@@ -8,12 +8,9 @@ import DocContent from "@/components/DocContent.vue";
 import useLibrary from '@/composables/useLibrary';
 import { useRoute, useRouter } from 'vue-router';
 import EmptyEntry from '@/components/EmptyEntry.vue';
-import LibraryInfoPopover from '@/components/LibraryInfoPopover.vue';
-import { useUIStore } from '@/stores/ui';
 import { useCommandPaletteStore } from '@/stores/commandPalette';
 import { useResourcesStore } from '@/stores/resources';
 import { useEditorResourcesStore } from '@/stores/editorResources';
-const uiStore = useUIStore();
 const commandPalette = useCommandPaletteStore();
 const resources = useResourcesStore();
 const editorResources = useEditorResourcesStore();
@@ -39,7 +36,6 @@ import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import DuplicateCleanupDialog from './components/DuplicateCleanupDialog.vue';
 import EntryWorkbench from './components/EntryWorkbench.vue';
 import PendingReviews from './components/PendingReviews.vue';
-import PendingCountBadge from '@/components/PendingCountBadge.vue';
 import { usePendingCountsStore } from '@/stores/pendingCounts';
 import { SEARCH_SOURCES } from '@/types/search';
 import {
@@ -345,14 +341,6 @@ const loadLibraryInfo = async (targetLibraryId: string, force = false) => {
   }
 };
 
-// 唯一库加载后获取文章内容
-// Route guards resolve unsaved dialog drafts before a tab unmounts its content.
-function selectLibraryTab(tab: KbTab) {
-  const query = { ...route.query }
-  if (tab === 'documents') delete query.tab
-  else query.tab = tab
-  void router.replace({ query })
-}
 // Sync activeLibraryTab to URL query so it survives page refresh
 watch(() => route.query.tab, (tab) => {
   activeLibraryTab.value = tab === 'domains' ? 'domains' : tab === 'entities' ? 'entities' : tab === 'reviews' ? 'reviews' : 'documents'
@@ -667,8 +655,6 @@ const onReparseMenuClick = (index: number, item: EntryCard) => {
   }
 };
 
-const handleOpenLibrarySettings = () => uiStore.openSettings('library', 'catalog');
-const openLibraries = () => router.push('/platform/libraries');
 const reparseConfirmStore = useReparseConfirmStore();
 
 const batchResultId = ref('');
@@ -1002,39 +988,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 
 <template>
   <div class="entry-layout">
-      <div class="document-header">
-        <div class="document-header-title">
-          <div class="document-title-row">
-            <h2 class="document-breadcrumb">
-              <button type="button" class="breadcrumb-link" @click="openLibraries">{{ $t('library.title') }}</button>
-              <t-icon name="chevron-right" class="breadcrumb-separator" />
-              <template v-if="selectedLibrary && (activeLibraryTab === 'documents' || activeLibraryTab === 'reviews')">
-                <span class="breadcrumb-current">{{ selectedLibrary.display_name || selectedLibrary.name }}</span>
-                <t-icon name="chevron-right" class="breadcrumb-separator" />
-              </template>
-                <button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'documents' }]" :aria-pressed="activeLibraryTab === 'documents'"
-                  @click="selectLibraryTab('documents')">{{ $t('knowledgeEditor.document.title') }}</button>
-                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'reviews' }]" :aria-pressed="activeLibraryTab === 'reviews'" @click="selectLibraryTab('reviews')">{{ $t('knowledgeReview.title') }} <PendingCountBadge /></button>
-                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'entities' }]" :aria-pressed="activeLibraryTab === 'entities'"
-                    @click="selectLibraryTab('entities')">{{ $t('knowledgeWorkbench.tabLabel') }}</button>
-                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'domains' }]" :aria-pressed="activeLibraryTab === 'domains'" @click="selectLibraryTab('domains')">{{ $t('domains.title') }}</button>
-            </h2>
-            <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
-            <div class="library-title-actions">
-
-              <LibraryInfoPopover v-if="displayedLibraryInfo && (activeLibraryTab === 'documents' || activeLibraryTab === 'reviews')" :library-info="displayedLibraryInfo"
-                />
-              <t-tooltip :content="$t('library.settings')" placement="top">
-                <button type="button" class="library-settings-button" @click="handleOpenLibrarySettings">
-                  <t-icon name="setting" size="16px" />
-                </button>
-              </t-tooltip>
-            </div>
-          </div>
-          <p v-if="activeLibraryTab === 'documents'" class="document-subtitle">{{ $t('knowledgeEditor.document.subtitle') }}</p>
-        </div>
-      </div>
-
       <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area">
         <EntryWorkbench :initial-entity-id="selectedEntityId"
           @open-source="openSourceDoc" />
@@ -1203,53 +1156,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
   min-width: 0;
   padding: 24px 32px 0px;
   box-sizing: border-box;
-}
-
-// Breadcrumb tab switch
-.breadcrumb-tab {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font: inherit;
-  cursor: pointer;
-  color: var(--td-text-color-placeholder);
-  font-weight: 400;
-  transition: color 0.15s;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-
-  &:hover {
-    color: var(--td-text-color-primary);
-  }
-
-  &.active {
-    color: var(--td-brand-color);
-    font-weight: 600;
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--td-brand-color);
-    outline-offset: 2px;
-  }
-
-  &.indexing {
-    color: var(--td-brand-color);
-  }
-}
-
-.breadcrumb-tab-indicator {
-  display: inline-flex;
-  align-items: center;
-  color: var(--td-brand-color);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.breadcrumb-tab-sep {
-  margin: 0 6px;
-  color: var(--td-text-color-disabled);
-  font-weight: 400;
 }
 
 // 与列表页一致：浅灰底圆角区，左侧筛选为白底卡片
@@ -1515,195 +1421,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 
   &>* {
     pointer-events: auto;
-  }
-}
-
-// Header 样式（无底部分割线，留更多空间给下方内容区）
-.document-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  flex-shrink: 0;
-
-  .document-header-title {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .document-title-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .library-title-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    margin-left: 4px;
-  }
-
-  .document-breadcrumb {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--td-text-color-primary);
-  }
-
-  .breadcrumb-link {
-    border: none;
-    background: transparent;
-    padding: 4px 8px;
-    margin: -4px -8px;
-    font: inherit;
-    color: var(--td-text-color-secondary);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    border-radius: 6px;
-    transition: all 0.12s ease;
-
-    &:focus-visible {
-      outline: 2px solid var(--td-brand-color);
-      outline-offset: 2px;
-    }
-
-    &:hover:not(:disabled) {
-      color: var(--td-success-color);
-      background: var(--td-bg-color-container);
-    }
-
-    &:disabled {
-      cursor: not-allowed;
-      color: var(--td-text-color-placeholder);
-    }
-
-    &.dropdown {
-      padding-right: 6px;
-
-      :deep(.t-icon) {
-        font-size: 14px;
-        transition: transform 0.12s ease;
-      }
-
-      &:hover:not(:disabled) {
-        :deep(.t-icon) {
-          transform: translateY(1px);
-        }
-      }
-    }
-  }
-
-  .breadcrumb-separator {
-    font-size: 14px;
-    color: var(--td-text-color-placeholder);
-  }
-
-  .breadcrumb-current {
-    color: var(--td-text-color-primary);
-    font-weight: 600;
-  }
-
-  h2 {
-    margin: 0;
-    color: var(--td-text-color-primary);
-    font-family: var(--app-font-family);
-    font-size: 24px;
-    font-weight: 600;
-    line-height: 32px;
-  }
-
-  .document-subtitle {
-    margin: 0;
-    color: var(--td-text-color-placeholder);
-    font-family: var(--app-font-family);
-    font-size: 14px;
-    font-weight: 400;
-    line-height: 20px;
-  }
-
-  .entry-header-hint__action {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-
-    &:focus-visible {
-      outline: 2px solid var(--td-brand-color);
-      outline-offset: 2px;
-    }
-  }
-
-  .storage-engine-warning {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin: 2px 0 0;
-    color: var(--td-warning-color);
-    font-size: 12px;
-    line-height: 1.4;
-    cursor: pointer;
-    transition: color 0.15s ease;
-
-    &:hover {
-      color: var(--td-warning-color-active);
-
-      .warning-link {
-        text-decoration: underline;
-      }
-    }
-
-    .warning-icon {
-      font-size: 12px;
-      flex-shrink: 0;
-    }
-
-    .warning-link {
-      color: var(--td-brand-color);
-      margin-left: 2px;
-      white-space: nowrap;
-    }
-  }
-}
-
-.library-settings-button {
-  width: 30px;
-  height: 30px;
-  border: none;
-  border-radius: 50%;
-  background: var(--td-bg-color-secondarycontainer);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  padding: 0;
-
-  &:hover:not(:disabled) {
-    background: var(--td-success-color-light);
-    color: var(--td-brand-color);
-    box-shadow: none;
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.4;
-  }
-
-  :deep(.t-icon) {
-    font-size: 18px;
   }
 }
 
@@ -2305,51 +2022,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
     min-height: 0;
   }
 
-  .document-header {
-    min-width: 0;
 
-    .document-header-title,
-    .document-title-row {
-      min-width: 0;
-      max-width: 100%;
-    }
-
-    .document-breadcrumb {
-      flex-wrap: wrap;
-      min-width: 0;
-      font-size: 16px;
-      overflow-wrap: anywhere;
-    }
-
-    .breadcrumb-link {
-      max-width: 100%;
-      white-space: normal;
-      text-align: left;
-    }
-
-    .entry-header-hint {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: start;
-      min-width: 0;
-      max-width: 100%;
-
-      .entry-header-hint__action {
-        grid-column: 2;
-        justify-self: start;
-        margin-left: 0;
-        max-width: 100%;
-        white-space: normal;
-      }
-    }
-
-    .entry-header-hint__text {
-      min-width: 0;
-      overflow-wrap: anywhere;
-      white-space: normal;
-    }
-
-  }
 }
 
 @container doc-card-area (max-width: 420px) {

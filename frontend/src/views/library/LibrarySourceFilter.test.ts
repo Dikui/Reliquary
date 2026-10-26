@@ -242,7 +242,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
 test('library cards open only the selected library and preserve its scope through history', async () => {
   const env = await mountLibrary()
   try {
-    await click(descendants(env.root).find(node => hasClass(node, 'breadcrumb-link'))!)
+    await env.router.push('/platform/libraries')
     await env.waitForLoad()
     assert.equal(env.route.path, '/platform/libraries')
     const cards = descendants(env.root).filter(node => hasClass(node, 'library-card'))
@@ -253,7 +253,7 @@ test('library cards open only the selected library and preserve its scope throug
     assert.equal(env.route.query.libraries, 'reports')
     assert.equal(env.requests.at(-1)!.get('libraries'), 'reports')
     assert.deepEqual(env.ids(), ['report'])
-    assert.ok(visibleText(env.root).includes('AI Reports'))
+    assert.ok(!descendants(env.root).some(node => hasClass(node, 'document-header')))
     await env.leave()
     await env.back()
     assert.deepEqual(env.ids(), ['report'])

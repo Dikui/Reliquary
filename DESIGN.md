@@ -73,7 +73,7 @@ TDesign owns buttons, inputs, date pickers, loading, empty states and pagination
 
 ## Do's and Don'ts
 
-LibraryBrowser uses the existing bordered-card language for library navigation. Each card shows the library name and description and opens that library's materials. The grid becomes a single column on narrow screens. Library configuration remains in Settings.
+The sidebar Library entry opens LibraryBrowser, which uses the existing bordered-card language for library navigation. Each card shows the library name and description and opens that library's materials. The material view has no duplicate navigation row, information icon or settings button above its filters. The grid becomes a single column on narrow screens. Library configuration remains in the bottom Settings entry.
 
 - Reuse existing semantic tokens and TDesign behavior across both locales and themes.
 - Keep unknown, partial and expired states explicit; link to existing diagnostic owners.
