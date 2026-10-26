@@ -270,6 +270,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	projectDomainSnapshot(snapshot, targetVersion)
 	projectUnderstandingSnapshot(snapshot, targetVersion)
 	projectStorySnapshot(snapshot, targetVersion)
+	projectLibraryPromptsSnapshot(snapshot, targetVersion)
 	order, err := replicaImportOrder(db, snapshot)
 	if err != nil {
 		return nil, err

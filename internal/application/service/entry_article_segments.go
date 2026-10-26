@@ -35,6 +35,7 @@ type articleProcessingProvenance struct {
 
 func (s *entryService) prepareArticleProcessing(ctx context.Context, library *types.Library, k *types.Entry) (articleProcessingInput, string, *types.Model, error) {
 	input := articleProcessingInput{
+		LibraryName: library.Name,
 		Title:       articleTitleForProcessing(k),
 		FactAllowed: materialCanProduceFact(library, k),
 	}
@@ -47,7 +48,6 @@ func (s *entryService) prepareArticleProcessing(ctx context.Context, library *ty
 	}
 	input.Publisher, input.PublishedAt, input.Author = source.Publisher, source.PublishedAt, source.Author
 	prompt := libraryProcessingPrompt(library, k)
-	prompt += "\n图片附件与输入 images 的顺序一一对应。仅依据已提供的可读图片理解文章，不猜测缺失或不可读图片的内容。"
 	id, err := ResolveModelTier(ctx, s.db, library, types.ModelTierGeneration)
 	if err != nil {
 		return input, prompt, nil, err
@@ -82,7 +82,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 		}
 		imageCount = min(imageLimit, imageCount)
 	}
-	budget, err := s.segmentBudget(model, prompt, input, imageCount)
+	budget, err := s.segmentBudget(model, prompt, input, imageCount, library.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 		limit, overlap, _ := s.segmentSettings()
 		_, _, completion := s.articleProcessingLimits(model)
 		metadata, _ := json.Marshal(input)
-		inputBudget := model.Parameters.ContextWindow - completion - len([]rune(prompt)) - len([]rune(string(metadata))) - imageCount*1024 - segmentEnvelopeReserve - overlap
+		inputBudget := model.Parameters.ContextWindow - completion - len([]rune(prompt)) - len([]rune(string(metadata))) - imageCount*1024 - segmentEnvelopeReserve - overlap - outputCorrectionBudget(library.ID)
 		_, imageLimit, _ := s.articleProcessingLimits(nil)
 		runes := []rune(body)
 		for {
@@ -120,8 +120,8 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 		}
 	}
 	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{
-		input, prompt, segmentSummaryPrompt(), segmentModelIdentity(model), budget,
-		ctx.Value(domainReclassificationKey{}),
+		input, prompt, segmentSummaryPrompt(library.ID), segmentModelIdentity(model), budget,
+		ctx.Value(domainReclassificationKey{}), config.Prompt("output_correction", library.ID),
 	})
 	if err != nil {
 		return nil, err
@@ -234,17 +234,8 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 	return merged
 }
 
-func segmentSummaryPrompt() string {
-	return config.Prompt("summary_merge") + `只输出 JSON {"title":"中文资料标题",
-"summary":{"overview":"中文一句话概述"},"domain_ids":[],"entity_mentions":[]}。
-领域与实体各选 0–3 个。领域只能从各段已选 ID 中选择。
-entity_mentions 只能从各段提供的实体中选择，完整保留 name、type、entity_id、quote，不得改写名称或逐字引文。匹配不到已有实体的新名称也必须保留，供人工确认。
-若 fact_allowed=true，从各段 fact 中选择整篇报道的本次发生，最多输出一个 fact。
-fact 包含 title、subject、action、object、conditions、occurred_at、quote，
-以及 subject_entity_id、object_entity_id、subject_type、object_type。
-保留所选事实的端点 ID 与类型，ID 只能来自 entity_options，无 ID 时类型为 organization、person 或 other。
-quote 必须完整照抄所选 fact 的引文。综合稿、评论、教程或没有合适事实时输出 fact:null。
-若 fact_allowed=false，必须输出 fact:null。`
+func segmentSummaryPrompt(libraryIDs ...string) string {
+	return config.Prompt("summary_merge", libraryIDs...)
 }
 
 func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types.Library, k *types.Entry, parts []*articleProcessingResult, model *types.Model) (*articleProcessingResult, error) {
@@ -266,7 +257,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 		"domain_options": options.DomainOptions, "entity_options": options.EntityOptions,
 	})
 	_, _, completion := s.articleProcessingLimits(model)
-	if model.Parameters.ContextWindow > 0 && len([]rune(string(input)))+len([]rune(segmentSummaryPrompt()))+completion+modelOutputCorrectionReserve > model.Parameters.ContextWindow {
+	if model.Parameters.ContextWindow > 0 && len([]rune(string(input)))+len([]rune(segmentSummaryPrompt(library.ID)))+completion+outputCorrectionBudget(library.ID) > model.Parameters.ContextWindow {
 		return nil, errors.New("各段摘要超过合并模型上下文，请提高模型上下文或减少分段数")
 	}
 	llm, err := GetTierChatModel(ctx, s.db, s.modelService, library, types.ModelTierGeneration)
@@ -280,7 +271,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 		ctx = types.WithModelCallTrace(ctx, span.Attempt, span.SpanID)
 	}
 	var summary *articleProcessingResult
-	err = chatWithOutputValidation(types.WithLLMCallMetadata(ctx, "article_summary_merge", ""), llm, []chat.Message{{Role: "system", Content: segmentSummaryPrompt()}, {Role: "user", Content: string(input)}}, &chat.ChatOptions{Temperature: 0, MaxTokens: completion, MaxCompletionTokens: completion}, func(raw string) error {
+	err = chatWithOutputValidation(types.WithLLMCallMetadata(ctx, "article_summary_merge", ""), llm, []chat.Message{{Role: "system", Content: segmentSummaryPrompt(library.ID)}, {Role: "user", Content: string(input)}}, &chat.ChatOptions{Temperature: 0, MaxTokens: completion, MaxCompletionTokens: completion}, func(raw string) error {
 		checked, err := parseArticleProcessingResult(raw)
 		if err == nil && checked.Title == "" {
 			return errors.New("summary merge output is missing a generated title")
@@ -298,7 +289,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 			summary = checked
 		}
 		return err
-	})
+	}, library.ID)
 	if err != nil {
 		s.tracker().FailSpan(ctx, span, "SUMMARY_MERGE_FAILED", err.Error(), err)
 		return nil, err

@@ -25,15 +25,8 @@ import (
 	"time"
 )
 
-func articleProcessingPrompt() string {
-	return config.Prompt("article_processing") + `
-输出所有字段，格式：{"title":"中文资料标题",
-"summary":{"overview":"中文一句话概述"},"domain_ids":[],
-"entity_mentions":[{"name":"原文中的机构或人物名称","type":"organization 或 person","entity_id":"匹配的已有实体 ID，未匹配留空","quote":"包含该名称的一句逐字原文"}]}。
-domain_ids 只能选 domain_options 中的 ID。领域和实体各选 0–3 个，没有依据时返回空数组。
-实体先按名称和别名匹配 entity_options，匹配不到仍输出原文名称，供人工确认新实体，不得硬选已有实体。
-quote 必须逐字来自正文并包含 name，不带段落编号。产品和模型本身不作为实体，不根据模型品牌推测机构名称。
-segment 是本段在整篇资料中的位置。只分析本段，context_before 仅作衔接上下文。`
+func articleProcessingPrompt(libraryIDs ...string) string {
+	return config.Prompt("article_processing", libraryIDs...)
 }
 
 const (
@@ -60,6 +53,7 @@ type articleProcessingResult struct {
 }
 
 type articleProcessingInput struct {
+	LibraryName   string                      `json:"library_name"`
 	FactAllowed   bool                        `json:"fact_allowed"`
 	DomainOptions []understandingDomainOption `json:"domain_options"`
 	EntityOptions []understandingEntityOption `json:"entity_options"`
@@ -174,15 +168,19 @@ func acceptedUnderstandingIDs(ids []string, options map[string]bool) []string {
 
 const modelOutputCorrectionReserve = 512
 
+func outputCorrectionBudget(libraryIDs ...string) int {
+	return len([]rune(strings.ReplaceAll(config.Prompt("output_correction", libraryIDs...), "{{validation_error}}", strings.Repeat("x", modelOutputCorrectionReserve)))) + 1
+}
+
 // Only invalid output gets one corrective call; transport failures use the task retry policy.
-func chatWithOutputValidation(ctx context.Context, model chat.Chat, messages []chat.Message, options *chat.ChatOptions, validate func(string) error) error {
+func chatWithOutputValidation(ctx context.Context, model chat.Chat, messages []chat.Message, options *chat.ChatOptions, validate func(string) error, libraryIDs ...string) error {
 	var validationErr error
 	for attempt := 0; attempt < 2; attempt++ {
 		request := messages
 		if attempt > 0 {
 			request = append([]chat.Message(nil), messages...)
-			feedback := []rune(fmt.Sprintf("\nGenerate the complete JSON again from the original input. Keep all required fields and use only supplied evidence. Correct this validation error: %s", validationErr))
-			request[0].Content += string(feedback[:min(len(feedback), modelOutputCorrectionReserve)])
+			feedback := []rune(validationErr.Error())
+			request[0].Content += "\n" + strings.ReplaceAll(config.Prompt("output_correction", libraryIDs...), "{{validation_error}}", string(feedback[:min(len(feedback), modelOutputCorrectionReserve)]))
 		}
 		response, err := model.Chat(ctx, request, options)
 		if err != nil {
@@ -337,7 +335,7 @@ func (s *entryService) callArticleProcessingPart(ctx context.Context, library *t
 	if err != nil {
 		return nil, err
 	}
-	if model.Parameters.ContextWindow > 0 && len([]rune(string(encoded)))+len([]rune(prompt))+completion+len(images)*1024 > model.Parameters.ContextWindow {
+	if model.Parameters.ContextWindow > 0 && len([]rune(string(encoded)))+len([]rune(prompt))+completion+len(images)*1024+outputCorrectionBudget(library.ID) > model.Parameters.ContextWindow {
 		return nil, errors.New("segment exceeds model context budget")
 	}
 	user := chat.Message{Role: "user", Content: string(encoded)}
@@ -359,7 +357,7 @@ func (s *entryService) callArticleProcessingPart(ctx context.Context, library *t
 		qualifyUnderstandingEntityMentions(result, body)
 		qualifyUnderstandingChoices(result, input)
 		return nil
-	})
+	}, library.ID)
 	if err != nil {
 		return nil, fmt.Errorf("article processing call failed: %w", err)
 	}

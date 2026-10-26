@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"reliquary/internal/config"
 	"strings"
 	"sync"
 	"time"
@@ -675,7 +676,7 @@ func (h *InitializationHandler) checkChatModelConnection(
 		return false, fmt.Sprintf("创建聊天实例失败: %v", err)
 	}
 
-	testMessages := []chat.Message{{Role: "user", Content: "test"}}
+	testMessages := []chat.Message{{Role: "user", Content: config.Prompt("model_connection_test")}}
 	testOptions := &chat.ChatOptions{
 		MaxTokens: 1,
 		Thinking:  &[]bool{false}[0], // for dashscope.aliyuncs qwen3-32b

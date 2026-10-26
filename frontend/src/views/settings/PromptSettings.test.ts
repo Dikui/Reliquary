@@ -18,10 +18,21 @@ const script = compileScript(descriptor, { id: 'prompt-settings-test' })
 const template = compileTemplate({ id: 'prompt-settings-test', filename: 'PromptSettings.vue', source: descriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: script.bindings } })
 assert.deepEqual(template.errors, [])
 
-async function scenario(locale: 'zh-CN' | 'en-US', failSave: boolean, action: (state: any, requests: any[], dialog: () => any) => Promise<void>) {
+async function scenario(locale: 'zh-CN' | 'en-US', failSave: boolean, action: (state: any, requests: any[], dialog: () => any, controls: { delayNextList: () => () => void }) => Promise<void>, emptyLibraries = false) {
   const requests: any[] = []
   let confirmation: any
-  let stored = { key: 'prompt.article_processing', id: 0, value: 'Original prompt', value_type: 'string', category: 'prompts' }
+  const stored = new Map<string, { key: string; id: number; value: string }>()
+  let listGate: Promise<void> | undefined
+  const controls = { delayNextList() {
+    let release!: () => void
+    listGate = new Promise<void>(resolve => { release = resolve })
+    return release
+  } }
+  const libraryTemplates = ['article_processing', 'summary_merge', 'fact_grouping', 'story_consolidation', 'output_correction', 'evaluation_questions']
+  const globalTemplates = ['evaluation_questions_multi_library', 'model_connection_test', 'model_maintenance_probe']
+  function row(id: string, scope?: string) {
+    return stored.get(`${scope || 'global'}:${id}`) || { key: `prompt.${id}`, id: 0, value: id === 'article_processing' ? 'Original prompt' : `${scope || 'global'} ${id}` }
+  }
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
   const originalWindow = globalThis.window
   globalThis.window = { addEventListener() {}, removeEventListener() {} } as any
@@ -33,19 +44,30 @@ async function scenario(locale: 'zh-CN' | 'en-US', failSave: boolean, action: (s
       DialogPlugin: { confirm(options: any) { confirmation = options; return { destroy() {} } } },
     },
     '@/components/SafeTextarea.vue': { __esModule: true, default: defineComponent({ props: ['modelValue'], setup(props) { return () => h('textarea', props.modelValue) } }) },
+    '@/api/library': {
+      listLibraries: async () => ({ success: true, data: emptyLibraries ? [] : [
+        { id: 'library-1', name: 'First library' }, { id: 'library-2', name: 'Second library' },
+      ] }),
+    },
     '@/api/system': {
-      listSystemSettings: async () => [
-        { ...stored },
-        { key: 'prompt.summary_merge', value: 'Summary prompt' },
-        { key: 'prompt.evaluation_questions', value: 'Evaluation prompt' },
-        { key: 'prompt.library_media', value: 'Retired prompt' },
-        { key: 'queue.core_concurrency', value: 1 },
-      ],
-      updateSystemSetting: async (key: string, value: string) => {
-        requests.push({ key, value })
+      listPromptSettings: async (scope?: string) => {
+        requests.push({ list: scope || 'global' })
+        const result = (scope ? libraryTemplates : globalTemplates).map(id => ({ ...row(id, scope) }))
+        const gate = listGate
+        listGate = undefined
+        if (gate) await gate
+        return result
+      },
+      updatePromptSetting: async (id: string, value: string, scope?: string) => {
+        requests.push({ key: id, value, scope })
         if (failSave) throw new Error('Save unavailable')
-        stored = { ...stored, id: 31, value }
-        return { ...stored }
+        const updated = { key: `prompt.${id}`, id: 31, value }
+        stored.set(`${scope || 'global'}:${id}`, updated)
+        return { ...updated }
+      },
+      resetPromptSetting: async (id: string, scope?: string) => {
+        requests.push({ reset: id, scope })
+        stored.delete(`${scope || 'global'}:${id}`)
       },
     },
   }
@@ -60,20 +82,21 @@ async function scenario(locale: 'zh-CN' | 'en-US', failSave: boolean, action: (s
   const setup = component.setup
   component.setup = (props: object, context: object) => {
     const state = setup(props, context)
-    onServerPrefetch(async () => { await state.load(); await action(state, requests, () => confirmation) })
+    onServerPrefetch(async () => { await state.initialize(); await action(state, requests, () => confirmation, controls) })
     return state
   }
   const app = createSSRApp(component)
   app.use(i18n)
-  for (const name of ['t-button', 't-loading', 't-empty', 't-tag']) app.component(name, stub)
+  for (const name of ['t-button', 't-loading', 't-empty', 't-tag', 't-select']) app.component(name, stub)
   try { return { html: await renderToString(app), requests } }
   finally { globalThis.window = originalWindow }
 }
 
-test('prompt settings save edited content and load it again through the existing settings API', async () => {
+test('prompt settings save and restore defaults within the selected library', async () => {
   assert.equal(normalizeSettingsSection('prompts'), 'prompts')
-  const { html, requests } = await scenario('zh-CN', false, async (state, calls) => {
-    assert.deepEqual(state.templates.value.map((item: { key: string }) => item.key), ['prompt.article_processing', 'prompt.summary_merge', 'prompt.evaluation_questions'])
+  const { html, requests } = await scenario('zh-CN', false, async (state, calls, dialog) => {
+    assert.equal(state.libraryId.value, 'library-1')
+    assert.deepEqual(state.templates.value.map((item: { key: string }) => item.key), ['prompt.article_processing', 'prompt.summary_merge', 'prompt.fact_grouping', 'prompt.story_consolidation', 'prompt.output_correction', 'prompt.evaluation_questions'])
     state.draft.value = 'Updated prompt\n保留换行'
     await state.save()
     assert.equal(state.dirty.value, false)
@@ -81,10 +104,17 @@ test('prompt settings save edited content and load it again through the existing
     assert.equal(calls.filter(call => call.key).length, 1)
     await state.load()
     assert.equal(state.draft.value, 'Updated prompt\n保留换行')
+    state.restoreDefault()
+    await dialog().onConfirm()
+    assert.equal(state.draft.value, 'Original prompt')
+    assert.equal(state.selected.value.row.id, 0)
+    assert.deepEqual(calls.find(call => call.reset), { reset: 'article_processing', scope: 'library-1' })
   })
   assert.match(html, /资料理解/)
-  assert.match(html, /已自定义/)
-  assert.equal(requests.find(call => call.key).key, 'prompt.article_processing')
+  assert.match(html, /系统默认/)
+  assert.equal(requests.find(call => call.key).key, 'article_processing')
+  assert.equal(requests.find(call => call.key).scope, 'library-1')
+  assert.match(requests.find(call => call.toast).toast, /First library/)
   assert.equal(requests.find(call => call.key).value, 'Updated prompt\n保留换行')
 })
 
@@ -105,4 +135,46 @@ test('failed prompt saves retain the draft and cancelling navigation keeps edits
   assert.match(html, /role="alert"[^>]*>Save unavailable/)
   assert.match(html, /Unsaved changes/)
   assert.match(html, /Keep this draft/)
+})
+
+
+test('switching prompt scope guards drafts and ignores an older library response', async () => {
+  await scenario('en-US', false, async (state, calls, dialog, controls) => {
+    state.draft.value = 'Keep this library draft'
+    const denied = state.selectScope('library-2')
+    await Promise.resolve()
+    dialog().onCancel()
+    await denied
+    assert.equal(state.libraryId.value, 'library-1')
+    assert.equal(state.draft.value, 'Keep this library draft')
+
+    const release = controls.delayNextList()
+    const switching = state.selectScope('library-2')
+    await Promise.resolve()
+    dialog().onConfirm()
+    await Promise.resolve()
+    assert.equal(state.libraryId.value, 'library-2')
+    await state.selectScope('')
+    release()
+    await switching
+    assert.equal(state.libraryId.value, '')
+    assert.deepEqual(state.templates.value.map((item: { key: string }) => item.key), [
+      'prompt.evaluation_questions_multi_library', 'prompt.model_connection_test', 'prompt.model_maintenance_probe',
+    ])
+    assert.equal(state.draft.value, 'global evaluation_questions_multi_library')
+    assert.equal(calls.some(call => call.list === 'library-2'), true)
+  })
+})
+
+test('global prompts remain editable when there are no libraries', async () => {
+  const { requests } = await scenario('zh-CN', false, async state => {
+    assert.equal(state.libraryId.value, '')
+    assert.equal(state.templates.value.length, 3)
+    state.draft.value = 'Global evaluation prompt'
+    await state.save()
+    assert.equal(state.dirty.value, false)
+  }, true)
+  assert.deepEqual(requests.find(call => call.key), {
+    key: 'evaluation_questions_multi_library', value: 'Global evaluation prompt', scope: undefined,
+  })
 })

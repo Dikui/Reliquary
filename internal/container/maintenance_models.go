@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"reliquary/internal/config"
 	"strings"
 	"time"
 
@@ -102,7 +103,7 @@ func checkMaintenanceModels(ctx context.Context, db *gorm.DB, modelID string, tr
 				if err != nil {
 					return err
 				}
-				response, err := adapter.Chat(probeCtx, []chat.Message{{Role: "user", Content: "Reply OK."}}, &chat.ChatOptions{MaxTokens: 8})
+				response, err := adapter.Chat(probeCtx, []chat.Message{{Role: "user", Content: config.Prompt("model_maintenance_probe")}}, &chat.ChatOptions{MaxTokens: 8})
 				if err != nil {
 					return err
 				}

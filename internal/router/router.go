@@ -51,6 +51,7 @@ type RouterParams struct {
 	ModelCredentialsHandler *handler.ModelCredentialsHandler
 	AuthHandler             *handler.AuthHandler
 	InitializationHandler   *handler.InitializationHandler
+	PromptHandler           *handler.PromptHandler `optional:"true"`
 	SystemHandler           *handler.SystemHandler
 	ResourceCatalog         interfaces.ResourceCatalog
 }
@@ -170,6 +171,11 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))
 		RegisterSystemRoutes(v1, params.SystemHandler, accessGuards)
+		if params.PromptHandler != nil {
+			v1.GET("/system/prompts", params.PromptHandler.List)
+			v1.PUT("/system/prompts/:id", params.PromptHandler.Update)
+			v1.DELETE("/system/prompts/:id", params.PromptHandler.Update)
+		}
 		RegisterChunkerDebugRoutes(v1, accessGuards)
 
 		// Fail fast if any declared API-key policy points at a route

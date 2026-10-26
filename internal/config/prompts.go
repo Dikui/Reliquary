@@ -25,9 +25,14 @@ var promptFiles = []struct {
 		[]string{
 			"article_processing",
 			"summary_merge",
+			"fact_grouping",
+			"story_consolidation",
+			"output_correction",
+			"model_connection_test",
+			"model_maintenance_probe",
 		},
 	},
-	{"evaluation.yaml", []string{"evaluation_questions"}},
+	{"evaluation.yaml", []string{"evaluation_questions", "evaluation_questions_multi_library"}},
 }
 
 // LoadPromptTemplates reads and validates the complete set before starting workers.
@@ -104,9 +109,13 @@ func SetPromptOverrides(prompts map[string]string) {
 
 // Prompt returns a saved override or the required template's file default.
 // An absent ID indicates an uninitialized process or a programming error.
-func Prompt(id string) string {
+func Prompt(id string, libraryIDs ...string) string {
+	key := id
+	if len(libraryIDs) > 0 && libraryIDs[0] != "" {
+		key = "library." + libraryIDs[0] + "." + id
+	}
 	if prompts, ok := promptOverrides.Load().(map[string]string); ok {
-		if content, exists := prompts[id]; exists {
+		if content, exists := prompts[key]; exists {
 			return content
 		}
 	}
@@ -116,4 +125,12 @@ func Prompt(id string) string {
 		}
 	}
 	panic("prompt template is not loaded: " + id)
+}
+
+// PromptScopeIDs exposes only templates that can run in the selected scope.
+func PromptScopeIDs(library bool) []string {
+	if library {
+		return []string{"article_processing", "summary_merge", "fact_grouping", "story_consolidation", "output_correction", "evaluation_questions"}
+	}
+	return []string{"evaluation_questions_multi_library", "model_connection_test", "model_maintenance_probe"}
 }

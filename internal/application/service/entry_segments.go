@@ -90,7 +90,7 @@ func (s *entryService) segmentSettings() (limit, overlap, reserve int) {
 
 // The same budget is used by planning and dispatch. MaxBodyChars only lowers
 // a model's capacity; it never overrides the model context safety boundary.
-func (s *entryService) segmentBudget(model *types.Model, prompt string, metadata any, images int) (int, error) {
+func (s *entryService) segmentBudget(model *types.Model, prompt string, metadata any, images int, libraryIDs ...string) (int, error) {
 	body, _, completion := s.articleProcessingLimits(model)
 	_, overlap, reserve := s.segmentSettings()
 	if model != nil && model.Parameters.ContextWindow > 0 {
@@ -100,7 +100,7 @@ func (s *entryService) segmentBudget(model *types.Model, prompt string, metadata
 		}
 		window := model.Parameters.ContextWindow
 		body = min(body, window*(100-reserve)/100)
-		body = min(body, window-completion-len([]rune(prompt))-len([]rune(string(encoded)))-images*1024-segmentEnvelopeReserve-overlap)
+		body = min(body, window-completion-len([]rune(prompt))-len([]rune(string(encoded)))-images*1024-segmentEnvelopeReserve-overlap-outputCorrectionBudget(libraryIDs...))
 	}
 	if body < 1 {
 		return 0, errors.New("model context is too small for instructions, metadata and segment context")

@@ -149,6 +149,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewInitializationHandler))
 	must(container.Provide(handler.NewAuthHandler))
 	must(container.Provide(handler.NewSystemHandler))
+	must(container.Provide(handler.NewPromptHandler))
 	must(container.Provide(handler.NewModelCredentialsHandler))
 
 	logger.Debugf(ctx, "[Container] HTTP handlers registered")

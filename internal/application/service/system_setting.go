@@ -153,7 +153,7 @@ var registry = map[string]settingSpec{
 const promptSettingPrefix = "prompt."
 
 func init() {
-	for _, id := range config.PromptIDs() {
+	for _, id := range config.PromptScopeIDs(false) {
 		registry[promptSettingPrefix+id] = settingSpec{
 			Type: "string", Default: "", Category: "prompts",
 		}
@@ -201,6 +201,9 @@ func (s *systemSettingService) preload(ctx context.Context) {
 		return
 	}
 	s.mu.Lock()
+	if s.cache == nil {
+		s.cache = make(map[string]*types.SystemSetting)
+	}
 	for _, row := range rows {
 		s.cache[row.Key] = row
 	}
@@ -291,9 +294,19 @@ func (s *systemSettingService) dispatchSideEffects(ctx context.Context, changedK
 }
 
 func (s *systemSettingService) applyPromptOverrides(ctx context.Context) {
-	prompts := config.PromptDefaults()
-	for id, fallback := range prompts {
-		prompts[id] = s.GetString(ctx, promptSettingPrefix+id, "", fallback)
+	prompts := map[string]string{}
+	// Include scoped rows already loaded or saved in this process.
+	s.mu.RLock()
+	for key, row := range s.cache {
+		if _, valid := settingSpecForKey(key); valid && strings.HasPrefix(key, promptSettingPrefix) && row != nil {
+			if content, err := row.AsString(); err == nil {
+				prompts[strings.TrimPrefix(key, promptSettingPrefix)] = content
+			}
+		}
+	}
+	s.mu.RUnlock()
+	for _, id := range config.PromptScopeIDs(false) {
+		prompts[id] = s.GetString(ctx, promptSettingPrefix+id, "", config.PromptDefaults()[id])
 	}
 	config.SetPromptOverrides(prompts)
 }
@@ -355,7 +368,7 @@ func (s *systemSettingService) applyModelMaxConcurrency(ctx context.Context) {
 // instead of a 500. This is the deliberate degradation policy spelled
 // out in the interface comment.
 func (s *systemSettingService) resolveRaw(ctx context.Context, key string) (raw types.JSON, fromDB bool) {
-	spec, known := registry[key]
+	spec, known := settingSpecForKey(key)
 	if s.loaded.Load() {
 		s.mu.RLock()
 		row, ok := s.cache[key]
@@ -504,6 +517,11 @@ func (s *systemSettingService) List(ctx context.Context) ([]*types.SystemSetting
 	byKey := make(map[string]*types.SystemSetting, len(rows))
 	out := make([]*types.SystemSetting, 0, len(rows)+len(registry))
 	for _, row := range rows {
+		if strings.HasPrefix(row.Key, promptSettingPrefix) {
+			if _, known := registry[row.Key]; !known {
+				continue
+			}
+		}
 		byKey[row.Key] = row
 	}
 	// Retired aggregate concurrency and space-creation settings have no
@@ -554,7 +572,14 @@ func (s *systemSettingService) List(ctx context.Context) ([]*types.SystemSetting
 // Enriches the row with registry-side `Enum` for the same UI reason
 // as List.
 func (s *systemSettingService) Get(ctx context.Context, key string) (*types.SystemSetting, error) {
-	spec, ok := registry[key]
+	if strings.HasPrefix(key, promptSettingPrefix) && !s.loaded.Load() {
+		s.promptMu.Lock()
+		if !s.loaded.Load() {
+			s.preload(ctx)
+		}
+		s.promptMu.Unlock()
+	}
+	spec, ok := settingSpecForKey(key)
 	if !ok {
 		return nil, fmt.Errorf("unknown setting key %q", key)
 	}
@@ -592,7 +617,7 @@ func (s *systemSettingService) virtualSetting(key string, spec settingSpec) *typ
 
 func (s *systemSettingService) fallbackJSONForSpec(key string, spec settingSpec) types.JSON {
 	if strings.HasPrefix(key, promptSettingPrefix) {
-		value, _ := json.Marshal(config.PromptDefaults()[strings.TrimPrefix(key, promptSettingPrefix)])
+		value, _ := json.Marshal(config.PromptDefaults()[promptIDFromSettingKey(key)])
 		return types.JSON(value)
 	}
 	if spec.EnvName != "" {
@@ -678,7 +703,7 @@ func (s *systemSettingService) Update(ctx context.Context, key string, rawValue 
 		s.promptMu.Lock()
 		defer s.promptMu.Unlock()
 	}
-	spec, ok := registry[key]
+	spec, ok := settingSpecForKey(key)
 	if !ok {
 		return nil, fmt.Errorf("unknown setting key %q", key)
 	}
@@ -789,7 +814,7 @@ func (s *systemSettingService) Reset(ctx context.Context, key string) error {
 		s.promptMu.Lock()
 		defer s.promptMu.Unlock()
 	}
-	_, ok := registry[key]
+	_, ok := settingSpecForKey(key)
 	if !ok {
 		return fmt.Errorf("unknown setting key %q", key)
 	}

@@ -79,6 +79,7 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 	projectDomainSnapshot(original, current.schemaVersion)
 	projectUnderstandingSnapshot(original, current.schemaVersion)
 	projectStorySnapshot(original, current.schemaVersion)
+	projectLibraryPromptsSnapshot(original, current.schemaVersion)
 	differences := []string{}
 	for table, wanted := range original.Tables {
 		actual, present := current.Tables[table]

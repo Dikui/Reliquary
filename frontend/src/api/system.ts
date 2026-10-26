@@ -115,6 +115,23 @@ export async function resetSystemSetting(key: string): Promise<void> {
   await del(`/api/v1/system/settings/${encodeURIComponent(key)}`)
 }
 
+function promptSettingsPath(id?: string, libraryId?: string): string {
+  const path = `/api/v1/system/prompts${id ? `/${encodeURIComponent(id)}` : ''}`
+  return libraryId ? `${path}?library_id=${encodeURIComponent(libraryId)}` : path
+}
+
+export async function listPromptSettings(libraryId?: string): Promise<SystemSettingItem[]> {
+  return await get(promptSettingsPath(undefined, libraryId)) as unknown as SystemSettingItem[]
+}
+
+export async function updatePromptSetting(id: string, value: string, libraryId?: string): Promise<SystemSettingItem> {
+  return await put(promptSettingsPath(id, libraryId), { value }) as unknown as SystemSettingItem
+}
+
+export async function resetPromptSetting(id: string, libraryId?: string): Promise<void> {
+  await del(promptSettingsPath(id, libraryId))
+}
+
 // ---- Runtime queue observability (system-scope) ----
 
 /**

@@ -124,7 +124,7 @@ func (s *StoryConsolidator) consolidatePair(ctx context.Context, spaceID uint64,
 		{"left": left.Fact, "right": right.Fact, "incoming_side": "right", "mention_only": false},
 		{"left": right.Fact, "right": left.Fact, "incoming_side": "left", "mention_only": false},
 	} {
-		answer, err := callFactGrouping(ctx, model, payload)
+		answer, err := callFactGrouping(ctx, model, payload, config.Prompt("story_consolidation", library.ID))
 		if err != nil {
 			return err
 		}

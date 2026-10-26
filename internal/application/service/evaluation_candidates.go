@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -78,8 +77,14 @@ func (s *EvaluationService) GenerateCandidates(ctx context.Context, setID string
 	if model == nil {
 		return nil, apperrors.NewServiceUnavailableError("candidate model unavailable")
 	}
-	raw, _ := json.Marshal(materials)
-	prompt := fmt.Sprintf(`Generate exactly %d `, input.Count) + config.Prompt("evaluation_questions") + ` Return only a JSON array of objects {"query":"question","answers":[{"entry_id":"supplied ID","grade":1}]}. Use only supplied document IDs. Every question requires at least one positive answer.`
+	raw, _ := json.Marshal(map[string]any{"count": input.Count, "documents": materials})
+	libraryID := ""
+	promptID := "evaluation_questions_multi_library"
+	if len(validation.Request.Libraries) == 1 {
+		libraryID = validation.Request.Libraries[0]
+		promptID = "evaluation_questions"
+	}
+	prompt := config.Prompt(promptID, libraryID)
 	response, err := model.Chat(types.WithLLMCallMetadata(types.WithModelTier(ctx, types.ModelTierGeneration), string(types.CallPurposeEvaluation), ""), []chat.Message{{Role: "system", Content: prompt}, {Role: "user", Content: string(raw)}}, &chat.ChatOptions{Temperature: 0, MaxTokens: 4096})
 	if err != nil {
 		return nil, err
