@@ -68,6 +68,27 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
   return { state, html }
 }
 
+test('bottom settings button opens the settings center directly without a submenu', async () => {
+  let opens = 0
+  const paths: unknown[] = []
+  const events: string[] = []
+  const { state: sidebar } = await componentScenario('../components/SideMenu.vue', 'zh-CN', {
+    '@/stores/ui': { useUIStore: () => ({ openSettings: () => opens++ }) },
+    '@/stores/menu': { useMenuStore: () => ({ menuGroups: ref([]) }) },
+    '@/components/SettingsMenu.vue': { default: stub, __esModule: true },
+    'vue-router': { useRoute: () => ({}), useRouter: () => ({ push: (path: unknown) => paths.push(path) }) },
+  }, async () => {}, { mobileOverlay: true, onClose: () => events.push('close') })
+  const { html } = await componentScenario('../components/SettingsMenu.vue', 'zh-CN', {},
+    async state => { state.emit('open') }, { onOpen: () => sidebar.navigate('settings') })
+  assert.match(readFileSync(new URL('../components/SideMenu.vue', import.meta.url), 'utf8'), /@open="navigate\('settings'\)"/)
+  assert.equal(opens, 1)
+  assert.deepEqual(paths, [{ path: '/platform/settings', query: {} }])
+  assert.deepEqual(events, ['close'])
+  assert.equal((html.match(/<button\b/g) || []).length, 1)
+  assert.match(html, /aria-label="设置"/)
+  assert.doesNotMatch(html, /aria-expanded|settings-dropdown|chevron/)
+})
+
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: API Key blank expiry creates a permanent key without sending epoch zero`, async () => {
     const requests: any[] = []

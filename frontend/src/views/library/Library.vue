@@ -660,7 +660,7 @@ const onReparseMenuClick = (index: number, item: EntryCard) => {
   }
 };
 
-const handleOpenLibrarySettings = () => uiStore.openSettings('library');
+const handleOpenLibrarySettings = () => uiStore.openSettings('library', 'catalog');
 const reparseConfirmStore = useReparseConfirmStore();
 
 const batchResultId = ref('');
@@ -998,7 +998,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
         <div class="document-header-title">
           <div class="document-title-row">
             <h2 class="document-breadcrumb">
-              <span>{{ $t('library.title') }}</span>
+              <button type="button" class="breadcrumb-link" @click="handleOpenLibrarySettings">{{ $t('library.title') }}</button>
               <t-icon name="chevron-right" class="breadcrumb-separator" />
                 <button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'documents' }]" :aria-pressed="activeLibraryTab === 'documents'"
                   @click="selectLibraryTab('documents')">{{ $t('knowledgeEditor.document.title') }}</button>
@@ -1559,6 +1559,11 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
     gap: 4px;
     border-radius: 6px;
     transition: all 0.12s ease;
+
+    &:focus-visible {
+      outline: 2px solid var(--td-brand-color);
+      outline-offset: 2px;
+    }
 
     &:hover:not(:disabled) {
       color: var(--td-success-color);

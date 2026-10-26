@@ -48,10 +48,15 @@ function textContent(node: any): string {
 
 function createHarness(locale: Locale, libraryInfo: LibraryInfo) {
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
+  const settingsCalls: string[][] = []
+  const openSettings = new Function('uiStore', `return ${source.match(/const handleOpenLibrarySettings = ([^\n]+)/)![1]}`)(
+    { openSettings: (...args: string[]) => settingsCalls.push(args) },
+  )
   const context = {
     libraryInfo,
     activeLibraryTab: 'documents' as KbTab,
     selectLibraryTab: (tab: KbTab) => { context.activeLibraryTab = tab },
+    handleOpenLibrarySettings: openSettings,
     $t: (...args: Parameters<typeof i18n.global.t>) => i18n.global.t(...args),
   }
   let tree: any
@@ -59,6 +64,7 @@ function createHarness(locale: Locale, libraryInfo: LibraryInfo) {
   return {
     i18n,
     context,
+    settingsCalls,
     async render() {
       const app = createSSRApp(component)
       app.component('t-icon', defineComponent({ setup: () => () => h('svg') }))
@@ -72,9 +78,9 @@ function createHarness(locale: Locale, libraryInfo: LibraryInfo) {
 function assertBreadcrumb(tree: any, locale: Locale, activeTab: KbTab) {
   assert.equal(tree.type, 'h2')
   assert.equal(tree.props.class, 'document-breadcrumb')
-  const rootLabel = tree.children.find((node: any) => node.type === 'span' && !node.props?.class)
+  const rootLabel = tree.children.find((node: any) => node.type === 'button' && node.props?.class === 'breadcrumb-link')
   assert.equal(textContent(rootLabel), expectedLabels[locale].root)
-  const buttons = tree.children.filter((node: any) => node.type === 'button')
+  const buttons = tree.children.filter((node: any) => node.type === 'button' && node !== rootLabel)
   assert.equal(buttons.length, tabs.length)
   assert.deepEqual(buttons.map((node: any) => textContent(node).trim()), expectedLabels[locale].tabs)
   assert.deepEqual(buttons.map((node: any) => node.props['aria-pressed']), tabs.map(tab => tab === activeTab))
@@ -89,7 +95,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       for (const activeTab of tabs) {
         harness.context.activeLibraryTab = activeTab
         const { html, tree } = await harness.render()
-        assert.ok(html.includes(`<span>${expectedLabels[locale].root}</span>`))
+        assert.ok(html.includes(`>${expectedLabels[locale].root}</button>`))
         assertBreadcrumb(tree, locale, activeTab)
       }
       assert.deepEqual(harness.context.libraryInfo, originalInfo, 'rendering preserves the database name')
@@ -100,6 +106,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 test('the existing breadcrumb switches language without changing the database name or selected tab', async () => {
   const harness = createHarness('zh-CN', { name: '库' })
   const first = await harness.render()
+  const libraryButton = first.tree.children.find((node: any) => node.props?.class === 'breadcrumb-link')
+  libraryButton.props.onClick()
+  assert.deepEqual(harness.settingsCalls, [['library', 'catalog']])
+  assert.equal(harness.context.activeLibraryTab, 'documents', 'opening the catalogue preserves the selected tab')
   const buttons = assertBreadcrumb(first.tree, 'zh-CN', 'documents')
   buttons[2].props.onClick()
   assert.equal(harness.context.activeLibraryTab, 'entities')

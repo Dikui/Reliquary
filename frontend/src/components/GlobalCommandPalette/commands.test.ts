@@ -33,9 +33,9 @@ test('primary navigation includes evaluation and model calls in its established 
     return require(name)
   }, module, module.exports)
   const items = module.exports.useMenuStore().visibleMenuArr.value
-  assert.deepEqual(items.map((item: any) => item.key), ['articles', 'stories', 'search', 'entities', 'domains', 'follows', 'pending', 'evaluation', 'modelCalls', 'settings'])
+  assert.deepEqual(items.map((item: any) => item.key), ['articles', 'stories', 'search', 'entities', 'domains', 'follows', 'pending', 'evaluation', 'modelCalls'])
   assert.deepEqual(items.map((item: any) => [item.path, item.tab]), [
-    ['entries', undefined], ['stories', undefined], ['search', undefined], ['entries', 'entities'], ['entries', 'domains'], ['follows', undefined], ['entries', 'reviews'], ['evaluation', undefined], ['model-calls', undefined], ['settings', undefined],
+    ['entries', undefined], ['stories', undefined], ['search', undefined], ['entries', 'entities'], ['entries', 'domains'], ['follows', undefined], ['entries', 'reviews'], ['evaluation', undefined], ['model-calls', undefined],
   ])
   const settings = readFileSync(new URL('../../views/settings/Settings.vue', import.meta.url), 'utf8')
   for (const section of ['library', 'models', 'vault', 'operation-logs', 'runtime-queues']) {

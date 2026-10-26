@@ -74,7 +74,7 @@ Article stars wait for server confirmation before updating the card, row or deta
 
 The article detail uses EntryArticleJudgments for the shared star control. The original body and images remain readable after processing failure.
 
-The main navigation groups existing entries into Materials, Needs attention, Diagnostics and Configuration. Needs attention opens /platform/entries?tab=reviews and retains only intake review and missing images. Diagnostics groups the existing evaluation and model-call pages. Existing contextual entries remain available. The entity entry opens /platform/entries?tab=entities. Settings retain library, models, file library status, operation logs, API integration and runtime queues. File library status lives at /platform/settings?section=vault.
+The main navigation groups existing entries into Materials, Needs attention and Diagnostics. A single Settings button stays at the bottom of the sidebar and directly opens the settings center. Needs attention opens /platform/entries?tab=reviews and retains only intake review and missing images. Diagnostics groups the existing evaluation and model-call pages. Existing contextual entries remain available. The entity entry opens /platform/entries?tab=entities. Settings retain library, models, file library status, operation logs, API integration and runtime queues. File library status lives at /platform/settings?section=vault.
 
 Follow controls share server state on entity pages, story lists, story details and follow-feed cards. Follow and unfollow are idempotent and record actual changes in the operation log. Entity and story merges transfer follows to the retained object, deduplicate them and keep the earliest follow time. Old merged IDs resolve to the retained target.
 
@@ -96,7 +96,7 @@ Article cards, rows, detail and the full search page share EntryClassification f
 
 Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名称为 Reliquary；Go/TypeScript 导出符号按语言惯例使用 Reliquary。登录页与侧栏共用 frontend/src/assets/img/reliquary.svg。
 
-唯一库的根面包屑使用 library.title，中文显示“库”，英文显示“Library”，不随数据库中的库名称变化。文章、待处理、实体及设置背景共用此名称。
+资料页的根面包屑使用 library.title，中文显示“库”，英文显示“Library”，不随数据库中的库名称变化。点击或键盘激活后直接打开资料库设置的“库目录”多库管理界面，保留当前资料页签和筛选。文章、待处理、实体及设置背景共用此名称。
 
 实体页面维护有明确名称的对象。实体详情显示规范名、别名以及跨库涉及该实体的资料，资料可通过原有详情入口打开。新增、编辑、删除和合并沿用 TDesign 组件与中英文文案，不再提供待合并建议和名称向量重建。
 
@@ -106,7 +106,7 @@ Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名�
 
 模型档位在设置中心的库设置中配置，使用 ModelTierEditor 与原有 ModelSelector。库目录按选中库展示统一的只读入库规则，并编辑适用模型、分块参数；生成型也可配置这些处理能力。审核标准、来源门槛和按类型抽图开关不再提供编辑。共享嵌入页签仅配置空间向量模型。每一行显示用途、选择和生效来源，不暗示其他库提供默认值。切库和离开前沿用未保存确认，失败保留草稿。父子分块开关按模板锁定。待审区明确标为历史资料的人工处置入口。资料和实体页面使用 /platform/entries；内容由外部工具通过收录接口送入。模型调用继续使用共享 ModelCallSummary 表格。
 
-主导航按资料管理、待处理、辅助诊断、系统配置分组。待处理直达原待审区，只保留收录待审；实体入口打开现有实体详情页签。设置中心提供库、模型、文件库状态、操作日志、API 集成和运行队列入口，沿用原有桌面外观。较窄的桌面窗口先减少内容左右留白，再收窄侧栏；内容使用命名容器 settings-content，实际可用宽度不超过 720px 时，标签与控件上下排列。断点与行布局由 frontend/src/assets/settings-layout.less 统一维护，控件可收缩，表格只在自身区域横向滚动。既有 640px 以下规则继续保留。
+主导航按资料管理、待处理、辅助诊断分组。设置入口固定在侧栏底部，点击直接打开设置中心。待处理直达原待审区，只保留收录待审；实体入口打开现有实体详情页签。设置中心提供库、模型、文件库状态、操作日志、API 集成和运行队列入口，沿用原有桌面外观。较窄的桌面窗口先减少内容左右留白，再收窄侧栏；内容使用命名容器 settings-content，实际可用宽度不超过 720px 时，标签与控件上下排列。断点与行布局由 frontend/src/assets/settings-layout.less 统一维护，控件可收缩，表格只在自身区域横向滚动。既有 640px 以下规则继续保留。
 
 自动增高文本框共用 SafeTextarea，保留 TDesign 外观与输入交互，项目负责可取消的安全高度测量。API Key 有效期使用 TDesign 日期时间选择器与全局中英文语言配置，保持原本本地时间、分钟精度与 Unix 秒提交方式。
 
@@ -187,4 +187,4 @@ Entity and story timelines share the backend visibility and source hydration own
 
 ## 本机设置入口
 
-来源：ADR 0015 与 2026-10-26 的登录及辅助入口清理需求。侧栏设置按钮保留通用、工作区、模型、全部设置和系统管理入口，不显示头像、账号资料或项目帮助外链。按钮支持键盘展开，Escape 关闭并返回触发按钮；窄屏沿用现有导航抽屉。工作区直接通过 `/api/v1/space` 加载，暂时断网保留已加载状态和可重试提示。主题、字体和最近搜索保存为本机偏好，升级沿用旧值。
+来源：ADR 0015 与 2026-10-26 的登录及辅助入口清理、设置入口简化需求。侧栏仅在底部保留一个设置按钮，点击或键盘激活后直接打开设置中心，不再提供重复的主导航入口和快捷子菜单。设置中心内部保留全部分类，不显示头像、账号资料或项目帮助外链；窄屏沿用现有导航抽屉。工作区直接通过 `/api/v1/space` 加载，暂时断网保留已加载状态和可重试提示。主题、字体和最近搜索保存为本机偏好，升级沿用旧值。

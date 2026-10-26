@@ -19,7 +19,7 @@
       </t-tooltip>
       </section>
     </nav>
-    <div class="menu_bottom"><SettingsMenu :collapsed="sidebarCollapsed" /></div>
+    <div class="menu_bottom"><SettingsMenu :collapsed="sidebarCollapsed" @open="navigate('settings')" /></div>
   </aside>
 </template>
 <script setup lang="ts">
