@@ -89,8 +89,8 @@ SELECT * FROM jsonb_populate_record(NULL::entry_entities,?::jsonb)`,
 		{
 			name: "unexpected_row",
 			mutate: `INSERT INTO entities(id,space_id,canonical_name,normalized_name,
-entity_type,created_at,updated_at)
-VALUES('unexpected',1,'Unexpected','unexpected','organization',now(),now())`,
+created_at,updated_at)
+VALUES('unexpected',1,'Unexpected','unexpected',now(),now())`,
 			restore:  `DELETE FROM entities WHERE id='unexpected'`,
 			expected: "table entities",
 		},

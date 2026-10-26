@@ -769,7 +769,7 @@ for (const width of [390, 1440]) test(`trace drawer is bounded by its ${width}px
 
 
 test('saving entities preserves loaded detail and card display fields until and after a fresh read', async () => {
-  const entities = [{ id: 'institute', canonical_name: 'Research Institute', entity_type: 'organization' }]
+  const entities = [{ id: 'institute', canonical_name: 'Research Institute', }]
   const record = { file_name: 'Material title.md', library_id: 'reference', library_name: 'Reference library' }
   const loader = createArticleDetailsLoader({ material: { ...record, entities: [], entities_manual: false } })
   const details = await loader.load('material')

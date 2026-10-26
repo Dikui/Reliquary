@@ -25,5 +25,5 @@ export interface ClassifiedEntry {
   domains?: Domain[]
   domains_manual?: boolean
   entities_manual?: boolean
-  entities?: Pick<Entity, 'id' | 'canonical_name' | 'entity_type'>[]
+  entities?: Pick<Entity, 'id' | 'canonical_name'>[]
 }

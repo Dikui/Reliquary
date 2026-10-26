@@ -17,7 +17,7 @@ type EntityHandler struct {
 
 func NewEntityHandler(s *service.EntityService) *EntityHandler { return &EntityHandler{service: s} }
 func entityListQuery(c *gin.Context) (types.EntityQuery, error) {
-	q := types.EntityQuery{Entity: c.Query("entity"), EntityType: c.Query("entity_type")}
+	q := types.EntityQuery{Entity: c.Query("entity")}
 	var err error
 	q.Limit, err = strconv.Atoi(c.DefaultQuery("limit", "50"))
 	if err != nil || q.Limit < 1 || q.Limit > 100 {
@@ -82,7 +82,7 @@ func (h *EntityHandler) MergeEntities(c *gin.Context) {
 func (h *EntityHandler) SaveEntity(c *gin.Context) {
 	var input types.EntityInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		_ = c.Error(werrors.NewBadRequestError("entity name and type required"))
+		_ = c.Error(werrors.NewBadRequestError("entity name required"))
 		return
 	}
 	item, err := h.service.SaveEntity(c.Request.Context(), c.Param("entity_id"), input)

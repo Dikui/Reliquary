@@ -1,7 +1,6 @@
 package types
 
 import (
-	"strings"
 	"time"
 )
 
@@ -11,7 +10,6 @@ type Entity struct {
 	SpaceID        uint64    `json:"space_id" gorm:"not null"`
 	CanonicalName  string    `json:"canonical_name" gorm:"type:varchar(512);not null"`
 	NormalizedName string    `json:"-" gorm:"type:varchar(512);not null"`
-	EntityType     string    `json:"entity_type" gorm:"type:varchar(128);not null"`
 	MergedIntoID   string    `json:"merged_into_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
@@ -21,7 +19,6 @@ type Entity struct {
 // EntityInput replaces an entity's editable directory fields.
 type EntityInput struct {
 	CanonicalName string   `json:"canonical_name" binding:"required"`
-	EntityType    string   `json:"entity_type" binding:"required"`
 	Aliases       []string `json:"aliases"`
 }
 
@@ -29,7 +26,6 @@ func (Entity) TableName() string { return "entities" }
 
 // EntityAlias stores normalized names used to resolve future mentions.
 type EntityAlias struct {
-	EntityType       string    `json:"entity_type" gorm:"type:varchar(128);not null;default:'';uniqueIndex:idx_entity_alias"`
 	ID               string    `json:"id" gorm:"type:varchar(36);primaryKey"`
 	SpaceID          uint64    `json:"space_id" gorm:"not null;uniqueIndex:idx_entity_alias"`
 	EntityID         string    `json:"entity_id" gorm:"type:varchar(36);not null;index"`
@@ -63,10 +59,9 @@ type EntityMergeRecord struct {
 func (EntityMergeRecord) TableName() string { return "entity_merge_records" }
 
 type EntityQuery struct {
-	Entity     string `json:"entity,omitempty"`
-	EntityType string `json:"entity_type,omitempty"`
-	Limit      int    `json:"limit,omitempty"`
-	Offset     int    `json:"offset,omitempty"`
+	Entity string `json:"entity,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+	Offset int    `json:"offset,omitempty"`
 }
 
 type EntityLibraryGroup struct {
@@ -79,17 +74,4 @@ type EntityDetail struct {
 	LibraryGroups []EntityLibraryGroup `json:"library_groups"`
 	Entity        Entity               `json:"entity"`
 	Entries       []Entry              `json:"entries"`
-}
-
-// EntityTypes are the supported kinds of maintained entities.
-var EntityTypes = []string{"organization", "person"}
-
-func NormalizeEntityType(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	for _, allowed := range EntityTypes {
-		if value == allowed {
-			return value
-		}
-	}
-	return ""
 }

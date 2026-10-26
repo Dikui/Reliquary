@@ -225,7 +225,7 @@ func TestEntryHeaderFullTextIncludesEntitiesAliasesAndOverview(t *testing.T) {
 	h.processor.output = articleProcessingOutput(
 		t,
 
-		[]legacyEntityCandidate{{Name: "Entitymarker", EntityType: "organization"}},
+		[]legacyEntityCandidate{{Name: "Entitymarker"}},
 	)
 	article := h.upload(t, "Headermarker", "discardedfixture reference source body")
 	maintainTestEntities(h.ctx, t, h.db, article.ID, "Entitymarker")

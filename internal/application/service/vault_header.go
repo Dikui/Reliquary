@@ -92,7 +92,6 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 		for _, entity := range h.RelatedEntities {
 			scalar("  - id", entity.ID)
 			scalar("    name", entity.Name)
-			scalar("    entity_type", entity.EntityType)
 		}
 	}
 	scalar("report_fingerprint", h.ReportFingerprint)

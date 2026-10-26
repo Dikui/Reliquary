@@ -162,7 +162,6 @@ func saveEntityAlias(tx *gorm.DB, entity types.Entity, name, method string) erro
 	alias := types.EntityAlias{
 		ID:               uuid.NewString(),
 		SpaceID:          entity.SpaceID,
-		EntityType:       entity.EntityType,
 		EntityID:         entity.ID,
 		Alias:            name,
 		NormalizedAlias:  types.NormalizeEntityKey(name),
@@ -183,14 +182,10 @@ func saveEntityAlias(tx *gorm.DB, entity types.Entity, name, method string) erro
 
 func validateEntityInput(input types.EntityInput) (types.EntityInput, error) {
 	input.CanonicalName = strings.TrimSpace(input.CanonicalName)
-	input.EntityType = types.NormalizeEntityType(input.EntityType)
 	if types.NormalizeEntityKey(input.CanonicalName) == "" || len([]rune(input.CanonicalName)) > 512 ||
 		len([]rune(types.NormalizeEntityKey(input.CanonicalName))) > 512 ||
 		strings.ContainsAny(input.CanonicalName, "\r\n\x00") {
 		return input, werrors.NewBadRequestError("entity name must be a single line of 1 to 512 characters")
-	}
-	if input.EntityType == "" {
-		return input, werrors.NewBadRequestError("entity type must be organization or person")
 	}
 	aliases := []string{}
 	seen := map[string]bool{types.NormalizeEntityKey(input.CanonicalName): true}
@@ -209,7 +204,7 @@ func validateEntityInput(input types.EntityInput) (types.EntityInput, error) {
 	return input, nil
 }
 
-// SaveEntity replaces the editable name, type and aliases in one transaction.
+// SaveEntity replaces the editable name and aliases in one transaction.
 func (s *EntityService) SaveEntity(ctx context.Context, id string, input types.EntityInput) (*types.Entity, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
@@ -241,21 +236,19 @@ func (s *EntityService) SaveEntity(ctx context.Context, id string, input types.E
 		} else {
 			entity = types.Entity{ID: uuid.NewString(), SpaceID: spaceID, CreatedAt: time.Now()}
 		}
-		var count int64
-		query := tx.Model(&types.Entity{}).
-			Where("space_id=? AND entity_type=? AND normalized_name=?",
-				spaceID, input.EntityType, types.NormalizeEntityKey(input.CanonicalName)).
-			Where("id<>? AND merged_into_id=''", entity.ID)
-		if err := query.Count(&count).Error; err != nil {
-			return err
+		normalizedName := types.NormalizeEntityKey(input.CanonicalName)
+		if id == "" || entity.NormalizedName != normalizedName {
+			var count int64
+			if err := tx.Model(&types.Entity{}).
+				Where("space_id=? AND normalized_name=? AND id<>? AND merged_into_id=''",
+					spaceID, normalizedName, entity.ID).Count(&count).Error; err != nil {
+				return err
+			}
+			if count > 0 {
+				return werrors.NewBadRequestError("entity name conflicts with another entity")
+			}
 		}
-
-		if count > 0 {
-			return werrors.NewBadRequestError("entity name conflicts with another entity")
-		}
-		entity.CanonicalName, entity.NormalizedName, entity.EntityType = input.CanonicalName, types.NormalizeEntityKey(
-			input.CanonicalName,
-		), input.EntityType
+		entity.CanonicalName, entity.NormalizedName = input.CanonicalName, normalizedName
 		entity.UpdatedAt = time.Now()
 		if err := tx.Save(&entity).Error; err != nil {
 			return err

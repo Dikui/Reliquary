@@ -34,7 +34,6 @@ func TestImportedDocumentSearchUsesSummaryFilters(t *testing.T) {
 				SpaceID:        1,
 				CanonicalName:  "Document entity",
 				NormalizedName: "document entity",
-				EntityType:     "organization",
 			},
 		).Error,
 	)

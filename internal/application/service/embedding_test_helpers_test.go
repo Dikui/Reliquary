@@ -133,8 +133,8 @@ func configureNameEmbedding(t *testing.T, db *gorm.DB, id string, dimension int)
 }
 
 type legacyEntityCandidate struct {
-	Name, EntityType, Description string
-	Aliases                       []string
+	Name, Description string
+	Aliases           []string
 }
 
 func entityRecord(id, name, _ string) types.Entity {
@@ -143,7 +143,6 @@ func entityRecord(id, name, _ string) types.Entity {
 		SpaceID:        1,
 		CanonicalName:  name,
 		NormalizedName: types.NormalizeEntityKey(name),
-		EntityType:     "organization",
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 	}
@@ -182,7 +181,7 @@ func maintainTestEntities(
 	entities := []types.Entity{}
 	ids := []string{}
 	for _, name := range names {
-		entity, err := service.SaveEntity(ctx, "", types.EntityInput{CanonicalName: name, EntityType: "organization"})
+		entity, err := service.SaveEntity(ctx, "", types.EntityInput{CanonicalName: name})
 		require.NoError(t, err)
 		entities = append(entities, *entity)
 		ids = append(ids, entity.ID)

@@ -26,8 +26,6 @@ type understandingFact struct {
 	Quote           string `json:"quote"`
 	SubjectEntityID string `json:"subject_entity_id"`
 	ObjectEntityID  string `json:"object_entity_id"`
-	SubjectType     string `json:"subject_type"`
-	ObjectType      string `json:"object_type"`
 }
 
 func materialCanProduceFact(library *types.Library, entry *types.Entry) bool {
@@ -43,7 +41,6 @@ func parseUnderstandingFact(raw json.RawMessage) *understandingFact {
 	// Optional endpoint fields cannot invalidate otherwise valid evidence.
 	for key, target := range map[string]*string{
 		"subject_entity_id": &fact.SubjectEntityID, "object_entity_id": &fact.ObjectEntityID,
-		"subject_type": &fact.SubjectType, "object_type": &fact.ObjectType,
 	} {
 		_ = json.Unmarshal(fields[key], target)
 		delete(fields, key)
@@ -213,7 +210,7 @@ func (s *entryService) saveUnderstandingFact(
 		if err := tx.Create(&stored).Error; err != nil {
 			return err
 		}
-		if err := recordFactCandidates(tx, stored, fact); err != nil {
+		if err := recordFactCandidates(tx, stored); err != nil {
 			return err
 		}
 		return saveGroupingEvidence(tx, types.EntryFact{

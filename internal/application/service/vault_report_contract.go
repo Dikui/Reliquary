@@ -31,9 +31,8 @@ type ReportFieldError struct {
 }
 
 type ReportEntityReference struct {
-	ID         string `json:"id" yaml:"id"`
-	Name       string `json:"name" yaml:"name"`
-	EntityType string `json:"entity_type" yaml:"entity_type"`
+	ID   string `json:"id" yaml:"id"`
+	Name string `json:"name" yaml:"name"`
 }
 
 type reportMetadata struct {
@@ -132,12 +131,12 @@ func validateReport(tx *gorm.DB, library *types.Library, input ReportInput) (rep
 		} else if len(entities) > 1 {
 			candidates := []ReportEntityReference{}
 			for _, entity := range entities {
-				candidates = append(candidates, ReportEntityReference{entity.ID, entity.CanonicalName, entity.EntityType})
+				candidates = append(candidates, ReportEntityReference{entity.ID, entity.CanonicalName})
 			}
 			issues = append(issues, ReportFieldError{Field: field, Message: "ambiguous entity; use an ID", Candidates: candidates})
 		} else {
 			entity := entities[0]
-			resolved[entity.ID] = ReportEntityReference{entity.ID, entity.CanonicalName, entity.EntityType}
+			resolved[entity.ID] = ReportEntityReference{entity.ID, entity.CanonicalName}
 		}
 	}
 	ids := make([]string, 0, len(resolved))

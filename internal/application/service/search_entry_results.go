@@ -218,7 +218,7 @@ func (s *searchService) entrySearchAssociations(
 	err := s.db.WithContext(ctx).Table("entities e").
 		Joins("JOIN entry_entities ke ON ke.entity_id=e.id AND ke.space_id=e.space_id").
 		Where("e.space_id=? AND ke.entry_id IN ?", spaceID, ids).
-		Select("ke.entry_id,e.id,e.canonical_name,e.entity_type").
+		Select("ke.entry_id,e.id,e.canonical_name").
 		Order("e.canonical_name,e.id").Scan(&rows).Error
 	if err != nil {
 		return nil, err
@@ -266,7 +266,7 @@ func (s *searchService) Options(ctx context.Context) (*types.EntrySearchOptions,
 	}
 	options := &types.EntrySearchOptions{Entities: []types.EntrySearchEntity{}}
 	if err := s.db.WithContext(ctx).Table("entities").Where("space_id=? AND merged_into_id=''", spaceID).
-		Select("id,canonical_name,entity_type").Order("canonical_name,id").Scan(&options.Entities).Error; err != nil {
+		Select("id,canonical_name").Order("canonical_name,id").Scan(&options.Entities).Error; err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, len(options.Entities))

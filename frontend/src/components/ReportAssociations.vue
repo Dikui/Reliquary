@@ -14,7 +14,6 @@ interface RelatedEntity {
   id: string
   name: string
   canonical_name?: string
-  entity_type?: string
 }
 
 

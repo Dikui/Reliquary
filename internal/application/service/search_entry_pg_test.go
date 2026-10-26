@@ -157,7 +157,6 @@ func TestEntrySearchPostgresHeaderTermsAndAssociations(t *testing.T) {
 		SpaceID:        1,
 		CanonicalName:  "Canonicalneedle",
 		NormalizedName: "canonicalneedle",
-		EntityType:     "organization",
 	}
 	require.NoError(t, h.db.Create(entity).Error)
 	require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: "summary", EntityID: entity.ID}).Error)
@@ -170,7 +169,6 @@ func TestEntrySearchPostgresHeaderTermsAndAssociations(t *testing.T) {
 				EntityID:        entity.ID,
 				Alias:           "Aliasneedle",
 				NormalizedAlias: "aliasneedle",
-				EntityType:      "organization",
 			},
 		).Error,
 	)
@@ -219,7 +217,6 @@ func TestEntrySearchPostgresFiltersAndMissingPublicationCount(t *testing.T) {
 				SpaceID:        1,
 				CanonicalName:  id,
 				NormalizedName: id,
-				EntityType:     "organization",
 			}).Error)
 		require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: id, EntityID: "entity-" + id}).Error)
 	}

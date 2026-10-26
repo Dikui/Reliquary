@@ -38,7 +38,7 @@ func TestIngestMineProcessesWithoutReviewAndExportsPortableHeader(t *testing.T) 
 	h.processor.output = articleProcessingOutput(
 		t,
 
-		[]legacyEntityCandidate{{Name: "Spectrometer", EntityType: "organization"}},
+		[]legacyEntityCandidate{{Name: "Spectrometer"}},
 	)
 	content := "# Calibration notes\n\nSpectrometer observations record verified values. Follow the measured calibration procedure and compare the original readings.\n\n来源: https://example.org/reference-not-my-document"
 	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "personal", SourceRef: "fixture-mine", Acquisition: "verbatim", Title: "校准笔记", Content: content})

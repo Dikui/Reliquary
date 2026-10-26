@@ -17,7 +17,7 @@ for (const editor of ['correction', 'entity'] as const) {
     const modules: Record<string, unknown> = {
       'tdesign-vue-next': { MessagePlugin: { success() {} } },
       'vue-router': { onBeforeRouteLeave() {}, onBeforeRouteUpdate() {} },
-      '@/api/entities': { ENTITY_TYPES: ['organization', 'person'], createEntity: pendingSave },
+      '@/api/entities': { createEntity: pendingSave },
       '@/api/stories': { splitFact: pendingSave },
     }
     Object.defineProperty(modules, '@/components/ModalDialog.vue', { get: () => loadComponent(new URL('./ModalDialog.vue', import.meta.url), {}) })

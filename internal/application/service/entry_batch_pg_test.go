@@ -39,7 +39,6 @@ func TestEntryBatchFreezesFilteredMembership(t *testing.T) {
 		SpaceID:        1,
 		CanonicalName:  "Batch target",
 		NormalizedName: "batch target",
-		EntityType:     "organization",
 	}
 	require.NoError(t, h.db.Create(&entity).Error)
 	seed := func(name string) string {

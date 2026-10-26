@@ -57,7 +57,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
 const article = {
   id: 'article', file_name: 'Example.md', type: 'manual', parse_status: 'completed',  processing_mode: 'full',
   structured_summary: { overview: 'A product was announced.', points: ['Launch date', 'Main feature', 'Availability'], key_terms: ['Example Company', '42'] },
-  entities: [{ id: 'entity-1', canonical_name: 'Example Company', entity_type: 'organization' }],  md: [], total: 0, metadata: {},
+  entities: [{ id: 'entity-1', canonical_name: 'Example Company', }],  md: [], total: 0, metadata: {},
 }
 const listModules = {
   '@/components/EntryProcessingStatus.vue': emptyModule,

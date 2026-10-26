@@ -23,7 +23,6 @@ type EntrySearchRequest struct {
 type EntrySearchEntity struct {
 	ID            string   `json:"id"`
 	CanonicalName string   `json:"canonical_name"`
-	EntityType    string   `json:"entity_type"`
 	Aliases       []string `json:"aliases" gorm:"-"`
 }
 

@@ -158,9 +158,6 @@ export default {
     "choiceSaved": "Material associations saved"
   },
  entityMaintenance: {
-  "type": "Type",
-  "person": "Person",
-  "organization": "Institution",
   "requestFailed": "Request failed. Try again.",
   "loadMore": "Load more",
 
@@ -849,7 +846,7 @@ export default {
   knowledgeWorkbench: {
   "tabLabel": "Entities",
   "title": "Entities",
-  "subtitle": "Maintain institutions, people and their aliases",
+  "subtitle": "Maintain entities and their aliases",
   "sections": "Entity sections",
   "refresh": "Refresh",
   "requestFailed": "The request failed. Please try again.",
@@ -875,18 +872,8 @@ export default {
   },
   "entities": {
     "title": "Entities",
-    "description": "Browse entity types, aliases and materials mentioning each entity.",
+    "description": "Browse entities, aliases and materials mentioning each entity.",
     "filter": "Search entity names or aliases",
-    "type": "Entity type",
-    "allTypes": "All types",
-    "types": {
-      "company": "Company",
-      "person": "Person",
-      "product": "Product",
-      "project": "Project",
-      "organization": "Institution",
-      "other": "Other"
-    },
     "empty": "No entities yet",
     "noResults": "No matching entities. Adjust the filters.",
     "aliases": "alias | aliases",

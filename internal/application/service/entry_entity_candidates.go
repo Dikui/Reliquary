@@ -19,9 +19,9 @@ func refreshEntryEntityCandidates(tx *gorm.DB, entry types.Entry, mentions []und
 	}
 	seen := map[string]bool{}
 	for _, mention := range mentions {
-		name, kind := strings.TrimSpace(mention.Name), types.NormalizeEntityType(mention.Type)
+		name := strings.TrimSpace(mention.Name)
 		key := types.NormalizeEntityKey(name)
-		if mention.EntityID != "" || kind == "" || key == "" || seen[key] || strings.TrimSpace(mention.Quote) == "" ||
+		if mention.EntityID != "" || key == "" || seen[key] || strings.TrimSpace(mention.Quote) == "" ||
 			utf8.RuneCountInString(name) > 512 || utf8.RuneCountInString(key) > 512 || strings.ContainsAny(name, "\r\n\x00") {
 			continue
 		}
@@ -29,7 +29,7 @@ func refreshEntryEntityCandidates(tx *gorm.DB, entry types.Entry, mentions []und
 		now := time.Now()
 		candidate := types.EntityCandidate{
 			ID: uuid.NewString(), SpaceID: entry.SpaceID, Name: name, NormalizedName: key,
-			EntityType: kind, Status: "pending", CreatedAt: now, UpdatedAt: now,
+			Status: "pending", CreatedAt: now, UpdatedAt: now,
 		}
 		if err := tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "space_id"}, {Name: "normalized_name"}},

@@ -28,7 +28,6 @@ func TestNamingFixedQueries(t *testing.T) {
 				SpaceID:        1,
 				CanonicalName:  "Canonicalneedle",
 				NormalizedName: "canonicalneedle",
-				EntityType:     "organization",
 			},
 		).Error,
 	)

@@ -23,7 +23,6 @@ type understandingDomainOption struct {
 type understandingEntityOption struct {
 	ID            string   `json:"id"`
 	CanonicalName string   `json:"canonical_name"`
-	EntityType    string   `json:"entity_type"`
 	Aliases       []string `json:"aliases"        gorm:"-"`
 }
 
@@ -36,7 +35,7 @@ func loadUnderstandingOptions(ctx context.Context, db *gorm.DB, spaceID uint64, 
 		Where("space_id=?", spaceID).Order("name,id").Find(&input.DomainOptions).Error; err != nil {
 		return err
 	}
-	if err := db.WithContext(ctx).Model(&types.Entity{}).Select("id,canonical_name,entity_type").
+	if err := db.WithContext(ctx).Model(&types.Entity{}).Select("id,canonical_name").
 		Where("space_id=? AND merged_into_id=''", spaceID).
 		Order("canonical_name,id").Find(&input.EntityOptions).Error; err != nil {
 		return err

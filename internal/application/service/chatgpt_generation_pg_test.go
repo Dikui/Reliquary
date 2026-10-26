@@ -223,8 +223,7 @@ func chatGPTGenerationSuccess(t *testing.T, request chatGPTGenerationRequest) (s
 	case "entry_understanding":
 		return articleProcessingOutput(t,
 				[]legacyEntityCandidate{{
-					Name:       "Fixture Acme",
-					EntityType: "organization",
+					Name: "Fixture Acme",
 				}}),
 			""
 	case "entity_resolution":

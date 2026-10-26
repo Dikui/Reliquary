@@ -36,7 +36,7 @@ Reliquary serves a single user collecting source material and maintaining an ent
 
 | Operation | Pending | Success | Failure recovery |
 | --- | --- | --- | --- |
-| View entity | Clear the previous material list and show loading | Show type, aliases and materials involving the entity grouped by library | Keep selection, show inline error and allow refresh |
+| View entity | Clear the previous material list and show loading | Show aliases and materials involving the entity grouped by library | Keep selection, show inline error and allow refresh |
 | Filter entity list | Debounce search and invalidate older requests | Show the filtered list with explicit load more | Show inline error and allow refresh |
 | Merge entity | App-owned dialog names the retained entity and space-wide consequences; disable duplicate requests | Refresh the entity list and announce success | Keep selected target and show inline error |
 
@@ -45,7 +45,7 @@ Reliquary serves a single user collecting source material and maintaining an ent
 The library catalogue permits an empty list and keeps library creation available. Empty libraries, including historical system libraries, use the existing delete confirmation and server-side emptiness check. Successful deletion refreshes the catalogue; deleting the final library clears its editor. Startup and registration do not recreate deleted libraries. The four template behaviors remain available when creating a library. Source: ADR 0014, revised 2026-10-21.
 
 
-Entity lists use explicit load more with fifty rows per request. Filter changes invalidate older results. Entity details show the shared identity and materials across libraries. Entity directory search and type filters are transient within the material view; its main documents/entities tab remains in URL state. Every article list filter persists in the URL: library scope, starred, keyword, entity_ids, domain_ids, published_from and published_to. Default values are omitted. Refresh and history navigation restore the controls and results together, retaining unrelated query parameters. The source category reuses the search source values and labels. Filters combine in both cards and rows. The filter panel uses aligned, wrapping controls; review and rebuild actions remain separate from the filter grid. Switching filters resets paging and clears hidden selections. Composing Chinese input does not trigger entity search. Clearing search refreshes immediately. Merge target options also use explicit load more and load across the entire space.
+Entity lists use explicit load more with fifty rows per request. Filter changes invalidate older results. Entity details show the shared identity and materials across libraries. Entities and candidates have no type field, type filter or type label; editing requires only a name and optional aliases. Entity directory search is transient within the material view; its main documents/entities tab remains in URL state. Every article list filter persists in the URL: library scope, starred, keyword, entity_ids, domain_ids, published_from and published_to. Default values are omitted. Refresh and history navigation restore the controls and results together, retaining unrelated query parameters. The source category reuses the search source values and labels. Filters combine in both cards and rows. The filter panel uses aligned, wrapping controls; review and rebuild actions remain separate from the filter grid. Switching filters resets paging and clears hidden selections. Composing Chinese input does not trigger entity search. Clearing search refreshes immediately. Merge target options also use explicit load more and load across the entire space.
 
 Model tiers and article processing configuration save in the library settings page. The server validates model compatibility. Leaving changed model tiers uses the shared application confirmation dialog. Failed saves preserve drafts and inline errors.
 
@@ -98,7 +98,7 @@ Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名�
 
 唯一库的根面包屑使用 library.title，中文显示“库”，英文显示“Library”，不随数据库中的库名称变化。文章、待处理、实体及设置背景共用此名称。
 
-实体页面维护机构和人物名录。实体详情显示规范名、类型、别名以及跨库涉及该实体的资料，资料可通过原有详情入口打开。新增、编辑、删除和合并沿用 TDesign 组件与中英文文案，不再提供待合并建议和名称向量重建。
+实体页面维护有明确名称的对象。实体详情显示规范名、别名以及跨库涉及该实体的资料，资料可通过原有详情入口打开。新增、编辑、删除和合并沿用 TDesign 组件与中英文文案，不再提供待合并建议和名称向量重建。
 
 运行时样式以 frontend/src/assets/theme/theme.css 为唯一色彩与圆角来源，经 frontend/src/main.ts 加载后供 TDesign 组件及 var(--td-*) 使用。字体由 frontend/src/composables/useFont.ts 管理，保留既有中文与英文选择。新增区域不另建色彩、字体或阴影体系。滚动条使用全局主题变量，所有新增溢出区域自动继承。
 
@@ -144,7 +144,7 @@ The entry API's parse_status describes body indexing, and summary_status describ
 Source: .scratch/weekly-self-check/spec.md (local only). ContentChecksPage under Diagnostics reuses TDesign selects, input, switch, buttons, loading and pagination, the shared theme and the existing entry reference route. Settings are explicitly saved; no model or schedule is enabled by default. List page and selected run live in URL state. Inline failures remain visible with existing results; only explicit recheck starts another run. Details expose source excerpts as escaped text and navigate through the existing reference/hash validation.
 
 
-Entity maintenance follows ADR 0016. The Entities page edits institutions and people with canonical names and explicit aliases, using the existing TDesign dialogs and MessagePlugin. Canonical name, type and aliases use native input, select and textarea controls with labels bound to the actual controls. Deletion names the entity and explains removal of links and follows while retaining material content. Merge moves links and follows to the retained entity. Removed merge suggestions and entity vector rebuilding have no navigation or actions.
+Entity maintenance follows ADR 0016. The Entities page edits named objects with canonical names and explicit aliases, using the existing TDesign dialogs and MessagePlugin. Canonical name and aliases use the existing input and textarea controls with labels bound to the actual controls. Deletion names the entity and explains removal of links and follows while retaining material content. Merge moves links and follows to the retained entity. Removed merge suggestions and entity vector rebuilding have no navigation or actions.
 
 Material details allow an explicit choice of zero to three existing entities and display the manual-edit marker, including an empty choice. Fresh detail loads restore this marker; closing or switching details resets it. Saving associations updates only entity fields, preserving enriched library names and formatted titles in the current detail and list cards. Material-list entity filters persist in entity_ids and participate in batch selection. Directory loading, errors, retries and paging use existing compact controls. These changes retain DESIGN.md tokens and the zh-CN/en-US locale policy.
 

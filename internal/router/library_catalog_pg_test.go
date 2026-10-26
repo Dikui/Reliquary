@@ -159,7 +159,6 @@ func TestMultipleLibraryReadSearchAndFeed(t *testing.T) {
 		SpaceID:        1,
 		CanonicalName:  "Multi entity",
 		NormalizedName: "multi entity",
-		EntityType:     "organization",
 	}
 	require.NoError(t, f.db.Create(&entity).Error)
 	follows := service.NewFollowService(f.db)

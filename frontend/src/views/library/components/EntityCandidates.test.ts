@@ -6,7 +6,7 @@ import en from '../../../i18n/locales/en-US'
 import zh from '../../../i18n/locales/zh-CN'
 import { click, descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText, type Element } from '../componentTestHarness'
 
-const candidate = { id: 'candidate', name: 'New Institute', entity_type: 'organization', status: 'pending', occurrence_count: 2, entity_id: null }
+const candidate = { id: 'candidate', name: 'New Institute', status: 'pending', occurrence_count: 2, entity_id: null }
 const second = { ...candidate, id: 'second', name: 'Another Institute' }
 const envelope = (data: unknown) => ({ success: true, data })
 const detail = (item = candidate) => envelope({ candidate: item, total: 1, occurrences: [{ fact: { id: 'fact', story_id: 'story', title: `Fact for ${item.name}`, subject: item.name, action: 'announced', object: 'Model A' }, endpoint: 'subject' }] })

@@ -200,8 +200,7 @@ func TestVaultReplicaRebuildPreservesEveryPersistentTableAndUserFiles(t *testing
 	h, v := newVaultArticleHarness(t)
 	h.processor.output = articleProcessingOutput(t,
 		[]legacyEntityCandidate{{
-			Name:       "Company",
-			EntityType: "organization",
+			Name: "Company",
 		}})
 	full := h.upload(t,
 		"Research preservation",

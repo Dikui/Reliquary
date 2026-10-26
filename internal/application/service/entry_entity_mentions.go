@@ -10,7 +10,6 @@ import (
 // Names and literal quotes keep entity selection grounded in the submitted material.
 type understandingEntityMention struct {
 	Name     string `json:"name"`
-	Type     string `json:"type"`
 	EntityID string `json:"entity_id"`
 	Quote    string `json:"quote"`
 }
@@ -33,10 +32,9 @@ func qualifyUnderstandingEntityMentions(result *articleProcessingResult, body st
 	seen := map[string]bool{}
 	for _, mention := range result.EntityMentions {
 		mention.Name = strings.TrimSpace(mention.Name)
-		mention.Type = types.NormalizeEntityType(mention.Type)
 		mention.Quote = strings.TrimSpace(mention.Quote)
 		key := types.NormalizeEntityKey(mention.Name)
-		if key == "" || mention.Type == "" || utf8.RuneCountInString(mention.Name) > 512 ||
+		if key == "" || utf8.RuneCountInString(mention.Name) > 512 ||
 			utf8.RuneCountInString(key) > 512 || strings.ContainsAny(mention.Name, "\r\n\x00") ||
 			mention.Quote == "" || !strings.Contains(body, mention.Quote) ||
 			!strings.Contains(types.NormalizeEntityKey(mention.Quote), key) || seen[key] {

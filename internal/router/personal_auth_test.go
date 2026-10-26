@@ -190,9 +190,8 @@ func seedPersonalEntities(t *testing.T, f *personalAuthFixture) {
 					i),
 				NormalizedName: fmt.Sprintf("acme %d",
 					i),
-				EntityType: "organization",
-				CreatedAt:  now,
-				UpdatedAt:  now,
+				CreatedAt: now,
+				UpdatedAt: now,
 			}).Error)
 
 		require.NoError(t,

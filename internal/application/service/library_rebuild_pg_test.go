@@ -74,9 +74,9 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	output := articleProcessingOutput(
 		t,
 		[]legacyEntityCandidate{
-			{Name: "OldCo", EntityType: "organization"},
-			{Name: "Partner", EntityType: "organization"},
-			{Name: "ObsoleteTool", EntityType: "organization"},
+			{Name: "OldCo"},
+			{Name: "Partner"},
+			{Name: "ObsoleteTool"},
 		},
 	)
 	h.processor.output = output
@@ -134,7 +134,7 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.NoError(t, h.db.Save(h.library).Error)
 	h.processor.output = articleProcessingOutput(
 		t,
-		[]legacyEntityCandidate{{Name: "NewCo", EntityType: "organization"}},
+		[]legacyEntityCandidate{{Name: "NewCo"}},
 	)
 	var fresh map[string]any
 	require.NoError(t, json.Unmarshal([]byte(h.processor.output), &fresh))

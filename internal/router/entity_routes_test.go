@@ -25,7 +25,6 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 		SpaceID:        1,
 		CanonicalName:  "Acme",
 		NormalizedName: "acme",
-		EntityType:     "organization",
 	}
 	require.NoError(t, db.Create(&entity).Error)
 	require.NoError(t,
@@ -33,7 +32,6 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 			ID:               "route-alias",
 			SpaceID:          1,
 			EntityID:         entity.ID,
-			EntityType:       "organization",
 			Alias:            "艾克米",
 			NormalizedAlias:  "艾克米",
 			ResolutionMethod: "exact",
@@ -62,7 +60,7 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 	response := entityRequest(t,
 		engine,
 		http.MethodGet,
-		"/api/v1/entities?entity_type=organization&entity=艾克米&limit=1&offset=0",
+		"/api/v1/entities?entity=艾克米&limit=1&offset=0",
 		"",
 		1,
 		entityOwnerID)
@@ -78,7 +76,6 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
 	var detail types.EntityDetail
 	require.NoError(t, json.Unmarshal(envelope.Data, &detail))
-	require.Equal(t, "organization", detail.Entity.EntityType)
 	require.Equal(t, []string{"艾克米"}, detail.Entity.Aliases)
 	require.Len(t, detail.Entries, 1)
 	require.Equal(t, article.ID, detail.Entries[0].ID)
@@ -92,7 +89,7 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 
 func TestEntityResponsesEncodeEmptyAliasesAndArticlesAsArrays(t *testing.T) {
 	encoded, err := json.Marshal(types.EntityDetail{
-		Entity: types.Entity{ID: "empty-entity", EntityType: "organization"},
+		Entity: types.Entity{ID: "empty-entity"},
 	})
 	require.NoError(t, err)
 	var fields map[string]json.RawMessage

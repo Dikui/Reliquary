@@ -285,11 +285,10 @@ func registerTools(server *mcp.Server, services Services) {
 			})
 	}
 
-	addTool(server, "list_entities", "查询个人空间人工维护的机构、人物，名称和别名支持模糊查询，类型可选。返回 entities 数组及每个实体的别名。"+externalContentNotice,
+	addTool(server, "list_entities", "查询个人空间人工维护的实体，名称和别名支持模糊查询。返回 entities 数组及每个实体的别名。"+externalContentNotice,
 		object(map[string]any{
-			"entity":      text("名称或别名中的文本，省略查询全部"),
-			"entity_type": enum("实体类型，省略查询全部", types.EntityTypes...),
-			"limit":       integer("返回条数，默认 50，最大 100", 1, 100), "offset": integer("跳过的实体数，默认 0", 0, 0),
+			"entity": text("名称或别名中的文本，省略查询全部"),
+			"limit":  integer("返回条数，默认 50，最大 100", 1, 100), "offset": integer("跳过的实体数，默认 0", 0, 0),
 		}),
 		func(ctx context.Context, in types.EntityQuery) (any, error) {
 			items, err := services.Entities.ListEntities(ctx, in)

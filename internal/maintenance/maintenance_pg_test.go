@@ -76,6 +76,12 @@ resolution_method,created_at) VALUES('alias',1,'organization','entity-a','A Inc'
 			statement = strings.ReplaceAll(statement, "'organization','Merged description'", "'organization'")
 		}
 
+		if !db.Migrator().HasColumn("entities", "entity_type") &&
+			(strings.Contains(statement, "INSERT INTO entities(") || strings.Contains(statement, "INSERT INTO entity_aliases(")) {
+			statement = strings.ReplaceAll(statement, "entity_type,", "")
+			statement = strings.ReplaceAll(statement, "'organization',", "")
+		}
+
 		if !db.Migrator().HasTable("topics") {
 			if strings.Contains(statement, "INSERT INTO topics(") ||
 				strings.Contains(statement, "INSERT INTO entry_topics(") {
@@ -182,9 +188,9 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
  VALUES(1,'article','fact','source','Immutable body',true,now()),
  (1,'pending','fact','mention','',false,now());
  UPDATE facts SET subject_entity_id='entity-a' WHERE id='fact';
- INSERT INTO entity_candidates(id,space_id,name,normalized_name,entity_type,status,entity_id,created_at,updated_at)
- VALUES('candidate',1,'New Institute','newinstitute','organization','ignored',NULL,now(),now()),
- ('candidate-approved',1,'Approved','approved','person','approved','entity-a',now(),now());
+ INSERT INTO entity_candidates(id,space_id,name,normalized_name,status,entity_id,created_at,updated_at)
+ VALUES('candidate',1,'New Institute','newinstitute','ignored',NULL,now(),now()),
+ ('candidate-approved',1,'Approved','approved','approved','entity-a',now(),now());
  INSERT INTO entity_candidate_occurrences(space_id,candidate_id,fact_id,endpoint,created_at)
  VALUES(1,'candidate','fact','object',now()),(1,'candidate-approved','fact','subject',now());
  INSERT INTO entity_candidate_entries(space_id,candidate_id,entry_id,quote,created_at)

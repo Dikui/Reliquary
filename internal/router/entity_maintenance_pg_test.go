@@ -28,7 +28,7 @@ func TestEntityMaintenanceCreateAndEdit(t *testing.T) {
 		f.router,
 		http.MethodPost,
 		"/api/v1/entities",
-		`{"canonical_name":"Aurora Labs","entity_type":"organization","aliases":["极光实验室"]}`,
+		`{"canonical_name":"Aurora Labs", "aliases":["极光实验室"]}`,
 		f.key,
 		true)
 	require.Equal(t, http.StatusCreated, create.Code, create.Body.String())
@@ -40,14 +40,22 @@ func TestEntityMaintenanceCreateAndEdit(t *testing.T) {
 		f.router,
 		http.MethodPatch,
 		"/api/v1/entities/"+result.Data.ID,
-		`{"canonical_name":"Aurora Research","entity_type":"person","aliases":["Aurora"]}`,
+		`{"canonical_name":"Aurora Research", "aliases":["Aurora"]}`,
 		f.key,
 		true)
 	require.Equal(t, http.StatusOK, edit.Code, edit.Body.String())
 	require.NoError(t, json.Unmarshal(edit.Body.Bytes(), &result))
 	require.Equal(t, "Aurora Research", result.Data.CanonicalName)
-	require.Equal(t, "person", result.Data.EntityType)
 	require.Equal(t, []string{"Aurora"}, result.Data.Aliases)
+	// Migration retains identities that previously shared a name across types.
+	duplicate := result.Data
+	duplicate.ID, duplicate.Aliases = uuid.NewString(), nil
+	require.NoError(t, f.db.Create(&duplicate).Error)
+	edit = personalRequest(t, f.router, http.MethodPatch, "/api/v1/entities/"+result.Data.ID,
+		`{"canonical_name":"Aurora Research","aliases":["Aurora Labs"]}`, f.key, true)
+	require.Equal(t, http.StatusOK, edit.Code, edit.Body.String())
+	require.NoError(t, json.Unmarshal(edit.Body.Bytes(), &result))
+	require.Equal(t, []string{"Aurora Labs"}, result.Data.Aliases)
 }
 
 func TestEntityMaintenanceLinksMergeDeleteAndFilter(t *testing.T) {
@@ -58,20 +66,19 @@ func TestEntityMaintenanceLinksMergeDeleteAndFilter(t *testing.T) {
 		require.Equal(t, status, r.Code, r.Body.String())
 		return r.Body.Bytes()
 	}
-	create := func(name, kind string) types.Entity {
+	create := func(name string) types.Entity {
 		t.Helper()
 		var result struct{ Data types.Entity }
 		require.NoError(t,
 			json.Unmarshal(call(http.MethodPost,
 				"/api/v1/entities",
-				fmt.Sprintf(`{"canonical_name":%q,"entity_type":%q,"aliases":[]}`,
-					name,
-					kind),
+				fmt.Sprintf(`{"canonical_name":%q,"aliases":[]}`,
+					name),
 				201),
 				&result))
 		return result.Data
 	}
-	keep, merged := create("Retained institution", "organization"), create("Researcher", "person")
+	keep, merged := create("Retained institution"), create("Researcher")
 	RegisterFollowRoutes(f.router.Group("/api/v1"), handler.NewFollowHandler(service.NewFollowService(f.db)))
 	call(http.MethodPut, "/api/v1/follows/entity/"+merged.ID, "", 200)
 	call(http.MethodPut, "/api/v1/follows/entity/"+keep.ID, "", 200)
@@ -159,10 +166,8 @@ func TestEntityMaintenanceLinksMergeDeleteAndFilter(t *testing.T) {
 func TestEntityMaintenanceValidationAndPresets(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	for _, body := range []string{
-		`{"canonical_name":" ","entity_type":"person"}`,
-		`{"canonical_name":"Product","entity_type":"product"}`,
-		`{"canonical_name":"Name","entity_type":"other"}`,
-		`{"canonical_name":"Name","entity_type":"person","aliases":[""]}`,
+		`{"canonical_name":" "}`,
+		`{"canonical_name":"Name", "aliases":[""]}`,
 	} {
 		r := personalRequest(t, f.router, http.MethodPost, "/api/v1/entities", body, f.key, true)
 		require.Equal(t, 400, r.Code, r.Body.String())
@@ -259,7 +264,7 @@ func TestEntityMaintenanceProcessingKeepsManualChoiceAndCannotCreateEntities(t *
 		r,
 		http.MethodPost,
 		"/api/v1/entities",
-		`{"canonical_name":"Maintained institution","entity_type":"organization","aliases":[]}`,
+		`{"canonical_name":"Maintained institution", "aliases":[]}`,
 		f.key,
 		true)
 	require.Equal(t, 201, created.Code, created.Body.String())

@@ -79,6 +79,11 @@ func retirementAt(version int64) retirement {
 		r.tables = append(r.tables, "auth_tokens")
 		r.columns["users"] = []string{"password_hash"}
 	}
+	if version >= 49 {
+		for _, table := range []string{"entities", "entity_aliases", "entity_candidates"} {
+			r.columns[table] = append(r.columns[table], "entity_type")
+		}
+	}
 	return r
 }
 

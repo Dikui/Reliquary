@@ -10,7 +10,6 @@ import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
 
-import { ENTITY_TYPES } from '../../api/entity-types'
 import * as highlight from '../../components/GlobalCommandPalette/useHighlight'
 import * as markdownPlainText from '../../utils/markdownPlainText'
 import { click as clickNode, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle as settleNodes, visibleText, type Element } from './componentTestHarness'
@@ -20,7 +19,7 @@ const moduleOf = (value: unknown) => ({ __esModule: true, default: value })
 async function settle() { await settleNodes(); await new Promise<void>(resolve => setImmediate(resolve)); await settleNodes() }
 async function click(node: Element) { await clickNode(node); await settle() }
 const empty = moduleOf(defineComponent({ setup: () => () => null }))
-const entity = { id: 'entity-a', canonical_name: 'Aurora', entity_type: 'organization', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }
+const entity = { id: 'entity-a', canonical_name: 'Aurora', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }
 const secondEntity = { id: 'entity-b', name: 'Space Labs', description: 'Space missions', entry_count: 2, created_at: '', updated_at: '' }
 const follow = (type: 'entity', id: string, name: string) => ({ target_type: type, target_id: id, name, created_at: '2026-10-01T00:00:00Z' })
 const entityFollow = follow('entity', entity.id, entity.canonical_name), secondEntityFollow = follow('entity', secondEntity.id, secondEntity.name)
@@ -68,7 +67,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const requestModule = Object.fromEntries(['get', 'post', 'put', 'del'].map(method => [method, (url: string, body?: any) => request(method, url, body)]))
   const followsAPI = evaluateFile('../../api/follows.ts', { '@/utils/request': requestModule })
 
-  const entitiesAPI = evaluateFile('../../api/entities.ts', { '@/utils/request': requestModule, './entity-types': { ENTITY_TYPES } })
+  const entitiesAPI = evaluateFile('../../api/entities.ts', { '@/utils/request': requestModule })
   const entryAPI = evaluateFile('../../api/library.ts', { '../utils/request': requestModule })
   const storeModule = evaluateFile('../../stores/follows.ts', { '@/api/follows': followsAPI })
   const pinia = createPinia(); setActivePinia(pinia)

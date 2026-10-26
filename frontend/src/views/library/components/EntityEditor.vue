@@ -4,17 +4,15 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import ModalDialog from '@/components/ModalDialog.vue'
-import { createEntity, updateEntity, ENTITY_TYPES, type Entity, type EntityType } from '@/api/entities'
+import { createEntity, updateEntity, type Entity } from '@/api/entities'
 
 const props = defineProps<{ entity: Entity | null }>()
 const emit = defineEmits<{ close: []; saved: [entity: Entity] }>()
 const { t } = useI18n()
 const name = ref(props.entity?.canonical_name || '')
-const kind = ref<EntityType>(props.entity?.entity_type || 'organization')
 const aliases = ref(props.entity?.aliases?.join('\n') || '')
 const saving = ref(false), composing = ref(false), error = ref(''), discardVisible = ref(false)
-const options = computed(() => ENTITY_TYPES.map(value => ({ value, label: t(value === 'person' ? 'entityMaintenance.person' : 'entityMaintenance.organization') })))
-const dirty = computed(() => name.value !== (props.entity?.canonical_name || '') || kind.value !== (props.entity?.entity_type || 'organization') || aliases.value !== (props.entity?.aliases?.join('\n') || ''))
+const dirty = computed(() => name.value !== (props.entity?.canonical_name || '') || aliases.value !== (props.entity?.aliases?.join('\n') || ''))
 function close() { if (saving.value) return; if (dirty.value) discardVisible.value = true; else emit('close') }
 let resolveNavigation: ((leave: boolean) => void) | undefined
 function guardNavigation() {
@@ -36,7 +34,7 @@ async function save() {
   if (!name.value.trim()) { error.value = t('entityMaintenance.nameRequired'); document.getElementById('entity-canonical-name')?.focus(); return }
   saving.value = true; error.value = ''
   try {
-    const input = { canonical_name: name.value.trim(), entity_type: kind.value, aliases: aliases.value.split('\n').map(value => value.trim()).filter(Boolean) }
+    const input = { canonical_name: name.value.trim(), aliases: aliases.value.split('\n').map(value => value.trim()).filter(Boolean) }
     const response = props.entity ? await updateEntity(props.entity.id, input) : await createEntity(input)
     if (!response.success) throw new Error(response.error || t('entityMaintenance.requestFailed'))
     MessagePlugin.success(t('entityMaintenance.saved'))
@@ -51,10 +49,6 @@ async function save() {
     <form class="entity-editor" novalidate @submit.prevent="save">
       <label for="entity-canonical-name">{{ t('entityMaintenance.name') }}</label>
       <input id="entity-canonical-name" class="entity-editor__control" type="text" v-model="name" @compositionstart="composing = true" @compositionend="composing = false" :maxlength="512" :disabled="saving" :aria-invalid="!!error" :aria-describedby="error ? 'entity-editor-error' : undefined" />
-      <label for="entity-type">{{ t('entityMaintenance.type') }}</label>
-      <select id="entity-type" v-model="kind" class="entity-editor__control" :disabled="saving">
-        <option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option>
-      </select>
       <label for="entity-aliases">{{ t('entityMaintenance.aliases') }}</label>
       <textarea id="entity-aliases" v-model="aliases" class="entity-editor__control" rows="3" @compositionstart="composing = true" @compositionend="composing = false" :disabled="saving" />
       <p v-if="error" id="entity-editor-error" role="alert">{{ error }}</p>

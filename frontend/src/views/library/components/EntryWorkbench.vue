@@ -7,14 +7,14 @@
     <t-alert v-if="loadError" theme="error" :message="loadError" role="alert"><template #operation><t-button variant="text" :loading="loading" @click="refreshAll">{{ t('common.retry') }}</t-button></template></t-alert>
     <section class="workbench-panel">
       <div class="panel-heading"><div><h3>{{ t('knowledgeWorkbench.entities.title') }}</h3><p>{{ t('knowledgeWorkbench.entities.description') }}</p></div>
-        <div class="entity-filters"><t-button @click="openEditor()">{{ t('entityMaintenance.create') }}</t-button><t-input v-model="entityFilter" clearable :placeholder="t('knowledgeWorkbench.entities.filter')" :aria-label="t('knowledgeWorkbench.entities.filter')" @compositionstart="entityComposing = true" @compositionend="endEntityComposition" @enter="onEntityEnter" /><t-select v-model="entityTypeFilter" clearable :options="entityTypeOptions" :placeholder="t('knowledgeWorkbench.entities.allTypes')" :aria-label="t('knowledgeWorkbench.entities.type')" /></div>
+        <div class="entity-filters"><t-button @click="openEditor()">{{ t('entityMaintenance.create') }}</t-button><t-input v-model="entityFilter" clearable :placeholder="t('knowledgeWorkbench.entities.filter')" :aria-label="t('knowledgeWorkbench.entities.filter')" @compositionstart="entityComposing = true" @compositionend="endEntityComposition" @enter="onEntityEnter" /></div>
       </div>
       <t-loading :loading="entitiesLoading" show-overlay>
         <div class="entity-layout">
           <div class="entity-list">
-            <t-empty v-if="!entities.length && !loadError" :description="t(entityFilter || entityTypeFilter ? 'knowledgeWorkbench.entities.noResults' : 'knowledgeWorkbench.entities.empty')" />
+            <t-empty v-if="!entities.length && !loadError" :description="t(entityFilter ? 'knowledgeWorkbench.entities.noResults' : 'knowledgeWorkbench.entities.empty')" />
             <button v-for="entity in entities" :key="entity.id" type="button" :class="['entity-list__item', { selected: selectedEntity?.id === entity.id }]" @click="selectEntity(entity)">
-              <span class="entity-list__avatar">{{ entity.canonical_name.slice(0, 1) }}</span><span class="entity-list__copy"><strong>{{ entity.canonical_name }}</strong><small>{{ entityTypeLabel(entity.entity_type) }} · {{ entity.aliases?.length || 0 }} {{ t('knowledgeWorkbench.entities.aliases', entity.aliases?.length || 0) }}</small></span>
+              <span class="entity-list__avatar">{{ entity.canonical_name.slice(0, 1) }}</span><span class="entity-list__copy"><strong>{{ entity.canonical_name }}</strong><small>{{ entity.aliases?.length || 0 }} {{ t('knowledgeWorkbench.entities.aliases', entity.aliases?.length || 0) }}</small></span>
             </button>
             <t-button v-if="hasMoreEntities" block variant="text" :loading="entitiesLoading" @click="loadEntities(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
             <p v-if="entities.length" class="muted" role="status">{{ t('knowledgeWorkbench.entities.loaded', { count: entities.length }) }}</p>
@@ -22,7 +22,7 @@
           <div class="entity-detail">
             <t-empty v-if="!selectedEntity" :description="t('knowledgeWorkbench.entities.choose')" />
             <section v-else>
-              <div class="entity-detail__header"><div><span class="eyebrow">{{ entityTypeLabel(selectedEntity.entity_type) }}</span><h3>{{ selectedEntity.canonical_name }}</h3><h4>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</h4><div v-if="selectedEntity.aliases?.length" class="chips"><span v-for="alias in selectedEntity.aliases" :key="alias" class="chip">{{ alias }}</span></div><p v-else class="muted">{{ t('knowledgeWorkbench.entities.noAliases') }}</p></div><div class="entity-detail__actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><t-button variant="outline" @click="openEditor(selectedEntity)">{{ t('entityMaintenance.edit') }}</t-button><t-button theme="danger" variant="text" @click="deleteVisible = true">{{ t('entityMaintenance.delete') }}</t-button><t-button variant="outline" @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</t-button></div></div>
+              <div class="entity-detail__header"><div><h3>{{ selectedEntity.canonical_name }}</h3><h4>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</h4><div v-if="selectedEntity.aliases?.length" class="chips"><span v-for="alias in selectedEntity.aliases" :key="alias" class="chip">{{ alias }}</span></div><p v-else class="muted">{{ t('knowledgeWorkbench.entities.noAliases') }}</p></div><div class="entity-detail__actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><t-button variant="outline" @click="openEditor(selectedEntity)">{{ t('entityMaintenance.edit') }}</t-button><t-button theme="danger" variant="text" @click="deleteVisible = true">{{ t('entityMaintenance.delete') }}</t-button><t-button variant="outline" @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</t-button></div></div>
               <t-alert v-if="entityDetailError" theme="error" :message="entityDetailError" role="alert"><template #operation><t-button variant="text" :loading="entityDetailLoading" @click="selectEntity(selectedEntity)">{{ t('knowledgeWorkbench.refresh') }}</t-button></template></t-alert>
               <EntityActivity :entity="selectedEntity" @select="selectEntity" @open-source="id => emit('open-source', id)" />
               <t-loading :loading="entityDetailLoading" show-overlay><div class="entity-articles"><h4>{{ t('knowledgeWorkbench.entities.articles') }}</h4><a v-if="selectedEntity" :href="`/platform/entries?tab=documents&entity_ids=${encodeURIComponent(selectedEntity.id)}`">{{ t('entryBatch.manageRelated') }}</a><t-empty v-if="!entityEntries.length && !entityDetailLoading && !entityDetailError" :description="t('knowledgeWorkbench.entities.noArticles')" /><section v-for="group in entityLibraryGroups" :key="group.id" class="entity-library-group"><h5>{{ group.name }} ({{ group.entries.length }})</h5><ul><li v-for="article in group.entries" :key="article.id"><t-button variant="text" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('knowledgeWorkbench.entities.untitledArticle') }}</t-button><small>{{ formatDate(article.created_at) }}</small></li></ul></section></div></t-loading>
@@ -47,7 +47,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { ENTITY_TYPES, deleteEntity, getEntity, listEntities, mergeEntities, type Entity, type EntityEntry, type EntityType } from '@/api/entities'
+import { deleteEntity, getEntity, listEntities, mergeEntities, type Entity, type EntityEntry } from '@/api/entities'
 import type { SourceLocation } from '@/types/search'
 import EntityEditor from './EntityEditor.vue'
 import EntityCandidates from './EntityCandidates.vue'
@@ -60,8 +60,7 @@ const emit = defineEmits<{ 'open-source': [entryId: string, location?: SourceLoc
 const { t, locale } = useI18n()
 const followStore = useFollowStore()
 const pageSize = 50
-const entityFilter = ref(''), entityTypeFilter = ref<EntityType | ''>(''), entityComposing = ref(false)
-const entityTypeOptions = computed(() => ENTITY_TYPES.map(value => ({ value, label: entityTypeLabel(value) })))
+const entityFilter = ref(''), entityComposing = ref(false)
 const entities = ref<Entity[]>([]), entitiesLoading = ref(false), hasMoreEntities = ref(false), loadError = ref('')
 const selectedEntity = ref<Entity | null>(null), entityEntries = ref<EntityEntry[]>([]), entityDetailLoading = ref(false), entityDetailError = ref('')
 const entityLibraryGroups = computed(() => {
@@ -74,11 +73,10 @@ const entityLibraryGroups = computed(() => {
 })
 const loading = ref(false), mergeVisible = ref(false), mergeTargetId = ref(''), merging = ref(false), mergeError = ref('')
 const mergeTargets = ref<Entity[]>([]), mergeTargetsLoading = ref(false), hasMoreMergeTargets = ref(false)
-const mergeTargetOptions = computed(() => mergeTargets.value.filter(item => item.id !== selectedEntity.value?.id && !item.merged_into_id).map(item => ({ value: item.id, label: `${item.canonical_name} · ${entityTypeLabel(item.entity_type)}` })))
+const mergeTargetOptions = computed(() => mergeTargets.value.filter(item => item.id !== selectedEntity.value?.id && !item.merged_into_id).map(item => ({ value: item.id, label: item.canonical_name })))
 
 let entityRequest = 0, detailRequest = 0, mergeTargetRequest = 0
 let entitySearchTimer: ReturnType<typeof setTimeout> | null = null
-function entityTypeLabel(value: string) { return t(value === 'person' ? 'knowledgeWorkbench.entities.types.person' : 'knowledgeWorkbench.entities.types.organization') }
 function formatDate(value?: string) { return value ? new Date(value).toLocaleString(locale.value) : t('knowledgeWorkbench.unknownDate') }
 function envelopeData<T>(response: { success: boolean; data: T; error?: string }): T { if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed')); return response.data }
 function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : t('knowledgeWorkbench.requestFailed') }
@@ -86,7 +84,7 @@ async function loadEntities(more = false) {
   if (more && entitiesLoading.value) return
   const current = ++entityRequest
   entitiesLoading.value = true; loadError.value = ''
-  try { const page = envelopeData(await listEntities({ entity: entityFilter.value.trim(), entity_type: entityTypeFilter.value || undefined, limit: pageSize, offset: more ? entities.value.length : 0 })) || []; if (current === entityRequest) { entities.value = more ? [...entities.value, ...page] : page; hasMoreEntities.value = page.length === pageSize } }
+  try { const page = envelopeData(await listEntities({ entity: entityFilter.value.trim(), limit: pageSize, offset: more ? entities.value.length : 0 })) || []; if (current === entityRequest) { entities.value = more ? [...entities.value, ...page] : page; hasMoreEntities.value = page.length === pageSize } }
   catch (cause) { if (current === entityRequest) loadError.value = errorMessage(cause) }
   finally { if (current === entityRequest) entitiesLoading.value = false }
 }
@@ -135,7 +133,6 @@ async function confirmDelete() {
   finally { deleting.value = false }
 }
 watch(entityFilter, scheduleEntitySearch)
-watch(entityTypeFilter, resetEntityList)
 async function selectInitialEntity(id: string) {
   if (!id) return;
   const current = ++detailRequest;
@@ -173,7 +170,6 @@ onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; 
 .entity-detail__header h3 { margin: 8px 0; }
 .entity-detail__header > div { min-width: 0; overflow-wrap: anywhere; }
 .entity-detail__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
-.eyebrow { color: var(--td-text-color-secondary); font-size: 12px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { padding: 4px 8px; background: var(--td-bg-color-secondarycontainer); border-radius: var(--td-radius-small); font-size: 12px; overflow-wrap: anywhere; }
 .entity-articles { min-height: 180px; }

@@ -136,13 +136,7 @@ func qualifyUnderstandingChoices(result *articleProcessingResult, input articleP
 	for i := range result.EntityMentions {
 		mention := &result.EntityMentions[i]
 		mention.EntityID = ""
-		options := []understandingEntityOption{}
-		for _, option := range input.EntityOptions {
-			if option.EntityType == mention.Type {
-				options = append(options, option)
-			}
-		}
-		if id := resolveFactEntity(mention.Name, "", options); id != nil {
+		if id := resolveFactEntity(mention.Name, "", input.EntityOptions); id != nil {
 			mention.EntityID = *id
 			if !slices.Contains(result.EntityIDs, *id) {
 				result.EntityIDs = append(result.EntityIDs, *id)

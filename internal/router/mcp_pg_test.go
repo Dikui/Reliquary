@@ -392,7 +392,6 @@ func TestMCPInvalidArgumentsAreRejectedBeforeWrites(t *testing.T) {
 		{"ingest", map[string]any{"items": []any{}}},
 		{"set_star", map[string]any{"id": "article-with-missing-starred"}},
 		{"list_pending", map[string]any{"page_size": 101}},
-		{"list_entities", map[string]any{"entity_type": "unknown"}},
 		{"search", map[string]any{"query": "text", "unknown_filter": true}},
 		{"search", map[string]any{"query": "text"}},
 	} {
@@ -515,7 +514,6 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 		SpaceID:        types.SingleSpaceID,
 		CanonicalName:  "MCP Acme",
 		NormalizedName: "mcp acme",
-		EntityType:     "organization",
 	}
 	require.NoError(t, f.db.Create(&entity).Error)
 	require.NoError(t,
@@ -525,7 +523,6 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 			EntityID:        entity.ID,
 			Alias:           "MCP alias",
 			NormalizedAlias: "mcp alias",
-			EntityType:      "organization",
 		}).Error)
 	require.NoError(t,
 		f.db.Create(&types.EntryEntity{
@@ -593,7 +590,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 		Entities []types.Entity `json:"entities"`
 	}
 	mcpCall(t, client, "list_entities",
-		map[string]any{"entity": "alias", "entity_type": "organization", "limit": 10, "offset": 0},
+		map[string]any{"entity": "alias", "limit": 10, "offset": 0},
 		&entities)
 	require.Len(t, entities.Entities, 1)
 	require.Equal(t, entity.ID, entities.Entities[0].ID)

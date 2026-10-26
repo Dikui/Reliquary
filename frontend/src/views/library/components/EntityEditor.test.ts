@@ -10,7 +10,6 @@ import { Input, Select, Textarea } from 'tdesign-vue-next'
 import ts from 'typescript'
 import enUS from '../../../i18n/locales/en-US'
 import zhCN from '../../../i18n/locales/zh-CN'
-import * as entityTypes from '../../../api/entity-types'
 
 const require = createRequire(import.meta.url)
 function compile(path: URL, modules: Record<string, unknown>) {
@@ -31,12 +30,12 @@ function compile(path: URL, modules: Record<string, unknown>) {
 }
 
 for (const [locale, messages] of [['zh-CN', zhCN], ['en-US', enUS]] as const) {
-  test(`${locale}: entity form labels identify native name, type and alias controls`, async () => {
+  test(`${locale}: entity form labels identify native name and alias controls`, async () => {
     const textarea = compile(new URL('../../../components/SafeTextarea.vue', import.meta.url), {
       'tdesign-vue-next': { Textarea }, '@/utils/textareaAutosize': {},
     })
     const editor = compile(new URL('./EntityEditor.vue', import.meta.url), {
-      '@/api/entities': entityTypes,
+      '@/api/entities': {},
       '@/components/ModalDialog.vue': defineComponent({ props: ['visible'], setup: (props, { slots }) => () => props.visible === false ? null : h('div', slots.default?.()) }),
       '@/components/SafeTextarea.vue': { __esModule: true, default: textarea },
       'tdesign-vue-next': { MessagePlugin: {} },
@@ -48,9 +47,9 @@ for (const [locale, messages] of [['zh-CN', zhCN], ['en-US', enUS]] as const) {
     const stub = defineComponent({ props: ['visible'], setup: (props, { slots }) => () => props.visible === false ? null : h('div', slots.default?.()) })
     app.component('t-dialog', stub); app.component('t-button', stub)
     const html = await renderToString(app)
+    assert.doesNotMatch(html, /entity-type/)
     for (const [id, label, tag] of [
       ['entity-canonical-name', messages.entityMaintenance.name, 'input'],
-      ['entity-type', messages.entityMaintenance.type, 'select'],
       ['entity-aliases', messages.entityMaintenance.aliases, 'textarea'],
     ]) {
       assert.ok(html.includes(`<label for="${id}">${label}</label>`), label)

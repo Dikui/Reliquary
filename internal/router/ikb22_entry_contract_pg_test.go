@@ -114,7 +114,6 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 		SpaceID:        1,
 		CanonicalName:  "Entrycontract",
 		NormalizedName: "entrycontract",
-		EntityType:     "organization",
 	}
 	require.NoError(t, f.db.Create(&entity).Error)
 	require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: source.ID, EntityID: entity.ID}).Error)

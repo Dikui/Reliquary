@@ -19,7 +19,6 @@ func mcpFollowTargets(t *testing.T, f *mcpFixture) types.Entity {
 		SpaceID:        types.SingleSpaceID,
 		CanonicalName:  "Follow Acme",
 		NormalizedName: "follow acme",
-		EntityType:     "organization",
 	}
 	require.NoError(t, f.db.Create(&entity).Error)
 	return entity
@@ -98,7 +97,6 @@ func TestMCPFollowMergedEntityIDResolvesToRetainedTarget(t *testing.T) {
 		SpaceID:        types.SingleSpaceID,
 		CanonicalName:  "Retained Acme",
 		NormalizedName: "retained acme",
-		EntityType:     "organization",
 	}
 	require.NoError(t, f.db.Create(&retained).Error)
 	client := f.connect(t, "2025-11-25")

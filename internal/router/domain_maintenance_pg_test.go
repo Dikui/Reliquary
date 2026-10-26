@@ -38,7 +38,7 @@ func TestDomainMaintenanceMaterialChoicesAndMixedFilters(t *testing.T) {
 			call(
 				http.MethodPost,
 				"/api/v1/entities",
-				`{"canonical_name":"Filter institution","entity_type":"organization","aliases":[]}`,
+				`{"canonical_name":"Filter institution", "aliases":[]}`,
 				201,
 			),
 			&entity,

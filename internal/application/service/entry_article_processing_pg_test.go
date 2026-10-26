@@ -253,7 +253,7 @@ func articleProcessingOutput(t *testing.T, entities []legacyEntityCandidate) str
 		if description == "" {
 			description = e.Name + " is a participant in this announcement."
 		}
-		values = append(values, map[string]interface{}{"name": e.Name, "type": e.EntityType, "aliases": e.Aliases, "description": description, "relevance": "central", "evidence_ids": []int{1}})
+		values = append(values, map[string]interface{}{"name": e.Name, "aliases": e.Aliases, "description": description, "relevance": "central", "evidence_ids": []int{1}})
 	}
 	result["entities"] = values
 	raw, err := json.Marshal(result)
@@ -302,8 +302,8 @@ func TestAllTemplatesIgnoreOpenEntityExtraction(t *testing.T) {
 					t,
 
 					[]legacyEntityCandidate{
-						{Name: "Acme", EntityType: "organization", Description: "A partner of Beta."},
-						{Name: "Beta", EntityType: "organization", Description: "A partner of Acme."},
+						{Name: "Acme", Description: "A partner of Beta."},
+						{Name: "Beta", Description: "A partner of Acme."},
 					},
 				),
 			)
@@ -355,7 +355,7 @@ func TestArticleUnderstandingRetainsFullMarkdownAndBuildsVectors(t *testing.T) {
 	h.processor.output = articleProcessingOutput(
 		t,
 
-		[]legacyEntityCandidate{{Name: "Acme", EntityType: "organization", Aliases: []string{"Acme Inc"}}},
+		[]legacyEntityCandidate{{Name: "Acme", Aliases: []string{"Acme Inc"}}},
 	)
 	body := "# First announcement\n\nAcme released a widget with original measureme" +
 		"nts.\n\n![chart](" + articleImageDataURI(
@@ -400,7 +400,7 @@ func TestArticleUnderstandingRetainsFullMarkdownAndBuildsVectors(t *testing.T) {
 	firstEntities, err := NewEntityService(h.db, h.service.modelService).ListEntities(h.ctx, types.EntityQuery{})
 	require.NoError(t, err)
 	require.Empty(t, firstEntities)
-	h.processor.output = articleProcessingOutput(t, []legacyEntityCandidate{{Name: "Acme", EntityType: "organization"}})
+	h.processor.output = articleProcessingOutput(t, []legacyEntityCandidate{{Name: "Acme"}})
 	second := h.upload(t, "second-event", "# Second announcement\n\nAcme opened a new office on a different continent. This is an original report of the expansion and its date.")
 	var entityLinks []types.EntryEntity
 	require.NoError(t, h.db.Where("entry_id IN ?", []string{article.ID, second.ID}).Find(&entityLinks).Error)

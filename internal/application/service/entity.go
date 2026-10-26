@@ -70,12 +70,6 @@ func (s *EntityService) ListEntities(ctx context.Context, q types.EntityQuery) (
 		return nil, err
 	}
 	query := s.db.WithContext(ctx).Model(&types.Entity{}).Where("entities.space_id=? AND entities.merged_into_id=''", spaceID)
-	if q.EntityType != "" {
-		if types.NormalizeEntityType(q.EntityType) == "" {
-			return nil, werrors.NewBadRequestError("invalid entity type")
-		}
-		query = query.Where("entities.entity_type=?", types.NormalizeEntityType(q.EntityType))
-	}
 	if name := types.NormalizeEntityKey(q.Entity); name != "" {
 		pattern := "%" + name + "%"
 		query = query.Where(`(entities.normalized_name LIKE ? OR EXISTS (SELECT 1 FROM entity_aliases a WHERE a.space_id=entities.space_id AND a.entity_id=entities.id AND a.normalized_alias LIKE ?))`, pattern, pattern)

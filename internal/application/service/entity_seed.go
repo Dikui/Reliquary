@@ -69,7 +69,6 @@ func ensurePresetEntities(tx *gorm.DB, spaceID uint64) error {
 			SpaceID:        spaceID,
 			CanonicalName:  preset.name,
 			NormalizedName: types.NormalizeEntityKey(preset.name),
-			EntityType:     "organization",
 			CreatedAt:      time.Now(),
 			UpdatedAt:      time.Now(),
 		}

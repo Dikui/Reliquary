@@ -57,25 +57,24 @@ func resolveFactEntity(name, proposedID string, options []understandingEntityOpt
 	return nil
 }
 
-func recordFactCandidates(tx *gorm.DB, fact types.Fact, proposed *understandingFact) error {
+func recordFactCandidates(tx *gorm.DB, fact types.Fact) error {
 	for _, end := range []struct {
-		name, kind, endpoint string
-		id                   *string
+		name, endpoint string
+		id             *string
 	}{
-		{fact.Subject, proposed.SubjectType, "subject", fact.SubjectEntityID},
-		{fact.Object, proposed.ObjectType, "object", fact.ObjectEntityID},
+		{fact.Subject, "subject", fact.SubjectEntityID},
+		{fact.Object, "object", fact.ObjectEntityID},
 	} {
-		kind := types.NormalizeEntityType(end.kind)
 		name := strings.TrimSpace(end.name)
 		key := types.NormalizeEntityKey(name)
-		if end.id != nil || kind == "" || key == "" || utf8.RuneCountInString(name) > 512 ||
+		if end.id != nil || key == "" || utf8.RuneCountInString(name) > 512 ||
 			utf8.RuneCountInString(key) > 512 || strings.ContainsAny(name, "\r\n\x00") {
 			continue
 		}
 		now := time.Now()
 		candidate := types.EntityCandidate{
 			ID: uuid.NewString(), SpaceID: fact.SpaceID, Name: name,
-			NormalizedName: key, EntityType: kind, Status: "pending", CreatedAt: now, UpdatedAt: now,
+			NormalizedName: key, Status: "pending", CreatedAt: now, UpdatedAt: now,
 		}
 		if err := tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "space_id"}, {Name: "normalized_name"}},

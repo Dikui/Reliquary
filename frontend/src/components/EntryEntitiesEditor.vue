@@ -3,7 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { listEntities, setEntryEntities, type Entity } from '@/api/entities'
 import EntryAssociationsEditor from './EntryAssociationsEditor.vue'
 
-const props = defineProps<{ entryId: string; entities: Pick<Entity, 'id' | 'canonical_name' | 'entity_type'>[]; manual?: boolean }>()
+const props = defineProps<{ entryId: string; entities: Pick<Entity, 'id' | 'canonical_name'>[]; manual?: boolean }>()
 const emit = defineEmits<{ saved: [value: { entities: Entity[]; entities_manual: boolean }] }>()
 const { t } = useI18n()
 async function loadOptions(offset: number) {

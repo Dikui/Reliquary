@@ -53,20 +53,22 @@ func TestEntityMentionsRejectUnsupportedBindingsAndKeepNewNames(t *testing.T) {
 	result, err := parseArticleProcessingResult(`{"title":"DeepSeek 文档","summary":{"overview":"介绍文档解析。"},"entity_ids":["anthropic"],"entity_mentions":[
 {"name":"DeepSeek","type":"organization","entity_id":"anthropic","quote":"DeepSeek 发布文档解析模型。"},
 {"name":"Anthropic","type":"organization","entity_id":"anthropic","quote":"DeepSeek 发布文档解析模型。"},
-{"name":"虚构机构","type":"organization","quote":"虚构机构发布模型。"}]}`)
+{"name":"虚构机构","quote":"虚构机构发布模型。"},
+{"name":"Claude Code","quote":"Claude Code handles local work."}]}`)
 	require.NoError(t, err)
-	qualifyUnderstandingEntityMentions(result, "DeepSeek 发布文档解析模型。")
+	qualifyUnderstandingEntityMentions(result, "DeepSeek 发布文档解析模型。Claude Code handles local work.")
 	options := articleProcessingInput{EntityOptions: []understandingEntityOption{
-		{ID: "anthropic", CanonicalName: "Anthropic", EntityType: "organization"},
-		{ID: "same-name-person", CanonicalName: "DeepSeek", EntityType: "person"},
+		{ID: "anthropic", CanonicalName: "Anthropic"},
+		{ID: "first-name", CanonicalName: "DeepSeek"},
+		{ID: "second-name", CanonicalName: "DeepSeek"},
 	}}
 	qualifyUnderstandingChoices(result, options)
 	require.Empty(t, result.EntityIDs, "an unrelated but valid ID cannot force a binding")
-	require.Len(t, result.EntityMentions, 1)
+	require.Len(t, result.EntityMentions, 2)
 	require.Equal(t, "DeepSeek", result.EntityMentions[0].Name)
 	require.Empty(t, result.EntityMentions[0].EntityID)
 
-	merged := &articleProcessingResult{EntityMentions: []understandingEntityMention{result.EntityMentions[0], {Name: "Anthropic", Type: "organization", Quote: "invented"}}}
+	merged := &articleProcessingResult{EntityMentions: append(append([]understandingEntityMention{}, result.EntityMentions...), understandingEntityMention{Name: "Anthropic", Quote: "invented"})}
 	qualifyMergedEntityMentions(merged, []*articleProcessingResult{result})
 	require.Equal(t, result.EntityMentions, merged.EntityMentions, "long-document merge keeps only verified segment evidence")
 }

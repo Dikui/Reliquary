@@ -8,7 +8,6 @@ type EntityCandidate struct {
 	SpaceID         uint64    `json:"space_id"`
 	Name            string    `json:"name"`
 	NormalizedName  string    `json:"-"`
-	EntityType      string    `json:"entity_type"`
 	Status          string    `json:"status"`
 	EntityID        *string   `json:"entity_id"`
 	CreatedAt       time.Time `json:"created_at"`

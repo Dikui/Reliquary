@@ -79,7 +79,7 @@ function articleComponent() {
 const article: SearchEntry = {
   entry_id: 'a', title: 'Launch article', source: 'article', published_at: '2026-10-11T08:00:00Z',
    summary: { overview: 'Launch overview' },
-  entities: [{ id: 'e1', canonical_name: 'Launch Labs', entity_type: 'organization', aliases: ['LL'] }],
+  entities: [{ id: 'e1', canonical_name: 'Launch Labs', aliases: ['LL'] }],
   snippets: [0, 1, 2, 3].map(index => ({ chunk_id: `c${index}`, chunk_index: index, content: `Launch snippet ${index} <script>`, score: 0.9, match_type: 'keyword' })),
   score: 0.9,  vault_path: 'articles/2026-10/a.md', original_url: 'https://example.com/a',
 }

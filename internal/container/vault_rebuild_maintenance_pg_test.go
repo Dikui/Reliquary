@@ -29,8 +29,7 @@ func TestReplicaVaultRebuildPausesBeforeWorkerStartupWithoutLosingInterruptedTas
 			SpaceID:        1,
 			CanonicalName:  "Preserved owner profile",
 			NormalizedName: "preserved owner profile",
-			EntityType:     "organization",
-		}).Error)
+			}).Error)
 	jobs := redistest.NewClient(t, source)
 	for _, state := range []string{"active", "pending"} {
 		_,

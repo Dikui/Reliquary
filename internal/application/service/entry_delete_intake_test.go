@@ -25,7 +25,6 @@ func TestDeleteArticleRemovesEntityAssociationsAndRetainsEntity(t *testing.T) {
 		SpaceID:        1,
 		CanonicalName:  "Acme",
 		NormalizedName: "acme",
-		EntityType:     "organization",
 	}
 	require.NoError(t, db.Create(article).Error)
 	require.NoError(t, db.Create(entity).Error)

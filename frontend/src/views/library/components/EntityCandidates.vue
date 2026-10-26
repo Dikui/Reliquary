@@ -90,7 +90,7 @@ onBeforeUnmount(() => { active = false; listRequest++; detailRequest++; targetRe
       <ol class="candidate-list">
         <li v-for="item in items" :key="item.id" :class="['candidate-item', { 'is-selected': selected?.id === item.id }]">
           <button type="button" class="candidate-select" :disabled="busy" :aria-label="item.name" :aria-expanded="selected?.id === item.id" :aria-controls="selected?.id === item.id ? `candidate-detail-${item.id}` : undefined" @click="toggle(item, $event)">
-            <span class="candidate-copy"><strong>{{ item.name }}</strong><span>{{ t(item.entity_type === 'person' ? 'entityMaintenance.person' : 'entityMaintenance.organization') }} · {{ t('entityCandidates.count', { count: item.occurrence_count.toLocaleString(locale) }) }}</span></span>
+            <span class="candidate-copy"><strong>{{ item.name }}</strong><span>{{ t('entityCandidates.count', { count: item.occurrence_count.toLocaleString(locale) }) }}</span></span>
             <span class="candidate-select-action">{{ t(selected?.id === item.id ? 'entityCandidates.collapse' : 'entityCandidates.review') }}<t-icon :name="selected?.id === item.id ? 'chevron-up' : 'chevron-down'" aria-hidden="true" /></span>
           </button>
           <section v-if="selected?.id === item.id" :id="`candidate-detail-${item.id}`" class="candidate-detail" :aria-label="item.name" :aria-busy="busy">

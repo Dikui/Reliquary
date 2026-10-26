@@ -51,7 +51,7 @@ func (f *candidateFixture) entity(t *testing.T, name string, aliases ...string) 
 	t.Helper()
 	var out struct{ Data types.Entity }
 	require.NoError(t, json.Unmarshal(f.request(t, http.MethodPost, "/api/v1/entities", map[string]any{
-		"canonical_name": name, "entity_type": "organization", "aliases": aliases,
+		"canonical_name": name, "aliases": aliases,
 	}, 201), &out))
 	return out.Data
 }
@@ -95,13 +95,11 @@ func (f *candidateFixture) process(t *testing.T, ref string, fact map[string]any
 
 func candidateFact(subject, object string) map[string]any {
 	return map[string]any{
-		"title":        "合作",
-		"subject":      subject,
-		"action":       "合作",
-		"object":       object,
-		"quote":        "A collaboration was announced.",
-		"subject_type": "organization",
-		"object_type":  "organization",
+		"title":   "合作",
+		"subject": subject,
+		"action":  "合作",
+		"object":  object,
+		"quote":   "A collaboration was announced.",
 	}
 }
 
@@ -337,13 +335,12 @@ func TestManualEntityAliasBackfillsOnlyExactUnlinkedEndpointsHTTP(t *testing.T) 
 	target := f.entity(t, "Known Institute")
 	other := f.entity(t, "Other Institute")
 	fact := candidateFact(" ＮＥＷ Name ", "New Name is mentioned in a sentence")
-	fact["subject_type"], fact["object_type"] = "other", "other"
 	exact := f.process(t, "alias-history", fact)
 	occupied := candidateFact("New Name", "Unrelated")
 	occupied["subject_entity_id"] = other.ID
 	preserved := f.process(t, "preserve-explicit-id", occupied)
 	f.request(t, http.MethodPatch, "/api/v1/entities/"+target.ID, map[string]any{
-		"canonical_name": target.CanonicalName, "entity_type": target.EntityType, "aliases": []string{"New Name"},
+		"canonical_name": target.CanonicalName, "aliases": []string{"New Name"},
 	}, 200)
 	var detail struct {
 		Data struct{ Facts []candidateFactWire }
@@ -363,8 +360,7 @@ func TestManualEntityAliasBackfillsOnlyExactUnlinkedEndpointsHTTP(t *testing.T) 
 	ambiguous := f.process(t, "ambiguous-history", candidateFact("Shared Alias", "Model"))
 	f.entity(t, "Ambiguous Institute", "Shared Alias")
 	f.request(t, http.MethodPatch, "/api/v1/entities/"+target.ID, map[string]any{
-		"canonical_name": target.CanonicalName, "entity_type": target.EntityType,
-		"aliases": []string{"New Name", "Shared Alias"},
+		"canonical_name": target.CanonicalName, "aliases": []string{"New Name", "Shared Alias"},
 	}, 200)
 	require.NoError(
 		t,
@@ -373,14 +369,13 @@ func TestManualEntityAliasBackfillsOnlyExactUnlinkedEndpointsHTTP(t *testing.T) 
 	require.Nil(t, detail.Data.Facts[0].SubjectEntityID)
 }
 
-func TestEntityCandidatesExcludeOtherEndpointsAuthorsAndLibrariesHTTP(t *testing.T) {
+func TestEntityCandidatesIncludeNamedProductsAndExcludeAuthorsAndLibrariesHTTP(t *testing.T) {
 	f := newCandidateFixture(t)
 	fact := candidateFact("Named Researcher", "Model Product")
-	fact["subject_type"], fact["object_type"] = "person", "other"
 	f.process(t, "person-and-product", fact)
 	items := f.candidates(t, "pending")
-	require.Len(t, items, 1)
-	require.Equal(t, "Named Researcher", items[0].Name)
+	require.Len(t, items, 2)
+	require.ElementsMatch(t, []string{"Named Researcher", "Model Product"}, []string{items[0].Name, items[1].Name})
 	// Merely supplying a byline and fact-shaped model output cannot create candidates in other libraries.
 	for _, library := range []string{"references", "personal", "ai-output"} {
 		result := ingestRevisionHTTP(t, f.mcpFixture, map[string]any{
@@ -412,10 +407,10 @@ func TestEntityCandidatesExcludeOtherEndpointsAuthorsAndLibrariesHTTP(t *testing
 
 func TestEntityCandidateReviewUsesOnlyRecordedOccurrencesAndLogsHTTP(t *testing.T) {
 	f := newCandidateFixture(t)
-	// Same text without an institution/person classification has no occurrence.
-	unrecordedFact := candidateFact("New Institute", "Product")
-	unrecordedFact["subject_type"], unrecordedFact["object_type"] = "other", "other"
+	// A historical fact without a recorded occurrence must not be changed by candidate approval.
+	unrecordedFact := candidateFact("New Institute", "")
 	unrecorded := f.process(t, "unrecorded", unrecordedFact)
+	require.NoError(t, f.db.Exec("DELETE FROM entity_candidate_occurrences WHERE fact_id=?", unrecorded.ID).Error)
 	fact := candidateFact("New Institute", "Other Person")
 	fact["subject_entity_id"] = 42 // A bad optional field cannot discard valid evidence.
 	f.process(t, "recorded", fact)
@@ -451,8 +446,7 @@ func TestEntityCandidateReviewUsesOnlyRecordedOccurrencesAndLogsHTTP(t *testing.
 		}
 	}
 	f.request(t, http.MethodPatch, "/api/v1/entities/"+target.ID, map[string]any{
-		"canonical_name": target.CanonicalName, "entity_type": target.EntityType,
-		"aliases": []string{"Other Person", "Historical Alias"},
+		"canonical_name": target.CanonicalName, "aliases": []string{"Other Person", "Historical Alias"},
 	}, 200)
 	logs := handler.NewOperationLogHandler(service.NewOperationLogService(f.db))
 	f.router.GET("/api/v1/operation-logs", logs.List)
@@ -535,10 +529,9 @@ func TestFactEntityLinkingValidatesLongMaterialMergeOptionsHTTP(t *testing.T) {
 		stage, _ := types.LLMCallMetadataFromContext(ctx)
 		fact := candidateFact("Unrecognized subject text", "Unrecognized object text")
 		fact["subject_entity_id"] = existing.ID
-		fact["subject_type"], fact["object_type"] = "organization", "other"
 		if stage == "article_summary_merge" {
 			require.Contains(t, messages[0].Content, "subject_entity_id")
-			require.Contains(t, messages[1].Content, "subject_type")
+			require.NotContains(t, messages[1].Content, "subject_type")
 			lateID = f.entity(t, "Created while the merge model was running").ID
 			// The new ID exists at save time but was never offered to this call.
 			require.NotContains(t, messages[1].Content, lateID)

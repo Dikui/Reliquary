@@ -158,9 +158,6 @@ export default {
     "choiceSaved": "资料关联已保存"
   },
  entityMaintenance: {
-  "type": "类型",
-  "person": "人物",
-  "organization": "机构",
   "requestFailed": "请求失败，请重试",
   "loadMore": "加载更多",
 
@@ -849,7 +846,7 @@ export default {
   knowledgeWorkbench: {
   "tabLabel": "实体",
   "title": "实体",
-  "subtitle": "维护机构、人物及其别名",
+  "subtitle": "维护实体及其别名",
   "sections": "实体功能",
   "refresh": "刷新",
   "requestFailed": "请求失败，请稍后重试。",
@@ -875,18 +872,8 @@ export default {
   },
   "entities": {
     "title": "实体",
-    "description": "查看实体类型、别名和提及该实体的资料。",
+    "description": "查看实体、别名和提及该实体的资料。",
     "filter": "搜索实体名称或别名",
-    "type": "实体类型",
-    "allTypes": "全部类型",
-    "types": {
-      "company": "公司",
-      "person": "人物",
-      "product": "产品",
-      "project": "项目",
-      "organization": "机构",
-      "other": "其他"
-    },
     "empty": "还没有实体",
     "noResults": "没有匹配的实体，请调整筛选条件。",
     "aliases": "个别名",

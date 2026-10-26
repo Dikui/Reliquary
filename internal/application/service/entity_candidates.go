@@ -177,14 +177,14 @@ func (s *EntityService) ReviewCandidate(
 			}
 			item.Status = "ignored"
 		case "approve":
-			input, err := validateEntityInput(types.EntityInput{CanonicalName: item.Name, EntityType: item.EntityType})
+			input, err := validateEntityInput(types.EntityInput{CanonicalName: item.Name})
 			if err != nil {
 				return err
 			}
 			var count int64
 			if err := tx.Model(&types.Entity{}).
-				Where("space_id=? AND entity_type=? AND normalized_name=? AND merged_into_id=''",
-					spaceID, input.EntityType, item.NormalizedName).Count(&count).Error; err != nil {
+				Where("space_id=? AND normalized_name=? AND merged_into_id=''",
+					spaceID, item.NormalizedName).Count(&count).Error; err != nil {
 				return err
 			}
 			if count > 0 {
@@ -193,7 +193,7 @@ func (s *EntityService) ReviewCandidate(
 			now := time.Now()
 			entity := types.Entity{
 				ID: uuid.NewString(), SpaceID: spaceID, CanonicalName: input.CanonicalName,
-				NormalizedName: item.NormalizedName, EntityType: input.EntityType, CreatedAt: now, UpdatedAt: now,
+				NormalizedName: item.NormalizedName, CreatedAt: now, UpdatedAt: now,
 			}
 			if err := tx.Create(&entity).Error; err != nil {
 				return err

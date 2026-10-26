@@ -62,7 +62,7 @@ func TestEntryUnderstandingAllLibrariesValidateChoices(t *testing.T) {
 			call(
 				http.MethodPost,
 				"/api/v1/entities",
-				`{"canonical_name":"理解测试机构","entity_type":"organization","aliases":["Understanding Inc"]}`,
+				`{"canonical_name":"理解测试机构", "aliases":["Understanding Inc"]}`,
 			),
 			&entity,
 		),
@@ -141,7 +141,7 @@ func TestEntryUnderstandingPreservesManualFieldsAcrossReprocessingAndRevision(t 
 	require.NoError(t, json.Unmarshal(options.Body.Bytes(), &domains))
 	var entity struct{ Data types.Entity }
 	options = personalRequest(t, f.router, http.MethodPost, "/api/v1/entities",
-		`{"canonical_name":"Manual choice fixture","entity_type":"organization","aliases":[]}`, f.key, true)
+		`{"canonical_name":"Manual choice fixture", "aliases":[]}`, f.key, true)
 	require.Equal(t, 201, options.Code)
 	require.NoError(t, json.Unmarshal(options.Body.Bytes(), &entity))
 	r := ingestAuthHTTPRouter(f)
@@ -483,7 +483,7 @@ func TestEntryUnderstandingCapsValidatedChoicesAndSupportsNoMatches(t *testing.T
 			f.router,
 			http.MethodPost,
 			"/api/v1/entities",
-			fmt.Sprintf(`{"canonical_name":"Choice %d","entity_type":"organization","aliases":[]}`, i),
+			fmt.Sprintf(`{"canonical_name":"Choice %d", "aliases":[]}`, i),
 			f.key,
 			true,
 		)
