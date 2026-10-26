@@ -34,7 +34,13 @@ async function scenario(locale: 'zh-CN' | 'en-US', failSave: boolean, action: (s
     },
     '@/components/SafeTextarea.vue': { __esModule: true, default: defineComponent({ props: ['modelValue'], setup(props) { return () => h('textarea', props.modelValue) } }) },
     '@/api/system': {
-      listSystemSettings: async () => [{ ...stored }, { key: 'queue.core_concurrency', value: 1 }],
+      listSystemSettings: async () => [
+        { ...stored },
+        { key: 'prompt.summary_merge', value: 'Summary prompt' },
+        { key: 'prompt.evaluation_questions', value: 'Evaluation prompt' },
+        { key: 'prompt.library_media', value: 'Retired prompt' },
+        { key: 'queue.core_concurrency', value: 1 },
+      ],
       updateSystemSetting: async (key: string, value: string) => {
         requests.push({ key, value })
         if (failSave) throw new Error('Save unavailable')
@@ -67,7 +73,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', failSave: boolean, action: (s
 test('prompt settings save edited content and load it again through the existing settings API', async () => {
   assert.equal(normalizeSettingsSection('prompts'), 'prompts')
   const { html, requests } = await scenario('zh-CN', false, async (state, calls) => {
-    assert.equal(state.templates.value.length, 1)
+    assert.deepEqual(state.templates.value.map((item: { key: string }) => item.key), ['prompt.article_processing', 'prompt.summary_merge', 'prompt.evaluation_questions'])
     state.draft.value = 'Updated prompt\n保留换行'
     await state.save()
     assert.equal(state.dirty.value, false)

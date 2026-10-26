@@ -509,7 +509,8 @@ func (s *systemSettingService) List(ctx context.Context) ([]*types.SystemSetting
 	// Retired aggregate concurrency and space-creation settings have no
 	// consumers. Hide their persisted rows so the UI cannot offer obsolete
 	// configuration, while preserving other unknown rows for diagnostics.
-	for _, key := range []string{"queue.concurrency", "tenant.auto_create_api_key", "tenant.default_storage_quota_gb"} {
+	for _, key := range []string{"queue.concurrency", "tenant.auto_create_api_key", "tenant.default_storage_quota_gb",
+		"prompt.library_media", "prompt.library_reference", "prompt.library_own", "prompt.library_institutional"} {
 		delete(byKey, key)
 	}
 

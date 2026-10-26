@@ -74,6 +74,7 @@ func TestEntryUnderstandingAllLibrariesValidateChoices(t *testing.T) {
 		require.Contains(t, string(input["entity_options"]), entity.Data.ID)
 		require.Contains(t, string(input["entity_options"]), "Understanding Inc")
 		require.Contains(t, messages[0].Content, "中文")
+		require.NotContains(t, messages[0].Content, "本库保存", "all libraries use the common prompt without retired library rules")
 		return fmt.Sprintf(`{"title":"中文资料标题",
 "summary":{"overview":"这是一句话概述。",
 "points":["discard"],

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"reliquary/internal/config"
 	"reliquary/internal/types"
 	"strings"
 	"time"
@@ -21,16 +20,6 @@ type extractedImage struct {
 
 func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	prompt := articleProcessingPrompt() + "\n所属库：" + l.Name
-	switch {
-	case l.SystemRole == "media":
-		prompt += "\n" + config.Prompt("library_media")
-	case l.Template == types.TemplateExternalDurable:
-		prompt += "\n" + config.Prompt("library_reference")
-	case l.Template == types.TemplateOwn:
-		prompt += "\n" + config.Prompt("library_own")
-	default:
-		prompt += "\n" + config.Prompt("library_institutional")
-	}
 	if materialCanProduceFact(l, k) {
 		prompt += `
 仅当本篇报道一次具体发生时，额外输出一个 fact 对象：{"title":"事实标题","subject":"主体","action":"本次动作","object":"对象","conditions":"条件",

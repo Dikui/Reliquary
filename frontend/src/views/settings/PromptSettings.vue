@@ -21,10 +21,6 @@ let dismissLeave: (() => void) | undefined
 const definitions = computed(() => [
   { key: 'prompt.article_processing', name: t('promptSettings.articleProcessing'), description: t('promptSettings.articleProcessingHint') },
   { key: 'prompt.summary_merge', name: t('promptSettings.summaryMerge'), description: t('promptSettings.summaryMergeHint') },
-  { key: 'prompt.library_media', name: t('promptSettings.libraryMedia'), description: t('promptSettings.libraryMediaHint') },
-  { key: 'prompt.library_reference', name: t('promptSettings.libraryReference'), description: t('promptSettings.libraryReferenceHint') },
-  { key: 'prompt.library_own', name: t('promptSettings.libraryOwn'), description: t('promptSettings.libraryOwnHint') },
-  { key: 'prompt.library_institutional', name: t('promptSettings.libraryInstitutional'), description: t('promptSettings.libraryInstitutionalHint') },
   { key: 'prompt.evaluation_questions', name: t('promptSettings.evaluationQuestions'), description: t('promptSettings.evaluationQuestionsHint') },
 ])
 const templates = computed(() => definitions.value.flatMap(definition => {

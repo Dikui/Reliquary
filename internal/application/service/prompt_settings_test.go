@@ -70,6 +70,7 @@ func TestPromptSettingsPersistAndApplyWithoutRestart(t *testing.T) {
 		}
 	}
 	require.Equal(t, len(config.PromptIDs()), count)
+	require.ElementsMatch(t, []string{"article_processing", "summary_merge", "evaluation_questions"}, config.PromptIDs())
 
 	content := "保留换行与原文。\n只输出所需的 JSON。"
 	row, err := svc.Update(ctx, key, content)
@@ -95,4 +96,13 @@ func TestPromptSettingsPersistAndApplyWithoutRestart(t *testing.T) {
 
 	require.NoError(t, svc.Reset(ctx, key))
 	require.Equal(t, fallback, config.Prompt("article_processing"))
+
+	repo.row = &types.SystemSetting{Key: "prompt.library_media", Value: types.JSON(`"retired rule"`)}
+	rows, err = svc.List(ctx)
+	require.NoError(t, err)
+	for _, row := range rows {
+		require.NotEqual(t, "prompt.library_media", row.Key, "retired saved values must not appear in settings")
+	}
+	_, err = svc.Get(ctx, "prompt.library_media")
+	require.ErrorContains(t, err, "unknown setting key")
 }

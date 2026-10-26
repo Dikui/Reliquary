@@ -24,10 +24,6 @@ var promptFiles = []struct {
 		"processing.yaml",
 		[]string{
 			"article_processing",
-			"library_media",
-			"library_reference",
-			"library_own",
-			"library_institutional",
 			"summary_merge",
 		},
 	},
