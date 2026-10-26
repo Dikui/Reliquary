@@ -2,16 +2,59 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
+	"regexp"
 	"reliquary/internal/types"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
 
 // Names and literal quotes keep entity selection grounded in the submitted material.
 type understandingEntityMention struct {
-	Name     string `json:"name"`
-	EntityID string `json:"entity_id"`
-	Quote    string `json:"quote"`
+	Name        string `json:"name"`
+	SurfaceName string `json:"surface_name,omitempty"`
+	SourceID    string `json:"source_id,omitempty"`
+	EntityID    string `json:"entity_id"`
+	Quote       string `json:"quote"`
+}
+
+var modelSeriesPatterns = []struct {
+	name    string
+	pattern *regexp.Regexp
+}{
+	{"GPT", regexp.MustCompile(`^gpt[- ]?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)},
+	{"Claude", regexp.MustCompile(`^claude[- ]?(?:(?:opus|sonnet|haiku)[- ]?)?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)},
+	{"DeepSeek", regexp.MustCompile(`^deepseek[- ]?[vr][0-9]+(?:\.[0-9]+)*(?:$|[- ])`)},
+	{"Grok", regexp.MustCompile(`^grok[- ]?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)},
+}
+
+var claudeVariantPattern = regexp.MustCompile(`^(?:opus|sonnet|haiku)[- ]?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)
+var entityVersionSuffix = regexp.MustCompile(`^[- ]?v?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)
+
+func entitySeriesText(value string) string {
+	return strings.NewReplacer("‐", "-", "‑", "-", "–", "-", "—", "-", "−", "-").Replace(strings.ToLower(strings.Join(strings.Fields(value), " ")))
+}
+
+// Model versions have a stable family name; agent and product names keep their identity.
+func canonicalEntityMentionName(name, surface string) string {
+	key := entitySeriesText(surface)
+	for _, series := range modelSeriesPatterns {
+		if series.pattern.MatchString(key) || key == entitySeriesText(series.name) {
+			return series.name
+		}
+	}
+	if entitySeriesText(name) == "claude" && claudeVariantPattern.MatchString(key) {
+		return "Claude"
+	}
+	// An unfamiliar series is accepted only when its literal prefix is followed by a version.
+	prefix := entitySeriesText(name)
+	if prefix != "" && strings.HasPrefix(key, prefix) {
+		if entityVersionSuffix.MatchString(strings.TrimPrefix(key, prefix)) {
+			return name
+		}
+	}
+	return surface
 }
 
 func understandingEntityMentions(raw json.RawMessage) []understandingEntityMention {
@@ -27,17 +70,45 @@ func understandingEntityMentions(raw json.RawMessage) []understandingEntityMenti
 	return mentions
 }
 
-func qualifyUnderstandingEntityMentions(result *articleProcessingResult, body string) {
+func qualifyUnderstandingEntityMentions(result *articleProcessingResult, body string) error {
 	accepted := []understandingEntityMention{}
 	seen := map[string]bool{}
+	_, blocks := articleEvidenceBody(body)
+	runes := []rune(body)
+	invalid := false
 	for _, mention := range result.EntityMentions {
 		mention.Name = strings.TrimSpace(mention.Name)
+		surface := strings.TrimSpace(mention.SurfaceName)
+		if surface == "" {
+			surface = mention.Name
+		}
 		mention.Quote = strings.TrimSpace(mention.Quote)
-		key := types.NormalizeEntityKey(mention.Name)
-		if key == "" || utf8.RuneCountInString(mention.Name) > 512 ||
-			utf8.RuneCountInString(key) > 512 || strings.ContainsAny(mention.Name, "\r\n\x00") ||
+		if mention.SourceID != "" {
+			number, err := strconv.Atoi(strings.TrimPrefix(mention.SourceID, "P"))
+			if err != nil || mention.SourceID != fmt.Sprintf("P%d", number) || number < 1 || number > len(blocks) {
+				invalid = true
+				continue
+			}
+			block := blocks[number-1]
+			// Resolve the citation from stored text, never from the model's transcription.
+			mention.Quote = strings.TrimSpace(string(runes[block.Start:block.End]))
+		}
+		key := types.NormalizeEntityKey(surface)
+		if key == "" || utf8.RuneCountInString(surface) > 512 ||
+			utf8.RuneCountInString(key) > 512 || strings.ContainsAny(surface, "\r\n\x00") ||
 			mention.Quote == "" || !strings.Contains(body, mention.Quote) ||
-			!strings.Contains(types.NormalizeEntityKey(mention.Quote), key) || seen[key] {
+			!strings.Contains(types.NormalizeEntityKey(mention.Quote), key) {
+			invalid = true
+			continue
+		}
+		mention.Name = canonicalEntityMentionName(mention.Name, surface)
+		mention.SurfaceName = surface
+		key = types.NormalizeEntityKey(mention.Name)
+		if utf8.RuneCountInString(mention.Name) > 512 || utf8.RuneCountInString(key) > 512 || strings.ContainsAny(mention.Name, "\r\n\x00") {
+			invalid = true
+			continue
+		}
+		if seen[key] {
 			continue
 		}
 		seen[key] = true
@@ -47,13 +118,44 @@ func qualifyUnderstandingEntityMentions(result *articleProcessingResult, body st
 		}
 	}
 	result.EntityMentions = accepted
+	if invalid {
+		return fmt.Errorf("entity_mentions has invalid evidence: use an existing P-number as source_id and copy surface_name from that paragraph; do not invent or transcribe quote")
+	}
+	return nil
+}
+
+func entityMentionReference(segment, index int) string {
+	return fmt.Sprintf("S%dE%d", segment+1, index+1)
 }
 
 // The merge may select evidence from a segment, but cannot invent new evidence.
-func qualifyMergedEntityMentions(result *articleProcessingResult, parts []*articleProcessingResult) {
+func qualifyMergedEntityMentions(result *articleProcessingResult, parts []*articleProcessingResult) error {
 	accepted := []understandingEntityMention{}
 	seen := map[string]bool{}
+	references := map[string]understandingEntityMention{}
+	for i, part := range parts {
+		for j, mention := range part.EntityMentions {
+			references[entityMentionReference(i, j)] = mention
+		}
+	}
+	invalid := false
 	for _, selected := range result.EntityMentions {
+		if selected.SourceID != "" {
+			mention, ok := references[selected.SourceID]
+			if !ok {
+				invalid = true
+				continue
+			}
+			key := types.NormalizeEntityKey(mention.Name)
+			if !seen[key] {
+				accepted = append(accepted, mention)
+				seen[key] = true
+			}
+			if len(accepted) == 3 {
+				break
+			}
+			continue
+		}
 		key := types.NormalizeEntityKey(selected.Name)
 		if seen[key] {
 			continue
@@ -70,9 +172,16 @@ func qualifyMergedEntityMentions(result *articleProcessingResult, parts []*artic
 				break
 			}
 		}
+		if !seen[key] {
+			invalid = true
+		}
 		if len(accepted) == 3 {
 			break
 		}
 	}
 	result.EntityMentions = accepted
+	if invalid {
+		return fmt.Errorf("entity_mentions has invalid references: select source_id values such as S1E1 from the provided segment mentions; do not rewrite their names or quotes")
+	}
+	return nil
 }

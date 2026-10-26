@@ -348,7 +348,9 @@ func (s *entryService) callArticleProcessingPart(ctx context.Context, library *t
 			return errors.New("article processing output is missing a generated title")
 		}
 		result.Images = imageRecords
-		qualifyUnderstandingEntityMentions(result, body)
+		if err := qualifyUnderstandingEntityMentions(result, body); err != nil {
+			return err
+		}
 		qualifyUnderstandingChoices(result, input)
 		return nil
 	}, library.ID)

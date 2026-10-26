@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reliquary/internal/models/chat"
@@ -71,6 +72,55 @@ func TestEntityMentionsRejectUnsupportedBindingsAndKeepNewNames(t *testing.T) {
 	merged := &articleProcessingResult{EntityMentions: append(append([]understandingEntityMention{}, result.EntityMentions...), understandingEntityMention{Name: "Anthropic", Quote: "invented"})}
 	qualifyMergedEntityMentions(merged, []*articleProcessingResult{result})
 	require.Equal(t, result.EntityMentions, merged.EntityMentions, "long-document merge keeps only verified segment evidence")
+}
+
+func TestEntityReferencesPreserveSourceAndNormalizeModelSeries(t *testing.T) {
+	body := "# Models\n\nGPT‑5.6 Sol and GPT-6 are available.\n\nClaude Code runs tools.\n\nOpus 5.5 is the model used in this example.\n\n[Model Context Protocol (MCP)](https://example.org/mcp) connects agents.\n\nEngram uses conditional\n    memory and lookup.\n"
+	_, blocks := articleEvidenceBody(body)
+	paragraph := func(text string) string {
+		for i, block := range blocks {
+			if strings.Contains(string([]rune(body)[block.Start:block.End]), text) {
+				return fmt.Sprintf("P%d", i+1)
+			}
+		}
+		t.Fatalf("missing evidence paragraph: %s", text)
+		return ""
+	}
+	first := &articleProcessingResult{EntityMentions: []understandingEntityMention{
+		{Name: "GPT‑5.6 Sol", SourceID: paragraph("GPT‑5.6")},
+		{Name: "GPT-6", SourceID: paragraph("GPT‑5.6")},
+		{Name: "Claude", SurfaceName: "Opus 5.5", SourceID: paragraph("Opus 5.5")},
+		{Name: "Claude", SurfaceName: "Claude Code", SourceID: paragraph("runs tools")},
+	}}
+	require.NoError(t, qualifyUnderstandingEntityMentions(first, body))
+	require.Equal(t, []string{"GPT", "Claude", "Claude Code"}, []string{first.EntityMentions[0].Name, first.EntityMentions[1].Name, first.EntityMentions[2].Name})
+	require.Equal(t, "GPT‑5.6 Sol", first.EntityMentions[0].SurfaceName)
+	second := &articleProcessingResult{EntityMentions: []understandingEntityMention{
+		{Name: "MCP", SourceID: paragraph("Model Context Protocol")},
+		{Name: "Engram", SourceID: paragraph("Engram"), Quote: "Engram uses conditional memory and lookup."},
+	}}
+	require.NoError(t, qualifyUnderstandingEntityMentions(second, body))
+	require.Equal(t, "[Model Context Protocol (MCP)](https://example.org/mcp) connects agents.", second.EntityMentions[0].Quote)
+	require.Equal(t, "Engram uses conditional\n    memory and lookup.", second.EntityMentions[1].Quote)
+	merged := &articleProcessingResult{EntityMentions: []understandingEntityMention{
+		{SourceID: "S2E1"}, {SourceID: "S1E1"}, {SourceID: "S1E1"}, {SourceID: "S1E3"},
+	}}
+	require.NoError(t, qualifyMergedEntityMentions(merged, []*articleProcessingResult{first, second}))
+	require.Equal(t, []understandingEntityMention{second.EntityMentions[0], first.EntityMentions[0], first.EntityMentions[2]}, merged.EntityMentions)
+}
+
+func TestEntityReferencesRejectMissingSourceAndInventedNames(t *testing.T) {
+	body := "# Source\n\nClaude Code runs tools.\n"
+	result := &articleProcessingResult{EntityMentions: []understandingEntityMention{
+		{Name: "Claude Code", SourceID: "P99"},
+		{Name: "Invented product", SourceID: "P2"},
+		{Name: "Claude Code", Quote: "Claude Code has invented capabilities."},
+	}}
+	require.Error(t, qualifyUnderstandingEntityMentions(result, body))
+	require.Empty(t, result.EntityMentions)
+	merged := &articleProcessingResult{EntityMentions: []understandingEntityMention{{SourceID: "S9E9"}}}
+	require.Error(t, qualifyMergedEntityMentions(merged, []*articleProcessingResult{result}))
+	require.Empty(t, merged.EntityMentions)
 }
 
 func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {

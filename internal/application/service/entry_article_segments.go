@@ -242,9 +242,13 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 	ctx = types.WithModelCallEntry(ctx, k.ID)
 	summaries := make([]any, len(parts))
 	for i, part := range parts {
+		mentions := append([]understandingEntityMention{}, part.EntityMentions...)
+		for j := range mentions {
+			mentions[j].SourceID = entityMentionReference(i, j)
+		}
 		summaries[i] = map[string]any{
 			"segment": i + 1, "title": part.Title, "summary": part.Summary,
-			"domain_ids": part.DomainIDs, "entity_mentions": part.EntityMentions, "fact": part.Fact,
+			"domain_ids": part.DomainIDs, "entity_mentions": mentions, "fact": part.Fact,
 		}
 	}
 	title := articleTitleForProcessing(k)
@@ -284,7 +288,9 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 				}
 			}
 			checked.DomainIDs = acceptedUnderstandingIDs(checked.DomainIDs, domains)
-			qualifyMergedEntityMentions(checked, parts)
+			if err := qualifyMergedEntityMentions(checked, parts); err != nil {
+				return err
+			}
 			qualifyUnderstandingChoices(checked, options)
 			summary = checked
 		}
