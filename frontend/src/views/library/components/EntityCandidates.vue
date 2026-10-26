@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { getEntityCandidate, listEntities, listEntityCandidates, reviewEntityCandidate, type CandidateDetail, type CandidateStatus, type Entity, type EntityCandidate, type EntityEnvelope } from '@/api/entities'
@@ -40,6 +40,18 @@ async function select(item: EntityCandidate, more = false) {
   } catch (cause) { if (current === detailRequest) detailError.value = message(cause) }
   finally { if (current === detailRequest) detailLoading.value = false }
 }
+async function toggle(item: EntityCandidate, event?: MouseEvent) {
+  if (busy.value) return
+  if (selected.value?.id !== item.id) {
+    const trigger = event?.currentTarget as HTMLElement | null
+    void select(item)
+    await nextTick()
+    trigger?.scrollIntoView({ block: 'nearest' })
+    return
+  }
+  detailRequest++; selected.value = null; detail.value = null; detailLoading.value = false
+  detailError.value = ''; targetId.value = ''; actionError.value = ''
+}
 async function loadTargets(more = false) {
   if (more && targetsLoading.value) return
   const current = ++targetRequest
@@ -75,33 +87,40 @@ onBeforeUnmount(() => { active = false; listRequest++; detailRequest++; targetRe
     <p v-if="error" role="alert">{{ error }} <t-button variant="text" :loading="loading" @click="load()">{{ t('common.retry') }}</t-button></p>
     <t-loading :loading="loading" show-overlay>
       <t-empty v-if="!items.length && !loading && !error" :description="t('entityCandidates.empty')" />
-      <ol class="candidate-list"><li v-for="item in items" :key="item.id"><t-button variant="text" :disabled="busy" :aria-pressed="selected?.id === item.id" @click="select(item)">{{ item.name }}</t-button><span>{{ t(item.entity_type === 'person' ? 'entityMaintenance.person' : 'entityMaintenance.organization') }} · {{ t('entityCandidates.count', { count: item.occurrence_count.toLocaleString(locale) }) }}</span></li></ol>
+      <ol class="candidate-list">
+        <li v-for="item in items" :key="item.id" :class="['candidate-item', { 'is-selected': selected?.id === item.id }]">
+          <button type="button" class="candidate-select" :disabled="busy" :aria-label="item.name" :aria-expanded="selected?.id === item.id" :aria-controls="selected?.id === item.id ? `candidate-detail-${item.id}` : undefined" @click="toggle(item, $event)">
+            <span class="candidate-copy"><strong>{{ item.name }}</strong><span>{{ t(item.entity_type === 'person' ? 'entityMaintenance.person' : 'entityMaintenance.organization') }} · {{ t('entityCandidates.count', { count: item.occurrence_count.toLocaleString(locale) }) }}</span></span>
+            <span class="candidate-select-action">{{ t(selected?.id === item.id ? 'entityCandidates.collapse' : 'entityCandidates.review') }}<t-icon :name="selected?.id === item.id ? 'chevron-up' : 'chevron-down'" aria-hidden="true" /></span>
+          </button>
+          <section v-if="selected?.id === item.id" :id="`candidate-detail-${item.id}`" class="candidate-detail" :aria-label="item.name" :aria-busy="busy">
+            <h4>{{ selected.name }}</h4>
+            <p v-if="detailError" role="alert">{{ detailError }} <t-button variant="text" :loading="detailLoading" @click="select(selected)">{{ t('common.retry') }}</t-button></p>
+            <div class="candidate-actions"><t-button :loading="busy" :disabled="busy" @click="review('approve')">{{ t('entityCandidates.approve') }}</t-button><t-button v-if="status === 'pending'" variant="outline" :disabled="busy" @click="review('ignore')">{{ t('entityCandidates.ignore') }}</t-button></div>
+            <p>{{ t('entityCandidates.ignoreHint') }}</p>
+            <label class="candidate-target"><span>{{ t('entityCandidates.target') }}</span><t-select v-model="targetId" filterable :options="targetOptions" :loading="targetsLoading" :disabled="busy" :aria-label="t('entityCandidates.target')" /></label>
+            <p v-if="targetsError" role="alert">{{ targetsError }} <t-button variant="text" :loading="targetsLoading" @click="loadTargets()">{{ t('common.retry') }}</t-button></p>
+            <div class="candidate-actions"><t-button v-if="moreTargets" variant="text" :loading="targetsLoading" :disabled="busy" @click="loadTargets(true)">{{ t('common.loadMore') }}</t-button><t-button variant="outline" :loading="busy" :disabled="!targetId || busy || targetsLoading" @click="review('alias')">{{ t('entityCandidates.alias') }}</t-button></div>
+            <p v-if="actionError" role="alert">{{ actionError }}</p>
+            <t-loading :loading="detailLoading">
+              <ul>
+                <li v-for="occurrence in detail?.occurrences" :key="occurrence.entry ? `entry:${occurrence.entry.id}` : `fact:${occurrence.fact?.id}:${occurrence.endpoint}`">
+                  <template v-if="occurrence.entry">
+                    <a :href="`/platform/entries?entry_id=${encodeURIComponent(occurrence.entry.id)}`">{{ occurrence.entry.title }}</a>
+                    <p>{{ occurrence.quote }}</p>
+                  </template>
+                  <template v-else-if="occurrence.fact">
+                    <a :href="`/platform/stories/${encodeURIComponent(occurrence.fact.story_id)}#fact-${encodeURIComponent(occurrence.fact.id)}`">{{ occurrence.fact.title }}</a><span>{{ t(occurrence.endpoint === 'subject' ? 'entityCandidates.subject' : 'entityCandidates.object') }}</span><p>{{ occurrence.fact.subject }} · {{ occurrence.fact.action }} · {{ occurrence.fact.object }}</p>
+                  </template>
+                </li>
+              </ul>
+              <t-button v-if="detail && detail.occurrences.length < detail.total" variant="text" :loading="detailLoading" :disabled="busy" @click="select(selected, true)">{{ t('common.loadMore') }}</t-button>
+            </t-loading>
+          </section>
+        </li>
+      </ol>
       <t-button v-if="items.length < total" variant="text" :loading="loading" :disabled="busy" @click="load(true)">{{ t('common.loadMore') }}</t-button>
     </t-loading>
-    <section v-if="selected" class="candidate-detail" :aria-label="selected.name" :aria-busy="busy">
-      <h4>{{ selected.name }}</h4>
-      <p v-if="detailError" role="alert">{{ detailError }} <t-button variant="text" :loading="detailLoading" @click="select(selected)">{{ t('common.retry') }}</t-button></p>
-      <t-loading :loading="detailLoading">
-        <ul>
-          <li v-for="occurrence in detail?.occurrences" :key="occurrence.entry ? `entry:${occurrence.entry.id}` : `fact:${occurrence.fact?.id}:${occurrence.endpoint}`">
-            <template v-if="occurrence.entry">
-              <a :href="`/platform/entries?entry_id=${encodeURIComponent(occurrence.entry.id)}`">{{ occurrence.entry.title }}</a>
-              <p>{{ occurrence.quote }}</p>
-            </template>
-            <template v-else-if="occurrence.fact">
-              <a :href="`/platform/stories/${encodeURIComponent(occurrence.fact.story_id)}#fact-${encodeURIComponent(occurrence.fact.id)}`">{{ occurrence.fact.title }}</a><span>{{ t(occurrence.endpoint === 'subject' ? 'entityCandidates.subject' : 'entityCandidates.object') }}</span><p>{{ occurrence.fact.subject }} · {{ occurrence.fact.action }} · {{ occurrence.fact.object }}</p>
-            </template>
-          </li>
-        </ul>
-        <t-button v-if="detail && detail.occurrences.length < detail.total" variant="text" :loading="detailLoading" :disabled="busy" @click="select(selected, true)">{{ t('common.loadMore') }}</t-button>
-      </t-loading>
-      <div class="candidate-actions"><t-button :loading="busy" :disabled="busy" @click="review('approve')">{{ t('entityCandidates.approve') }}</t-button><t-button v-if="status === 'pending'" variant="outline" :disabled="busy" @click="review('ignore')">{{ t('entityCandidates.ignore') }}</t-button></div>
-      <p>{{ t('entityCandidates.ignoreHint') }}</p>
-      <label class="candidate-target"><span>{{ t('entityCandidates.target') }}</span><t-select v-model="targetId" filterable :options="targetOptions" :loading="targetsLoading" :disabled="busy" :aria-label="t('entityCandidates.target')" /></label>
-      <p v-if="targetsError" role="alert">{{ targetsError }} <t-button variant="text" :loading="targetsLoading" @click="loadTargets()">{{ t('common.retry') }}</t-button></p>
-      <div class="candidate-actions"><t-button v-if="moreTargets" variant="text" :loading="targetsLoading" :disabled="busy" @click="loadTargets(true)">{{ t('common.loadMore') }}</t-button><t-button variant="outline" :loading="busy" :disabled="!targetId || busy || targetsLoading" @click="review('alias')">{{ t('entityCandidates.alias') }}</t-button></div>
-      <p v-if="actionError" role="alert">{{ actionError }}</p>
-    </section>
   </section>
 </template>
 
@@ -114,13 +133,23 @@ p, li > span { color: var(--td-text-color-secondary); line-height: 1.65; overflo
 .candidate-actions :deep(.t-select__wrap) { width: 180px; }
 ol, ul { list-style: none; margin: 16px 0; padding: 0; }
 .candidate-list { min-height: 80px; }
+.candidate-list > li { padding: 0; border: 1px solid transparent; border-bottom-color: var(--td-component-stroke); border-radius: var(--td-radius-medium); }
+.candidate-item.is-selected { border-color: var(--td-brand-color); background: var(--td-brand-color-light); }
+.candidate-select { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 60px; padding: 12px 16px; border: 0; border-radius: var(--td-radius-medium); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; scroll-margin-top: 80px; }
+.candidate-select:hover:not(:disabled) { background: var(--td-bg-color-container-hover); }
+.candidate-select:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
+.candidate-select:disabled { cursor: not-allowed; opacity: .6; }
+.candidate-copy { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 20px; min-width: 0; overflow-wrap: anywhere; }
+.candidate-copy strong { font-weight: 500; }
+.candidate-copy > span { color: var(--td-text-color-secondary); font-size: 13px; }
+.candidate-select-action { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--td-brand-color); }
 li { padding: 12px 0; border-bottom: 1px solid var(--td-component-stroke); min-width: 0; overflow-wrap: anywhere; }
 li > span { margin-left: 12px; font-size: 13px; }
 li :deep(.t-button), li :deep(.t-button__text) { height: auto; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
-.candidate-detail { margin-top: 16px; padding: 20px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-medium); }
+.candidate-detail { margin: 0 12px 12px; padding: 20px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-medium); background: var(--td-bg-color-container); }
 .candidate-target { display: grid; gap: 8px; max-width: 420px; margin: 16px 0; }
 a { color: var(--td-brand-color); }
 a:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 p[role="alert"] { color: var(--td-error-color); }
-@media (max-width: 720px) { header { flex-direction: column; } .candidate-detail { padding: 12px; } }
+@media (max-width: 720px) { header { flex-direction: column; } .candidate-copy { flex-direction: column; gap: 4px; } .candidate-detail { padding: 12px; } }
 </style>

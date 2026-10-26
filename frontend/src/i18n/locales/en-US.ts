@@ -65,7 +65,9 @@ export default {
   },
   "entityCandidates": {
     "title": "Entity candidates",
-    "description": "Sorted by occurrences. Review source materials or facts before adding an entity.",
+    "description": "Open a row to review its sources, approve the entity, merge it as an alias, or ignore it.",
+    "review": "Review",
+    "collapse": "Collapse",
     "status": "Review status",
     "pending": "Pending",
     "ignored": "Ignored",

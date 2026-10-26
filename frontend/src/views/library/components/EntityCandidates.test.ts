@@ -11,7 +11,7 @@ const second = { ...candidate, id: 'second', name: 'Another Institute' }
 const envelope = (data: unknown) => ({ success: true, data })
 const detail = (item = candidate) => envelope({ candidate: item, total: 1, occurrences: [{ fact: { id: 'fact', story_id: 'story', title: `Fact for ${item.name}`, subject: item.name, action: 'announced', object: 'Model A' }, endpoint: 'subject' }] })
 function button(root: Element, label: string) {
-  const found = descendants(root).find(node => node.tag === 'button' && visibleText(node) === label)
+  const found = descendants(root).find(node => node.tag === 'button' && (visibleText(node) === label || node.props['aria-label'] === label))
   assert.ok(found, `missing button ${label}`)
   return found
 }
@@ -39,6 +39,28 @@ async function mount(locale: 'zh-CN' | 'en-US', api: Record<string, unknown> = {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: each candidate opens its own controls and reviews only that name`, async () => {
+    const env = await mount(locale)
+    try {
+      const first = button(env.root, candidate.name), next = button(env.root, second.name)
+      await click(first)
+      let scrolls = 0
+      next.props.onClick({ currentTarget: { scrollIntoView: () => scrolls++ } })
+      await settle()
+      assert.equal(scrolls, 1, 'switching rows keeps the selected control in view')
+      assert.equal(first.props['aria-expanded'], false)
+      assert.equal(next.props['aria-expanded'], true)
+      const panel = descendants(env.root).find(node => node.props.id === `candidate-detail-${second.id}`)
+      assert.ok(panel)
+      assert.equal(panel.parent, next.parent, 'controls stay inside the selected row')
+      assert.ok(button(panel, env.copy.entityCandidates.approve))
+      await click(next)
+      assert.ok(!descendants(env.root).some(node => node.props.id === `candidate-detail-${second.id}`))
+      await click(next)
+      await click(button(env.root, env.copy.entityCandidates.approve))
+      assert.deepEqual(env.calls.filter(call => call[0] === 'review'), [['review', second.id, 'approve', undefined]])
+    } finally { env.app.unmount() }
+  })
   test(`${locale}: candidate facts can be reviewed and approved once`, async () => {
     let resolveReview: (value: unknown) => void = () => {}, reviews = 0
     const env = await mount(locale, { reviewEntityCandidate: () => { reviews++; return new Promise(resolve => { resolveReview = resolve }) } })

@@ -65,7 +65,9 @@ export default {
   },
   "entityCandidates": {
     "title": "待确认实体",
-    "description": "按出现次数排序，查看来源资料或事实后决定是否收录。",
+    "description": "点击每一行处理该实体，展开后可查看来源、通过、并为别名或忽略。",
+    "review": "处理",
+    "collapse": "收起",
     "status": "处理状态",
     "pending": "待处理",
     "ignored": "已忽略",
