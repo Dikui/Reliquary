@@ -1062,8 +1062,9 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                   <t-select v-model="selectedStarred" :options="starredOptions" :aria-label="$t('articleJudgments.starLabel')" class="doc-type-select doc-filter-field__control" />
                 </div>
 
-
-
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedParseStatus" :options="parseStatusOptions" :aria-label="$t('library.parseStatusFilter')" class="doc-type-select doc-filter-field__control" />
+                </div>
 
                 <div class="doc-filter-field doc-filter-field--wide"><t-date-range-picker v-model="publishedRange" allow-input clearable :placeholder="[t('entryBatch.publishedFrom'), t('entryBatch.publishedTo')]" :aria-label="t('entryBatch.publishedDates')" class="doc-date-range doc-filter-field__control" /><small v-if="publishedRange.length">{{ t('entryBatch.publishedHint') }}</small></div>
 

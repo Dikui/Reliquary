@@ -271,6 +271,30 @@ test('the shared entity and domain selector preserves material filter requests a
   } finally { env.cleanup() }
 })
 
+test('the visible processing status filter finds active materials and restores its URL selection', async () => {
+  const env = await mountLibrary('zh-CN')
+  try {
+    env.records[0].parse_status = 'processing'
+    const status = env.control('library.parseStatusFilter')
+    assert.ok(status, 'the material toolbar exposes the processing status filter')
+    assert.equal(status.props.value, '')
+    assert.ok(status.props['data-options'].some((option: any) => option.value === 'processing' && option.label === '处理中'))
+    await env.change(status, 'processing')
+    assert.equal(env.requests.at(-1)!.get('parse_status'), 'processing')
+    assert.equal(env.requests.at(-1)!.get('page'), '1')
+    assert.equal(env.route.query.parse_status, 'processing')
+    assert.deepEqual(env.ids(), ['article'])
+    await env.leave()
+    await env.back()
+    assert.equal(env.control('library.parseStatusFilter').props.value, 'processing')
+    assert.deepEqual(env.ids(), ['article'])
+    await env.change(env.control('library.parseStatusFilter'), '')
+    assert.equal(env.requests.at(-1)!.has('parse_status'), false)
+    assert.equal(env.route.query.parse_status, undefined)
+    assert.ok(env.ids().length > 1)
+  } finally { env.cleanup() }
+})
+
 for (const locale of ['zh-CN', 'en-US']) {
 
 }
