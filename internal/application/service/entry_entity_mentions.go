@@ -70,12 +70,12 @@ func understandingEntityMentions(raw json.RawMessage) []understandingEntityMenti
 	return mentions
 }
 
-func qualifyUnderstandingEntityMentions(result *articleProcessingResult, body string) error {
+// Invalid entity evidence is discarded without failing the rest of the material.
+func qualifyUnderstandingEntityMentions(result *articleProcessingResult, body string) {
 	accepted := []understandingEntityMention{}
 	seen := map[string]bool{}
 	_, blocks := articleEvidenceBody(body)
 	runes := []rune(body)
-	invalid := false
 	for _, mention := range result.EntityMentions {
 		mention.Name = strings.TrimSpace(mention.Name)
 		surface := strings.TrimSpace(mention.SurfaceName)
@@ -86,7 +86,6 @@ func qualifyUnderstandingEntityMentions(result *articleProcessingResult, body st
 		if mention.SourceID != "" {
 			number, err := strconv.Atoi(strings.TrimPrefix(mention.SourceID, "P"))
 			if err != nil || mention.SourceID != fmt.Sprintf("P%d", number) || number < 1 || number > len(blocks) {
-				invalid = true
 				continue
 			}
 			block := blocks[number-1]
@@ -98,14 +97,12 @@ func qualifyUnderstandingEntityMentions(result *articleProcessingResult, body st
 			utf8.RuneCountInString(key) > 512 || strings.ContainsAny(surface, "\r\n\x00") ||
 			mention.Quote == "" || !strings.Contains(body, mention.Quote) ||
 			!strings.Contains(types.NormalizeEntityKey(mention.Quote), key) {
-			invalid = true
 			continue
 		}
 		mention.Name = canonicalEntityMentionName(mention.Name, surface)
 		mention.SurfaceName = surface
 		key = types.NormalizeEntityKey(mention.Name)
 		if utf8.RuneCountInString(mention.Name) > 512 || utf8.RuneCountInString(key) > 512 || strings.ContainsAny(mention.Name, "\r\n\x00") {
-			invalid = true
 			continue
 		}
 		if seen[key] {
@@ -118,10 +115,6 @@ func qualifyUnderstandingEntityMentions(result *articleProcessingResult, body st
 		}
 	}
 	result.EntityMentions = accepted
-	if invalid {
-		return fmt.Errorf("entity_mentions has invalid evidence: use an existing P-number as source_id and copy surface_name from that paragraph; do not invent or transcribe quote")
-	}
-	return nil
 }
 
 func entityMentionReference(segment, index int) string {
@@ -129,7 +122,7 @@ func entityMentionReference(segment, index int) string {
 }
 
 // The merge may select evidence from a segment, but cannot invent new evidence.
-func qualifyMergedEntityMentions(result *articleProcessingResult, parts []*articleProcessingResult) error {
+func qualifyMergedEntityMentions(result *articleProcessingResult, parts []*articleProcessingResult) {
 	accepted := []understandingEntityMention{}
 	seen := map[string]bool{}
 	references := map[string]understandingEntityMention{}
@@ -138,12 +131,10 @@ func qualifyMergedEntityMentions(result *articleProcessingResult, parts []*artic
 			references[entityMentionReference(i, j)] = mention
 		}
 	}
-	invalid := false
 	for _, selected := range result.EntityMentions {
 		if selected.SourceID != "" {
 			mention, ok := references[selected.SourceID]
 			if !ok {
-				invalid = true
 				continue
 			}
 			key := types.NormalizeEntityKey(mention.Name)
@@ -172,16 +163,9 @@ func qualifyMergedEntityMentions(result *articleProcessingResult, parts []*artic
 				break
 			}
 		}
-		if !seen[key] {
-			invalid = true
-		}
 		if len(accepted) == 3 {
 			break
 		}
 	}
 	result.EntityMentions = accepted
-	if invalid {
-		return fmt.Errorf("entity_mentions has invalid references: select source_id values such as S1E1 from the provided segment mentions; do not rewrite their names or quotes")
-	}
-	return nil
 }

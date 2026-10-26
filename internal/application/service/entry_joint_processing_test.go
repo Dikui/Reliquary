@@ -92,20 +92,20 @@ func TestEntityReferencesPreserveSourceAndNormalizeModelSeries(t *testing.T) {
 		{Name: "Claude", SurfaceName: "Opus 5.5", SourceID: paragraph("Opus 5.5")},
 		{Name: "Claude", SurfaceName: "Claude Code", SourceID: paragraph("runs tools")},
 	}}
-	require.NoError(t, qualifyUnderstandingEntityMentions(first, body))
+	qualifyUnderstandingEntityMentions(first, body)
 	require.Equal(t, []string{"GPT", "Claude", "Claude Code"}, []string{first.EntityMentions[0].Name, first.EntityMentions[1].Name, first.EntityMentions[2].Name})
 	require.Equal(t, "GPT‑5.6 Sol", first.EntityMentions[0].SurfaceName)
 	second := &articleProcessingResult{EntityMentions: []understandingEntityMention{
 		{Name: "MCP", SourceID: paragraph("Model Context Protocol")},
 		{Name: "Engram", SourceID: paragraph("Engram"), Quote: "Engram uses conditional memory and lookup."},
 	}}
-	require.NoError(t, qualifyUnderstandingEntityMentions(second, body))
+	qualifyUnderstandingEntityMentions(second, body)
 	require.Equal(t, "[Model Context Protocol (MCP)](https://example.org/mcp) connects agents.", second.EntityMentions[0].Quote)
 	require.Equal(t, "Engram uses conditional\n    memory and lookup.", second.EntityMentions[1].Quote)
 	merged := &articleProcessingResult{EntityMentions: []understandingEntityMention{
-		{SourceID: "S2E1"}, {SourceID: "S1E1"}, {SourceID: "S1E1"}, {SourceID: "S1E3"},
+		{SourceID: "S9E9"}, {SourceID: "S2E1"}, {SourceID: "S1E1"}, {SourceID: "S1E1"}, {SourceID: "S1E3"},
 	}}
-	require.NoError(t, qualifyMergedEntityMentions(merged, []*articleProcessingResult{first, second}))
+	qualifyMergedEntityMentions(merged, []*articleProcessingResult{first, second})
 	require.Equal(t, []understandingEntityMention{second.EntityMentions[0], first.EntityMentions[0], first.EntityMentions[2]}, merged.EntityMentions)
 }
 
@@ -116,11 +116,34 @@ func TestEntityReferencesRejectMissingSourceAndInventedNames(t *testing.T) {
 		{Name: "Invented product", SourceID: "P2"},
 		{Name: "Claude Code", Quote: "Claude Code has invented capabilities."},
 	}}
-	require.Error(t, qualifyUnderstandingEntityMentions(result, body))
+	qualifyUnderstandingEntityMentions(result, body)
 	require.Empty(t, result.EntityMentions)
 	merged := &articleProcessingResult{EntityMentions: []understandingEntityMention{{SourceID: "S9E9"}}}
-	require.Error(t, qualifyMergedEntityMentions(merged, []*articleProcessingResult{result}))
+	qualifyMergedEntityMentions(merged, []*articleProcessingResult{result})
 	require.Empty(t, merged.EntityMentions)
+}
+
+func TestArticleProcessingKeepsValidEntitiesWhenAnotherReferenceIsInvalid(t *testing.T) {
+	h := newArticleProcessingHarness(t, false)
+	k := segmentedEntry(t, h)
+	output, err := parseArticleProcessingResult(validProcessingFixture())
+	require.NoError(t, err)
+	output.EntityMentions = []understandingEntityMention{
+		{Name: "Claude Code", SourceID: "P99"},
+		{Name: "Invented product", SourceID: "P2"},
+		{Name: "Claude Code", SourceID: "P2"},
+	}
+	raw, err := json.Marshal(output)
+	require.NoError(t, err)
+	h.processor.output = string(raw)
+	result, err := h.service.callArticleProcessing(h.ctx, h.library, k, "# Tool\n\nClaude Code runs tools.\n", nil)
+	require.NoError(t, err)
+	require.Len(t, h.processor.requests, 1, "invalid entity references must not trigger whole-article correction")
+	require.Equal(t, output.Title, result.Title)
+	require.Equal(t, output.Summary, result.Summary)
+	require.Len(t, result.EntityMentions, 1)
+	require.Equal(t, "Claude Code", result.EntityMentions[0].Name)
+	require.Equal(t, "Claude Code runs tools.", result.EntityMentions[0].Quote)
 }
 
 func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {

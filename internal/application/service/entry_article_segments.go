@@ -288,9 +288,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 				}
 			}
 			checked.DomainIDs = acceptedUnderstandingIDs(checked.DomainIDs, domains)
-			if err := qualifyMergedEntityMentions(checked, parts); err != nil {
-				return err
-			}
+			qualifyMergedEntityMentions(checked, parts)
 			qualifyUnderstandingChoices(checked, options)
 			summary = checked
 		}
