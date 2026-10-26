@@ -33,7 +33,8 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         },
         {
           path: "libraries",
-          redirect: "/platform/entries",
+          name: "libraries",
+          component: () => import('../views/library/LibraryBrowser.vue'),
           meta: { requiresInit: true }
         },
         {

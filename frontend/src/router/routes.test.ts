@@ -112,9 +112,11 @@ test('root and platform return to entries while the retired login and conversati
   }
 })
 
-test('old knowledge list and ID routes redirect to the single article page', async () => {
+test('the library browser has its own route while old ID routes keep their redirects', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  for (const old of ['/platform/libraries', '/platform/libraries/library-a', '/platform/libraries/library-a/documents']) {
+  await router.push('/platform/libraries')
+  assert.equal(router.currentRoute.value.name, 'libraries')
+  for (const old of ['/platform/libraries/library-a', '/platform/libraries/library-a/documents']) {
     await router.push(old + '?entry_id=article-a')
     assert.equal(router.currentRoute.value.path, '/platform/entries')
     assert.equal(router.currentRoute.value.query.entry_id, 'article-a')

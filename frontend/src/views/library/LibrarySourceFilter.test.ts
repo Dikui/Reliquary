@@ -13,7 +13,7 @@ import zhCN from '../../i18n/locales/zh-CN'
 import enUS from '../../i18n/locales/en-US'
 import * as polling from './entryStatusPolling'
 import * as documentListFilters from './documentListFilters'
-import { descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle, visibleText } from './componentTestHarness'
+import { click, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle, visibleText } from './componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const { createPinia, setActivePinia } = require('pinia') as typeof import('pinia')
@@ -44,7 +44,6 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
   const t = i18n.global.t
   const requests: URLSearchParams[] = []
-  const scope = ref<string[]>([])
   const rebuildRequests: Array<{ path: string; data: unknown }> = [], notices: string[] = []
   const previewResult = { success: true, data: { fingerprint: 'preview-1', matched: 41, eligible: 40, skipped: 1, blocked: 0, reasons: [{ code: 'generated_library', count: 1 }], samples: [{ id: 'sample', title: 'Matching sample', library_id: 'library-source' }] } }
   const batchResult = { success: true, data: { batch_id: 'batch-1', action: 'reprocess', status: 'completed', total: 41, succeeded: 40, failed: 0, skipped: 1, pending: 0, running: 0, warnings: 0, items: [], page: 1, page_size: 20 } }
@@ -56,6 +55,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     { id: 'report', source_kind: 'report', title: 'Needle report',  starred: false },
     ...Array.from({ length: 38 }, (_, index) => ({ id: `mine-${index}`, source_kind: 'mine', title: `Document ${index}`,  starred: false })),
   ].map(record => ({ ...record, file_name: `${record.title}.md`, type: 'manual', file_type: 'md', channel: 'api',
+    library_id: record.id === 'report' ? 'reports' : 'library-source',
     parse_status: 'completed', incomplete: record.id === 'mine', created_at: '2026-10-13T08:00:00Z', updated_at: '2026-10-13T08:00:00Z' }))
   if (customType) records.push({ ...records[0], id: 'sop', })
   const target = records.find(record => record.id === 'mine')!
@@ -71,6 +71,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
       const query = new URLSearchParams(url.searchParams)
       requests.push(query)
       const filtered = records.filter(record => {
+        if (query.has('libraries') && !query.get('libraries')!.split(',').includes(record.library_id)) return false
         if (query.has('source_kind') && record.source_kind !== query.get('source_kind')) return false
         if (query.has('keyword') && !record.title.toLowerCase().includes(query.get('keyword')!.toLowerCase())) return false
         if (query.has('file_type') && record.file_type !== query.get('file_type')) return false
@@ -104,7 +105,6 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     '@/api/entities': { listEntities: async () => ({ success: true, data: [{ id: 'entity-1', canonical_name: 'Target Entity' }] }) },
 
     '@/utils/bodyReference': bodyReference,
-    '@/composables/useLibraryScope': { useLibraryScope: () => scope },
     'vue-router': vueRouter,
     '@/composables/useLibrary': hook,
     '@/stores/ui': { useUIStore: () => ({}) },
@@ -155,7 +155,13 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   }
   const library = loadComponent(new URL('./Library.vue', import.meta.url), modules)
   const router = vueRouter.createRouter({ history: vueRouter.createMemoryHistory(), routes: [
-    { path: '/platform/library', component: library },
+    { path: '/platform/library', alias: '/platform/entries', component: library },
+    { path: '/platform/libraries', component: loadComponent(new URL('./LibraryBrowser.vue', import.meta.url), {
+      ...modules, '@/api/library': { ...api, listLibraries: async () => ({ success: true, data: [
+        { id: 'library-source', name: 'Research', description: 'Research sources' },
+        { id: 'reports', name: 'AI Reports', description: 'Generated reports' },
+      ] }) },
+    }) },
     { path: '/platform/search', component: empty.default },
   ] })
   await router.push({ path: '/platform/library', query: { preserved: 'value', ...initialQuery } })
@@ -208,7 +214,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     node.tag === 'select' && node.props['data-options']?.some((option: any) => option.value === value))!
   const ids = () => descendants(root).filter(node => node.props['data-select-id']).map(node => node.props['data-select-id'])
   return {
-    root, router, requests, records, errors, control, byOptions, ids, t, scope, rebuildRequests, notices, previewResult, batchResult,
+    root, router, requests, records, errors, control, byOptions, ids, t, rebuildRequests, notices, previewResult, batchResult, waitForLoad,
     get confirmation() { return confirmation },
     setRebuildResponse(response: (path: string, data: unknown) => Promise<any>) { rebuildResponse = response },
     recover() { backendAvailable = true },
@@ -232,6 +238,31 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     },
   }
 }
+
+test('library cards open only the selected library and preserve its scope through history', async () => {
+  const env = await mountLibrary()
+  try {
+    await click(descendants(env.root).find(node => hasClass(node, 'breadcrumb-link'))!)
+    await env.waitForLoad()
+    assert.equal(env.route.path, '/platform/libraries')
+    const cards = descendants(env.root).filter(node => hasClass(node, 'library-card'))
+    assert.equal(cards.length, 2)
+    await click(cards.find(node => visibleText(node).includes('AI Reports'))!)
+    await env.waitForLoad()
+    assert.equal(env.route.path, '/platform/entries')
+    assert.equal(env.route.query.libraries, 'reports')
+    assert.equal(env.requests.at(-1)!.get('libraries'), 'reports')
+    assert.deepEqual(env.ids(), ['report'])
+    assert.ok(visibleText(env.root).includes('AI Reports'))
+    await env.leave()
+    await env.back()
+    assert.deepEqual(env.ids(), ['report'])
+    assert.equal(env.requests.at(-1)!.get('libraries'), 'reports')
+    await env.back()
+    assert.equal(env.route.path, '/platform/libraries')
+    assert.equal(descendants(env.root).filter(node => hasClass(node, 'library-card')).length, 2)
+  } finally { env.cleanup() }
+})
 
 test('a space with no libraries finishes loading and displays the material empty state', async () => {
   const env = await mountLibrary('zh-CN', {}, 'grid', false, false, true)
@@ -399,7 +430,7 @@ test('bulk management retains exact filters and server count across both steps a
     })
     for (const key of ['library.rebuildLibrary', 'library.rebuildLibraryAll']) assert.equal(button(key), undefined)
     assert.equal(button('entryBatch.title')!.props.disabled, false)
-    env.scope.value = ['library-source']; await settle()
+    await env.navigate({ ...env.route.query, libraries: 'library-source' })
     button('entryBatch.title')!.props.onClick(); await settle()
     assert.ok(visibleText(env.root).includes(env.t('entryBatch.scopeStep')))
     assert.equal(env.control('entryBatch.action'), undefined)

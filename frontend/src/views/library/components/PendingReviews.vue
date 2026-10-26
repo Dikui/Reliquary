@@ -4,12 +4,11 @@ import { useI18n } from 'vue-i18n'
 import { listPendingEntry, type ReviewEntry } from '@/api/entry-review'
 import { isValidURL } from '@/utils/security'
 import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue'
-import { useLibraryScope } from '@/composables/useLibraryScope'
 import ReviewActions from '@/components/ReviewActions.vue'
 
 const emit = defineEmits<{ 'open-source': [id: string]; changed: []; refreshed: [] }>()
 const { t } = useI18n()
-const libraryScope = useLibraryScope()
+const libraryScope = defineModel<string[]>({ default: () => [] })
 const records = ref<ReviewEntry[]>([]), total = ref(0), page = ref(1)
 const loading = ref(false), error = ref(''), busyIds = ref(new Set<string>())
 const busy = computed(() => busyIds.value.size > 0)

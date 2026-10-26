@@ -48,15 +48,16 @@ function textContent(node: any): string {
 
 function createHarness(locale: Locale, libraryInfo: LibraryInfo) {
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
-  const settingsCalls: string[][] = []
-  const openSettings = new Function('uiStore', `return ${source.match(/const handleOpenLibrarySettings = ([^\n]+)/)![1]}`)(
-    { openSettings: (...args: string[]) => settingsCalls.push(args) },
+  const navigations: string[] = []
+  const openLibraries = new Function('router', `return ${source.match(/const openLibraries = ([^\n]+)/)![1]}`)(
+    { push: (path: string) => navigations.push(path) },
   )
   const context = {
     libraryInfo,
     activeLibraryTab: 'documents' as KbTab,
     selectLibraryTab: (tab: KbTab) => { context.activeLibraryTab = tab },
-    handleOpenLibrarySettings: openSettings,
+    openLibraries,
+    selectedLibrary: null,
     $t: (...args: Parameters<typeof i18n.global.t>) => i18n.global.t(...args),
   }
   let tree: any
@@ -64,7 +65,7 @@ function createHarness(locale: Locale, libraryInfo: LibraryInfo) {
   return {
     i18n,
     context,
-    settingsCalls,
+    navigations,
     async render() {
       const app = createSSRApp(component)
       app.component('t-icon', defineComponent({ setup: () => () => h('svg') }))
@@ -108,8 +109,8 @@ test('the existing breadcrumb switches language without changing the database na
   const first = await harness.render()
   const libraryButton = first.tree.children.find((node: any) => node.props?.class === 'breadcrumb-link')
   libraryButton.props.onClick()
-  assert.deepEqual(harness.settingsCalls, [['library', 'catalog']])
-  assert.equal(harness.context.activeLibraryTab, 'documents', 'opening the catalogue preserves the selected tab')
+  assert.deepEqual(harness.navigations, ['/platform/libraries'])
+  assert.equal(harness.context.activeLibraryTab, 'documents', 'opening the library browser preserves the selected tab')
   const buttons = assertBreadcrumb(first.tree, 'zh-CN', 'documents')
   buttons[2].props.onClick()
   assert.equal(harness.context.activeLibraryTab, 'entities')

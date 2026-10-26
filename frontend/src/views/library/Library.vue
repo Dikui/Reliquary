@@ -2,7 +2,6 @@
 import { ref, onMounted, onUnmounted, watch, reactive, computed, nextTick } from "vue";
 import { MessagePlugin } from "tdesign-vue-next";
 import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue';
-import { useLibraryScope } from '@/composables/useLibraryScope';
 import { parseReference } from '@/utils/bodyReference';
 import type { SourceLocation } from '@/types/search';
 import DocContent from "@/components/DocContent.vue";
@@ -63,8 +62,13 @@ const { t } = useI18n();
 const pendingCounts = usePendingCountsStore();
 const libraryId = computed(() => resources.library?.id || '');
 const libraryInfo = ref<any>(null);
-const libraryScope = useLibraryScope();
+const libraryScope = computed<string[]>({
+  get: () => typeof route.query.libraries === 'string' ? [...new Set(route.query.libraries.split(',').filter(Boolean))] : [],
+  set: ids => { void router.replace({ query: { ...route.query, libraries: ids.join(',') || undefined } }); },
+});
 const libraryCatalog = ref<import('@/api/library').LibraryCatalogItem[]>([]);
+const selectedLibrary = computed(() => libraryScope.value.length === 1 ? libraryCatalog.value.find(item => item.id === libraryScope.value[0]) : undefined);
+const displayedLibraryInfo = computed(() => libraryScope.value.length === 1 ? selectedLibrary.value : libraryInfo.value);
 const referencedEntryId = ref(typeof route.query.entry_id === 'string' ? route.query.entry_id : '');
 const activeReference = ref<SourceLocation | undefined>(parseReference(route.query.reference));
 const libraryLoading = ref(false);
@@ -384,7 +388,10 @@ watch(() => libraryId.value, (newLibraryId, oldLibraryId) => {
   loadLibraryInfo(newLibraryId);
 }, { immediate: true });
 
-watch(libraryScope, () => { selectedIds.value.clear(); resetPage(); void loadEntryFiles(libraryId.value); }, { deep: true });
+watch(libraryScope, (ids, previous) => {
+  if (ids.join(',') === previous.join(',')) return;
+  clearSelection(); resetPage(); void loadEntryFiles(libraryId.value);
+}, { deep: true });
 
 // Restore all filters together before requesting the list after history navigation.
 let documentFiltersRestoredFromRoute = false;
@@ -661,6 +668,7 @@ const onReparseMenuClick = (index: number, item: EntryCard) => {
 };
 
 const handleOpenLibrarySettings = () => uiStore.openSettings('library', 'catalog');
+const openLibraries = () => router.push('/platform/libraries');
 const reparseConfirmStore = useReparseConfirmStore();
 
 const batchResultId = ref('');
@@ -730,7 +738,7 @@ const confirmRebuildEntry = async (index: number, item: EntryCard) => {
 
   // No Library context to seed the dialog defaults — fall back to a direct reparse
   // that reuses the overrides stored at upload time.
-  if (!libraryInfo.value) {
+  if (!displayedLibraryInfo.value) {
     await submitReparse(item.id);
     return;
   }
@@ -752,7 +760,7 @@ const confirmRebuildEntry = async (index: number, item: EntryCard) => {
 
   try {
     const result = await reparseConfirmStore.open({
-      libraryInfo: libraryInfo.value,
+      libraryInfo: displayedLibraryInfo.value,
       reparse: { entryId: item.id, fileName, fileType, processOverrides, sourceKind: item.source_kind },
     });
     await submitReparse(result.reparse.entryId, result.processConfig);
@@ -998,8 +1006,12 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
         <div class="document-header-title">
           <div class="document-title-row">
             <h2 class="document-breadcrumb">
-              <button type="button" class="breadcrumb-link" @click="handleOpenLibrarySettings">{{ $t('library.title') }}</button>
+              <button type="button" class="breadcrumb-link" @click="openLibraries">{{ $t('library.title') }}</button>
               <t-icon name="chevron-right" class="breadcrumb-separator" />
+              <template v-if="selectedLibrary && (activeLibraryTab === 'documents' || activeLibraryTab === 'reviews')">
+                <span class="breadcrumb-current">{{ selectedLibrary.display_name || selectedLibrary.name }}</span>
+                <t-icon name="chevron-right" class="breadcrumb-separator" />
+              </template>
                 <button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'documents' }]" :aria-pressed="activeLibraryTab === 'documents'"
                   @click="selectLibraryTab('documents')">{{ $t('knowledgeEditor.document.title') }}</button>
                 <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'reviews' }]" :aria-pressed="activeLibraryTab === 'reviews'" @click="selectLibraryTab('reviews')">{{ $t('knowledgeReview.title') }} <PendingCountBadge /></button>
@@ -1010,7 +1022,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
             <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
             <div class="library-title-actions">
 
-              <LibraryInfoPopover v-if="libraryInfo" :library-info="libraryInfo"
+              <LibraryInfoPopover v-if="displayedLibraryInfo && (activeLibraryTab === 'documents' || activeLibraryTab === 'reviews')" :library-info="displayedLibraryInfo"
                 />
               <t-tooltip :content="$t('library.settings')" placement="top">
                 <button type="button" class="library-settings-button" @click="handleOpenLibrarySettings">
@@ -1030,7 +1042,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 
       <DomainsManager v-if="activeLibraryTab === 'domains'" @reclassify="openDomainReclassification" />
 
-      <PendingReviews v-if="activeLibraryTab === 'reviews' && libraryId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="handlePendingChanged" @refreshed="pendingCounts.refresh()" />
+      <PendingReviews v-if="activeLibraryTab === 'reviews' && libraryId" v-model="libraryScope" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="handlePendingChanged" @refreshed="pendingCounts.refresh()" />
       <t-empty v-else-if="activeLibraryTab === 'reviews'" :description="$t('knowledgeReview.noLibrary')" />
 
       <template v-if="activeLibraryTab === 'documents'">

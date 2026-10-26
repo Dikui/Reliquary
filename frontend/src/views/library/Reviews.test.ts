@@ -80,7 +80,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: rejected personal documents show their source and approve without a URL`, async () => {
     const mine = { ...intake, source_kind: 'mine', metadata: { intake: { decision: 'rejected', reason: 'Needs user decision', source_info: {} } } }
     const { api, calls } = createReviewAPI(async call => ({ success: true, data: call.method === 'get' ? [mine] : mine, total: 1 }))
-    const html = await render(pendingComponent(api), {}, locale, async state => { await state.load() })
+    const html = await render(pendingComponent(api), { modelValue: ['library-source'] }, locale, async state => { await state.load() })
+    assert.equal(new URL(calls[0].url, 'https://example.test').searchParams.get('libraries'), 'library-source')
     assert.ok(html.includes(messages[locale].library.sourceKinds.mine))
     assert.ok(html.includes(messages[locale].articleJudgments.approveReview))
     assert.ok(!html.includes(messages[locale].knowledgeReview.missingLinkHint))
