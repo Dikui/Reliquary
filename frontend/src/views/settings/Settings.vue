@@ -74,6 +74,10 @@
                     <ModelSettings />
                   </div>
 
+                  <div v-if="currentSection === 'prompts'" class="section">
+                    <PromptSettings ref="promptSettingsView" />
+                  </div>
+
                   <div v-if="currentSection === 'library'" class="section"><LibrarySettings ref="librarySettingsView" :initial-section="currentSubSection || undefined" /></div>
                   <div v-if="currentSection === 'vault'" class="section"><VaultStatus /></div>
                   <div v-if="currentSection === 'operation-logs'" class="section"><OperationLogs /></div>
@@ -131,6 +135,7 @@ import SpaceInfo from './SpaceInfo.vue'
 import UserProfile from './UserProfile.vue'
 import GeneralSettings from './GeneralSettings.vue'
 import ModelSettings from './ModelSettings.vue'
+import PromptSettings from './PromptSettings.vue'
 import OllamaSettings from './OllamaSettings.vue'
 
 import LibrarySettings from './LibrarySettings.vue'
@@ -163,10 +168,12 @@ const deploymentCapabilities = useDeploymentCapabilitiesStore()
 const { t } = useI18n()
 
 const librarySettingsView = ref<InstanceType<typeof LibrarySettings>>()
+const promptSettingsView = ref<InstanceType<typeof PromptSettings>>()
 const spaceInfoView = ref<InstanceType<typeof SpaceInfo>>()
 const canLeaveCurrentSection = () => currentSection.value === 'space'
   ? spaceInfoView.value?.confirmLeave() ?? Promise.resolve(true)
-  : currentSection.value === 'library' ? librarySettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
+  : currentSection.value === 'library' ? librarySettingsView.value?.confirmLeave() ?? Promise.resolve(true)
+  : currentSection.value === 'prompts' ? promptSettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
 const currentSection = ref<string>('general')
 const currentSubSection = ref<string>('')
 const expandedMenus = ref<string[]>([])
@@ -221,6 +228,7 @@ const navItems = computed(() => {
     { key: 'general', icon: 'setting', label: t('general.title') },
     { key: 'ollama', icon: 'server', label: 'Ollama' },
     { key: 'models', icon: 'control-platform', label: t('settings.modelManagement') },
+    { key: 'prompts', icon: 'file-paste', label: t('promptSettings.title') },
     { key: 'library', icon: 'file', label: t('settings.librarySettings') },
     { key: 'vault', icon: 'folder', label: t('settings.vault.title') },
     { key: 'operation-logs', icon: 'history', label: t('operationLogs.title') },
@@ -256,7 +264,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'models_runtime',
       label: t('settings.navGroups.modelsRuntime'),
-      items: pickItems(['models', 'ollama']),
+      items: pickItems(['models', 'prompts', 'ollama']),
     },
     {
       key: 'integrations',

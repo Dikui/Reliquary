@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var loadedPrompts atomic.Value // map[string]string; published together at startup.
+var loadedPrompts atomic.Value   // map[string]string; published together at startup.
+var promptOverrides atomic.Value // map[string]string; published after persisted settings change.
 
 var promptFiles = []struct {
 	name string
@@ -82,9 +84,36 @@ func LoadPromptTemplates(configDir string) error {
 	return nil
 }
 
-// Prompt returns a required template from the startup snapshot.
+// PromptIDs returns the fixed set of templates that operators may edit.
+func PromptIDs() []string {
+	var ids []string
+	for _, file := range promptFiles {
+		ids = append(ids, file.ids...)
+	}
+	return ids
+}
+
+// PromptDefaults returns a copy of the validated file defaults.
+func PromptDefaults() map[string]string {
+	if prompts, ok := loadedPrompts.Load().(map[string]string); ok {
+		return maps.Clone(prompts)
+	}
+	return map[string]string{}
+}
+
+// SetPromptOverrides publishes saved settings without changing file defaults.
+func SetPromptOverrides(prompts map[string]string) {
+	promptOverrides.Store(maps.Clone(prompts))
+}
+
+// Prompt returns a saved override or the required template's file default.
 // An absent ID indicates an uninitialized process or a programming error.
 func Prompt(id string) string {
+	if prompts, ok := promptOverrides.Load().(map[string]string); ok {
+		if content, exists := prompts[id]; exists {
+			return content
+		}
+	}
 	if prompts, ok := loadedPrompts.Load().(map[string]string); ok {
 		if content, exists := prompts[id]; exists {
 			return content

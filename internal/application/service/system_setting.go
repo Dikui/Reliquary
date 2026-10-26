@@ -150,6 +150,16 @@ var registry = map[string]settingSpec{
 	},
 }
 
+const promptSettingPrefix = "prompt."
+
+func init() {
+	for _, id := range config.PromptIDs() {
+		registry[promptSettingPrefix+id] = settingSpec{
+			Type: "string", Default: "", Category: "prompts",
+		}
+	}
+}
+
 // systemSettingService caches settings for the single backend process.
 // Writes refresh the cache and dependent in-process controls before returning.
 type systemSettingService struct {
@@ -167,7 +177,8 @@ type systemSettingService struct {
 	// loaded flips true once the initial preload finishes. Reads
 	// before this point fall through to the DB so the very first
 	// hot request after boot doesn't get a default-valued surprise.
-	loaded atomic.Bool
+	loaded   atomic.Bool
+	promptMu sync.Mutex
 }
 
 // NewSystemSettingService constructs and preloads the process-local cache.
@@ -186,6 +197,7 @@ func (s *systemSettingService) preload(ctx context.Context) {
 	rows, err := s.repo.List(ctx)
 	if err != nil {
 		logger.Warnf(ctx, "[system_settings] preload failed, falling back to per-request DB reads: %v", err)
+		s.applyPromptOverrides(ctx)
 		return
 	}
 	s.mu.Lock()
@@ -206,6 +218,7 @@ func (s *systemSettingService) preload(ctx context.Context) {
 	// Add new bridges here as more env vars get migrated.
 	s.applySSRFWhitelist(ctx)
 	s.applyModelMaxConcurrency(ctx)
+	s.applyPromptOverrides(ctx)
 }
 
 // encodeDefault produces the JSONB encoding for a spec's built-in
@@ -265,12 +278,24 @@ func encodeDefault(spec settingSpec) (types.JSON, error) {
 
 // dispatchSideEffects applies changed settings to process-local controls.
 func (s *systemSettingService) dispatchSideEffects(ctx context.Context, changedKey string) {
+	if strings.HasPrefix(changedKey, promptSettingPrefix) {
+		s.applyPromptOverrides(ctx)
+		return
+	}
 	switch changedKey {
 	case "ssrf.whitelist":
 		s.applySSRFWhitelist(ctx)
 	case "model.max_concurrency":
 		s.applyModelMaxConcurrency(ctx)
 	}
+}
+
+func (s *systemSettingService) applyPromptOverrides(ctx context.Context) {
+	prompts := config.PromptDefaults()
+	for id, fallback := range prompts {
+		prompts[id] = s.GetString(ctx, promptSettingPrefix+id, "", fallback)
+	}
+	config.SetPromptOverrides(prompts)
 }
 
 // applySSRFWhitelist resolves the active ssrf.whitelist via the 3-tier
@@ -565,6 +590,10 @@ func (s *systemSettingService) virtualSetting(key string, spec settingSpec) *typ
 }
 
 func (s *systemSettingService) fallbackJSONForSpec(key string, spec settingSpec) types.JSON {
+	if strings.HasPrefix(key, promptSettingPrefix) {
+		value, _ := json.Marshal(config.PromptDefaults()[strings.TrimPrefix(key, promptSettingPrefix)])
+		return types.JSON(value)
+	}
 	if spec.EnvName != "" {
 		if raw := strings.TrimSpace(os.Getenv(spec.EnvName)); raw != "" {
 			switch spec.Type {
@@ -644,6 +673,10 @@ func jsonEqual(a, b types.JSON) bool {
 // Returns the persisted row (re-read from DB so updated_at /
 // last_modified_by are fresh).
 func (s *systemSettingService) Update(ctx context.Context, key string, rawValue any) (*types.SystemSetting, error) {
+	if strings.HasPrefix(key, promptSettingPrefix) {
+		s.promptMu.Lock()
+		defer s.promptMu.Unlock()
+	}
 	spec, ok := registry[key]
 	if !ok {
 		return nil, fmt.Errorf("unknown setting key %q", key)
@@ -751,6 +784,10 @@ func (s *systemSettingService) Update(ctx context.Context, key string, rawValue 
 
 // Reset deletes the database override and refreshes the configuration cache.
 func (s *systemSettingService) Reset(ctx context.Context, key string) error {
+	if strings.HasPrefix(key, promptSettingPrefix) {
+		s.promptMu.Lock()
+		defer s.promptMu.Unlock()
+	}
 	_, ok := registry[key]
 	if !ok {
 		return fmt.Errorf("unknown setting key %q", key)
@@ -882,6 +919,15 @@ func encodeForType(declared string, rawValue any) (types.JSON, error) {
 //   - keep error messages user-facing (the handler surfaces them as the
 //     400 body verbatim).
 func validateRegistryEntry(key string, rawValue any) error {
+	if strings.HasPrefix(key, promptSettingPrefix) {
+		content, ok := rawValue.(string)
+		if !ok || strings.TrimSpace(content) == "" {
+			return errors.New("prompt content must not be empty")
+		}
+		if len(content) > 64*1024 {
+			return errors.New("prompt content must not exceed 64 KiB")
+		}
+	}
 	switch key {
 	case "queue.core_concurrency",
 		"queue.enrichment_concurrency", "queue.maintenance_concurrency",

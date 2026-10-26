@@ -49,6 +49,8 @@ Entity lists use explicit load more with fifty rows per request. Filter changes 
 
 Model tiers and article processing configuration save in the library settings page. The server validates model compatibility. Leaving changed model tiers uses the shared application confirmation dialog. Failed saves preserve drafts and inline errors.
 
+PromptSettings at `/platform/settings?section=prompts` manages the seven existing business prompt templates through the system settings API. The explicit page-management request and docs/local-deployment.md define this flow. File templates provide defaults; saved database values take priority and apply to subsequent model calls without restarting or reprocessing existing materials. The page uses the existing TDesign controls, SafeTextarea and settings draft confirmation. Switching templates or leaving with unsaved edits requires a discard decision; failed saves keep the draft and current effective content. Prompt settings appear only in this editor, not in the generic runtime-settings table. Both supported locales use the same compact list/editor layout and stack in narrow containers.
+
 ## Layout and interaction
 
 Settings content owns vertical scrolling. Long forms keep their natural height. New controls use TDesign keyboard behavior, visible focus, disabled and busy states, and app-owned dialogs. Native entity selection buttons have visible focus and hover states. Entities and article titles wrap and remain readable in narrow views. Autosizing textareas use SafeTextarea and cancel pending measurements on unmount.

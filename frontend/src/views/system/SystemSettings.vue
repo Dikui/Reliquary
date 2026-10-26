@@ -562,7 +562,7 @@ async function loadSettings() {
       settingsRetryTimer = setTimeout(loadSettings, 5000)
       return
     }
-    const list = await listSystemSettings()
+    const list = (await listSystemSettings()).filter(item => !item.key.startsWith('prompt.'))
     settings.value = list
     // Reset edit values to the canonical state on every load — no
     // partial drafts survive a refresh, which avoids the "I came back
