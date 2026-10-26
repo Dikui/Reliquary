@@ -75,6 +75,10 @@ func retirementAt(version int64) retirement {
 	if version >= 45 {
 		r.tables = append(r.tables, "follow_feed_states", "follow_feed_library_states")
 	}
+	if version >= 48 {
+		r.tables = append(r.tables, "auth_tokens")
+		r.columns["users"] = []string{"password_hash"}
+	}
 	return r
 }
 

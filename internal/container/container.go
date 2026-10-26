@@ -147,7 +147,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewChatGPTHandler))
 	must(container.Provide(handler.NewChatGPTPolicyHandler))
 	must(container.Provide(handler.NewInitializationHandler))
-	must(container.Provide(handler.NewAuthHandler))
 	must(container.Provide(handler.NewSystemHandler))
 	must(container.Provide(handler.NewPromptHandler))
 	must(container.Provide(handler.NewModelCredentialsHandler))

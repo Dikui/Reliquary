@@ -2,7 +2,6 @@ import { ref } from 'vue'
 import {
   loadPreference,
   savePreference,
-  migratePreferencesIntoUser,
 } from './preferenceStorage'
 
 // Font options are filtered by host platform. A Windows user selecting
@@ -277,14 +276,5 @@ export function useFont() {
 
 /** Call once in main.ts to apply persisted font preferences before mount. */
 export function initFont() {
-  applyFont()
-}
-
-/** Re-read preferences from storage (call after login / logout). */
-export function reloadFontFromStorage() {
-  migratePreferencesIntoUser()
-  currentSans.value = loadSans()
-  currentMono.value = loadMono()
-  currentSize.value = loadSize()
   applyFont()
 }

@@ -30,7 +30,7 @@ test('settings shell names the usable content container and preserves wide deskt
 })
 
 for (const [file, wideMinimum] of [
-  ['GeneralSettings.vue', '280px'], ['UserProfile.vue', '280px'],
+  ['GeneralSettings.vue', '280px'],
   ['OllamaSettings.vue', '360px'],
   ['SystemInfo.vue', '280px'], ['SpaceInfo.vue', '0'],
 ] as const) {
@@ -63,7 +63,7 @@ test('narrow font choices and information values preserve readable widths', asyn
     assert.equal(styleDeclarationsAtWidth(general, selector, 900, { 'settings-content': 636 }).width, '100%')
     assert.equal(styleDeclarationsAtWidth(general, selector, 1440, { 'settings-content': 760 }).width, '280px')
   }
-  for (const file of ['SystemInfo.vue', 'UserProfile.vue', 'SpaceInfo.vue']) {
+  for (const file of ['SystemInfo.vue', 'SpaceInfo.vue']) {
     const rules = await compiledSFCStyleRules(new URL(`./${file}`, import.meta.url))
     assert.equal(styleDeclarationsAtWidth(rules, '.setting-control .info-value', 900, { 'settings-content': 636 })['text-align'], 'left')
   }

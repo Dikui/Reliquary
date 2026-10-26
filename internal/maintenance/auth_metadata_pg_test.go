@@ -15,6 +15,14 @@ import (
 	"reliquary/internal/utils"
 )
 
+// Keep exercising credential sanitization for the frozen pre-removal schema.
+func legacyAuthenticationDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := pgtest.Open(t)
+	require.NoError(t, collectionMigration(t, db).Migrate(47))
+	return db
+}
+
 func seedAuthenticationMetadata(t *testing.T, db *gorm.DB) {
 	t.Helper()
 	for _, statement := range []string{
@@ -75,7 +83,7 @@ func assertAuthenticationDisabled(t *testing.T, db *gorm.DB) {
 
 func TestAuthenticationMetadataRoundtripKeepsHistoryWithoutRestoringCredentials(t *testing.T) {
 	ctx := context.Background()
-	source := pgtest.Open(t)
+	source := legacyAuthenticationDB(t)
 	seed(t, source)
 	seedAuthenticationMetadata(t, source)
 	before, err := Capture(ctx, source)
@@ -99,7 +107,7 @@ func TestAuthenticationMetadataRoundtripKeepsHistoryWithoutRestoringCredentials(
 	require.NoError(t, WriteSnapshot(root, "", before))
 	expected, err := BuildManifest(ctx, source, root, "")
 	require.NoError(t, err)
-	target := pgtest.Open(t)
+	target := legacyAuthenticationDB(t)
 	_, err = Import(ctx, target, root, "", nil)
 	require.NoError(t, err)
 	assertAuthenticationDisabled(t, target)
@@ -134,7 +142,7 @@ func TestAuthenticationMetadataRoundtripKeepsHistoryWithoutRestoringCredentials(
 
 func TestReconfigurationAppendPreservesOldAuthenticationMetadataAndDuplicateAttempts(t *testing.T) {
 	ctx := context.Background()
-	db := pgtest.Open(t)
+	db := legacyAuthenticationDB(t)
 	seed(t, db)
 	seedAuthenticationMetadata(t, db)
 	root := t.TempDir()
@@ -247,7 +255,7 @@ func TestLegacySubscriptionCredentialRequirementsNameEveryEncryptedLeaf(t *testi
 
 func TestRestoredCredentialSentinelsAllowAnotherBackupWithoutWeakeningSecretScan(t *testing.T) {
 	ctx := context.Background()
-	db := pgtest.Open(t)
+	db := legacyAuthenticationDB(t)
 	seed(t, db)
 	seedAuthenticationMetadata(t, db)
 	for _, secret := range []string{"old-access.secret.signature", strings.Repeat("a", 64), "old-oauth-state-one", "API_HASH_SECRET"} {

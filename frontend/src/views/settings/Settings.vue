@@ -97,12 +97,6 @@
                     <RuntimeQueues />
                   </div>
 
-                  <!-- 用户信息（账户基础信息：ID / 用户名 / 邮箱 / 注册时间）。
-                     用户的基本信息不该跟 owner 权限绑定。 -->
-                  <div v-if="currentSection === 'userprofile'" class="section">
-                    <UserProfile />
-                  </div>
-
                   <!-- 空间信息 -->
                   <div v-if="currentSection === 'space'" class="section">
                     <SpaceInfo ref="spaceInfoView" />
@@ -132,7 +126,6 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SystemInfo from './SystemInfo.vue'
 import SpaceInfo from './SpaceInfo.vue'
-import UserProfile from './UserProfile.vue'
 import GeneralSettings from './GeneralSettings.vue'
 import ModelSettings from './ModelSettings.vue'
 import PromptSettings from './PromptSettings.vue'
@@ -235,7 +228,6 @@ const navItems = computed(() => {
     { key: 'system', icon: 'info-circle', label: t('settings.versionInfo') },
     { key: 'system-global', icon: 'server', label: t('settings.system') },
     { key: 'runtime-queues', icon: 'queue', label: t('settings.taskQueue') },
-    { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
     { key: 'space', icon: 'user-circle', label: t('settings.spaceInfo') },
     ...integrationItems,
   ]
@@ -247,14 +239,11 @@ const navItems = computed(() => {
 const navGroups = computed<NavGroup[]>(() => {
   const itemMap = new Map(navItems.value.map((item) => [item.key, item]))
   const pickItems = (keys: string[]) => keys.map((key) => itemMap.get(key)).filter(Boolean) as NavItem[]
-  // 分组：账户 → 空间 → 模型 → 发布集成 → 数据与扩展 → 系统管理 → 平台
-  // 关键调整：把个人偏好(general)和用户信息收进「账户」；
-  // 把检索引擎和外部集成合并为「数据与扩展」，避免两个 2~3 项的窄分组。
   return [
     {
-      key: 'account',
-      label: t('settings.navGroups.account'),
-      items: pickItems(['general', 'userprofile', ]),
+      key: 'preferences',
+      label: t('general.title'),
+      items: pickItems(['general']),
     },
     {
       key: 'workspace',

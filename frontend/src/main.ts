@@ -40,7 +40,7 @@ async function bootstrap() {
   app.use(router);
   app.use(i18n);
 
-  // 等首屏路由（含导航守卫、显式 QA 自动登录）完成后再挂载，避免先闪默认页再跳转
+  // 等首屏路由和导航守卫完成后再挂载，避免先闪默认页再跳转
   await router.isReady();
   const removeImeEnterGuard = installImeEnterGuard(document);
   app.onUnmount(removeImeEnterGuard);

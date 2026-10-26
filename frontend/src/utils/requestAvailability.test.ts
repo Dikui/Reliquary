@@ -18,14 +18,18 @@ function evaluate(path: string, modules: Record<string, any>) {
  new Function('require', 'module', 'exports', code)((name: string) => modules[name] ?? require(name), value, value.exports)
  return value.exports
 }
-function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', previousCache = false) {
+function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', previousCache = false, cachedSpace?: string) {
  const priorStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage'), priorWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
  // reliquary_token is left over from the removed login; the store must drop it.
- const storage = new Map([['reliquary_token', 'stale-session'], ['reliquary_refresh_token', 'stale-refresh'], ['reliquary_user', JSON.stringify({ id: 'user-1', space_id: 1 })]])
+ const storage = new Map([['reliquary_tenant', JSON.stringify({ id: 1, name: 'Personal' })], ['reliquary_token', 'stale-session'], ['reliquary_refresh_token', 'stale-refresh'], ['reliquary_user', JSON.stringify({ id: 'user-1', space_id: 1 })]])
  if (previousCache) {
   storage.set('reliquary_user', JSON.stringify({ id: 'user-1', 'tenant_id': 1 }))
   storage.set('reliquary_tenant', JSON.stringify({ id: '1', name: 'Original personal space' }))
+  storage.set('Reliquary_user-1_theme', 'dark')
+  storage.set('Reliquary_user-1_font_sans', 'georgia')
+  storage.set('reliquary_cmdk_recent:user-1:1', JSON.stringify(['retained query']))
  }
+ if (cachedSpace !== undefined) storage.set('reliquary_tenant', cachedSpace)
  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) } })
  const location = { pathname: '/platform/settings', href: '/platform/settings' }
  Object.defineProperty(globalThis, 'window', { configurable: true, value: { location } })
@@ -51,16 +55,16 @@ function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', previousCa
   }
   return { status: 200, statusText: 'OK', headers: {}, config: packet, data: { success: true, data: { user: { id: 'user-1', space_id: 1, username: 'owner' }, space: { id: 1, name: 'Personal' } } } }
  } }) } }
- Object.assign(modules, { pinia: { defineStore }, axios: network, '@/i18n': { __esModule: true, default: i18n }, './index': { generateRandomString: () => 'availability-test', MAX_FILE_SIZE_MB: 100 }, './api-base': { getApiBaseUrl: () => 'http://availability.test' }, './personalServerError': { translatePersonalServerMessage }, '@/composables/useFont': { reloadFontFromStorage() {} }, '@/composables/useTheme': { reloadThemeFromStorage() {} }, '@/composables/preferenceStorage': { resetMigrationLatch() {} }, '@/stores/resources': { useResourcesStore: () => ({ invalidate() {} }) }, '@/stores/editorResources': { useEditorResourcesStore: () => ({ invalidate() {} }) } })
+ Object.assign(modules, { pinia: { defineStore }, axios: network, '@/i18n': { __esModule: true, default: i18n }, './index': { generateRandomString: () => 'availability-test', MAX_FILE_SIZE_MB: 100 }, './api-base': { getApiBaseUrl: () => 'http://availability.test' }, './personalServerError': { translatePersonalServerMessage }, '@/stores/resources': { useResourcesStore: () => ({ invalidate() {} }) }, '@/stores/editorResources': { useEditorResourcesStore: () => ({ invalidate() {} }) } })
  const request = evaluate('./request.ts', modules)
  modules['@/utils/request'] = request
  const spaceApi = evaluate('../api/space.ts', modules)
- const api = evaluate('../api/auth.ts', modules)
- modules['@/api/auth'] = api; modules['../api/auth'] = api
+ modules['@/api/space'] = spaceApi
+ modules['@/composables/preferenceStorage'] = evaluate('../composables/preferenceStorage.ts', modules)
  setActivePinia(createPinia())
- const authModule = evaluate('../stores/auth.ts', modules)
- modules['@/stores/auth'] = authModule
- const store = authModule.useAuthStore()
+ const spaceModule = evaluate('../stores/space.ts', modules)
+ modules['@/stores/space'] = spaceModule
+ const store = spaceModule.useSpaceStore()
  const notice = loadComponent(new URL('../components/ServiceAvailabilityNotice.vue', import.meta.url), { '@/utils/request': request })
  const app = renderer.createApp(notice), root = element('root')
  app.use(i18n); app.mount(root)
@@ -74,44 +78,60 @@ function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', previousCa
 }
 for (const locale of ['zh-CN', 'en-US'] as const) {
  for (const mode of ['503', 'network', 'timeout']) {
-  test(`${locale}: actual auth store and request interceptor preserve session on ${mode} and clear global notice after recovery`, async t => {
+  test(`${locale}: actual space store and request interceptor preserve workspace data on ${mode} and clear global notice after recovery`, async t => {
    const f = fixture(t, locale); f.transport.mode = mode
-   assert.equal(await f.store.refreshFromAuthMe(), false); await settle()
-   assert.equal(f.store.isLoggedIn, true); assert.equal(f.storage.has('reliquary_token'), false); assert.equal(f.storage.has('reliquary_refresh_token'), false)
+   assert.equal(await f.store.refresh(), false); await settle()
+   assert.equal(f.store.hasValidSpace, true); assert.equal(f.storage.has('reliquary_token'), false); assert.equal(f.storage.has('reliquary_refresh_token'), false)
    assert.equal(f.location.href, '/platform/settings')
    assert.ok(visibleText(f.root).includes((locale === 'zh-CN' ? zh : en).error.serviceUnavailable))
    f.transport.mode = 'healthy'; await f.request.retryServiceAvailability(); await settle()
    assert.equal(f.request.serviceUnavailable.value, false); assert.equal(visibleText(f.root), '')
-   assert.equal(f.store.isLoggedIn, true); assert.equal(f.calls.at(-1)?.url, '/api/v1/auth/me')
+   assert.equal(f.store.hasValidSpace, true); assert.equal(f.calls.at(-1)?.url, '/api/v1/space')
    assert.equal(f.calls.at(-1)?.headers.Authorization, undefined)
   })
  }
 }
 test('a 401 neither refreshes a session nor redirects to the removed login page', async t => {
  const f = fixture(t); f.transport.mode = '401'
- assert.equal(await f.store.refreshFromAuthMe(), false)
- assert.equal(f.store.isLoggedIn, true); assert.equal(f.location.href, '/platform/settings')
+ assert.equal(await f.store.refresh(), false)
+ assert.equal(f.store.hasValidSpace, true); assert.equal(f.location.href, '/platform/settings')
  assert.ok(!f.calls.some(packet => packet.url?.includes('/auth/refresh')))
 })
 
 
+test('a corrupt workspace cache preserves the valid owner preferences during account removal', async t => {
+ const f = fixture(t, 'zh-CN', true, '{invalid JSON')
+ assert.equal(f.storage.get('Reliquary_theme'), 'dark')
+ assert.equal(f.storage.get('Reliquary_font_sans'), 'georgia')
+ const palette = evaluate('../stores/commandPalette.ts', f.modules).useCommandPaletteStore()
+ assert.deepEqual(palette.recentQueries, ['retained query'])
+ assert.equal(f.store.hasValidSpace, false)
+ assert.equal(await f.store.refresh(), true)
+ assert.equal(Number(f.store.space.id), 1)
+})
+
 for (const locale of ['zh-CN', 'en-US'] as const) {
- test(`${locale}: persisted browser session upgrades before loading current HTTP data`, async t => {
+ test(`${locale}: persisted workspace cache survives the account removal`, async t => {
   const f = fixture(t, locale, true)
-  assert.equal(f.store.user.space_id, '1')
-  assert.equal(f.store.effectiveSpaceId, 1)
-  assert.equal(f.store.currentSpaceName, 'Original personal space')
-  assert.equal(await f.store.refreshFromAuthMe(), true)
-  assert.equal(f.store.user.space_id, '1')
-  assert.equal(JSON.parse(f.storage.get('reliquary_user')!).space_id, '1')
+  assert.equal(String(f.store.space.id), '1')
+  assert.equal(Number(f.store.space.id), 1)
+  assert.equal(f.store.space.name, 'Original personal space')
+  assert.equal(f.storage.get('Reliquary_theme'), 'dark')
+  assert.equal(f.storage.get('Reliquary_font_sans'), 'georgia')
+  const palette = evaluate('../stores/commandPalette.ts', f.modules).useCommandPaletteStore()
+  assert.deepEqual(palette.recentQueries, ['retained query'])
+  assert.equal(f.storage.has('Reliquary_user-1_theme'), false)
+  assert.equal(await f.store.refresh(), true)
+  assert.equal(String(f.store.space.id), '1')
+  assert.equal(f.storage.has('reliquary_user'), false)
   assert.equal(JSON.parse(f.storage.get('reliquary_tenant')!).name, 'Personal')
  })
- test(`${locale}: personal space data loads through Axios interceptors, API and the real auth store with space_id`, async t => {
+ test(`${locale}: personal space data loads through Axios interceptors, API and the real space store with space_id`, async t => {
   const f = fixture(t, locale)
-  assert.equal(await f.store.refreshFromAuthMe(), true)
-  assert.equal(f.store.user.space_id, '1')
-  assert.equal(f.store.effectiveSpaceId, 1)
-  assert.equal(JSON.parse(f.storage.get('reliquary_user')!).space_id, '1')
+  assert.equal(await f.store.refresh(), true)
+  assert.equal(String(f.store.space.id), '1')
+  assert.equal(Number(f.store.space.id), 1)
+  assert.equal(f.storage.has('reliquary_user'), false)
   const loaded = await f.spaceApi.getSpaceInfo()
   assert.equal(loaded.data.space_id, 1)
   await f.spaceApi.updateSpace({ name: 'Updated personal space' })

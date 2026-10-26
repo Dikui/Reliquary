@@ -14,16 +14,11 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
       redirect: "/platform/entries",
     },
     {
-      // 登录已移除，旧书签回到资料页。
-      path: "/login",
-      redirect: "/platform/entries",
-    },
-    {
       path: "/platform",
       name: "Platform",
       redirect: "/platform/entries",
       component: () => import("../views/platform/index.vue"),
-      meta: { requiresInit: true, requiresAuth: true },
+      meta: { requiresInit: true },
       children: [
         ...removedPlatformRoutes,
         {
@@ -34,44 +29,44 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
           path: "settings",
           name: "settings",
           component: libraryPage,
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true }
         },
         {
           path: "libraries",
           redirect: "/platform/entries",
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true }
         },
         {
           path: "libraries/:legacyLibraryId/:pathMatch(.*)*",
           redirect: to => entryLocation('/platform/entries', to),
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true }
         },
         {
           path: "entries",
           name: "entries",
           component: libraryPage,
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true }
         },
-        { path: 'stories/:storyId?', name: 'stories', component: () => import('../views/library/StoriesPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
-        { path: 'evaluation', name: 'evaluation', component: () => import('../views/insights/EvaluationPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
-        { path: 'model-calls', name: 'modelCalls', component: () => import('../views/insights/ModelCallsPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
+        { path: 'stories/:storyId?', name: 'stories', component: () => import('../views/library/StoriesPage.vue'), meta: { requiresInit: true } },
+        { path: 'evaluation', name: 'evaluation', component: () => import('../views/insights/EvaluationPage.vue'), meta: { requiresInit: true } },
+        { path: 'model-calls', name: 'modelCalls', component: () => import('../views/insights/ModelCallsPage.vue'), meta: { requiresInit: true } },
         {
           path: "follows",
           name: "follows",
           component: () => import('../views/library/FollowFeed.vue'),
-          meta: { requiresInit: true, requiresAuth: true },
+          meta: { requiresInit: true },
         },
         {
           path: "operation-logs",
           name: "operationLogs",
           redirect: to => ({ path: '/platform/settings', query: { ...to.query, section: 'operation-logs' } }),
-          meta: { requiresInit: true, requiresAuth: true },
+          meta: { requiresInit: true },
         },
         {
           path: "search",
           name: "search",
           component: () => import('../views/library/SearchView.vue'),
-          meta: { requiresInit: true, requiresAuth: true },
+          meta: { requiresInit: true },
         },
         {
           path: "integrations",
@@ -88,7 +83,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
               },
             }
           },
-          meta: { requiresInit: true, requiresAuth: true }
+          meta: { requiresInit: true }
         },
         // Compatibility redirects for /platform/system/* URLs. System
         // administration surfaces live as dedicated sections inside the
@@ -97,25 +92,25 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         {
           path: "system",
           redirect: { path: "/platform/settings", query: { section: "system-global" } },
-          meta: { requiresInit: true, requiresAuth: true },
+          meta: { requiresInit: true },
         },
         {
           path: "system/settings",
           name: "systemSettings",
           redirect: { path: "/platform/settings", query: { section: "system-global" } },
-          meta: { requiresInit: true, requiresAuth: true },
+          meta: { requiresInit: true },
         },
         {
           path: "system/queues",
           name: "systemQueues",
           redirect: { path: "/platform/settings", query: { section: "runtime-queues" } },
-          meta: { requiresInit: true, requiresAuth: true },
+          meta: { requiresInit: true },
         },
         {
           path: ':pathMatch(.*)*',
           name: 'platformNotFound',
           component: notFound,
-          meta: { requiresInit: true, requiresAuth: true },
+          meta: { requiresInit: true },
         },
       ],
     },
@@ -124,7 +119,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
       path: '/:pathMatch(.*)*',
       name: 'notFound',
       component: notFound,
-      meta: { requiresAuth: false, requiresInit: false },
+      meta: { requiresInit: false },
     },
   ]
 }

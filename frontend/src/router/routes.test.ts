@@ -34,7 +34,7 @@ test('removed feature routes return to libraries with one notice', async () => {
     '/embed.html',
   ]
   for (const path of paths) {
-    await router.push('/login')
+    await router.push('/platform/settings')
     const previousNotices = notices
     await router.push(path)
     assert.equal(router.currentRoute.value.name, 'entries', path)
@@ -60,7 +60,7 @@ test('unknown root and platform paths match an application error page', async ()
   await router.push('/platform/does-not-exist')
   assert.equal(router.currentRoute.value.name, 'platformNotFound')
   assert.equal(router.currentRoute.value.matched[0].name, 'Platform')
-  assert.equal(router.currentRoute.value.meta.requiresAuth, true)
+  assert.equal(router.currentRoute.value.meta.requiresAuth, undefined)
 
   const source = readFileSync(new URL('../views/NotFound.vue', import.meta.url), 'utf8')
   assert.match(source, /<h1>\{\{ t\('navigation.pageNotFound'\) \}\}<\/h1>/)
@@ -98,12 +98,14 @@ test('settings deep links and system shortcuts mount one settings instance', asy
   }
 })
 
-test('root, platform and old login links return to entries and removed conversation pages show not found', async () => {
+test('root and platform return to entries while the retired login and conversation pages show not found', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  for (const path of ['/', '/platform', '/login']) {
+  for (const path of ['/', '/platform']) {
     await router.push(path)
     assert.equal(router.currentRoute.value.name, 'entries')
   }
+  await router.push('/login')
+  assert.equal(router.currentRoute.value.name, 'notFound')
   for (const path of ['/platform/chat/old-id', '/platform/creatChat', '/platform/agents', '/platform/entries/obsolete']) {
     await router.push(path)
     assert.equal(router.currentRoute.value.name, 'platformNotFound', path)

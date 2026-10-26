@@ -537,9 +537,9 @@ class AdminStorageTests(unittest.TestCase):
                 admin.snapshot_tree(source, self.root / "snapshot")
 
     def test_operational_credentials_removed_from_env_and_yaml(self):
-        safe, required = admin.sanitized_env({"JWT_SECRET": "a-unique-jwt-secret", "DB_PASSWORD": "db-password", "CUSTOM_SERVICE_URL": "https://user:pass@example.com", "VAULT_ROOT": "/data/vault"})
+        safe, required = admin.sanitized_env({"DB_PASSWORD": "db-password", "CUSTOM_SERVICE_URL": "https://user:pass@example.com", "VAULT_ROOT": "/data/vault"})
         self.assertEqual(safe, {"VAULT_ROOT": "/data/vault"})
-        self.assertEqual({row["name"] for row in required}, {"JWT_SECRET", "DB_PASSWORD", "CUSTOM_SERVICE_URL"})
+        self.assertEqual({row["name"] for row in required}, {"DB_PASSWORD", "CUSTOM_SERVICE_URL"})
         self.assertEqual(admin.sanitized_env({"MAX_COMPLETION_TOKENS": "4096"})[0], {"MAX_COMPLETION_TOKENS": "4096"})
         source = self.root / "source.yaml"
         source.write_text('model:\n  api_key: "secret-a"\n  credentials:\n    opaque: "secret-b"\n  name: local\n')
@@ -1042,7 +1042,7 @@ with mock.patch('subprocess.run') as docker:
         self.assertEqual(json.loads((self.root / ".maintenance-rebuild.json").read_text())["state"], "waiting_scheduler")
 
     def test_unpack_discards_source_host_control_paths_and_keeps_destination_overrides(self):
-        admin.write_env(self.root / ".env.template", {"RELIQUARY_ADMIN_VAULT_DIR": "/old-host/vault", "RELIQUARY_ADMIN_RESOURCES_DIR": "/old-host/uploads", "RELIQUARY_DIAGNOSTICS_DIR": "/old-host/diagnostics", "RELIQUARY_ADMIN_SERVER": "/old-host/server", "FEATURE_CONFIG": "preserved"})
+        admin.write_env(self.root / ".env.template", {"RELIQUARY_ADMIN_VAULT_DIR": "/old-host/vault", "RELIQUARY_ADMIN_RESOURCES_DIR": "/old-host/uploads", "RELIQUARY_DIAGNOSTICS_DIR": "/old-host/diagnostics", "RELIQUARY_ADMIN_SERVER": "/old-host/server", "FEATURE_CONFIG": "preserved", "JWT_SECRET": "retired-test-value"})
         class FakeContext:
             env = {"RELIQUARY_ADMIN_VAULT_DIR": "/new-host/vault", "REDIS_ADDR": "destination:6379", "REDIS_DB": "4", "REDIS_PASSWORD": "destination-password"}
         values = admin.restored_environment(FakeContext(), self.root)
@@ -1051,6 +1051,7 @@ with mock.patch('subprocess.run') as docker:
         self.assertNotIn("RELIQUARY_ADMIN_SERVER", values)
         self.assertNotIn("RELIQUARY_DIAGNOSTICS_DIR", values)
         self.assertEqual(values["FEATURE_CONFIG"], "preserved")
+        self.assertNotIn("JWT_SECRET", values)
         runtime = self.host_context(RELIQUARY_ADMIN_DIRECT="1", **FakeContext.env).runtime_env()
         for key in ("REDIS_ADDR", "REDIS_DB", "REDIS_PASSWORD"):
             self.assertEqual(values[key], FakeContext.env[key])

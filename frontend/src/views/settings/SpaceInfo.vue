@@ -41,7 +41,7 @@
             <p class="desc">{{ $t('space.details.nameDescription') }}</p>
           </div>
           <div class="setting-control">
-            <!-- 只读态：显示名称 + 编辑按钮（登录后可编辑）。
+            <!-- 只读态：显示名称 + 编辑按钮。
                原地编辑取代弹窗：少一层视觉打断，与其它行的展示节奏一致。 -->
             <template v-if="!editing">
               <span class="info-value">{{ displayName || '-' }}</span>
@@ -75,7 +75,7 @@
             <p class="desc">{{ $t('space.details.descriptionDescription') }}</p>
           </div>
           <div class="setting-control">
-            <!-- 只读态：显示描述（空时给占位）+ 编辑按钮（登录后可编辑）。
+            <!-- 只读态：显示描述（空时给占位）+ 编辑按钮。
                与名称同款"原地编辑"模式，少一层弹窗打断。 -->
             <template v-if="!editingDescription">
               <span class="info-value description-value" :class="{ 'is-empty': !spaceInfo?.description }">
@@ -167,13 +167,13 @@ import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, computed, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { getSpaceInfo, updateSpace as updateSpaceApi, type SpaceInfo } from '@/api/space'
-import { useAuthStore } from '@/stores/auth'
+import { useSpaceStore } from '@/stores/space'
 import { useI18n } from 'vue-i18n'
 import { workspaceName, workspaceDescription } from '@/utils/workspaceCopy'
 
 defineExpose({ confirmLeave: () => Promise.resolve(true) })
 const { t, locale } = useI18n()
-const authStore = useAuthStore()
+const spaceStore = useSpaceStore()
 
 // Reactive state
 const spaceInfo = ref<SpaceInfo | null>(null)
@@ -260,7 +260,7 @@ const saveSpaceDescription = async () => {
     savingDescription.value = true
     const resp = await updateSpaceApi({ description: newDesc })
     if (resp.success) {
-      // 本地立即回显，避免等 /auth/me 往返。
+      // 本地立即回显。
       if (spaceInfo.value) {
         spaceInfo.value = { ...spaceInfo.value, description: newDesc }
       }
@@ -292,12 +292,12 @@ const saveSpaceName = async () => {
     saving.value = true
     const resp = await updateSpaceApi({ name: newName })
     if (resp.success) {
-      // 本地立即回显，并同步登录态中的空间名称。
+      // 本地立即回显，并同步工作区名称。
       if (spaceInfo.value) {
         spaceInfo.value = { ...spaceInfo.value, name: newName }
       }
-      if (authStore.space && String(authStore.space.id) === String(spaceInfo.value?.id)) {
-        authStore.setSpace({ ...authStore.space, name: newName })
+      if (spaceStore.space && String(spaceStore.space.id) === String(spaceInfo.value?.id)) {
+        spaceStore.setSpace({ ...spaceStore.space, name: newName })
       }
 
       MessagePlugin.success(t('space.details.editNameSuccess'))

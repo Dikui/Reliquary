@@ -21,7 +21,7 @@ import (
 	"reliquary/internal/utils"
 )
 
-// Credential values live only in memory. Password hashes for local owner login
+// Credential values live only in memory. Password hashes in historical schemas
 // are intentionally absent from this inventory.
 func credentialNeedles(ctx context.Context, db *gorm.DB) ([]string, error) {
 	columns, err := Schema(ctx, db)

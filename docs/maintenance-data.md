@@ -261,7 +261,7 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
 
 `entries.vault_body` 保存各库的完整正文。已发布普通资料的维护副本继续从资料 Markdown 读取正文；自有资料和 AI产出的正文还保留在数据库与维护副本中，并与资料文件核对。未发布、待审和处理中的内容尚无文件时，在副本保留数据库已有原文及收录 metadata。分块不是正文恢复来源。图片由文件库及完整备份保护。文件库重建使用统一表头和按库目录，未登记的手放文件不会自动收录。
 
-账号密码哈希选择保留在 `config/users.json`，使仅用文件库重建后仍能用原密码登录。密码明文、登录 JWT、API Key、API Key 哈希、资源访问令牌哈希、ChatGPT 令牌和 OAuth 临时 state/nonce/verifier 均不输出。会话与临时访问记录的非密钥元信息全部保留，旧认证值不恢复。当前账号与模型配置保留非凭据部分，旧结构的解析器字段按历史版本规则读取；任意嵌套 JSON 中的凭据键、Authorization/Cookie、URL 用户信息和敏感 query 参数递归剔除。headers 与 custom_headers 只保留 Accept、Content-Type、User-Agent 三种明确公开的头，其他头即使自定义名称不含 token 也列为待填凭据。当前数据库的密文与解密后密钥、SYSTEM_AES_KEY、JWT_SECRET、数据库密码等只在内存中形成核对集合；副本的非密钥字符串中出现同一长凭据时，把对应字串替换为 [credential excluded]，保留其他文字。Basic 或 Bearer 开头的普通文章原文不会仅因开头词语而清空。ChatGPT 凭据中的 token_type、scope、username、email、client_id 等公开元信息不当作秘密字串，避免误删普通内容。被剔除字段写入待配置清单，不保留其值。迁移后模型需要配置、ChatGPT 账号需要重新登录，完成配置后再恢复对应功能。
+结构版本 48 起，`auth_tokens` 和 `users.password_hash` 已删除，新导出不再包含这两项。旧版本的 `config/users.json` 和登录令牌元信息仍可读取；导入版本 48 时只丢弃这两项，其余账号与业务数据继续严格核对。本机网页直接访问，不恢复密码登录。密码明文、登录 JWT、API Key、API Key 哈希、资源访问令牌哈希、ChatGPT 令牌和 OAuth 临时 state/nonce/verifier 均不输出。会话与临时访问记录的非密钥元信息全部保留，旧认证值不恢复。当前账号与模型配置保留非凭据部分，旧结构的解析器字段按历史版本规则读取；任意嵌套 JSON 中的凭据键、Authorization/Cookie、URL 用户信息和敏感 query 参数递归剔除。headers 与 custom_headers 只保留 Accept、Content-Type、User-Agent 三种明确公开的头，其他头即使自定义名称不含 token 也列为待填凭据。当前数据库的密文与解密后密钥、SYSTEM_AES_KEY、数据库密码和旧环境遗留的 JWT_SECRET 等只在内存中形成核对集合；副本的非密钥字符串中出现同一长凭据时，把对应字串替换为 [credential excluded]，保留其他文字。Basic 或 Bearer 开头的普通文章原文不会仅因开头词语而清空。ChatGPT 凭据中的 token_type、scope、username、email、client_id 等公开元信息不当作秘密字串，避免误删普通内容。被剔除字段写入待配置清单，不保留其值。迁移后模型需要配置、ChatGPT 账号需要重新登录，完成配置后再恢复对应功能。
 
 `.reliquary/` 是数据库的实时可读副本，不反向同步外部编辑。普通表和配置使用 UTF-8 JSON 数组，每行保留原始主键、时间戳和非派生字段；JSON 键稳定排序。操作日志每条一行 JSON，正常变化只追加，不改写既有条目。`verify --repair` 遇到损坏日志时，把坏原件移到 `quarantine/`，保留坏原件，再从数据库建立完整的新日志。这是显式修复操作，正常同步不会做这件事。
 
@@ -288,7 +288,7 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
 
 导入保持所有业务主键和时间戳，并在同一事务中恢复依赖顺序；`follows` 生成列由 PostgreSQL 重算，历史 `follow_ready_at` 只作为旧字段保留，不参与事件动态排序。结构版本 45 删除空间与分库查看状态；旧副本导入不重建已读时间，事件关注在事件导入后恢复。全部 serial sequence 重设到已恢复最大 ID。重建先恢复原始行和全文 chunks，不调用不可用的模型；模型准备完成后通过现有全部向量重建入口恢复向量。
 
-打包最后在原数据库的凭据内存集合下执行 secret-scan，扫描原始文件、Docker save 中的 gzip 层、Git bundle 解压后的全部对象及标准输入的解码 PostgreSQL 导出。不写出或打印核对集合；发现匹配只报告安全的相对文件位置并拒绝打包。密码哈希不加入集合。短凭据不进行任意子串替换，避免破坏主键和普通文字；敏感字段与整个值相等的文本仍剔除，打包扫描对短凭据也不放宽，有泄漏就停止。
+打包最后在原数据库的凭据内存集合下执行 secret-scan，扫描原始文件、Docker save 中的 gzip 层、Git bundle 解压后的全部对象及标准输入的解码 PostgreSQL 导出。不写出或打印核对集合；发现匹配只报告安全的相对文件位置并拒绝打包。历史版本的密码哈希不加入集合。短凭据不进行任意子串替换，避免破坏主键和普通文字；敏感字段与整个值相等的文本仍剔除，打包扫描对短凭据也不放宽，有泄漏就停止。
 
 原文路径 vault_body、original_content、raw_content、manual.content 与 intake.content 不按 URL 参数名称猜测凭据，公开教程中的 token 或 api_key 示例保持原样；这些原文仍按当前系统的真实凭据集合排除已知密钥。配置、来源 URL 和签名 URL 则剔除用户信息及敏感 query，访问密钥、对象存储密钥与签名字段也进入待填清单。
 
@@ -300,9 +300,9 @@ ParadeDB 的 paradedb._typmod_cache 保存持久 tokenizer 类型配置。当前
 
 resources/ 保留完整历史镜像，包括正常处理流程后来移除的原始上传文件。manifest.active_uploads 则另列当前上传目录的全部相对路径、SHA256 和大小，明确空数组表示当前没有上传文件，与旧格式缺少该字段区分。仅用文件库重建时，只把 active_uploads 恢复到新环境上传目录，历史镜像仍留在 .reliquary/resources/，既不删除原件，也不把历史文件重新变成当前上传文件。导入先核对清单路径安全、无重复、每项哈希及大小与已核对历史镜像一致，非法 null 清单也拒绝；任何差异在数据库写入前停止。verify 另行比较清单与实际当前上传目录，迁移核对仍严格比较所有当前上传文件。旧格式没有 active_uploads 时继续按原方式恢复全部历史镜像，无法推断当时哪些文件已退出当前目录，之后应核对清单并人工确认当前文件集合。
 
-认证表的元信息也是不可再生数据。auth_tokens 的用户、类型、过期时间、撤销状态与历史时间，resource_access_grants 的资源、权限范围、过期时间、撤销时间与创建时间，以及 chatgpt_login_attempts 的回调地址、client_id、account_id、过期时间进入 data/<table>.json。token、token_hash、state、nonce、verifier 始终缺席。恢复后的数据库仅为满足原有非空约束写入 reliquary-excluded- 前缀的非认证占位值；该值不具备 JWT 或 SHA256 token_hash 格式。OAuth state 使用安全元信息的规范 JSON 哈希与重复序号，不保存旧 state 或它的哈希，nonce 与 verifier 为空。相同元信息的多个尝试仍保留全部条数。原有 is_revoked、revoked_at 和所有历史时间戳不因失效处理而改写。
+以下认证元信息规则也用于读取历史备份。结构版本 47 及以前保留 auth_tokens 的用户、类型、过期时间、撤销状态与历史时间；版本 48 起这张表不再导出或导入。resource_access_grants 的资源、权限范围、过期时间、撤销时间与创建时间，以及 chatgpt_login_attempts 的回调地址、client_id、account_id、过期时间进入 data/<table>.json。token、token_hash、state、nonce、verifier 始终缺席。恢复后的数据库仅为满足原有非空约束写入 reliquary-excluded- 前缀的非认证占位值；该值不具备 JWT 或 SHA256 token_hash 格式。OAuth state 使用安全元信息的规范 JSON 哈希与重复序号，不保存旧 state 或它的哈希，nonce 与 verifier 为空。相同元信息的多个尝试仍保留全部条数。原有 is_revoked、revoked_at 和所有历史时间戳不因失效处理而改写。
 
-初始恢复仍逐表严格核对这些认证元信息。凭据配置期间重新登录或生成新临时访问会新增记录，只有显式 --allow-reconfiguration-append 才接受上述三张表与操作日志的新安全行；auth_tokens 与 resource_access_grants 的旧 ID 行逐列保持，OAuth 尝试按安全元信息多重集合核对旧行和重复次数。新增行不会放宽旧行修改、删除或其他业务表的核对。原 --allow-operation-log-append 仍只允许新日志，未扩大到认证表。
+初始恢复仍逐表严格核对这些认证元信息。凭据配置期间重新登录或生成新临时访问会新增记录，只有显式 --allow-reconfiguration-append 才接受仍存在的认证表与操作日志的新安全行；resource_access_grants 的旧 ID 行逐列保持，auth_tokens 的同样规则仅用于版本 47 及以前，OAuth 尝试按安全元信息多重集合核对旧行和重复次数。新增行不会放宽旧行修改、删除或其他业务表的核对。原 --allow-operation-log-append 仍只允许新日志，未扩大到认证表。
 
 读取版本 4 及以前备份时，旧订阅源的 credentials、鉴权头与配置中的秘密仍递归剔除，导出文件不含可用凭据。当前版本不提供订阅源凭据填写或连接验证入口。
 

@@ -65,7 +65,7 @@ func TestPersonalUserAndAPIKeyCanAccessAllSystemRoutes(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	cfg := &config.Config{}
 	spaceSvc := service.NewSpaceService(apprepo.NewSpaceRepository(f.db))
-	users := service.NewUserService(cfg, apprepo.NewUserRepository(f.db), spaceSvc)
+	users := service.NewUserService(apprepo.NewUserRepository(f.db))
 	keys := service.NewAPIKeyService(apprepo.NewAPIKeyRepository(f.db))
 	h := handler.NewSystemHandler(cfg, spaceSvc, users, personalSystemRouteSettings{}, keys, personalSystemRouteInspector{}, nil)
 	r := gin.New()

@@ -15,7 +15,7 @@ func TestAuthenticationDatabaseOutagePreservesCredentialErrors(t *testing.T) {
 		value  string
 		apiKey bool
 	}{{"invalid-token", false}, {"invalid-key", true}} {
-		response := personalRequest(t, f.router, http.MethodGet, "/api/v1/auth/me", "", credential.value, credential.apiKey)
+		response := personalRequest(t, f.router, http.MethodGet, "/api/v1/space", "", credential.value, credential.apiKey)
 		require.Equal(t, http.StatusUnauthorized, response.Code, response.Body.String())
 	}
 	pool, err := f.db.DB()
@@ -26,7 +26,7 @@ func TestAuthenticationDatabaseOutagePreservesCredentialErrors(t *testing.T) {
 		apiKey      bool
 	}{{"local user", "", false}, {"API key header", f.key, true}, {"API key bearer", f.key, false}} {
 		t.Run(credential.name, func(t *testing.T) {
-			response := personalRequest(t, f.router, http.MethodGet, "/api/v1/auth/me", "", credential.value, credential.apiKey)
+			response := personalRequest(t, f.router, http.MethodGet, "/api/v1/space", "", credential.value, credential.apiKey)
 			require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
 			require.Equal(t, "5", response.Header().Get("Retry-After"))
 			var body struct {

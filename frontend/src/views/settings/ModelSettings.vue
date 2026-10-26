@@ -25,11 +25,6 @@
         <p class="builtin-hint-text">
           {{ $t('modelSettings.builtinModels.descriptionAdmin') }}
         </p>
-        <a class="doc-link" href="http://192.168.1.146:3000/dikui/reliquary/src/branch/main/docs/builtin-models.md" target="_blank"
-          rel="noopener noreferrer">
-          {{ $t('modelSettings.builtinModels.viewGuide') }}
-          <t-icon name="link" class="link-icon" />
-        </a>
       </div>
     </div>
 
@@ -784,10 +779,6 @@ onMounted(() => {
   font-size: 13px;
   line-height: 1.55;
   color: var(--td-text-color-secondary);
-}
-
-.builtin-models-hint .doc-link {
-  font-size: 13px;
 }
 
 .model-list-loading {

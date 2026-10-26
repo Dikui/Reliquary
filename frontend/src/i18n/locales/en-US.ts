@@ -774,11 +774,9 @@ export default {
     batchManage: 'Batch manage',
   "library": "Materials",
   "settings": "Settings",
-  "logout": "Logout",
   "search": "Knowledge search",
   "collapseSidebar": "Collapse sidebar",
   "expandSidebar": "Expand sidebar",
-  "logoutSuccess": "Logged out successfully"
 },
   navigation: {
     removedFeature: 'This feature has been removed. You have been returned to the materials page.',
@@ -1315,7 +1313,6 @@ export default {
     spaceInfo: 'Workspace Info',
     workspaceSettings: 'Workspace Settings',
     navGroups: {
-      account: 'Account',
       workspace: 'Workspace',
       modelsRuntime: 'Models',
       dataExtensions: 'Data & Extensions',
@@ -1347,13 +1344,6 @@ export default {
   initialization: {
     skip: 'Skip',
     next: 'Next'
-  },
-  authStore: {
-    errors: {
-      parseUserFailed: 'Failed to parse user information',
-      parseSpaceFailed: 'Failed to parse workspace information',
-
-    }
   },
   common: {
     operation: 'Actions',
@@ -1390,8 +1380,6 @@ export default {
     all: 'All',
     clear: 'Clear',
     website: 'Official Website',
-    github: 'GitHub',
-    githubStarTip: 'Open the Reliquary repository on GitHub',
     on: 'On',
     off: 'Off',
     confirmDelete: 'Confirm Delete',
@@ -1406,8 +1394,6 @@ export default {
     library: 'Library',
     noResult: 'No results',
     remove: 'Remove',
-    avatar: 'Avatar',
-    defaultUser: 'User',
     copyFailed: 'Copy failed',
     retry: 'Retry',
     expand: 'Expand',
@@ -1641,14 +1627,6 @@ export default {
       docLabel: 'API Documentation',
       docDescription: 'View complete API documentation and examples,',
       openDoc: 'Open documentation',
-      userIdLabel: 'User ID',
-      userIdDescription: 'Your unique user identifier',
-      usernameLabel: 'Username',
-      usernameDescription: 'Your login username',
-      emailLabel: 'Email',
-      emailDescription: 'Your registered email address',
-      createdAtLabel: 'Registration Time',
-      createdAtDescription: 'Time when the account was created',
     }
   },
   system: {
@@ -1658,7 +1636,7 @@ export default {
     credentialEncryptionEnabledDescription: "Model API keys are encrypted with SYSTEM_AES_KEY.",
     credentialEncryptionDisabledDescription: "SYSTEM_AES_KEY is not set. Model API keys are stored in plaintext.",
     title: 'System Information',
-    sectionDescription: 'View system version information and user account configuration',
+    sectionDescription: 'View system versions, runtime status and credential storage',
     loadingInfo: 'Loading information...',
     retry: 'Retry',
     versionLabel: 'App Version',
@@ -1682,9 +1660,7 @@ export default {
     dbVersionDescription: 'Current database migration version',
     dbMigrationFailedTag: 'Migration failed',
     dbMigrationFailedTitle: 'Database migration failed',
-    dbMigrationFailedDesc: 'The startup database migration did not complete successfully. Some tables or indexes may be missing, which can break knowledge ingestion and other features. Check the troubleshooting guide below first; if the issue persists, report it via the link.',
-    dbMigrationViewDocs: 'View troubleshooting guide',
-    dbMigrationReportIssue: 'Can\'t fix it? Report an issue',
+    dbMigrationFailedDesc: 'The startup database migration did not complete. Some tables or indexes may be missing. Use the error details below to investigate; ingestion and other features may be unavailable until migration succeeds.',
     keywordIndexEngineLabel: 'Keyword Index Engine',
     keywordIndexEngineDescription: 'Currently used keyword index engine',
     unknown: 'Unknown',
@@ -2000,9 +1976,6 @@ export default {
     invalidImageLink: 'Invalid image link',
     missingLibraryId: 'Missing library ID',
     streamFailed: 'Stream connection failed',
-    auth: {
-      getUserFailed: 'Failed to get user info'
-    },
     model: {
       createFailed: 'Failed to create model',
       getFailed: 'Failed to get model',
@@ -2204,8 +2177,6 @@ export default {
   general: {
     title: 'General Settings',
     allSettings: 'All Settings',
-    personalSettings: 'Personal Settings',
-    helpAndDocs: 'Help & Documentation',
     description: 'Configure language, appearance and other basic options',
     settings: 'Settings',
     close: 'Close Settings'
@@ -2330,7 +2301,6 @@ export default {
       title: 'Built-in Models',
       description: "View and edit built-in model configuration here.",
       descriptionAdmin: "View and edit built-in model configuration here.",
-      viewGuide: 'View Built-in Models Guide'
     },
     builtinTag: 'Built-in',
     confirmDelete: 'Delete model "{name}"?',
@@ -2587,7 +2557,7 @@ export default {
       mcpUrlDesc: 'Connect via Streamable HTTP to search, read materials, ingest, review pending materials, set stars and write reports. Access over the intranet with the same API key: Authorization: Bearer API_KEY.',
       copyMcpUrl: 'Copy MCP server URL',
       apiKeys: 'API Keys',
-      apiKeysDesc: "API keys can access all content in your personal space and interfaces such as ingest and search. Some account settings, including ChatGPT sign-in and maintenance schedules, still require signing in on the web.",
+      apiKeysDesc: "API keys can access all content in your personal workspace and interfaces such as ingest and search. Manage ChatGPT connections and maintenance schedules in the local web interface.",
       createApiKey: 'Create API Key',
       createApiKeyDialogDesc: 'Set a name and optional expiry for this API key.',
       noApiKeys: 'No API keys',
@@ -2640,10 +2610,6 @@ export default {
     removeFailed: 'Failed to remove credential',
     confirmRemovePrompt: 'Remove this credential? This cannot be undone.',
     confirmRemove: 'Confirm remove'
-  },
-  userProfile: {
-    title: 'User Profile',
-    description: 'View your account info (user ID, username, email, creation time).',
   },
   countCopy: {
     "entities": "{count} entity | {count} entities",

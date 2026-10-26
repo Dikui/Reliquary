@@ -2,7 +2,6 @@ import { ref } from 'vue'
 import {
   loadPreference,
   savePreference,
-  migratePreferencesIntoUser,
 } from './preferenceStorage'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
@@ -54,11 +53,4 @@ export function initTheme() {
       applyTheme('system')
     }
   })
-}
-
-/** Re-read preferences from storage (call after login / logout). */
-export function reloadThemeFromStorage() {
-  migratePreferencesIntoUser()
-  currentTheme.value = loadTheme()
-  applyTheme(currentTheme.value)
 }

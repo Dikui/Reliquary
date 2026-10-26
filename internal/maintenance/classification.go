@@ -105,7 +105,7 @@ func sortedTables(inventories ...map[string]Rule) []string {
 }
 
 // These columns contain credentials, including one-way API authentication
-// hashes. The account password hash is retained to preserve owner login.
+// hashes. Frozen legacy login records remain readable for older backups.
 var SecretColumns = map[string]string{
 	"auth_tokens": "token", "api_keys": "key_hash api_key", "resource_access_grants": "token_hash",
 	"spaces": "credentials", "chatgpt_accounts": "credentials", "chatgpt_login_attempts": "state nonce verifier",

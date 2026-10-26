@@ -34,7 +34,7 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
     '@/api/search': { getSearchOptions: async () => ({ success: true, data: { entities: [], } }) },
     'vue-i18n': { useI18n: () => ({ t, tm: () => [], locale: ref(locale) }) },
     '@/utils/personalServerError': personalError,
-    '@/stores/auth': { useAuthStore: () => ({ currentSpaceId: '1', isLoggedIn: false }) },
+    '@/stores/space': { useSpaceStore: () => ({ space: null }) },
     '@/components/settings/SettingDrawer.vue': { default: stub, __esModule: true },
     '@/utils/api-base': { getApiBaseUrl: () => 'http://localhost' },
     '@/utils/clipboard': { copyWithToast() {} },

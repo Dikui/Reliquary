@@ -377,11 +377,13 @@ class Context:
 
     def runtime_env(self):
         if self.direct or self.local_server:
-            values = {k: v for k, v in self.env.items() if k.startswith(("RELIQUARY_", "DB_", "REDIS_", "VAULT_", "OLLAMA_", "LOCAL_STORAGE_", "SSRF_", "CHATGPT_")) or k in {"SYSTEM_AES_KEY", "JWT_SECRET", "APP_PORT", "FRONTEND_PORT", "TZ"}}
+            values = {k: v for k, v in self.env.items() if k.startswith(("RELIQUARY_", "DB_", "REDIS_", "VAULT_", "OLLAMA_", "LOCAL_STORAGE_", "SSRF_", "CHATGPT_")) or k in {"SYSTEM_AES_KEY", "APP_PORT", "FRONTEND_PORT", "TZ"}}
         else:
             config = json.loads(self.compose("config", "--format", "json"))
             values = config["services"].get(self.app, {}).get("environment", {})
-        return {**read_env(self.root / ".env"), **{k: str(v) for k, v in values.items() if v is not None}}
+        runtime = {**read_env(self.root / ".env"), **{k: str(v) for k, v in values.items() if v is not None}}
+        runtime.pop("JWT_SECRET", None)
+        return runtime
 
     def host_storage_path(self, name):
         legacy = "RELIQUARY_ADMIN_VAULT_DIR" if name == "vault" else "RELIQUARY_ADMIN_RESOURCES_DIR"
@@ -1008,12 +1010,13 @@ def backup(ctx, args):
 
 def restored_environment(ctx, package, env_path=None):
     values = read_env(package / ".env.template")
+    values.pop("JWT_SECRET", None)
     # Maintenance control paths describe the old host, not application data.
     # Accept destination storage overrides only from the current invocation.
     for key in list(values):
         if key.startswith("RELIQUARY_ADMIN_") or key in {"RELIQUARY_VAULT_DIR", "RELIQUARY_FILES_DIR", "RELIQUARY_DIAGNOSTICS_DIR", "BACKUP_DIR", "RELIQUARY_BACKUP_DIRECTORY"}:
             values.pop(key)
-    values.update({"SYSTEM_AES_KEY": secrets.token_hex(16), "JWT_SECRET": secrets.token_hex(32), "DB_PASSWORD": secrets.token_urlsafe(32)})
+    values.update({"SYSTEM_AES_KEY": secrets.token_hex(16), "DB_PASSWORD": secrets.token_urlsafe(32)})
     values.setdefault("VAULT_ROOT", "/data/vault")
     values.setdefault("LOCAL_STORAGE_BASE_DIR", "/data/files")
     values.update(RELIQUARY_VAULT_DIR="${HOME}/Reliquary/vault", RELIQUARY_FILES_DIR="${HOME}/Reliquary/files", BACKUP_DIR="${HOME}/Backups/Reliquary")
@@ -1114,7 +1117,9 @@ def print_credentials(required, preserve_version=False):
     print("Reconfiguration checklist:")
     for item in required:
         name = item.get("name", item.get("id", ""))
-        if item.get("kind") == "environment" and name in {"SYSTEM_AES_KEY", "JWT_SECRET", "DB_PASSWORD", "POSTGRES_PASSWORD"}:
+        if item.get("kind") == "environment" and name == "JWT_SECRET":
+            continue
+        if item.get("kind") == "environment" and name in {"SYSTEM_AES_KEY", "DB_PASSWORD", "POSTGRES_PASSWORD"}:
             print(f"  [x] environment: {name} / regenerated for this environment")
         else:
             print(f"  [ ] {item.get('kind', 'credential')}: {name} / {', '.join(item.get('fields', []))}")
@@ -1716,7 +1721,7 @@ def drill_runtime(ctx, root, package, database):
     redis_name = container + "-redis"
     native = ctx.local_server or ctx.direct
     runtime = ctx.runtime_env()
-    overrides = {"DB_NAME": database, "SYSTEM_AES_KEY": secrets.token_hex(16), "JWT_SECRET": secrets.token_hex(32),
+    overrides = {"DB_NAME": database, "SYSTEM_AES_KEY": secrets.token_hex(16),
                  "VAULT_ROOT": str(root / "vault"), "LOCAL_STORAGE_BASE_DIR": str(root / "resources"),
                  "REDIS_DB": "0", "REDIS_PASSWORD": ""}
     if getattr(ctx, "database_only", False):

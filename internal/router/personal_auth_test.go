@@ -64,7 +64,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	cfg := &config.Config{}
 	spaceRepo := apprepo.NewSpaceRepository(db)
 	spaceSvc := service.NewSpaceService(spaceRepo)
-	users := service.NewUserService(cfg, apprepo.NewUserRepository(db), spaceSvc)
+	users := service.NewUserService(apprepo.NewUserRepository(db))
 	keys := service.NewAPIKeyService(apprepo.NewAPIKeyRepository(db))
 	entryRepo := apprepo.NewEntryRepository(db)
 	libraryRepo := apprepo.NewLibraryRepository(db)
@@ -84,13 +84,12 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 		ModelHandler:   handler.NewModelHandler(models),
 		EntityHandler:  handler.NewEntityHandler(service.NewEntityService(db, nil)),
 		SpaceHandler:   handler.NewSpaceHandler(spaceSvc, keys, users, library, cfg, settings),
-		AuthHandler:    handler.NewAuthHandler(users, spaceSvc), SystemHandler: system,
+		SystemHandler:  system,
 	}
 	guards := newAccessGuards(library, entry, nil)
 	r := gin.New()
 	r.Use(middleware.ErrorHandler(), middleware.Auth(spaceSvc, users, keys))
 	v1 := r.Group("/api/v1")
-	RegisterAuthRoutes(v1, params.AuthHandler, guards)
 	RegisterSpaceRoutes(v1, params.SpaceHandler, guards)
 	RegisterSystemRoutes(v1, system, guards)
 	RegisterModelRoutes(v1, params.ModelHandler, nil, guards)
@@ -121,7 +120,7 @@ func TestPersonalLocalAccessAndAPIKeys(t *testing.T) {
 	var usersCount int64
 	require.NoError(t, f.db.Model(&types.User{}).Count(&usersCount).Error)
 	require.EqualValues(t, 1, usersCount)
-	for _, path := range []string{"/api/v1/system/settings", "/api/v1/system/runtime/queues", "/api/v1/models", "/api/v1/space/api-keys", "/api/v1/auth/me"} {
+	for _, path := range []string{"/api/v1/system/settings", "/api/v1/system/runtime/queues", "/api/v1/models", "/api/v1/space/api-keys", "/api/v1/space"} {
 		rec := personalRequest(t, f.router, http.MethodGet, path, "", "invalid-key", true)
 		require.Equal(t, http.StatusUnauthorized, rec.Code, path+" "+rec.Body.String())
 		for _, credential := range []string{"", f.key} {
@@ -144,7 +143,7 @@ func TestCredentialLessAccessRejectsCrossSiteAndRemoteHosts(t *testing.T) {
 		"rebinding host":  func(r *http.Request) { r.Host = "attacker.example:8080" },
 		"lan address":     func(r *http.Request) { r.Host = "192.168.1.20" },
 	} {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/space", nil)
 		req.Host = "localhost"
 		mutate(req)
 		rec := httptest.NewRecorder()
@@ -152,7 +151,7 @@ func TestCredentialLessAccessRejectsCrossSiteAndRemoteHosts(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, rec.Code, name)
 	}
 	for _, host := range []string{"127.0.0.1:8080", "[::1]:8080", "localhost"} {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/space", nil)
 		req.Host = host
 		req.Header.Set("Sec-Fetch-Site", "same-origin")
 		rec := httptest.NewRecorder()

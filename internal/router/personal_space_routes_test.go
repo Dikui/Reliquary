@@ -69,6 +69,7 @@ func TestPersonalSpaceRoutesUseAuthenticatedSpace(t *testing.T) {
 func TestPersonalOldManagementRoutesReturnNotFound(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	for _, path := range []string{
+		"/api/v1/auth/me", "/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh", "/api/v1/auth/logout",
 		"/api/v1/space/model-tiers", "/api/v1/model-routing", "/api/v1/spaces/1", "/api/v1/spaces/1/api-keys", "/api/v1/spaces/1/api-keys/1", "/api/v1/spaces/kv/retrieval-config", "/api/v1/spaces/model-tiers",
 		"/api/v1/system/admin/settings", "/api/v1/system/admin/settings/file.max_size_mb", "/api/v1/system/admin/runtime/queues",
 		"/api/v1/system/admin/runtime/queues/default/tasks", "/api/v1/system/admin/runtime/queues/default/archived",

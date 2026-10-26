@@ -19,11 +19,6 @@ func RegisterSpaceRoutes(r *gin.RouterGroup, h *handler.SpaceHandler, g *accessG
 	routes.DELETE("/api-keys/:key_id", h.DeleteAPIKey)
 }
 
-// RegisterAuthRoutes registers authentication routes
-func RegisterAuthRoutes(r *gin.RouterGroup, h *handler.AuthHandler, g *accessGuards) {
-	r.GET("/auth/me", h.GetCurrentUser)
-}
-
 func RegisterSystemRoutes(r *gin.RouterGroup, h *handler.SystemHandler, g *accessGuards) {
 	routes := r.Group("/system")
 	routes.GET("/capabilities", h.GetDeploymentCapabilities)

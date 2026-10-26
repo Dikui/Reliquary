@@ -1,119 +1,63 @@
-/**
- * Shared localStorage utilities for per-user UI preferences (theme, fonts).
- *
- * Storage layout: Reliquary_${userId}_${suffix}, where userId is the active
- * user's id or "anon" before login. Read paths are intentionally narrow —
- * no cross-namespace fallbacks — so one user's preferences cannot bleed
- * into another user's session.
- *
- * One-shot migration adopts pre-existing values into the current user's
- * namespace at login time:
- *   - Legacy un-namespaced keys (Reliquary_${suffix}) from earlier branch
- *     versions are inherited and removed.
- *   - The "anon" namespace (used while no user is logged in) is also
- *     adopted and cleared, so the next user to log in cannot inherit it.
- */
-
-const PREFERENCE_SUFFIXES = [
-  'theme',
-  'font_sans',
-  'font_mono',
-  'font_size',
-] as const
-
-export function readUserId(): string {
-  try {
-    const raw = localStorage.getItem('reliquary_user')
-    if (!raw) return 'anon'
-    const parsed = JSON.parse(raw)
-    return parsed?.id ? String(parsed.id) : 'anon'
-  } catch {
-    return 'anon'
-  }
-}
-
+/** Browser-local preferences for the personal workspace. */
 export function safeGetItem(key: string): string | null {
-  try {
-    return localStorage.getItem(key)
-  } catch {
-    return null
-  }
+  try { return localStorage.getItem(key) } catch { return null }
 }
 
-export function safeSetItem(key: string, value: string): void {
+export function safeSetItem(key: string, value: string): boolean {
   try {
     localStorage.setItem(key, value)
+    return true
   } catch (err) {
-    // Quota exceeded, disabled storage, private mode — surface in DevTools
-    // so the issue is at least diagnosable, but don't break the UI.
     console.warn(`[Reliquary] failed to persist preference "${key}":`, err)
+    return false
   }
 }
 
 export function safeRemoveItem(key: string): void {
-  try {
-    localStorage.removeItem(key)
-  } catch {
-    // Same conditions as setItem; silent best-effort.
-  }
-}
-
-export function userKey(suffix: string): string {
-  return `Reliquary_${readUserId()}_${suffix}`
+  try { localStorage.removeItem(key) } catch { /* Storage may be disabled. */ }
 }
 
 export function loadPreference(suffix: string): string | null {
-  return safeGetItem(userKey(suffix))
+  return safeGetItem(`Reliquary_${suffix}`)
 }
 
 export function savePreference(suffix: string, value: string): void {
-  safeSetItem(userKey(suffix), value)
+  safeSetItem(`Reliquary_${suffix}`, value)
 }
 
-let migratedForUser: string | null = null
+// Adopt the former account's preferences before removing its cached profile.
+function migrateLocalPreferences() {
+  let userId = 'anon'
+  let spaceId = 'none'
+  try {
+    const user = JSON.parse(safeGetItem('reliquary_user') || 'null')
+    userId = String(user?.id || 'anon')
+    spaceId = String(user?.space_id || user?.tenant_id || 'none')
+    const space = JSON.parse(safeGetItem('reliquary_tenant') || 'null')
+    spaceId = String(space?.id || spaceId)
+  } catch { /* Keep any valid owner identity if the workspace cache is corrupt. */ }
 
-/**
- * Adopt legacy and anon preferences into the current user's namespace, then
- * remove the source keys. Idempotent per session per user — repeat calls for
- * the same userId are no-ops. Safe to call before the user is logged in
- * (it returns early when userId === "anon").
- */
-export function migratePreferencesIntoUser(): void {
-  const userId = readUserId()
-  if (userId === 'anon') return
-  if (migratedForUser === userId) return
-  migratedForUser = userId
-
-  for (const suffix of PREFERENCE_SUFFIXES) {
-    const target = `Reliquary_${userId}_${suffix}`
-    const targetExists = safeGetItem(target) !== null
-
-    const anonKey = `Reliquary_anon_${suffix}`
-    const legacyKey = `Reliquary_${suffix}`
-
-    if (!targetExists) {
-      const anonValue = safeGetItem(anonKey)
-      if (anonValue !== null) {
-        safeSetItem(target, anonValue)
-      } else {
-        const legacyValue = safeGetItem(legacyKey)
-        if (legacyValue !== null) {
-          safeSetItem(target, legacyValue)
-        }
+  const sources: Record<string, string[]> = {
+    theme: [`Reliquary_${userId}_theme`, 'Reliquary_anon_theme'],
+    font_sans: [`Reliquary_${userId}_font_sans`, 'Reliquary_anon_font_sans'],
+    font_mono: [`Reliquary_${userId}_font_mono`, 'Reliquary_anon_font_mono'],
+    font_size: [`Reliquary_${userId}_font_size`, 'Reliquary_anon_font_size'],
+    recent_queries: [`reliquary_cmdk_recent:${userId}:${spaceId}`],
+  }
+  let saved = true
+  for (const [suffix, keys] of Object.entries(sources)) {
+    if (loadPreference(suffix) === null) {
+      const value = keys.map(safeGetItem).find(value => value !== null)
+      if (value !== undefined && !safeSetItem(`Reliquary_${suffix}`, value)) {
+        saved = false
+        continue
       }
     }
-
-    // Always clean up source keys so subsequent users cannot inherit them.
-    safeRemoveItem(anonKey)
-    safeRemoveItem(legacyKey)
+    keys.forEach(safeRemoveItem)
   }
+  if (saved) safeRemoveItem('reliquary_user')
+  safeRemoveItem('reliquary_token')
+  safeRemoveItem('reliquary_refresh_token')
 }
 
-/** Resets the per-session migration latch (used when the active user changes). */
-export function resetMigrationLatch(): void {
-  migratedForUser = null
-}
-
-// Run migration once at module load so the composables that read from
-// storage see post-migration values when initialising their refs.
-migratePreferencesIntoUser()
+migrateLocalPreferences()

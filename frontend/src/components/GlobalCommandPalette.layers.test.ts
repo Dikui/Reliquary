@@ -77,7 +77,7 @@ for (const locale of ['en-US', 'zh-CN']) for (const timeline of [false, true]) t
   try {
     const { Dialog, Drawer, ImageViewer } = require('tdesign-vue-next')
     const modules: Record<string, any> = {
-      '@/stores/commandPalette': { useCommandPaletteStore: () => store }, '@/stores/auth': { useAuthStore: () => ({}) },
+      '@/stores/commandPalette': { useCommandPaletteStore: () => store },
       'vue-router': { useRoute: () => ({ name: 'search', query: {} }), useRouter: () => ({ push: (value: any) => navigations.push(value) }) },
       './GlobalCommandPalette/useSearch': { useCmdkSearch: () => ({ query, libraryScope: ref([]), composing: ref(false), loading: ref(false), hasSearched: ref(true), fileGroups, clearResults() {}, searchError: ref(''), retry() {} }) },
       './GlobalCommandPalette/visibleFileChunks': visible, './GlobalCommandPalette/useHighlight': highlights, '@/utils/markdownPlainText': excerpts, '@/utils/bodyReference': references,

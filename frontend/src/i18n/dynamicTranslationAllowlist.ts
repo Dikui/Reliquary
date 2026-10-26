@@ -9,13 +9,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     expressions: ['`ikb18.${draft.template}`', '`ikb18.${draft.template}Hint`', '`ikb18.${value}`', '`ikb18.${value}Hint`', '`ikb18.${newLibrary.template}Hint`'],
     reason: 'Four immutable library template enums and their descriptions are tested in both locales.',
   },
-  {
-    "file": "api/auth.ts",
-    "expressions": [
-      "key"
-    ],
-    "reason": "API helpers receive literal keys from their audited call sites."
-  },
+
   {
     "file": "api/initialization.ts",
     "expressions": [

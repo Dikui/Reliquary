@@ -19,7 +19,7 @@
       </t-tooltip>
       </section>
     </nav>
-    <div class="menu_bottom"><UserMenu :collapsed="sidebarCollapsed" /></div>
+    <div class="menu_bottom"><SettingsMenu :collapsed="sidebarCollapsed" /></div>
   </aside>
 </template>
 <script setup lang="ts">
@@ -29,7 +29,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMenuStore } from '@/stores/menu'
 import { useUIStore } from '@/stores/ui'
-import UserMenu from '@/components/UserMenu.vue'
+import SettingsMenu from '@/components/SettingsMenu.vue'
 const props = defineProps<{ mobileOverlay?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()

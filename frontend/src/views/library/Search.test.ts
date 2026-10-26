@@ -114,7 +114,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const palette = component('../../components/GlobalCommandPalette.vue', {
       pinia: { storeToRefs: (value: unknown) => value },
       '@/stores/commandPalette': { useCommandPaletteStore: () => store },
-      '@/stores/auth': { useAuthStore: () => ({}) },
       'vue-router': { useRoute: () => ({ name: 'search' }), useRouter: () => ({ push() {} }) },
       './GlobalCommandPalette/useSearch': hook,
       './GlobalCommandPalette/visibleFileChunks': visibleFileChunks,

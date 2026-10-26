@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useSpaceStore } from '@/stores/space'
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import type { DeploymentCapabilityKey } from '@/config/deploymentCapabilities'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -12,13 +12,13 @@ const router = createRouter({
   routes: createApplicationRoutes(import.meta.env.DEV),
 });
 
-// 路由守卫：载入唯一用户与部署能力
+// 路由守卫：载入工作区与部署能力
 router.beforeEach(async (to, from, next) => {
-  const authStore = useAuthStore()
+  const spaceStore = useSpaceStore()
 
-  // 没有登录：首次进入时从 /auth/me 取唯一用户和空间。
-  if (!authStore.hasValidSpace) {
-    await authStore.refreshFromAuthMe()
+  // 首次进入时载入个人工作区。
+  if (!spaceStore.hasValidSpace) {
+    await spaceStore.refresh()
   }
 
   // 部署能力只描述“后端是否提供该功能”，不反映服务健康或是否已配置。

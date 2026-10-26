@@ -138,21 +138,6 @@
           <template #default>
             <p class="migration-error-desc">{{ $t('system.dbMigrationFailedDesc') }}</p>
             <pre class="migration-error-detail">{{ systemInfo.db_migration_error }}</pre>
-            <div class="migration-error-actions">
-              <t-link
-                theme="primary"
-                :href="troubleshootingDocsURL"
-                target="_blank"
-                rel="noopener noreferrer"
-              >{{ $t('system.dbMigrationViewDocs') }}</t-link>
-              <span class="migration-error-actions-sep">·</span>
-              <t-link
-                theme="primary"
-                :href="reportIssueURL"
-                target="_blank"
-                rel="noopener noreferrer"
-              >{{ $t('system.dbMigrationReportIssue') }}</t-link>
-            </div>
           </template>
         </t-alert>
       </div>
@@ -234,38 +219,6 @@ function formatUptime(totalSeconds: number): string {
   if (seconds > 0 && days === 0) parts.push(t('system.uptimeSeconds', { n: seconds }))
   return parts.join(' ')
 }
-
-const troubleshootingDocsURL =
-  'http://192.168.1.146:3000/dikui/reliquary/src/branch/main/docs/migration-troubleshooting.md'
-
-// Pre-fills a new issue with the current migration error so users don't have to
-// paste it manually. Body is intentionally minimal — the bug template will fill
-// in the rest. Encode aggressively to survive newlines / quotes.
-const reportIssueURL = computed(() => {
-  const base = 'http://192.168.1.146:3000/dikui/reliquary/issues/new'
-  const params = new URLSearchParams({
-    template: 'bug_report.yml',
-    title: '[Bug]: Database migration failed at startup',
-    labels: 'bug',
-  })
-  const errMsg = systemInfo.value?.db_migration_error
-  if (errMsg) {
-    const body = [
-      '### Environment',
-      `- Reliquary version: ${systemInfo.value?.version || 'unknown'}`,
-      `- Commit: ${systemInfo.value?.commit_id || 'unknown'}`,
-      `- Frontend version: ${frontendVersion} (${frontendCommit})`,
-      `- DB version reported: ${systemInfo.value?.db_version || 'unknown'}`,
-      '',
-      '### Migration error',
-      '```',
-      errMsg,
-      '```',
-    ].join('\n')
-    params.set('body', body)
-  }
-  return `${base}?${params.toString()}`
-})
 
 // Methods
 const loadInfo = async () => {
@@ -408,16 +361,6 @@ onUnmounted(() => {
   color: var(--td-text-color-secondary);
 }
 
-.migration-error-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-
-  .migration-error-actions-sep {
-    color: var(--td-text-color-placeholder);
-  }
-}
 
 .setting-control {
   flex-shrink: 0;

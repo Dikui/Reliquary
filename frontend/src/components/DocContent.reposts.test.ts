@@ -129,7 +129,6 @@ async function renderDetails(sources: EntryRepostSource[] | null | undefined, lo
     '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)), createSafeImage, isValidImageURL, createProtectedFileImageScope, hydrateProtectedFileImages,
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
-    '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
     '@/components/ReviewActions.vue': options.reviewActions || emptyModule, '@/components/EntryArticleJudgments.vue': options.articleJudgments || emptyModule, '@/components/EntryDomainsEditor.vue': { __esModule: true, default: { setup: () => () => null } }, '@/components/EntryEntitiesEditor.vue': options.entityEditor || emptyModule, '@/components/EntryClassification.vue': options.classification || emptyModule, '@/components/EntryStarToggle.vue': emptyModule,
     '@/components/EntryUpdateNotice.vue': emptyModule,
     '@/components/ReportAssociations.vue': emptyModule,

@@ -126,7 +126,6 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useCommandPaletteStore } from '@/stores/commandPalette'
-import { useAuthStore } from '@/stores/auth'
 import { useCmdkSearch, type CmdkFileGroup, type CmdkChunk } from './GlobalCommandPalette/useSearch'
 import { visibleFileChunks } from './GlobalCommandPalette/visibleFileChunks'
 import { highlightText } from './GlobalCommandPalette/useHighlight'
@@ -143,7 +142,6 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const commandPaletteStore = useCommandPaletteStore()
-const authStore = useAuthStore()
 const { open, initialQuery, recentQueries } = storeToRefs(commandPaletteStore)
 
 // Per-group display caps — keep the palette compact.

@@ -25,7 +25,7 @@ const pages = [
   '../views/settings/SpaceInfo.vue',
   '../components/DocContent.vue',
   '../components/SideMenu.vue',
-  '../components/UserMenu.vue',
+  '../components/SettingsMenu.vue',
 ]
 
 for (const [locale, bundle] of Object.entries({ 'zh-CN': zhCN, 'en-US': enUS })) {

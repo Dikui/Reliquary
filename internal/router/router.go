@@ -49,7 +49,6 @@ type RouterParams struct {
 	ChatGPTPolicyHandler    *handler.ChatGPTPolicyHandler `optional:"true"`
 	ModelHandler            *handler.ModelHandler
 	ModelCredentialsHandler *handler.ModelCredentialsHandler
-	AuthHandler             *handler.AuthHandler
 	InitializationHandler   *handler.InitializationHandler
 	PromptHandler           *handler.PromptHandler `optional:"true"`
 	SystemHandler           *handler.SystemHandler
@@ -130,7 +129,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 	{
 		accessGuards := newAccessGuards(params.LibraryService, params.EntryService, params.ChunkService)
 
-		RegisterAuthRoutes(v1, params.AuthHandler, accessGuards)
 		RegisterSpaceRoutes(v1, params.SpaceHandler, accessGuards)
 		RegisterLibraryRoutes(v1, params.LibraryHandler, accessGuards)
 		serveLibraryScopedFiles(

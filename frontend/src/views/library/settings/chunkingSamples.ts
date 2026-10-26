@@ -113,7 +113,7 @@ docker pull docker.m.daocloud.io/reliquary-ui:v0.5.0
 ### Q2: 启动后访问 5173 显示旧界面？
 浏览器缓存了旧版前端资源。Ctrl+Shift+R 强制刷新即可，必要时清空站点存储。
 
-### Q3: 注册新用户报 500 Internal Server Error
+### Q3: 打开本机网页报 500 Internal Server Error
 通常是后端容器未正常启动。先检查 \`make dev-logs | grep app\`，常见为数据库连接失败或迁移未执行。
 
 ### Q4: 上传文档报 column "xxx" does not exist
@@ -202,7 +202,7 @@ const CHAPTER_SAMPLE = `第 1 章 引言
 
 2.2.1 用户与权限
 
-用户认证集中在服务端。唯一用户登录后拥有全部权限。
+服务仅供本机使用，打开网页即可访问个人工作区。外部工具通过 API Key 访问。
 
 2.2.2 内容与索引
 

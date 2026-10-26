@@ -774,11 +774,9 @@ export default {
     batchManage: '批量管理',
   "library": "资料",
   "settings": "设置",
-  "logout": "退出登录",
   "search": "知识检索",
   "collapseSidebar": "收起侧栏",
   "expandSidebar": "展开侧栏",
-  "logoutSuccess": "已退出登录"
 },
   navigation: {
     removedFeature: '此功能已移除，已返回资料页面。',
@@ -908,10 +906,6 @@ export default {
     "mergeSaved": "实体已合并"
   }
 },
-  userProfile: {
-    title: '用户信息',
-    description: '查看您的账户基础信息（用户 ID、用户名、邮箱、创建时间）',
-  },
   credential: {
     configured: '已配置',
     unconfigured: '未配置',
@@ -964,7 +958,7 @@ export default {
       mcpUrlDesc: '通过 Streamable HTTP 连接，支持检索、读取资料、收录、待审区、星标和写入AI产出。内网访问，使用同一个 API Key：Authorization: Bearer API_KEY。',
       copyMcpUrl: '复制 MCP 服务地址',
       apiKeys: 'API 密钥',
-      apiKeysDesc: "API Key 可以访问个人空间的全部内容和收录、检索等接口。部分账号设置，如 ChatGPT 登录和维护日程，仍需网页登录。",
+      apiKeysDesc: "API Key 可以访问个人空间的全部内容和收录、检索等接口。ChatGPT 连接和维护日程请在本机网页中管理。",
       createApiKey: '创建 API Key',
       createApiKeyDialogDesc: '设置此 API Key 的名称和可选有效期。',
       noApiKeys: '暂无 API Key',
@@ -1228,7 +1222,6 @@ export default {
       title: '内置模型',
       description: "内置模型配置可在此查看和修改。",
       descriptionAdmin: "内置模型配置可在此查看和修改。",
-      viewGuide: '查看内置模型管理指南'
     },
     toasts: {
       nameRequired: '模型名称不能为空',
@@ -1346,8 +1339,6 @@ export default {
   general: {
     title: '常规设置',
     allSettings: '全部设置',
-    personalSettings: '个人设置',
-    helpAndDocs: '帮助与文档',
     description: '配置语言、外观等基础选项',
     settings: '设置',
     close: '关闭设置'
@@ -1558,9 +1549,6 @@ export default {
       updateFailed: '更新模型失败',
       deleteFailed: '删除模型失败'
     },
-    auth: {
-      getUserFailed: '获取用户信息失败'
-    }
   },
   system: {
     credentialEncryptionLabel: '凭据保存方式',
@@ -1569,7 +1557,7 @@ export default {
     credentialEncryptionEnabledDescription: "模型 API Key 使用 SYSTEM_AES_KEY 加密存储。",
     credentialEncryptionDisabledDescription: "未设置 SYSTEM_AES_KEY，模型 API Key 以明文存储。",
     title: '系统信息',
-    sectionDescription: '查看系统版本信息和用户账户配置',
+    sectionDescription: '查看系统版本、运行状态和凭据存储方式',
     loadingInfo: '正在加载信息...',
     retry: '重试',
     versionLabel: '应用版本',
@@ -1593,9 +1581,7 @@ export default {
     dbVersionDescription: '当前数据库迁移版本号',
     dbMigrationFailedTag: '迁移失败',
     dbMigrationFailedTitle: '数据库迁移失败',
-    dbMigrationFailedDesc: '启动时数据库迁移未成功完成，部分表或索引可能未创建，会导致知识收录等功能异常。建议先查看排查文档自助修复；如仍无法解决，请通过下方链接反馈。',
-    dbMigrationViewDocs: '查看排查文档',
-    dbMigrationReportIssue: '无法修复？提交 Issue',
+    dbMigrationFailedDesc: '启动时数据库迁移未成功完成，部分表或索引可能缺失。请根据下方错误详情排查；迁移成功前，收录等功能可能无法使用。',
     keywordIndexEngineLabel: '关键词索引引擎',
     keywordIndexEngineDescription: '当前使用的关键词索引引擎',
     unknown: '未知',
@@ -1922,14 +1908,6 @@ export default {
       docLabel: 'API 文档',
       docDescription: '查看完整的 API 调用文档和示例，',
       openDoc: '打开文档',
-      userIdLabel: '用户 ID',
-      userIdDescription: '您的唯一用户标识',
-      usernameLabel: '用户名',
-      usernameDescription: '您的登录用户名',
-      emailLabel: '邮箱',
-      emailDescription: '您的注册邮箱地址',
-      createdAtLabel: '注册时间',
-      createdAtDescription: '账户创建的时间',
     },
     messages: {
       fetchFailed: '获取空间信息失败',
@@ -2170,8 +2148,6 @@ export default {
     all: '全部',
     clear: '清空',
     website: '官方网站',
-    github: 'GitHub',
-    githubStarTip: '在 GitHub 打开 Reliquary 仓库',
     on: '开启',
     off: '关闭',
     confirmDelete: '确认删除',
@@ -2186,8 +2162,6 @@ export default {
     library: '库',
     noResult: '无结果',
     remove: '移除',
-    avatar: '头像',
-    defaultUser: '用户',
     copyFailed: '复制失败',
     retry: '重试',
     expand: '展开',
@@ -2196,13 +2170,6 @@ export default {
     discardHint: "本次修改尚未保存，返回后将丢弃这些修改。",
     discard: "放弃修改"
 },
-  authStore: {
-    errors: {
-      parseUserFailed: '解析用户信息失败',
-      parseSpaceFailed: '解析空间信息失败',
-
-    }
-  },
   initialization: {
     skip: '跳过',
     next: '下一步'
@@ -2285,7 +2252,6 @@ export default {
 
     capabilityUnavailable: '当前部署不支持此功能，已返回可用页面。',
     navGroups: {
-      account: '账户',
       workspace: '空间',
       modelsRuntime: '模型',
       dataExtensions: '数据与扩展',

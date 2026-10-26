@@ -22,7 +22,7 @@ const instance = axios.create({
   },
 });
 
-// Temporary outages keep the session and retry a read-only availability check.
+// Temporary outages retain workspace data and retry a read-only availability check.
 export const serviceUnavailable = ref(false);
 let availabilityTimer: ReturnType<typeof setInterval> | undefined;
 let checkingAvailability = false;
@@ -42,7 +42,7 @@ export async function retryServiceAvailability() {
   if (checkingAvailability) return;
   checkingAvailability = true;
   try {
-    await instance.get('/api/v1/auth/me');
+    await instance.get('/api/v1/space');
     serviceAvailable();
   } catch { /* The response interceptor retains the outage state. */ }
   finally { checkingAvailability = false; }

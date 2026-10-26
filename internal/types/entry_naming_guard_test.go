@@ -113,7 +113,7 @@ var entryNamingExceptions = map[string]entryNamingException{
 	"frontend/src/views/library/settings/LibraryAdvancedSettings.vue":       {Reason: "保留 i18n 键，两个 locale 的文案和键集合不变", Tokens: []string{"knowledgeEditor"}},
 	"frontend/src/views/library/settings/LibraryChunkingDebug.vue":          {Reason: "保留 i18n 键，两个 locale 的文案和键集合不变", Tokens: []string{"knowledgeEditor"}},
 	"frontend/src/views/library/settings/LibraryChunkingSettings.vue":       {Reason: "保留 i18n 键，两个 locale 的文案和键集合不变", Tokens: []string{"knowledgeEditor"}},
-	"frontend/src/views/settings-and-auth-behavior.test.ts":                 {Reason: "现有 i18n 键、界面原文案或对应断言", Tokens: []string{"knowledge"}},
+	"frontend/src/views/settings-behavior.test.ts":                 {Reason: "现有 i18n 键、界面原文案或对应断言", Tokens: []string{"knowledge"}},
 	"frontend/src/views/settings/ChatGPTSettings.test.ts":                   {Reason: "已持久化模型类型值", Tokens: []string{"KnowledgeQA"}},
 	"frontend/src/views/settings/ChatGPTSettings.vue":                       {Reason: "已持久化模型类型值", Tokens: []string{"KnowledgeQA"}},
 	"frontend/src/views/settings/LibrarySettings.test.ts":                   {Reason: "现有 i18n 键、界面原文案或对应断言", Tokens: []string{"knowledge"}},

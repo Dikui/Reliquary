@@ -128,8 +128,8 @@ func sanitizeRow(table string, row map[string]any) (map[string]any, []string) {
 			}
 			continue
 		}
-		// Login password hashes are intentionally retained. They cannot grant an
-		// existing session, and preserve the user's ability to log in after loss.
+		// Preserve the frozen legacy column while reading older backups. Import
+		// into the current schema drops it through the retirement projection.
 		if table == "users" && column == "password_hash" {
 			copy[column] = value
 			continue

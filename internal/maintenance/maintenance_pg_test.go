@@ -62,6 +62,10 @@ resolution_method,created_at) VALUES('alias',1,'organization','entity-a','A Inc'
 	}
 	for _, statement := range statements {
 		statement = strings.ReplaceAll(statement, "\n", "")
+		if strings.Contains(statement, "INSERT INTO users(") && !db.Migrator().HasColumn("users", "password_hash") {
+			statement = strings.ReplaceAll(statement, "email,password_hash,space_id", "email,space_id")
+			statement = strings.ReplaceAll(statement, ",'$2a$10$preserved-owner-password-hash'", "")
+		}
 		if strings.Contains(statement, "INSERT INTO follow_feed_states(") &&
 			!db.Migrator().HasTable("follow_feed_states") {
 			continue
@@ -224,7 +228,7 @@ func TestPortableReplicaRoundtripEveryPersistentTable(t *testing.T) {
 			require.NotContains(t, string(data), secret, file.Path)
 		}
 	}
-	require.Contains(t, string(mustRead(t, filepath.Join(root, ".reliquary/config/users.json"))), "preserved-owner-password-hash")
+	require.NotContains(t, string(mustRead(t, filepath.Join(root, ".reliquary/config/users.json"))), "password_hash")
 	target := pgtest.Open(t)
 	newUploads := t.TempDir()
 	_, err = Import(ctx, target, root, newUploads, nil)
