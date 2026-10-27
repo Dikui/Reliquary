@@ -23,10 +23,12 @@ var modelSeriesPatterns = []struct {
 	name    string
 	pattern *regexp.Regexp
 }{
-	{"GPT", regexp.MustCompile(`^gpt[- ]?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)},
+	{"GPT", regexp.MustCompile(`^gpt(?:[- ]?[0-9]+(?:\.[0-9]+)*|[- ](?:live|rosalind))(?:$|[- ])`)},
 	{"Claude", regexp.MustCompile(`^claude[- ]?(?:(?:opus|sonnet|haiku)[- ]?)?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)},
-	{"DeepSeek", regexp.MustCompile(`^deepseek[- ]?[vr][0-9]+(?:\.[0-9]+)*(?:$|[- ])`)},
-	{"Grok", regexp.MustCompile(`^grok[- ]?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)},
+	{"DeepSeek", regexp.MustCompile(`^deepseek[- ]?(?:[vr][0-9]+(?:\.[0-9]+)*|chat|reasoner|ocr|math)(?:$|[- (0-9])`)},
+	{"Grok", regexp.MustCompile(`^grok(?:[- ]?[0-9]+(?:\.[0-9]+)*|[- ]code[- ]fast(?:[- ][0-9]+)?)(?:$|[- ])`)},
+	{"Grok", regexp.MustCompile(`^(?:grok[- ]imagine|imagine[- ](?:image|video))(?:$|[- ])`)},
+	{"Grok", regexp.MustCompile(`^grok[- ](?:voice|speech[- ]to[- ]text|text[- ]to[- ]speech)(?:$|[- (])`)},
 }
 
 var claudeVariantPattern = regexp.MustCompile(`^(?:opus|sonnet|haiku)[- ]?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)
@@ -36,7 +38,7 @@ func entitySeriesText(value string) string {
 	return strings.NewReplacer("‐", "-", "‑", "-", "–", "-", "—", "-", "−", "-").Replace(strings.ToLower(strings.Join(strings.Fields(value), " ")))
 }
 
-// Model versions have a stable family name; agent and product names keep their identity.
+// Models share a brand across versions and modalities; applications keep their identity.
 func canonicalEntityMentionName(name, surface string) string {
 	key := entitySeriesText(surface)
 	for _, series := range modelSeriesPatterns {

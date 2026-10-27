@@ -109,6 +109,42 @@ func TestEntityReferencesPreserveSourceAndNormalizeModelSeries(t *testing.T) {
 	require.Equal(t, []understandingEntityMention{second.EntityMentions[0], first.EntityMentions[0], first.EntityMentions[2]}, merged.EntityMentions)
 }
 
+func TestEntityModelVariantsResolveToExistingBrand(t *testing.T) {
+	for _, sample := range []struct {
+		name     string
+		surfaces []string
+	}{
+		{"GPT", []string{"GPT‑Rosalind", "GPT‑Live"}},
+		{"DeepSeek", []string{"deepseek-chat", "DeepSeek-OCR", "DeepSeek-OCR-2", "DeepSeekMath-V2"}},
+		{"Grok", []string{"grok-code-fast-1", "Grok Imagine", "Grok Imagine Video 1.5", "Imagine Video 1.5", "Grok Voice", "Grok Speech to Text (STT)", "Grok Text to Speech (TTS)"}},
+		{"Claude Code", []string{"Claude Code"}},
+		{"Grok Build", []string{"Grok Build"}},
+		{"DeepSeek Sparse Attention (DSA)", []string{"DeepSeek Sparse Attention (DSA)"}},
+	} {
+		t.Run(sample.name, func(t *testing.T) {
+			body := strings.Join(sample.surfaces, ", ") + " are discussed here."
+			result := &articleProcessingResult{}
+			for _, surface := range sample.surfaces {
+				result.EntityMentions = append(result.EntityMentions, understandingEntityMention{
+					Name: surface, SourceID: "P1",
+				})
+			}
+			qualifyUnderstandingEntityMentions(result, body)
+			qualifyUnderstandingChoices(result, articleProcessingInput{EntityOptions: []understandingEntityOption{
+				{ID: "brand", CanonicalName: sample.name},
+				{ID: "old-imagine", CanonicalName: "Grok Imagine"},
+				{ID: "old-voice", CanonicalName: "Grok Voice"},
+				{ID: "old-ocr", CanonicalName: "DeepSeek-OCR"},
+			}})
+			require.Len(t, result.EntityMentions, 1, "model variants share one entity slot")
+			require.Equal(t, sample.name, result.EntityMentions[0].Name)
+			require.Equal(t, sample.surfaces[0], result.EntityMentions[0].SurfaceName)
+			require.Equal(t, body, result.EntityMentions[0].Quote)
+			require.Equal(t, []string{"brand"}, result.EntityIDs)
+		})
+	}
+}
+
 func TestEntityReferencesRejectMissingSourceAndInventedNames(t *testing.T) {
 	body := "# Source\n\nClaude Code runs tools.\n"
 	result := &articleProcessingResult{EntityMentions: []understandingEntityMention{
