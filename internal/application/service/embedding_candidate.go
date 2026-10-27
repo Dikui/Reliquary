@@ -254,8 +254,8 @@ COALESCE((SELECT jsonb_agg(to_jsonb(i)) FROM image_embeddings i WHERE i.space_id
 			var err error
 			switch {
 			case strings.HasSuffix(v.Kind, "_chunk"):
-				err = tx.Exec(`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,library_id,model_id,dimension,embedding,is_enabled)
-    SELECT id,0,id,entry_id,library_id,?,?,?,is_enabled FROM chunks WHERE id=?`, v.ModelID, v.Dimension, v.Embedding, v.SourceID).Error
+				err = tx.Exec(`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,library_id,model_id,dimension,embedding)
+    SELECT id,0,id,entry_id,library_id,?,?,? FROM chunks WHERE id=?`, v.ModelID, v.Dimension, v.Embedding, v.SourceID).Error
 			case v.Kind == "article":
 				err = tx.Exec(`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash) VALUES (?,?,?,?,?,?,?)`, v.EntryID, spaceID, v.LibraryID, v.ModelID, v.Dimension, v.Embedding, v.ContentHash).Error
 			case v.Kind == "image":

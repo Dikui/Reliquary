@@ -30,7 +30,7 @@ func (s *searchService) entryChunkVectorQuery(ctx context.Context, spaceID uint6
 		Joins("JOIN chunks c ON c.entry_id=k.id AND c.space_id=k.space_id").
 		Joins("JOIN "+vectorRelation(f.request.VectorSet, "chunk", "e")+" ON e.chunk_id=c.id AND e.entry_id=k.id").
 		Where(entrySearchableChunks).
-		Where("e.dimension=? AND e.embedding IS NOT NULL AND (e.is_enabled IS NULL OR e.is_enabled=true)", len(vector)).
+		Where("e.dimension=? AND e.embedding IS NOT NULL", len(vector)).
 		Where(expression+" <= ?", pgvector.NewHalfVector(vector), 1-config.GetEffectiveVectorThreshold())
 }
 

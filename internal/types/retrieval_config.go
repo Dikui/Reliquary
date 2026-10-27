@@ -47,9 +47,10 @@ func (c *RetrievalConfig) GetEffectiveRRFImageWeight() float64 {
 }
 
 // DefaultRetrievalTopK is the retrieval depth used when a caller supplies no
-// usable TopK / MatchCount. HybridSearch also floors its over-retrieval pool
-// at this value, so the fallback and the pool it draws from stay in step by
-// construction rather than by two independently maintained literals.
+// usable TopK / MatchCount. The entry search pipeline also floors its
+// over-retrieval pool at this value, so the fallback and the pool it draws
+// from stay in step by construction rather than by two independently
+// maintained literals.
 const DefaultRetrievalTopK = 50
 
 // GetEffectiveEmbeddingTopK returns EmbeddingTopK with a fallback default.

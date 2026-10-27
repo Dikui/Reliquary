@@ -2,8 +2,6 @@ package retriever
 
 import (
 	"context"
-	"slices"
-
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -29,10 +27,6 @@ func (s *PostgresRetrievalService) Retrieve(ctx context.Context, params []types.
 		results = append(results, result...)
 	}
 	return results, nil
-}
-
-func (s *PostgresRetrievalService) SupportRetriever(kind types.RetrieverType) bool {
-	return slices.Contains(s.Support(), kind)
 }
 func (s *PostgresRetrievalService) Index(ctx context.Context, embedder embedding.Embedder, index *types.IndexInfo) error {
 	return s.RetrieveEngineService.Index(ctx, embedder, index, s.Support())

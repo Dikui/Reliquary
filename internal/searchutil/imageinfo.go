@@ -77,44 +77,6 @@ func CollectImageInfoByChunkIDs(ctx context.Context, chunkRepo interfaces.ChunkR
 	return out
 }
 
-// EnrichSearchResultsImageInfo fills in ImageInfo for SearchResults that have
-// none by batch-querying body chunks and their text children.
-func EnrichSearchResultsImageInfo(
-	ctx context.Context,
-	chunkRepo interfaces.ChunkRepository,
-	spaceID uint64,
-	results []*types.SearchResult,
-) {
-	var chunkIDs []string
-	seen := make(map[string]bool)
-	for _, r := range results {
-		if r.ImageInfo != "" {
-			continue
-		}
-		if !seen[r.ID] {
-			seen[r.ID] = true
-			chunkIDs = append(chunkIDs, r.ID)
-		}
-	}
-	if len(chunkIDs) == 0 {
-		return
-	}
-
-	infoMap := CollectImageInfoByChunkIDs(ctx, chunkRepo, spaceID, chunkIDs)
-	if len(infoMap) == 0 {
-		return
-	}
-
-	for _, r := range results {
-		if r.ImageInfo != "" {
-			continue
-		}
-		if merged, ok := infoMap[r.ID]; ok {
-			r.ImageInfo = merged
-		}
-	}
-}
-
 // MergeImageInfoJSON combines per-chunk image_info JSON strings (from
 // CollectImageInfoByChunkIDs) into a single JSON array, deduplicating by URL.
 func MergeImageInfoJSON(perChunk map[string]string) string {

@@ -43,15 +43,6 @@ func buildLibraryResponse(
 	return m
 }
 
-// HybridSearch keeps the old route explicit while callers adopt article retrieval.
-func (h *LibraryHandler) HybridSearch(c *gin.Context) {
-	if _, _, _, err := h.validateAndGetLibrary(c); err != nil {
-		c.Error(err)
-		return
-	}
-	c.Error(apperrors.NewBadRequestError("chunk search and library scope are no longer supported; use POST /api/v1/search with query and article filters"))
-}
-
 func (h *LibraryHandler) validateAndGetLibrary(c *gin.Context) (*types.Library, string, uint64, error) {
 	ctx := c.Request.Context()
 

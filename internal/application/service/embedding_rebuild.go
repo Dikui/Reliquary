@@ -481,10 +481,10 @@ func (r *EmbeddingRebuilder) prepareItem(
 		if vaultContentHash(buildEntryIndexContent(&current, currentChunk.Content)) != hash {
 			return errors.New("document chunk changed while embedding; retry this item")
 		}
-		if err := tx.Exec(`INSERT INTO embeddings (source_id,source_type,chunk_id,entry_id,library_id,model_id,dimension,embedding,is_enabled)
-			VALUES (?,0,?,?,?,?,?,?::halfvec,?) ON CONFLICT (source_id,source_type) DO UPDATE SET model_id=EXCLUDED.model_id,
-			dimension=EXCLUDED.dimension,embedding=EXCLUDED.embedding,is_enabled=EXCLUDED.is_enabled,updated_at=NOW()`,
-			chunk.ID, chunk.ID, article.ID, article.LibraryID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector), chunk.IsEnabled).Error; err != nil {
+		if err := tx.Exec(`INSERT INTO embeddings (source_id,source_type,chunk_id,entry_id,library_id,model_id,dimension,embedding)
+			VALUES (?,0,?,?,?,?,?,?::halfvec) ON CONFLICT (source_id,source_type) DO UPDATE SET model_id=EXCLUDED.model_id,
+			dimension=EXCLUDED.dimension,embedding=EXCLUDED.embedding,updated_at=NOW()`,
+			chunk.ID, chunk.ID, article.ID, article.LibraryID, run.ModelID, run.Dimension, pgvector.NewHalfVector(vector)).Error; err != nil {
 			return err
 		}
 		// The document marker becomes current only after all its chunk vectors

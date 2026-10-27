@@ -24,8 +24,8 @@ func TestUpdateChunksPostgresCastsBooleansAndIntegers(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateChunks(ctx, []*types.Chunk{first, second, untouched}))
 
-	first.Content, first.IsEnabled, first.Flags, first.Status = "changed first", false, 4, int(types.ChunkStatusIndexed)
-	second.Content, second.IsEnabled, second.Flags, second.Status = "changed second", true, 2, int(types.ChunkStatusStored)
+	first.Content, first.IsEnabled, first.Status = "changed first", false, int(types.ChunkStatusIndexed)
+	second.Content, second.IsEnabled, second.Status = "changed second", true, int(types.ChunkStatusStored)
 	tx := db.Begin()
 	require.NoError(t, tx.Error)
 	defer tx.Rollback()
@@ -38,7 +38,6 @@ func TestUpdateChunksPostgresCastsBooleansAndIntegers(t *testing.T) {
 		require.NoError(t, tx.First(&saved, "id = ?", expected.ID).Error)
 		assert.Equal(t, expected.Content, saved.Content)
 		assert.Equal(t, expected.IsEnabled, saved.IsEnabled)
-		assert.Equal(t, expected.Flags, saved.Flags)
 		assert.Equal(t, expected.Status, saved.Status)
 		assert.True(t, saved.UpdatedAt.Equal(transactionTime))
 	}

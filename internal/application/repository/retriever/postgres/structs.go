@@ -24,7 +24,6 @@ type pgVector struct {
 	ModelID    string              `json:"model_id" gorm:"column:model_id"`
 	Dimension  int                 `json:"dimension"         gorm:"column:dimension;not null"`
 	Embedding  pgvector.HalfVector `json:"embedding"         gorm:"column:embedding;not null"`
-	IsEnabled  bool                `json:"is_enabled"        gorm:"column:is_enabled;index"`
 }
 
 // pgVectorWithScore extends pgVector with similarity score field
@@ -40,10 +39,8 @@ type pgVectorWithScore struct {
 	Content       string              `json:"content"           gorm:"column:content;->"`
 	ContextHeader string              `json:"-"                 gorm:"column:context_header;->"`
 	Title         string              `json:"-"                 gorm:"column:title;->"`
-	Metadata      types.JSON          `json:"-"                 gorm:"column:metadata;->"`
 	Dimension     int                 `json:"dimension"         gorm:"column:dimension;not null"`
 	Embedding     pgvector.HalfVector `json:"embedding"         gorm:"column:embedding;not null"`
-	IsEnabled     bool                `json:"is_enabled"        gorm:"column:is_enabled;default:true;index"`
 	Score         float64             `json:"score"             gorm:"column:score"`
 }
 
@@ -65,9 +62,6 @@ func toDBVectorEmbedding(indexInfo *types.IndexInfo, additionalParams map[string
 		ChunkID:    indexInfo.ChunkID,
 		EntryID:    indexInfo.EntryID,
 		LibraryID:  indexInfo.LibraryID,
-		// Preserve the historical default for callers that omit IsEnabled.
-		// Disabled chunks are filtered from chunks and explicit status maps win below.
-		IsEnabled: true,
 	}
 	// Add embedding data if available in additionalParams
 	if additionalParams != nil && slices.Contains(slices.Collect(maps.Keys(additionalParams)), "embedding") {
@@ -76,15 +70,10 @@ func toDBVectorEmbedding(indexInfo *types.IndexInfo, additionalParams map[string
 			pgVector.Dimension = len(pgVector.Embedding.Slice())
 		}
 	}
-	// Get is_enabled from additionalParams if available
+	// Get model_id from additionalParams if available
 	if additionalParams != nil {
 		if modelID, ok := additionalParams["model_id"].(string); ok {
 			pgVector.ModelID = modelID
-		}
-		if chunkEnabledMap, ok := additionalParams["chunk_enabled"].(map[string]bool); ok {
-			if enabled, exists := chunkEnabledMap[indexInfo.ChunkID]; exists {
-				pgVector.IsEnabled = enabled
-			}
 		}
 	}
 	return pgVector

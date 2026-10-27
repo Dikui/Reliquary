@@ -217,10 +217,9 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 	conds = append(conds, clause.Expr{
 		SQL: `c.seq_id @@@ paradedb.boolean(should => ARRAY[
 			paradedb.match_disjunction('content', ?),
-			paradedb.match_disjunction('context_header', ?),
-			paradedb.match_disjunction('search_title', ?)
+			paradedb.match_disjunction('context_header', ?)
 		])`,
-		Vars: []interface{}{params.Query, params.Query, params.Query},
+		Vars: []interface{}{params.Query, params.Query},
 	})
 
 	// A chunk is the source of keyword availability, even without a vector row.
@@ -246,7 +245,7 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 		Select([]string{
 			"paradedb.score(c.seq_id) AS score",
 			"c.seq_id AS id",
-			"c.content", "c.context_header", "k.title", "c.metadata",
+			"c.content", "c.context_header", "k.title",
 			"c.id AS source_id",
 			"0 AS source_type",
 			"c.id AS chunk_id",
@@ -365,10 +364,6 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 			strings.Join(placeholders, ", ")))
 	}
 
-	// is_enabled filter
-	whereParts = append(whereParts, fmt.Sprintf("(is_enabled IS NULL OR is_enabled = $%d)", len(allVars)+1))
-	allVars = append(allVars, true)
-
 	// Build WHERE clause string
 	whereClause := ""
 	if len(whereParts) > 0 {
@@ -411,7 +406,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 
 	querySQL := fmt.Sprintf(`
 		SELECT 
-			e.id, c.content, c.context_header, k.title, c.metadata,
+			e.id, c.content, c.context_header, k.title,
 			e.source_id, e.source_type, e.chunk_id, e.entry_id, e.library_id,
 			(1 - candidates.distance) as score
 		FROM (
@@ -527,55 +522,4 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 			Error:               nil,
 		},
 	}, nil
-}
-
-// BatchUpdateChunkEnabledStatus updates the enabled status of chunks in batch
-func (g *pgRepository) BatchUpdateChunkEnabledStatus(ctx context.Context, chunkStatusMap map[string]bool) error {
-	if len(chunkStatusMap) == 0 {
-		logger.GetLogger(ctx).Warnf("[Postgres] Chunk status map is empty, skipping update")
-		return nil
-	}
-
-	logger.GetLogger(ctx).Infof("[Postgres] Batch updating chunk enabled status, count: %d", len(chunkStatusMap))
-
-	// Group chunks by enabled status for batch updates
-	enabledChunkIDs := make([]string, 0)
-	disabledChunkIDs := make([]string, 0)
-
-	for chunkID, enabled := range chunkStatusMap {
-		if enabled {
-			enabledChunkIDs = append(enabledChunkIDs, chunkID)
-		} else {
-			disabledChunkIDs = append(disabledChunkIDs, chunkID)
-		}
-	}
-
-	// Batch update enabled chunks
-	if len(enabledChunkIDs) > 0 {
-		result := g.db.WithContext(ctx).Model(&pgVector{}).
-			Where("chunk_id IN ?", enabledChunkIDs).
-			Update("is_enabled", true)
-		if result.Error != nil {
-			logger.GetLogger(ctx).Errorf("[Postgres] Failed to update enabled chunks: %v", result.Error)
-			return result.Error
-		}
-		logger.GetLogger(ctx).
-			Infof("[Postgres] Updated %d chunks to enabled, rows affected: %d", len(enabledChunkIDs), result.RowsAffected)
-	}
-
-	// Batch update disabled chunks
-	if len(disabledChunkIDs) > 0 {
-		result := g.db.WithContext(ctx).Model(&pgVector{}).
-			Where("chunk_id IN ?", disabledChunkIDs).
-			Update("is_enabled", false)
-		if result.Error != nil {
-			logger.GetLogger(ctx).Errorf("[Postgres] Failed to update disabled chunks: %v", result.Error)
-			return result.Error
-		}
-		logger.GetLogger(ctx).
-			Infof("[Postgres] Updated %d chunks to disabled, rows affected: %d", len(disabledChunkIDs), result.RowsAffected)
-	}
-
-	logger.GetLogger(ctx).Infof("[Postgres] Successfully batch updated chunk enabled status")
-	return nil
 }

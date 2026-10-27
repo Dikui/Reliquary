@@ -132,16 +132,6 @@ func TestEntrySearchHTTPRejectsOldAndUnknownParameters(t *testing.T) {
 	}
 }
 
-func TestHybridSearchHTTPRejectsRemovedLibraryScope(t *testing.T) {
-	for _, field := range []string{"library_ids", "library_id", "scope"} {
-		svc := &hybridSearchTestService{}
-		response := performHybridSearchRequest(svc, `{"query_text":"query","`+field+`":[]}`)
-		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
-		require.Contains(t, response.Body.String(), "POST /api/v1/search")
-		require.Zero(t, svc.searchCalls)
-	}
-}
-
 func TestEntrySearchHTTPDependencyErrorsAreSafe(t *testing.T) {
 	for _, failure := range []error{
 		fmt.Errorf("EmbedBatch API error: Http Status 503 <html>upstream secret</html>"),

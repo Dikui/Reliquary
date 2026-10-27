@@ -41,9 +41,6 @@ const (
 	ChunkStatusIndexed ChunkStatus = 2
 )
 
-// ChunkFlags 保留已有分块状态字段的存储类型。
-type ChunkFlags int
-
 // ImageInfo 表示与 Chunk 关联的图片信息
 type ImageInfo struct {
 	// 图片URL
@@ -89,8 +86,6 @@ type Chunk struct {
 	ChunkIndex int `json:"chunk_index"`
 	// Whether the chunk is enabled, can be used to temporarily disable certain chunks
 	IsEnabled bool `json:"is_enabled"               gorm:"default:true"`
-	// Flags 保留存储列、API 字段及原默认值；当前检索不读取此字段。
-	Flags ChunkFlags `json:"flags"                    gorm:"default:1"`
 	// Status of the chunk
 	Status int `json:"status"                   gorm:"default:0"`
 	// Starting character position in the original text
@@ -105,12 +100,7 @@ type Chunk struct {
 	ChunkType ChunkType `json:"chunk_type"               gorm:"type:varchar(20);default:'text'"`
 	// 父 Chunk ID，用于关联图片 Chunk 和原始文本 Chunk
 	ParentChunkID string `json:"parent_chunk_id"          gorm:"type:varchar(36);index"`
-	// 关系 Chunk ID，用于关联关系 Chunk 和原始文本 Chunk
-	RelationChunks JSON `json:"relation_chunks"          gorm:"type:json"`
-	// 间接关系 Chunk ID，用于关联间接关系 Chunk 和原始文本 Chunk
-	IndirectRelationChunks JSON   `json:"indirect_relation_chunks" gorm:"type:json"`
-	Metadata               JSON   `json:"metadata"                 gorm:"type:json"`
-	ContentHash            string `json:"content_hash"             gorm:"type:varchar(64);index"`
+	ContentHash   string `json:"content_hash"             gorm:"type:varchar(64);index"`
 	// 图片信息，存储为 JSON
 	ImageInfo string `json:"image_info"               gorm:"type:text"`
 	// Chunk creation time

@@ -77,6 +77,4 @@ func RegisterLibraryRoutes(r *gin.RouterGroup, h *handler.LibraryHandler, g *acc
 	r.DELETE("/libraries/:id", g.LibraryExists("id"), h.DeleteLibrary)
 	r.GET("/library", h.GetLibrary)
 	r.PUT("/library", h.UpdateLibrary)
-	r.POST("/libraries/:id/hybrid-search", g.LibraryExists("id"), h.HybridSearch)
-	r.GET("/libraries/:id/hybrid-search", g.LibraryExists("id"), h.HybridSearch)
 }

@@ -372,23 +372,11 @@ func TestArticleUnderstandingRetainsFullMarkdownAndBuildsVectors(t *testing.T) {
 	require.Positive(t, chunks)
 	require.NoError(t, h.db.Model(&types.EntryEntity{}).Where("entry_id=?", article.ID).Count(&links).Error)
 	require.Zero(t, links)
-	hits, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{RetrieverType: types.VectorRetrieverType, LibraryIDs: []string{h.library.ID}, Embedding: []float32{1, 0, 0}, TopK: 10, Threshold: .9}})
-	require.NoError(t, err)
-	require.NotEmpty(t, hits)
-	require.NotEmpty(t, hits[0].Results)
 	var bodyChunk types.Chunk
 	require.NoError(t, h.db.Where("entry_id=? AND chunk_type=?", article.ID, types.ChunkTypeText).First(&bodyChunk).Error)
-	foundBody := false
-	for _, hit := range hits[0].Results {
-		if hit.ChunkID == bodyChunk.ID {
-			foundBody = true
-		}
-	}
-	require.True(t, foundBody, "body and description vectors may tie, but the body remains retrievable")
-	retrieved := []*types.SearchResult{{ID: bodyChunk.ID}}
-	searchutil.EnrichSearchResultsImageInfo(h.ctx, h.service.chunkService.GetRepository(), article.SpaceID, retrieved)
+	infoMap := searchutil.CollectImageInfoByChunkIDs(h.ctx, h.service.chunkService.GetRepository(), article.SpaceID, []string{bodyChunk.ID})
 	var imageInfos []types.ImageInfo
-	require.NoError(t, json.Unmarshal([]byte(retrieved[0].ImageInfo), &imageInfos))
+	require.NoError(t, json.Unmarshal([]byte(infoMap[bodyChunk.ID]), &imageInfos))
 	require.Len(t, imageInfos, 1, "retrieved body chunk keeps its image reference")
 	require.True(t, strings.HasPrefix(imageInfos[0].URL, "local://"))
 	require.Empty(t, imageInfos[0].Caption)

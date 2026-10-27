@@ -50,9 +50,10 @@ var allowedOutboundCalls = map[string]int{
 	"internal/utils/security.go|roundTripPinnedProxy|transport.RoundTrip": 1,
 	// Local selectors with HTTP-like method names.
 	// Self-check Get calls read persisted run records, without making an HTTP request.
-	"cmd/server/maintenance_chatgpt.go|runMaintenanceChatGPT|query.Get":                                6,
-	"internal/application/service/search/search.go|searchByTargets|errOnce.Do":                         1,
-	"internal/application/service/vault_file_rebuild.go|lockFileRebuild|once.Do":                       1,
+	"cmd/server/maintenance_chatgpt.go|runMaintenanceChatGPT|query.Get":          6,
+	"internal/application/service/vault_file_rebuild.go|lockFileRebuild|once.Do": 1,
+	// Prompt settings are persisted key/value reads, not outbound requests.
+	"internal/handler/prompts.go|List|h.settings.Get":                                                  1,
 	"internal/application/service/system_setting.go|Get|s.repo.Get":                                    1,
 	"internal/application/service/system_setting.go|Update|s.repo.Get":                                 2,
 	"internal/application/service/system_setting.go|resolveRaw|s.repo.Get":                             1,

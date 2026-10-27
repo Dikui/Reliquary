@@ -296,17 +296,13 @@ func (r *chunkRepository) SaveChunks(ctx context.Context, chunks []*types.Chunk)
 // IMPORTANT: This method only updates the following fields:
 //   - content
 //   - is_enabled
-//   - flags
 //   - status
 //   - updated_at
 //
 // Fields NOT updated by this method (will retain their original values):
-//   - metadata
 //   - content_hash
 //   - embedding-related fields
 //   - other fields not listed above
-//
-// If you need to update metadata or content_hash, use UpdateChunk (single) instead.
 func (r *chunkRepository) UpdateChunks(ctx context.Context, chunks []*types.Chunk) error {
 	if len(chunks) == 0 {
 		return nil
@@ -316,12 +312,10 @@ func (r *chunkRepository) UpdateChunks(ctx context.Context, chunks []*types.Chun
 	var ids []string
 	contentCases := make([]string, 0, len(chunks))
 	isEnabledCases := make([]string, 0, len(chunks))
-	flagsCases := make([]string, 0, len(chunks))
 	statusCases := make([]string, 0, len(chunks))
 
 	var contentArgs []interface{}
 	var isEnabledArgs []interface{}
-	var flagsArgs []interface{}
 	var statusArgs []interface{}
 
 	for _, chunk := range chunks {
@@ -339,9 +333,6 @@ func (r *chunkRepository) UpdateChunks(ctx context.Context, chunks []*types.Chun
 		isEnabledCases = append(isEnabledCases, "WHEN id = ? THEN ?")
 		isEnabledArgs = append(isEnabledArgs, chunk.ID, isEnabledStr)
 
-		flagsCases = append(flagsCases, "WHEN id = ? THEN ?")
-		flagsArgs = append(flagsArgs, chunk.ID, fmt.Sprintf("%d", chunk.Flags))
-
 		statusCases = append(statusCases, "WHEN id = ? THEN ?")
 		statusArgs = append(statusArgs, chunk.ID, fmt.Sprintf("%d", chunk.Status))
 	}
@@ -352,11 +343,10 @@ func (r *chunkRepository) UpdateChunks(ctx context.Context, chunks []*types.Chun
 		inPlaceholders[i] = "?"
 	}
 
-	// Combine args in correct order: content, is_enabled, flags, status, then IN clause
+	// Combine args in correct order: content, is_enabled, status, then IN clause
 	var args []interface{}
 	args = append(args, contentArgs...)
 	args = append(args, isEnabledArgs...)
-	args = append(args, flagsArgs...)
 	args = append(args, statusArgs...)
 	for _, id := range ids {
 		args = append(args, id)
@@ -366,14 +356,12 @@ func (r *chunkRepository) UpdateChunks(ctx context.Context, chunks []*types.Chun
 			UPDATE chunks SET
 				content = CASE %s END,
 				is_enabled = (CASE %s END)::boolean,
-				flags = (CASE %s END)::integer,
 				status = (CASE %s END)::integer,
 				updated_at = NOW()
 			WHERE id IN (%s)
 		`,
 		strings.Join(contentCases, " "),
 		strings.Join(isEnabledCases, " "),
-		strings.Join(flagsCases, " "),
 		strings.Join(statusCases, " "),
 		strings.Join(inPlaceholders, ","),
 	)

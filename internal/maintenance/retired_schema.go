@@ -84,6 +84,11 @@ func retirementAt(version int64) retirement {
 			r.columns[table] = append(r.columns[table], "entity_type")
 		}
 	}
+	if version >= 50 {
+		r.columns["chunks"] = append(r.columns["chunks"],
+			"search_title", "metadata", "flags", "relation_chunks", "indirect_relation_chunks")
+		r.columns["embeddings"] = append(r.columns["embeddings"], "is_enabled")
+	}
 	return r
 }
 

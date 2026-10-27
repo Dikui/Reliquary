@@ -118,8 +118,8 @@ func (h *entrySearchFixture) add(t *testing.T, id, source, date, contentType, se
 			ChunkType: types.ChunkTypeText, IsEnabled: true,
 		}
 		require.NoError(t, h.db.Create(chunk).Error)
-		require.NoError(t, h.db.Exec(`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,library_id,dimension,embedding,is_enabled)
-			VALUES (?,0,?,?,?,?,?,true)`, chunk.ID, chunk.ID, article.ID, libraryID, 3, pgvector.NewHalfVector(entrySearchFixtureEmbedding(chunk.Content))).Error)
+		require.NoError(t, h.db.Exec(`INSERT INTO embeddings(source_id,source_type,chunk_id,entry_id,library_id,dimension,embedding)
+			VALUES (?,0,?,?,?,?,?)`, chunk.ID, chunk.ID, article.ID, libraryID, 3, pgvector.NewHalfVector(entrySearchFixtureEmbedding(chunk.Content))).Error)
 	}
 	return article
 }

@@ -17,9 +17,7 @@ type LibraryService interface {
 	GetLibrariesByIDsOnly(ctx context.Context, ids []string) ([]*types.Library, error)
 	FillLibraryCounts(ctx context.Context, library *types.Library) error
 	UpdateLibrary(ctx context.Context, id, name, description string, config *types.LibraryConfig) (*types.Library, error)
-	HybridSearch(ctx context.Context, id string, params types.SearchParams) ([]*types.SearchResult, error)
 	GetQueryEmbedding(ctx context.Context, libraryID, queryText string) ([]float32, error)
-	ResolveEmbeddingModelKeys(ctx context.Context, libraries []*types.Library) map[string]string
 }
 
 // LibraryRepository preserves the internal library identity and model bindings.
