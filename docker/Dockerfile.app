@@ -92,8 +92,8 @@ COPY --from=builder /app/Reliquary .
 # Copy and make entrypoint script executable
 COPY --from=builder /app/scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
 
-# Make scripts executable
-RUN chmod +x ./scripts/*.sh
+# The runtime user must be able to read templates and migrations copied as root.
+RUN chmod -R a+rX /app/config /app/migrations /app/scripts && chmod +x ./scripts/*.sh
 
 # Expose ports
 EXPOSE 8080
