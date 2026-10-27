@@ -210,9 +210,6 @@ func (s *entryService) saveUnderstandingFact(
 		if err := tx.Create(&stored).Error; err != nil {
 			return err
 		}
-		if err := recordFactCandidates(tx, stored); err != nil {
-			return err
-		}
 		return saveGroupingEvidence(tx, types.EntryFact{
 			SpaceID: entry.SpaceID, EntryID: entry.ID, FactID: stored.ID,
 			Role: "source", Quote: fact.Quote, CreatedAt: now,

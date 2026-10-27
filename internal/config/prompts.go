@@ -24,6 +24,7 @@ var promptFiles = []struct {
 		"processing.yaml",
 		[]string{
 			"article_processing",
+			"quality_scoring",
 			"summary_merge",
 			"fact_grouping",
 			"story_consolidation",
@@ -130,7 +131,7 @@ func Prompt(id string, libraryIDs ...string) string {
 // PromptScopeIDs exposes only templates that can run in the selected scope.
 func PromptScopeIDs(library bool) []string {
 	if library {
-		return []string{"article_processing", "summary_merge", "fact_grouping", "story_consolidation", "output_correction", "evaluation_questions"}
+		return []string{"article_processing", "quality_scoring", "summary_merge", "fact_grouping", "story_consolidation", "output_correction", "evaluation_questions"}
 	}
 	return []string{"evaluation_questions_multi_library", "model_connection_test", "model_maintenance_probe"}
 }

@@ -234,6 +234,12 @@ const parseStatusOptions = computed(() => [
   { label: t('library.parseStatusDraft'), value: 'draft' },
   { label: t('library.intakeWaiting'), value: 'rejected' },
 ]);
+const selectedQuality = ref(initialDocumentFilters.quality);
+const qualityOptions = computed(() => [
+  { label: t('library.qualityDefault'), value: '' },
+  { label: t('library.qualityLow'), value: 'low' },
+  { label: t('library.qualityAll'), value: 'all' },
+]);
 const selectedSource = ref(initialDocumentFilters.source);
 const selectedSourceKind = ref(initialDocumentFilters.sourceKind);
 const sourceKindOptions = computed(() => [
@@ -260,6 +266,7 @@ const documentFilters = computed<DocumentListFilters>(() => ({
   fileType: selectedFileType.value || '',
   starred: selectedStarred.value || '',
   parseStatus: selectedParseStatus.value || '',
+  quality: selectedQuality.value || '',
   source: selectedSource.value || '',
   sourceKind: selectedSourceKind.value || '',
   startDate: updatedTimeRange.value?.[0] || '',
@@ -280,6 +287,7 @@ const filterParams = computed(() => {
     file_type: selectedFileType.value || undefined,
     starred: selectedStarred.value === '' ? undefined : selectedStarred.value === 'true',
     parse_status: selectedParseStatus.value || undefined,
+    quality: selectedQuality.value || undefined,
     source: selectedSource.value || undefined,
     source_kind: selectedSourceKind.value || undefined,
     start_time: start ? `${start} 00:00:00` : undefined,
@@ -398,6 +406,7 @@ watch(() => route.query, query => {
     selectedStarred.value = restored.starred;
     publishedRange.value = restored.publishedFrom || restored.publishedTo ? [restored.publishedFrom, restored.publishedTo] : [];
     selectedParseStatus.value = restored.parseStatus;
+    selectedQuality.value = restored.quality;
     selectedSource.value = restored.source;
     selectedSourceKind.value = restored.sourceKind;
     updatedTimeRange.value = restored.startDate || restored.endDate
@@ -961,7 +970,7 @@ const handleListAction = (
 
 // Clear selection on filter/library change to avoid acting on hidden items.
 watch(
-  [selectedDomainIds, selectedEntityIds, docSearchKeyword, selectedFileType, selectedStarred, selectedParseStatus, selectedSource, selectedSourceKind, updatedTimeRange, publishedRange, libraryId],
+  [selectedDomainIds, selectedEntityIds, docSearchKeyword, selectedFileType, selectedStarred, selectedParseStatus, selectedQuality, selectedSource, selectedSourceKind, updatedTimeRange, publishedRange, libraryId],
   () => {
     clearSelection();
   },
@@ -1033,6 +1042,10 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 
                 <div class="doc-filter-field">
                   <t-select v-model="selectedParseStatus" :options="parseStatusOptions" :aria-label="$t('library.parseStatusFilter')" class="doc-type-select doc-filter-field__control" />
+                </div>
+
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedQuality" :options="qualityOptions" :aria-label="$t('library.qualityFilter')" class="doc-type-select doc-filter-field__control" />
                 </div>
 
                 <div class="doc-filter-field doc-filter-field--wide"><t-date-range-picker v-model="publishedRange" allow-input clearable :placeholder="[t('entryBatch.publishedFrom'), t('entryBatch.publishedTo')]" :aria-label="t('entryBatch.publishedDates')" class="doc-date-range doc-filter-field__control" /><small v-if="publishedRange.length">{{ t('entryBatch.publishedHint') }}</small></div>

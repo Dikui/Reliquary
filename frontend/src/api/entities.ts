@@ -41,16 +41,7 @@ export interface EntityFactParams {
   limit?: number
   offset?: number
 }
-export interface EntityGraphEdge {
-  subject_entity_id: string
-  object_entity_id: string
-  latest_action: string
-  fact_count: number
-}
-export interface EntityGraph { center: Entity; nodes: Entity[]; edges: EntityGraphEdge[] }
 export interface EntityFactPage { items: import('./stories').StoryFact[]; total: number }
-export const getEntityGraph = (id: string, params?: Pick<EntityFactParams, 'from' | 'to'>) =>
-  get<EntityEnvelope<EntityGraph>>(`${base}/${encodeURIComponent(id)}/graph${queryString(params)}`)
 export const getEntityFacts = (id: string, params?: EntityFactParams) =>
   get<EntityEnvelope<EntityFactPage>>(`${base}/${encodeURIComponent(id)}/facts${queryString(params)}`)
 export const mergeEntities = (input: { keep_entity_id: string; merge_entity_id: string }) => post<EntityActionEnvelope>(`${base}/merge`, input)
@@ -61,27 +52,3 @@ export const createEntity = (input: EntityInput) => post<EntityEnvelope<Entity>>
 export const updateEntity = (id: string, input: EntityInput) => patch<EntityEnvelope<Entity>>(`${base}/${encodeURIComponent(id)}`, input)
 export const deleteEntity = (id: string) => del<EntityActionEnvelope>(`${base}/${encodeURIComponent(id)}`)
 export const setEntryEntities = (id: string, entity_ids: string[]) => put<EntityEnvelope<{ entities: Entity[]; entities_manual: boolean }>>(`/api/v1/entries/${encodeURIComponent(id)}/entities`, { entity_ids })
-
-export type CandidateStatus = 'pending' | 'ignored' | 'approved' | 'aliased'
-export interface EntityCandidate {
-  id: string
-  name: string
-  status: CandidateStatus
-  entity_id: string | null
-  occurrence_count: number
-}
-export interface CandidatePage { items: EntityCandidate[]; total: number }
-export interface CandidateFact {
-  fact?: Omit<import('./stories').StoryFact, 'sources'>
-  endpoint?: 'subject' | 'object'
-  entry?: { id: string; title: string }
-  quote?: string
-  created_at: string
-}
-export interface CandidateDetail { candidate: EntityCandidate; occurrences: CandidateFact[]; total: number }
-export const listEntityCandidates = (status: CandidateStatus = 'pending', limit = 50, offset = 0) =>
-  get<EntityEnvelope<CandidatePage>>(`/api/v1/entity-candidates?status=${status}&limit=${limit}&offset=${offset}`)
-export const getEntityCandidate = (id: string, limit = 50, offset = 0) =>
-  get<EntityEnvelope<CandidateDetail>>(`/api/v1/entity-candidates/${encodeURIComponent(id)}?limit=${limit}&offset=${offset}`)
-export const reviewEntityCandidate = (id: string, action: 'approve' | 'alias' | 'ignore', entityId?: string) =>
-  post<EntityEnvelope<EntityCandidate>>(`/api/v1/entity-candidates/${encodeURIComponent(id)}/${action}`, entityId ? { entity_id: entityId } : {})

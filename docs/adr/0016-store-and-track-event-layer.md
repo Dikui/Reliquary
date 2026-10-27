@@ -1,6 +1,6 @@
 # 0016 存储加跟踪：资料、事实、事件三层与预设实体
 
-Status: accepted
+Status: accepted；部分被 [0018](0018-closed-entity-catalog.md) 取代（待确认实体、候选审核、实体图谱）
 日期：2026-10-24
 部分取代 [0009](0009-kb-collect-store-retrieve.md)（不建事实与事件、删除领域）、[0014](0014-internal-knowledge-base.md)（知识图谱、关系与关系类型、Neo4j 副本、实体开放抽取与核查、内容类型与主题、关注动态、相似折叠、摘要要点）、[0002](0002-global-entity-registry.md)（自动建档与身份判断）
 沿用 [0005](0005-event-layer-bounds.md) 的有限关联原则：关联只展开一层，不做传递推理。

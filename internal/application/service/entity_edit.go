@@ -90,10 +90,6 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 				return err
 			}
 		}
-		if err := tx.Model(&types.EntityCandidate{}).Where("space_id=? AND entity_id=?", spaceID, merged.ID).
-			Update("entity_id", keep.ID).Error; err != nil {
-			return err
-		}
 		actor, _ := types.PrincipalFromContext(ctx)
 		record := types.EntityMergeRecord{
 			ID:            uuid.NewString(),
@@ -313,10 +309,6 @@ func (s *EntityService) DeleteEntity(ctx context.Context, id string) error {
 		) {
 			return werrors.NewNotFoundError("entity not found")
 		} else if err != nil {
-			return err
-		}
-		if err := tx.Model(&types.EntityCandidate{}).Where("space_id=? AND entity_id=?", spaceID, id).
-			Updates(map[string]any{"status": "pending", "entity_id": nil, "updated_at": time.Now()}).Error; err != nil {
 			return err
 		}
 		// Old merge URLs must not resolve to a deleted target.

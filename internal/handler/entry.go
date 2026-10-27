@@ -518,6 +518,7 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 		FileType:    c.Query("file_type"),
 		ParseStatus: c.Query("parse_status"),
 		Source:      c.Query("source"),
+		Quality:     strings.TrimSpace(c.Query("quality")),
 	}
 	for key, target := range map[string]*[]string{"domain_ids": &filter.DomainIDs, "entity_ids": &filter.EntityIDs} {
 		ids, err := queryFilterIDs(c, key)
@@ -548,6 +549,12 @@ func (h *EntryHandler) ListEntry(c *gin.Context) {
 	case "", "article", "mine", "report":
 	default:
 		c.Error(errors.NewBadRequestError("invalid source_kind"))
+		return
+	}
+	switch filter.Quality {
+	case "", types.QualityStatusPassed, types.QualityStatusLow, "all":
+	default:
+		c.Error(errors.NewBadRequestError("invalid quality"))
 		return
 	}
 	if raw, supplied := c.GetQuery("starred"); supplied {

@@ -3,13 +3,8 @@ package service
 import (
 	"context"
 	"reliquary/internal/types"
-	"strings"
-	"time"
-	"unicode/utf8"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // Validate against the exact directory snapshot offered to each model call.
@@ -57,48 +52,7 @@ func resolveFactEntity(name, proposedID string, options []understandingEntityOpt
 	return nil
 }
 
-func recordFactCandidates(tx *gorm.DB, fact types.Fact) error {
-	for _, end := range []struct {
-		name, endpoint string
-		id             *string
-	}{
-		{fact.Subject, "subject", fact.SubjectEntityID},
-		{fact.Object, "object", fact.ObjectEntityID},
-	} {
-		name := strings.TrimSpace(end.name)
-		key := types.NormalizeEntityKey(name)
-		if end.id != nil || key == "" || utf8.RuneCountInString(name) > 512 ||
-			utf8.RuneCountInString(key) > 512 || strings.ContainsAny(name, "\r\n\x00") {
-			continue
-		}
-		now := time.Now()
-		candidate := types.EntityCandidate{
-			ID: uuid.NewString(), SpaceID: fact.SpaceID, Name: name,
-			NormalizedName: key, Status: "pending", CreatedAt: now, UpdatedAt: now,
-		}
-		if err := tx.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "space_id"}, {Name: "normalized_name"}},
-			DoUpdates: clause.AssignmentColumns([]string{"updated_at"}),
-		}).Create(&candidate).Error; err != nil {
-			return err
-		}
-		candidate = types.EntityCandidate{}
-		if err := tx.Where("space_id=? AND normalized_name=?", fact.SpaceID, key).First(&candidate).Error; err != nil {
-			return err
-		}
-		occurrence := types.EntityCandidateOccurrence{
-			SpaceID: fact.SpaceID, CandidateID: candidate.ID,
-			FactID: fact.ID, Endpoint: end.endpoint, CreatedAt: now,
-		}
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&occurrence).Error; err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // Manual alias edits perform one exact pass over unlinked historical endpoints.
-// Candidate review deliberately uses occurrence records instead of this scan.
 func backfillFactAliases(ctx context.Context, tx *gorm.DB, entity types.Entity, aliases []string) error {
 	keys := map[string]bool{}
 	for _, alias := range aliases {

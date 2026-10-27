@@ -10,9 +10,6 @@ func RegisterEntityRoutes(r *gin.RouterGroup, h *handler.EntityHandler) {
 	if h == nil {
 		return
 	}
-	r.GET("/entity-candidates", h.Candidates)
-	r.GET("/entity-candidates/:candidate_id", h.CandidateDetail)
-	r.POST("/entity-candidates/:candidate_id/:action", h.ReviewCandidate)
 	group := r.Group("/entities")
 	group.GET("", h.Entities)
 	group.POST("", h.SaveEntity)
@@ -21,7 +18,6 @@ func RegisterEntityRoutes(r *gin.RouterGroup, h *handler.EntityHandler) {
 	r.PUT("/entries/:id/entities", h.SetEntryEntities)
 	group.POST("/merge", h.MergeEntities)
 	group.GET("/:entity_id", h.EntityDetail)
-	group.GET("/:entity_id/graph", h.Graph)
 	group.GET("/:entity_id/facts", h.Facts)
 	group.GET("/:entity_id/merge-records", h.MergeRecords)
 }

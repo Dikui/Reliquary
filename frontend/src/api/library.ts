@@ -56,6 +56,7 @@ export function listEntryFiles(
     file_type?: string;
     starred?: boolean;
     parse_status?: string;
+    quality?: string;
     source?: string;
     source_kind?: SearchSource;
     start_time?: string;
@@ -74,6 +75,7 @@ export function listEntryFiles(
   if (params.file_type) query.append('file_type', params.file_type);
   if (typeof params.starred === 'boolean') query.append('starred', String(params.starred));
   if (params.parse_status) query.append('parse_status', params.parse_status);
+  if (params.quality) query.append('quality', params.quality);
   if (params.source) query.append('source', params.source);
   if (params.source_kind) query.append('source_kind', params.source_kind);
   if (params.start_time) query.append('start_time', params.start_time);

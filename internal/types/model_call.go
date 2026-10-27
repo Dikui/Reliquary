@@ -17,6 +17,7 @@ const (
 	CallPurposeIntakeReview       ModelCallPurpose = "intake_review"
 	CallPurposeArticleProcessing  ModelCallPurpose = "article_processing"
 	CallPurposeEntryUnderstanding ModelCallPurpose = "entry_understanding"
+	CallPurposeQualityScoring     ModelCallPurpose = "quality_scoring"
 	CallPurposeSegmentMerge       ModelCallPurpose = "segment_merge"
 	CallPurposeImageDescription   ModelCallPurpose = "image_description"
 	CallPurposeEntityResolution   ModelCallPurpose = "entity_resolution"
@@ -32,6 +33,7 @@ var ModelCallPurposes = []ModelCallPurpose{
 	CallPurposeIntakeReview,
 	CallPurposeArticleProcessing,
 	CallPurposeEntryUnderstanding,
+	CallPurposeQualityScoring,
 	CallPurposeSegmentMerge,
 	CallPurposeImageDescription,
 	CallPurposeEntityResolution,
@@ -50,6 +52,8 @@ func NormalizeModelCallPurpose(stage string, tier ModelTier) ModelCallPurpose {
 		return CallPurposeArticleProcessing
 	case "entry_understanding":
 		return CallPurposeEntryUnderstanding
+	case "quality_scoring":
+		return CallPurposeQualityScoring
 	case "article_summary_merge", "segment_merge":
 		return CallPurposeSegmentMerge
 	case "image_description", "image_caption":

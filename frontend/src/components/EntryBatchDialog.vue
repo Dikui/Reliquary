@@ -27,7 +27,7 @@ const step = ref<'scope' | 'action'>('scope'), stepTitle = ref<HTMLElement>()
 const action = ref<EntryBatchAction>('star'), scope = ref('selected'), starred = ref(true)
 const preview = ref<EntryBatchPreview>(), batch = ref<EntryBatch>(), confirmed = ref(false), busy = ref(false), error = ref(''), page = ref(1)
 let generation = 0, timer: ReturnType<typeof setTimeout> | undefined, disposed = false, readGeneration = 0
-const actions: EntryBatchAction[] = ['star', 'reprocess', 'reclassify_domains', 'delete']
+const actions: EntryBatchAction[] = ['star', 'score_quality', 'reprocess', 'reclassify_domains', 'delete']
 const selection = computed<EntryBatchSelection>(() => scope.value === 'selected' && !props.scopeLabel ? { ids: [...(props.ids || [])] } : (props.selection || {}))
 const request = computed<EntryBatchRequest>(() => ({ action: action.value, selection: selection.value, ...(action.value === 'star' ? { starred: starred.value } : {}) }))
 const scopeValid = computed(() => Boolean(selection.value.filters || selection.value.ids?.length))
@@ -170,6 +170,7 @@ onUnmounted(() => { disposed = true; trigger = null; generation++; readGeneratio
         <t-alert v-if="action === 'delete'" theme="warning" :message="t('entryBatch.deleteHint')" />
         <t-alert v-if="action === 'reprocess'" theme="warning" :message="t('entryBatch.reprocessHint')" />
         <t-alert v-if="action === 'reclassify_domains'" theme="info" :message="t('domains.reclassifyHint')" />
+        <t-alert v-if="action === 'score_quality'" theme="info" :message="t('entryBatch.scoreQualityHint')" />
         <t-button :loading="busy" :disabled="busy || !valid" @click="showPreview">{{ t('entryBatch.preview') }}</t-button>
         <section v-if="preview" aria-live="polite"><p>{{ t('entryBatch.previewCounts', { ...preview }) }}</p><ul><li v-for="reason in preview.reasons" :key="reason.code">{{ t('entryBatch.reasonCount', { reason: t(`entryBatch.reasons.${reason.code}`, reason.code), count: reason.count }) }}</li></ul><p>{{ t('entryBatch.samples') }}</p><ul><li v-for="item in preview.samples" :key="item.id">{{ item.title || item.id }} · {{ libraryName(item.library_id) }}</li></ul><t-checkbox v-model="confirmed" :disabled="busy || !preview.eligible">{{ t('entryBatch.confirmScope', { scope: scopeText, count: preview.eligible }) }}</t-checkbox><div><t-button :theme="action === 'delete' ? 'danger' : 'primary'" :disabled="busy || !confirmed || !preview.eligible || preview.blocked > 0" :loading="busy" @click="submit()">{{ t('entryBatch.confirm') }}</t-button></div></section>
         </template>

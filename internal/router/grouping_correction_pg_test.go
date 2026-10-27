@@ -42,52 +42,6 @@ func TestManualGroupingMergeFactsHTTP(t *testing.T) {
 		"library": "ai-output", "source_ref": "analysis", "content": "An analysis.",
 		"mentioned_fact_ids": []string{a.ID, b.ID},
 	})[0]["entry_id"].(string)
-	before := f.candidates(t, "pending")
-	require.Len(t, before, 2)
-	require.EqualValues(t, 2, before[0].OccurrenceCount)
-	f.request(t, http.MethodPost, "/api/v1/facts/"+b.ID+"/merge", map[string]string{"keep_fact_id": a.ID}, 200)
-	// A repeated submission is harmless and does not add another log.
-	f.request(t, http.MethodPost, "/api/v1/facts/"+b.ID+"/merge", map[string]string{"keep_fact_id": a.ID}, 200)
-	detail := groupingDetail(t, f.mcpFixture, a.StoryID)
-	require.Len(t, detail.Facts, 1)
-	require.Len(t, detail.Facts[0].Sources, 2)
-	require.True(t, detail.Facts[0].ManualCorrected)
-	for _, source := range detail.Facts[0].Sources {
-		require.Equal(t, "A collaboration was announced.", source.Quote)
-		require.True(t, source.Manual)
-	}
-	require.Len(t, detail.Mentions, 1)
-	require.Equal(t, mention, detail.Mentions[0].EntryID)
-	require.True(t, detail.Mentions[0].Manual)
-	require.Empty(t, groupingDetail(t, f.mcpFixture, b.StoryID).Facts)
-	var retained struct{ Data types.StoryFact }
-	require.NoError(t, json.Unmarshal(f.request(t, http.MethodGet, "/api/v1/facts/"+b.ID, nil, 200), &retained))
-	require.Equal(t, a.ID, retained.Data.ID)
-	for _, candidate := range f.candidates(t, "pending") {
-		require.EqualValues(t, 1, candidate.OccurrenceCount)
-		var out struct{ Data types.EntityCandidateDetail }
-		require.NoError(
-			t,
-			json.Unmarshal(f.request(t, http.MethodGet, "/api/v1/entity-candidates/"+candidate.ID, nil, 200), &out),
-		)
-		require.Len(t, out.Data.Occurrences, 1)
-		require.Equal(t, a.ID, out.Data.Occurrences[0].Fact.ID)
-	}
-	entity := f.entity(t, "Reviewed institute")
-	var candidateID string
-	for _, candidate := range f.candidates(t, "pending") {
-		if candidate.Name == "Unlisted" {
-			candidateID = candidate.ID
-		}
-	}
-	f.request(
-		t,
-		http.MethodPost,
-		"/api/v1/entity-candidates/"+candidateID+"/alias",
-		map[string]string{"entity_id": entity.ID},
-		200,
-	)
-	require.Equal(t, &entity.ID, groupingDetail(t, f.mcpFixture, a.StoryID).Facts[0].SubjectEntityID)
 	for _, id := range []string{a.Sources[0].EntryID, b.Sources[0].EntryID, mention} {
 		reprocessCorrected(t, f, id)
 	}
@@ -178,26 +132,6 @@ func TestManualGroupingMergeSourceWinsOverMentionHTTP(t *testing.T) {
 	detail := groupingDetail(t, f.mcpFixture, a.StoryID)
 	require.Len(t, detail.Facts[0].Sources, 3)
 	require.Empty(t, detail.Mentions, "duplicate mention cannot downgrade source evidence")
-}
-
-func TestManualGroupingMergeRemapsReversedCandidateEndpointsHTTP(t *testing.T) {
-	f := newCandidateFixture(t)
-	a := f.process(t, "first", candidateFact("Institute A", "Institute B"))
-	b := f.process(t, "second", candidateFact("Institute B", "Institute A"))
-	f.request(t, http.MethodPost, "/api/v1/facts/"+b.ID+"/merge", map[string]string{"keep_fact_id": a.ID}, 200)
-	approved := map[string]*string{}
-	for _, candidate := range f.candidates(t, "pending") {
-		require.EqualValues(t, 1, candidate.OccurrenceCount)
-		var result struct{ Data types.EntityCandidate }
-		require.NoError(t, json.Unmarshal(f.request(t, http.MethodPost,
-			"/api/v1/entity-candidates/"+candidate.ID+"/approve", map[string]any{}, 200), &result))
-		approved[candidate.Name] = result.Data.EntityID
-	}
-	detail := groupingDetail(t, f.mcpFixture, a.StoryID)
-	require.NotNil(t, detail.Facts[0].SubjectEntityID)
-	require.NotNil(t, detail.Facts[0].ObjectEntityID)
-	require.Equal(t, approved["Institute A"], detail.Facts[0].SubjectEntityID)
-	require.Equal(t, approved["Institute B"], detail.Facts[0].ObjectEntityID)
 }
 
 func TestManualGroupingRedirectChainsAndValidationHTTP(t *testing.T) {

@@ -68,58 +68,6 @@ func entityTimeRange(q *gorm.DB, from, to string) (*gorm.DB, error) {
 	return q, nil
 }
 
-// EntityGraph derives directed edges from live facts without storing a graph replica.
-func (s *EntityService) EntityGraph(
-	ctx context.Context,
-	id string,
-	query types.EntityFactQuery,
-) (*types.EntityGraph, error) {
-	spaceID, err := s.requireSpace(ctx)
-	if err != nil {
-		return nil, err
-	}
-	center, err := canonicalEntity(s.db.WithContext(ctx), spaceID, id)
-	if err != nil {
-		return nil, err
-	}
-	q, err := entityTimeRange(NewStoryService(s.db).visibleFacts(ctx, spaceID), query.From, query.To)
-	if err != nil {
-		return nil, err
-	}
-	graph := &types.EntityGraph{Center: center, Nodes: []types.Entity{}, Edges: []types.EntityGraphEdge{}}
-	err = q.Where("f.subject_entity_id=? OR f.object_entity_id=?", center.ID, center.ID).
-		Joins(`JOIN entities subject ON subject.id=f.subject_entity_id
- AND subject.space_id=f.space_id AND subject.merged_into_id=''`).
-		Joins(`JOIN entities object ON object.id=f.object_entity_id
- AND object.space_id=f.space_id AND object.merged_into_id=''`).
-		Select(`DISTINCT ON (f.subject_entity_id,f.object_entity_id) f.subject_entity_id,f.object_entity_id,
- COUNT(*) OVER (PARTITION BY f.subject_entity_id,f.object_entity_id) AS fact_count, f.action AS latest_action`).
-		Order("f.subject_entity_id,f.object_entity_id," + entityFactTime + " DESC,f.created_at DESC,f.id").
-		Scan(&graph.Edges).Error
-	if err != nil {
-		return nil, err
-	}
-	ids := []string{center.ID}
-	for _, edge := range graph.Edges {
-		ids = appendUniqueEntityString(ids, edge.SubjectEntityID)
-		ids = appendUniqueEntityString(ids, edge.ObjectEntityID)
-	}
-	err = s.db.WithContext(ctx).Where("space_id=? AND id IN ?", spaceID, ids).
-		Order("canonical_name,id").Find(&graph.Nodes).Error
-	if err != nil {
-		return nil, err
-	}
-	if err = s.loadAliases(ctx, spaceID, graph.Nodes); err != nil {
-		return nil, err
-	}
-	for _, node := range graph.Nodes {
-		if node.ID == center.ID {
-			graph.Center = node
-		}
-	}
-	return graph, nil
-}
-
 // EntityFacts reads all visible endpoint facts, including single-ended occurrences.
 func (s *EntityService) EntityFacts(
 	ctx context.Context,

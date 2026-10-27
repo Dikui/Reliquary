@@ -40,11 +40,12 @@ func batchSpace(ctx context.Context) (uint64, error) {
 }
 
 func batchFilter(f *types.EntryBatchFilters) (types.EntryListFilter, error) {
-	out := types.EntryListFilter{}
+	out := types.EntryListFilter{Quality: "all"}
 	if f == nil {
 		return out, nil
 	}
 	out = types.EntryListFilter{
+		Quality:         "all",
 		LibraryIDs:      f.Libraries,
 		EntityIDs:       f.EntityIDs,
 		DomainIDs:       f.DomainIDs,
@@ -103,7 +104,7 @@ func validateBatchRequest(req types.EntryBatchRequest) error {
 		return apperrors.NewBadRequestError("select either ids or filters")
 	}
 	switch req.Action {
-	case "delete", "reprocess", "reclassify_domains":
+	case "delete", "reprocess", "reclassify_domains", "score_quality":
 	case "star":
 		if req.Starred == nil {
 			return apperrors.NewBadRequestError("starred is required")
@@ -213,12 +214,14 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 		}
 		if reason == "" {
 			switch req.Action {
-			case "review", "reprocess", "reclassify_domains":
+			case "review", "reprocess", "reclassify_domains", "score_quality":
 				library, e := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
 				if e != nil {
 					return nil, nil, e
 				}
-				if req.Action == "review" && library.Template == types.TemplateGenerated {
+				if req.Action == "score_quality" && !qualityScoringApplies(library, entry) {
+					reason = "quality_not_applicable"
+				} else if req.Action == "review" && library.Template == types.TemplateGenerated {
 					reason = "generated_library"
 				} else if req.Action == "review" && !libraryReviewEligible(entry, "all") {
 					reason = "review_ineligible"
@@ -614,6 +617,12 @@ func (s *entryService) executeBatchItem(ctx context.Context, p types.EntryBatchP
 			return err
 		}
 		return nil
+	case "score_quality":
+		library, err := s.libraryService.GetLibraryByID(ctx, current.LibraryID)
+		if err != nil {
+			return err
+		}
+		return s.scoreEntryQuality(ctx, library, &current)
 	case "reprocess", "review":
 		run := fmt.Sprintf("%s:%d", p.BatchID, item.Attempt)
 		child := types.EntryListReparsePayload{SpaceID: p.SpaceID, LibraryID: item.LibraryID, Initiator: p.Initiator}
@@ -724,7 +733,7 @@ func (s *entryService) RetryEntryBatch(ctx context.Context, id string) (*types.E
 }
 
 func batchProcessesEntries(action string) bool {
-	return action == "review" || action == "reprocess" || action == "reclassify_domains"
+	return action == "review" || action == "reprocess" || action == "reclassify_domains" || action == "score_quality"
 }
 
 // Recover ledger state after a terminal dispatcher failure without interrupting live children.

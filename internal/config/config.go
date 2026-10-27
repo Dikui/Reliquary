@@ -18,10 +18,40 @@ type Config struct {
 	FactGrouping      *FactGroupingConfig      `yaml:"fact_grouping" json:"fact_grouping"`
 	Vault             *VaultConfig             `yaml:"vault" json:"vault"`
 	ArticleProcessing *ArticleProcessingConfig `yaml:"article_processing" json:"article_processing"`
+	QualityScoring    *QualityScoringConfig    `yaml:"quality_scoring" json:"quality_scoring"`
 	Server            *ServerConfig            `yaml:"server"           json:"server"`
 	Library           *LibraryConfig           `yaml:"library"   json:"library"`
 
 	Models []ModelConfig `yaml:"models"           json:"models"`
+}
+
+// QualityScoringConfig controls the two-pass junk filter. Each material is
+// scored twice independently; the sum must reach 2*Threshold to be kept.
+type QualityScoringConfig struct {
+	Threshold    int `yaml:"threshold" json:"threshold"`
+	MaxBodyChars int `yaml:"max_body_chars" json:"max_body_chars"`
+}
+
+// DefaultQualityThreshold is the per-call score floor used when unset.
+const DefaultQualityThreshold = 60
+
+// DefaultQualityMaxBodyChars caps the body sent to each scoring call.
+const DefaultQualityMaxBodyChars = 12000
+
+// QualityThreshold returns the effective per-call score floor.
+func (cfg *Config) QualityThreshold() int {
+	if cfg != nil && cfg.QualityScoring != nil && cfg.QualityScoring.Threshold > 0 {
+		return cfg.QualityScoring.Threshold
+	}
+	return DefaultQualityThreshold
+}
+
+// QualityMaxBodyChars returns the effective per-call body cap.
+func (cfg *Config) QualityMaxBodyChars() int {
+	if cfg != nil && cfg.QualityScoring != nil && cfg.QualityScoring.MaxBodyChars > 0 {
+		return cfg.QualityScoring.MaxBodyChars
+	}
+	return DefaultQualityMaxBodyChars
 }
 
 // FactGroupingConfig controls candidate recall and high-confidence verification.
@@ -188,6 +218,9 @@ func ValidateConfig(cfg *Config) error {
 	}
 	if cfg.ArticleProcessing != nil && (cfg.ArticleProcessing.MaxBodyChars < 0 || cfg.ArticleProcessing.MaxImages < 0 || cfg.ArticleProcessing.MaxCompletionTokens < 0 || cfg.ArticleProcessing.MaxSegments < 0 || cfg.ArticleProcessing.SegmentOverlapChars < 0 || cfg.ArticleProcessing.ContextReservePercent < 0 || cfg.ArticleProcessing.ContextReservePercent > 90) {
 		errs = append(errs, "article_processing limits must be nonnegative")
+	}
+	if cfg.QualityScoring != nil && (cfg.QualityScoring.Threshold < 0 || cfg.QualityScoring.Threshold > 100 || cfg.QualityScoring.MaxBodyChars < 0) {
+		errs = append(errs, "quality_scoring threshold must be between 0 and 100 and max_body_chars nonnegative")
 	}
 
 	if cfg.Library != nil {

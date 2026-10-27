@@ -398,6 +398,13 @@ func (s *entryService) processArticleBody(ctx context.Context, library *types.Li
 			return errors.New(k.ErrorMessage)
 		}
 	}
+	kept, err := s.applyQualityGate(ctx, library, k, body)
+	if err != nil {
+		return err
+	}
+	if !kept {
+		return nil
+	}
 	k.SummaryStatus = types.SummaryStatusProcessing
 	if err := s.repo.UpdateEntry(ctx, k); err != nil {
 		return err

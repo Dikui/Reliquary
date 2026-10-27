@@ -4,11 +4,6 @@
       <div><h2>{{ t('knowledgeWorkbench.title') }}</h2><p>{{ t('knowledgeWorkbench.subtitle') }}</p></div>
       <t-button variant="outline" :loading="loading" @click="refreshAll"><template #icon><t-icon name="refresh" /></template>{{ t('knowledgeWorkbench.refresh') }}</t-button>
     </header>
-    <div class="workbench-views" role="group" :aria-label="t('knowledgeWorkbench.title')">
-      <t-button :theme="activeView === 'entities' ? 'primary' : 'default'" :variant="activeView === 'entities' ? 'base' : 'outline'" :aria-pressed="activeView === 'entities'" @click="activeView = 'entities'">{{ t('knowledgeWorkbench.entities.title') }}</t-button>
-      <t-button :theme="activeView === 'candidates' ? 'primary' : 'default'" :variant="activeView === 'candidates' ? 'base' : 'outline'" :aria-pressed="activeView === 'candidates'" @click="activeView = 'candidates'">{{ t('entityCandidates.title') }}</t-button>
-    </div>
-    <div v-show="activeView === 'entities'">
     <t-alert v-if="loadError" theme="error" :message="loadError" role="alert"><template #operation><t-button variant="text" :loading="loading" @click="refreshAll">{{ t('common.retry') }}</t-button></template></t-alert>
     <section class="workbench-panel">
       <div class="panel-heading"><div><h3>{{ t('knowledgeWorkbench.entities.title') }}</h3><p>{{ t('knowledgeWorkbench.entities.description') }}</p></div>
@@ -36,10 +31,6 @@
         </div>
       </t-loading>
     </section>
-    </div>
-    <div v-show="activeView === 'candidates'">
-      <EntityCandidates @changed="refreshAll" @open-source="id => emit('open-source', id)" />
-    </div>
     <EntityEditor v-if="editorVisible" :entity="editingEntity" @close="editorVisible = false" @saved="entitySaved" />
     <t-dialog v-model:visible="deleteVisible" :header="t('entityMaintenance.delete')" :footer="false" :close-on-overlay-click="false" :close-btn="!deleting" :close-on-esc-keydown="!deleting" width="min(480px, 95vw)">
       <p>{{ t('entityMaintenance.deleteHint', { name: selectedEntity?.canonical_name }) }}</p>
@@ -58,7 +49,6 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { deleteEntity, getEntity, listEntities, mergeEntities, type Entity, type EntityEntry } from '@/api/entities'
 import type { SourceLocation } from '@/types/search'
 import EntityEditor from './EntityEditor.vue'
-import EntityCandidates from './EntityCandidates.vue'
 import EntityActivity from './EntityActivity.vue'
 import FollowToggle from '@/components/FollowToggle.vue'
 import { useFollowStore } from '@/stores/follows'
@@ -68,7 +58,6 @@ const emit = defineEmits<{ 'open-source': [entryId: string, location?: SourceLoc
 const { t, locale } = useI18n()
 const followStore = useFollowStore()
 const pageSize = 50
-const activeView = ref('entities')
 const entityFilter = ref(''), entityComposing = ref(false)
 const entities = ref<Entity[]>([]), entitiesLoading = ref(false), hasMoreEntities = ref(false), loadError = ref('')
 const selectedEntity = ref<Entity | null>(null), entityEntries = ref<EntityEntry[]>([]), entityDetailLoading = ref(false), entityDetailError = ref('')
@@ -144,7 +133,6 @@ async function confirmDelete() {
 watch(entityFilter, scheduleEntitySearch)
 async function selectInitialEntity(id: string) {
   if (!id) return;
-  activeView.value = 'entities';
   const current = ++detailRequest;
   entityEntries.value = []; entityDetailError.value = ''; entityDetailLoading.value = true;
   try { const result = envelopeData(await getEntity(id)); if (current === detailRequest) { selectedEntity.value = result.entity; entityEntries.value = result.entries || [] } }

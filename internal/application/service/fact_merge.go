@@ -50,26 +50,6 @@ func (s *StoryService) MergeFacts(ctx context.Context, id, keepID string) (*type
 			spaceID, merged.ID, keep.ID).Error; err != nil {
 			return err
 		}
-		if err := tx.Exec(`WITH moved AS (
- SELECT o.space_id,o.candidate_id,o.created_at,
- CASE WHEN c.normalized_name=? AND c.normalized_name<>? THEN 'subject'
-      WHEN c.normalized_name=? AND c.normalized_name<>? THEN 'object'
-      ELSE o.endpoint END AS endpoint
- FROM entity_candidate_occurrences o JOIN entity_candidates c ON c.space_id=o.space_id AND c.id=o.candidate_id
- WHERE o.space_id=? AND o.fact_id=?)
- INSERT INTO entity_candidate_occurrences(space_id,candidate_id,fact_id,endpoint,created_at)
- SELECT space_id,candidate_id,?,endpoint,min(created_at) FROM moved GROUP BY space_id,candidate_id,endpoint
- ON CONFLICT(candidate_id,fact_id,endpoint) DO UPDATE
- SET created_at=LEAST(entity_candidate_occurrences.created_at,EXCLUDED.created_at)`,
-			types.NormalizeEntityKey(keep.Subject), types.NormalizeEntityKey(keep.Object),
-			types.NormalizeEntityKey(keep.Object), types.NormalizeEntityKey(keep.Subject),
-			spaceID, merged.ID, keep.ID).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("space_id=? AND fact_id=?", spaceID, merged.ID).
-			Delete(&types.EntityCandidateOccurrence{}).Error; err != nil {
-			return err
-		}
 		if err := tx.Model(&types.Fact{}).Where("space_id=? AND (id=? OR merged_into_id=?)",
 			spaceID, merged.ID, merged.ID).
 			Updates(map[string]any{"merged_into_id": keep.ID, "manual_corrected": true}).Error; err != nil {

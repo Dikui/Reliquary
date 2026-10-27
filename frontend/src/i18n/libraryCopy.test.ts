@@ -9,7 +9,7 @@ import { collectLocaleKeys, getLocaleValueAtPath } from './localeKeyAudit'
 import { collectTranslationCallsFromSource } from './translationCallAudit'
 
 // ADR 0016 defines 对象 as a fact-frame field and names events and entities 关注对象.
-const isFactObject = (key: string, value: string) => (['stories.object', 'entityCandidates.object'].includes(key) && value === '对象')
+const isFactObject = (key: string, value: string) => (['stories.object'].includes(key) && value === '对象')
   || (key === 'entityActivity.incoming' && value.includes('作为对象'))
   || (['follows.targetsFailed', 'follows.filterTarget', 'follows.allTargets'].includes(key) && value.includes('关注对象'))
 const retiredCopy = /消息|对象|知识上下文|领域模板|开放字段|字段归并|事实记录|证据版本|抽取模式|关注范围|事件聚合|事件热度|具体所指标签|内容性质标签|自由标签|关注价值|Agent 策略|策略版本|跟踪任务|知识工作流|知识报告|可编辑工作副本|不可变原文|知识工作台|message content|existing message|knowledge context|knowledge workbench/i
@@ -17,7 +17,6 @@ const pages = [
   '../views/library/Library.vue',
   '../views/library/SearchView.vue',
   '../views/library/components/EntryWorkbench.vue',
-  '../views/library/components/EntityCandidates.vue',
 
   '../views/library/OperationLogs.vue',
   '../views/settings/Settings.vue',

@@ -76,6 +76,17 @@ const (
 	SummaryStatusFailed = "failed"
 )
 
+// Entry quality status constants. Quality is scored by two independent model
+// calls; the sum of both scores decides whether the material is kept for
+// understanding. Low-quality material stays in the library but is hidden from
+// the default list and never produces entities or facts.
+const (
+	// QualityStatusPassed marks material that cleared the score threshold.
+	QualityStatusPassed = "passed"
+	// QualityStatusLow marks material that did not clear the score threshold.
+	QualityStatusLow = "low"
+)
+
 // ManualEntryFormat represents the format of the manual entry
 const (
 	ManualEntryFormatMarkdown = "markdown"
@@ -104,6 +115,10 @@ type EntryListFilter struct {
 	// ParseStatus filters by parse_status when non-empty. Failed also includes
 	// completed body indexes whose background processing failed.
 	ParseStatus string
+	// Quality filters by quality_status. Empty hides low-quality entries while
+	// keeping unscored material visible; "low" selects only low-quality
+	// entries; "all" disables the quality filter.
+	Quality string
 	// Source filters by ingestion channel when non-empty (web, api, rss).
 	// The special values "manual" and "url" are routed to the `type` column to match
 	// FileType semantics, so callers can filter "manually created" / "URL imported" entries.
@@ -180,6 +195,16 @@ type Entry struct {
 	PendingSubtasksCount int `json:"pending_subtasks_count" gorm:"type:int;not null;default:0"`
 	// Summary status for async summary generation
 	SummaryStatus string `json:"summary_status"     gorm:"type:varchar(32);default:none"`
+	// QualityStatus is empty before scoring, then passed or low.
+	QualityStatus string `json:"quality_status" gorm:"type:varchar(16);not null;default:''"`
+	// QualityScore is the sum of the two independent scoring calls (0-200).
+	QualityScore int `json:"quality_score" gorm:"not null;default:0"`
+	// QualityScoreFirst is the first independent 0-100 score.
+	QualityScoreFirst int `json:"quality_score_first" gorm:"not null;default:0"`
+	// QualityScoreSecond is the second independent 0-100 score.
+	QualityScoreSecond int `json:"quality_score_second" gorm:"not null;default:0"`
+	// QualityScoredAt is when the quality decision was last written.
+	QualityScoredAt *time.Time `json:"quality_scored_at,omitempty"`
 	// Enable status of the entry
 	EnableStatus string `json:"enable_status"`
 	// ID of the embedding model

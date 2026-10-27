@@ -124,11 +124,6 @@ null],"entity_mentions":[{"name":"Understanding Inc","type":"organization","enti
 			require.Equal(t, "exists", again["status"])
 		})
 	}
-	var candidates struct{ Data types.EntityCandidatePage }
-	require.NoError(t, json.Unmarshal(call(http.MethodGet, "/api/v1/entity-candidates", ""), &candidates))
-	require.Len(t, candidates.Data.Items, 1)
-	require.Equal(t, "Unlisted Research Institute", candidates.Data.Items[0].Name)
-	require.EqualValues(t, 4, candidates.Data.Items[0].OccurrenceCount, "all four library types recommend unmatched entities")
 }
 
 func TestEntryUnderstandingPreservesManualFieldsAcrossReprocessingAndRevision(t *testing.T) {

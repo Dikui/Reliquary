@@ -34,7 +34,7 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
     '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
     '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
     './EntityActivity.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
-    './EntityCandidates.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) }, './EntityEditor.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) } }
+    './EntityEditor.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) } }
   function evaluate(code: string) { const module = { exports: {} as any }; const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText; new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports); return module.exports }
   const component = evaluate(script.content).default; component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup; let state: any
@@ -45,15 +45,6 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
   const errors: unknown[] = []; app.config.errorHandler = error => errors.push(error)
   const html = await renderToString(app); assert.deepEqual(errors, [], 'the real workbench template renders without exceptions'); return { html, requests, state }
 }
-test('opening an entity from candidate review restores the entity view', async () => {
-  await renderWorkbench({ scenario: async state => {
-    state.activeView.value = 'candidates'
-    await state.selectInitialEntity(entity.id)
-    assert.equal(state.activeView.value, 'entities')
-    assert.equal(state.selectedEntity.value.id, entity.id)
-    assert.equal(state.entityEntries.value[0].id, 'article-a')
-  } })
-})
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: the workbench renders only maintained entities`, async () => {
     const { html } = await renderWorkbench({ locale })

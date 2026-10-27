@@ -35,18 +35,3 @@ test('entity routes do not send a library range', async () => {
   await api.listEntities({ limit: 20 })
   assert.equal(requests[0]?.url, '/api/v1/entities?limit=20')
 })
-test('candidate review uses bounded lists, detail and explicit review actions', async () => {
-  const requests: Request[] = [], api = loadAPI(requests)
-  await api.listEntityCandidates('ignored', 50, 10)
-  await api.getEntityCandidate('candidate/a', 50, 20)
-  await api.reviewEntityCandidate('candidate/a', 'approve')
-  await api.reviewEntityCandidate('candidate/a', 'alias', 'target')
-  await api.reviewEntityCandidate('candidate/a', 'ignore')
-  assert.deepEqual(requests, [
-    { method: 'get', url: '/api/v1/entity-candidates?status=ignored&limit=50&offset=10' },
-    { method: 'get', url: '/api/v1/entity-candidates/candidate%2Fa?limit=50&offset=20' },
-    { method: 'post', url: '/api/v1/entity-candidates/candidate%2Fa/approve', body: {} },
-    { method: 'post', url: '/api/v1/entity-candidates/candidate%2Fa/alias', body: { entity_id: 'target' } },
-    { method: 'post', url: '/api/v1/entity-candidates/candidate%2Fa/ignore', body: {} },
-  ])
-})

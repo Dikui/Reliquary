@@ -1,6 +1,6 @@
 # 0014 内部资料库：库模板、知识图谱与 Markdown 收录
 
-Status: accepted；知识图谱、关系与关系类型、Neo4j 副本、实体抽取与核查、内容类型与主题、关注动态、相似折叠、摘要要点部分被 [0016](0016-store-and-track-event-layer.md) 取代
+Status: accepted；知识图谱、关系与关系类型、Neo4j 副本、实体抽取与核查、内容类型与主题、关注动态、相似折叠、摘要要点部分被 [0016](0016-store-and-track-event-layer.md) 取代；开放实体抽取与图谱删除部分被 [0018](0018-closed-entity-catalog.md) 取代
 日期：2026-10-14
 部分取代 [0001](0001-postgres-only.md)（不使用 Neo4j 与 Redis）、[0009](0009-kb-collect-store-retrieve.md)（唯一知识库、收录时不抽关系、内容类型决定保存方式、处理待复核）、[0010](0010-postgres-task-queue.md)（PostgreSQL 任务队列）、[0012](0012-ingest-only-no-collection.md)（完整材料含原始文件、服务端解析文件、按原文链接补全）、[0013](0013-user-documents-imported.md)（`mine/`、`reports/` 目录规则）
 

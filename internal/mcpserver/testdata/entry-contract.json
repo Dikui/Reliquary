@@ -25,6 +25,8 @@
         "custom_metadata": null,
         "deleted_at": null,
         "description": "",
+        "domains": null,
+        "domains_manual": false,
         "embedding_model_id": "",
         "enable_status": "",
         "entities": null,
@@ -48,6 +50,10 @@
         "parse_status": "",
         "pending_subtasks_count": 0,
         "processed_at": null,
+        "quality_score": 0,
+        "quality_score_first": 0,
+        "quality_score_second": 0,
+        "quality_status": "",
         "repost_sources": null,
         "source": "",
         "source_kind": "",
@@ -61,9 +67,7 @@
         "title": "",
         "type": "",
         "updated_at": "0001-01-01T00:00:00Z",
-        "vault_path": "",
-        "domains_manual": false,
-        "domains": null
+        "vault_path": ""
       }
     ],
     "library_groups": null
@@ -78,6 +82,8 @@
     "custom_metadata": null,
     "deleted_at": null,
     "description": "",
+    "domains": null,
+    "domains_manual": false,
     "embedding_model_id": "",
     "enable_status": "",
     "entities": null,
@@ -104,6 +110,10 @@
     "parse_status": "",
     "pending_subtasks_count": 0,
     "processed_at": null,
+    "quality_score": 0,
+    "quality_score_first": 0,
+    "quality_score_second": 0,
+    "quality_status": "",
     "repost_sources": null,
     "source": "",
     "source_kind": "mine",
@@ -117,9 +127,7 @@
     "title": "",
     "type": "",
     "updated_at": "0001-01-01T00:00:00Z",
-    "vault_path": "",
-    "domains_manual": false,
-    "domains": null
+    "vault_path": ""
   },
   "read": {
     "acquisition": "",

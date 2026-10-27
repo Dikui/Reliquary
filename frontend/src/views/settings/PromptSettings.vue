@@ -28,6 +28,7 @@ let disposed = false
 
 const definitions = computed(() => [
   { key: 'prompt.article_processing', name: t('promptSettings.articleProcessing'), description: t('promptSettings.articleProcessingHint') },
+  { key: 'prompt.quality_scoring', name: t('promptSettings.qualityScoring'), description: t('promptSettings.qualityScoringHint') },
   { key: 'prompt.summary_merge', name: t('promptSettings.summaryMerge'), description: t('promptSettings.summaryMergeHint') },
   { key: 'prompt.fact_grouping', name: t('promptSettings.factGrouping'), description: t('promptSettings.factGroupingHint') },
   { key: 'prompt.story_consolidation', name: t('promptSettings.storyConsolidation'), description: t('promptSettings.storyConsolidationHint') },
