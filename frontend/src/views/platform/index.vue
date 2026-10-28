@@ -16,8 +16,6 @@
             <ContentCheckNotice />
             <RouterView />
         </div>
-        <!-- 全局设置模态框，供所有 platform 子路由使用 -->
-        <Settings />
         <!-- 全局命令面板 (⌘K)，随 platform 路由存活 -->
         <GlobalCommandPalette />
     </div>
@@ -29,13 +27,15 @@ import { ref, onMounted, onUnmounted, nextTick, provide, watch } from 'vue';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { MenuIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import { Drawer } from '@/components/ui'
-import Settings from '@/views/settings/Settings.vue'
+import { connectSettingsNavigation } from '@/config/settingsNavigation'
+import { useUIStore } from '@/stores/ui'
 import GlobalCommandPalette from '@/components/GlobalCommandPalette.vue'
 import { useCommandPaletteStore } from '@/stores/commandPalette'
 import { useI18n } from 'vue-i18n'
 
 const route = useRoute();
 const router = useRouter();
+const disconnectSettings = connectSettingsNavigation(router, useUIStore());
 const commandPaletteStore = useCommandPaletteStore();
 const { t } = useI18n();
 const navigationMedia = window.matchMedia('(max-width: 640px)');
@@ -82,6 +82,7 @@ function maybeOpenCmdkFromRoute() {
 
 // 组件卸载时移除全局事件监听器
 onUnmounted(() => {
+    disconnectSettings();
     navigationMedia.removeEventListener('change', updateNavigationLayout);
 });
 </script>

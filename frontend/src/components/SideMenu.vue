@@ -85,6 +85,13 @@ function refreshNavigation() {
   void refreshFailures(current)
   void follows.refreshState()
 }
+function settingsSaved(event: Event) {
+  const changed = (event as CustomEvent<Partial<LibraryCatalogItem>>).detail
+  if (changed?.id) {
+    libraries.value = libraries.value.map(library => library.id === changed.id ? { ...library, ...changed, display_name: changed.name || library.display_name } : library)
+  }
+  void refreshCatalog(++request)
+}
 function refreshAllCounts() { refreshNavigation(); if (document.visibilityState !== 'hidden') void pending.refresh() }
 watch(() => route.fullPath, refreshAllCounts)
 onMounted(() => {
@@ -92,11 +99,13 @@ onMounted(() => {
   refreshNavigation()
   timer = setInterval(refreshAllCounts, 30000)
   document.addEventListener('visibilitychange', refreshAllCounts)
+  window.addEventListener('reliquary:library-settings-saved', settingsSaved)
 })
 onUnmounted(() => {
   request++
   clearInterval(timer)
   document.removeEventListener('visibilitychange', refreshAllCounts)
+  window.removeEventListener('reliquary:library-settings-saved', settingsSaved)
 })
 </script>
 

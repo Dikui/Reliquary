@@ -253,6 +253,7 @@ const usageConflictModelName = ref('')
 const currentModelType = ref<ModelType>('chat')
 const editingModel = ref<any>(null)
 const loading = ref(true)
+const props = defineProps<{ initialSection?: string }>()
 const activeTypeFilter = ref<FilterType>('all')
 
 const MODEL_TAB_TYPES: FilterType[] = ['chat', 'embedding', 'rerank']
@@ -262,7 +263,7 @@ const LIBRARY_EDITOR_HOST_ROUTES = new Set([
   'libraryDetail',
 ])
 watch(
-  () => uiStore.settingsInitialSubSection,
+  () => props.initialSection || uiStore.settingsInitialSubSection,
   (sub) => {
     if (sub && MODEL_TAB_TYPES.includes(sub as FilterType)) {
       activeTypeFilter.value = sub as FilterType

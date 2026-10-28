@@ -13,20 +13,14 @@ const scenarios = [
   { viewport: 768, inner: 504, stacked: true },
 ]
 
-test('settings shell names the usable content container and preserves wide desktop geometry', async () => {
+test('settings page uses the designed navigation width and a scrollable content container', async () => {
   const rules = await compiledSFCStyleRules(new URL('./Settings.vue', import.meta.url))
-  for (const { viewport } of scenarios) {
-    const wrapper = styleDeclarationsAtWidth(rules, '.content-wrapper', viewport)
-    assert.equal(wrapper['container-name'], 'settings-content')
-    assert.equal(wrapper['container-type'], 'inline-size')
-    assert.equal(wrapper.padding, '40px 48px')
-    assert.equal(wrapper['padding-left'], viewport <= 1100 ? '24px' : undefined)
-    assert.equal(wrapper['padding-right'], viewport <= 1100 ? '24px' : undefined)
-    assert.equal(styleDeclarationsAtWidth(rules, '.settings-sidebar', viewport).width, viewport <= 900 ? '176px' : '208px')
-    assert.equal(styleDeclarationsAtWidth(rules, '.settings-content', viewport)['min-width'], '0')
-  }
-  assert.equal(styleDeclarationsAtWidth(rules, '.settings-sidebar', 390).display, 'none')
-  assert.equal(styleDeclarationsAtWidth(rules, '.content-wrapper', 390).padding, '20px 16px')
+  assert.equal(styleDeclarationsAtWidth(rules, '.settings-page', 1280)['grid-template-columns'], '208px minmax(0, 1fr)')
+  assert.equal(styleDeclarationsAtWidth(rules, '.settings-page', 900)['grid-template-columns'], 'minmax(0, 1fr)')
+  assert.equal(styleDeclarationsAtWidth(rules, '.content-wrapper', 1280)['container-name'], 'settings-content')
+  assert.equal(styleDeclarationsAtWidth(rules, '.content-wrapper', 1280)['container-type'], 'inline-size')
+  assert.equal(styleDeclarationsAtWidth(rules, '.settings-content', 1280)['min-width'], '0')
+  assert.equal(styleDeclarationsAtWidth(rules, '.settings-content', 1280)['overflow-y'], 'auto')
 })
 
 for (const [file, wideMinimum] of [

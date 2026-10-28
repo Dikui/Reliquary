@@ -37,9 +37,4 @@ test('primary navigation includes evaluation and model calls in its established 
   assert.deepEqual(items.map((item: any) => [item.path, item.tab]), [
     ['libraries', undefined], ['search', undefined], ['entities', undefined], ['topics', undefined], ['follows', undefined], ['pending', undefined], ['diagnostics', undefined], ['content-checks', undefined], ['evaluation', undefined], ['model-calls', undefined],
   ])
-  const settings = readFileSync(new URL('../../views/settings/Settings.vue', import.meta.url), 'utf8')
-  for (const section of ['library', 'models', 'vault', 'operation-logs', 'runtime-queues']) {
-    assert.ok(settings.includes(`currentSection === '${section}'`), section)
-    assert.ok(settings.includes(`key: '${section}'`), section)
-  }
 })

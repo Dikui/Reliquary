@@ -66,8 +66,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: the actual settings navigation excludes collection and canonicalizes the old datasource bookmark`, async () => {
     const replacements: unknown[] = []
     const html = await render('views/settings/Settings.vue', locale, {
-      'vue-router': { useRoute: () => ({ path: '/platform/settings', query: { section: 'datasource' } }), useRouter: () => ({ replace: (value: unknown) => replacements.push(value), beforeEach: () => () => {} }) },
-      '@/stores/ui': { useUIStore: () => ({}) },
+      'vue-router': { RouterLink: stub, onBeforeRouteLeave() {}, onBeforeRouteUpdate() {}, useRoute: () => ({ path: '/platform/settings', query: { section: 'datasource' } }), useRouter: () => ({ replace: (value: unknown) => replacements.push(value), beforeEach: () => () => {} }) },
+      '@/components/ui': { toast: { warning: () => assert.fail('Retired sections use the default settings page') } },
       '@/stores/deploymentCapabilities': { useDeploymentCapabilitiesStore: () => ({ loaded: true, isSupported: () => true }) },
       '@/config/settingsRoute': settingsRoute,
       '@/config/settingsAccess': settingsAccess,
@@ -76,7 +76,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       'tdesign-vue-next': { MessagePlugin: { warning: () => assert.fail('Retired sections use the default settings page') } },
     }, {}, state => {
       assert.equal(state.currentSection.value, 'general')
-      const keys = state.navItems.value.map((item: { key: string }) => item.key)
+      const keys = state.navGroups.value.flatMap((group: { items: string[] }) => group.items)
       for (const key of ['library', 'vault', 'models', 'operation-logs', 'integration-api']) assert.ok(keys.includes(key))
       for (const key of ['datasource', 'sync-logs', 'import', 'upload', 'manual']) assert.equal(keys.includes(key), false)
     })

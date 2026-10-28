@@ -16,7 +16,7 @@ const icons = new Proxy({}, { get: () => icon })
 const catalog = [{ id: 'a', name: 'Research', display_name: '', color: 2, entry_count: 1200 }, { id: 'b', name: 'Reports', color: 7, entry_count: 84 }]
 
 async function fixture(path = '/platform/libraries', collapsed = false, mobileOverlay = false) {
-  let failed = false, opened = 0, closed = 0
+  let failed = false, opened = 0, closed = 0, delayCatalog = false
   const ui = reactive({ sidebarCollapsed: collapsed, openSettings() {}, toggleSidebar() { ui.sidebarCollapsed = !ui.sidebarCollapsed } })
   const follows = reactive({ newCount: 12, stateError: false, refreshState() {} })
   const pending = reactive({ total: 5, refresh() {} })
@@ -34,7 +34,7 @@ async function fixture(path = '/platform/libraries', collapsed = false, mobileOv
     '@/stores/follows': { useFollowStore: () => follows },
     '@/stores/pendingCounts': { usePendingCountsStore: () => pending },
     '@/stores/commandPalette': { useCommandPaletteStore: () => ({ openPalette: () => opened++ }) },
-    '@/api/library': { listLibraries: async () => ({ success: !failed, data: catalog }) },
+    '@/api/library': { listLibraries: async () => { if (delayCatalog) await new Promise(() => {}); return { success: !failed, data: catalog } } },
     '@/api/ingest-diagnostics': { listIngestFailures: async () => ({ success: !failed, data: { total: 3 } }) },
     '@/components/ui': { LibMark: loadUiComponent('LibMark'), Tooltip: loadUiComponent('Tooltip') },
     '@/components/PendingCountBadge.vue': { __esModule: true, default: loadComponent(new URL('./PendingCountBadge.vue', import.meta.url), {
@@ -58,6 +58,7 @@ async function fixture(path = '/platform/libraries', collapsed = false, mobileOv
   await settle()
   return { root, router, ui, follows, pending, opened: () => opened, closed: () => closed,
     fail: () => { failed = true },
+    delayCatalog: () => { delayCatalog = true },
     async unmount() { app.unmount(); root.remove(); await settle() },
   }
 }
@@ -148,4 +149,15 @@ test('sidebar active states use theme tokens and preserve the design dimensions 
   assert.equal(styleDeclarationsAtWidth(rules, '.rq-sidebar__scroll', 1280).overflow, 'auto')
   assert.ok(!rules.some(rule => 'filter' in rule.declarations))
   assert.doesNotMatch(readFileSync(new URL('./SideMenu.vue', import.meta.url), 'utf8'), /\b\d*\.?\d+rem\b/)
+})
+
+test('a saved library color updates the sidebar before its catalog refresh resolves', async t => {
+  const f = await fixture('/platform/settings?section=library')
+  t.after(() => f.unmount())
+  f.delayCatalog()
+  window.dispatchEvent(new CustomEvent('reliquary:library-settings-saved', { detail: { id: 'b', name: 'Updated reports', color: 6 } }))
+  await settle()
+  const link = f.root.querySelector('a[href="/platform/entries?libraries=b"]')!
+  assert.match(link.textContent, /Updated reports/)
+  assert.equal(link.querySelector('span')!.style.backgroundColor, 'var(--lib-6)')
 })

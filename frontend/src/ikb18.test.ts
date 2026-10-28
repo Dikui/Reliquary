@@ -11,12 +11,13 @@ import ts from 'typescript'
 import zh from './i18n/locales/zh-CN'
 import en from './i18n/locales/en-US'
 import * as form from './utils/libraryCatalogForm'
+import * as classification from './types/entryClassification'
 import * as scope from './utils/libraryScope'
 import * as references from './utils/bodyReference'
 import { copyModelTiers } from './utils/modelTiers'
 const require = createRequire(import.meta.url)
 const empty = { __esModule: true, default: defineComponent({ setup: () => () => null }) }
-const library = (id = 'mine', extra = {}) => ({ id, name: '我的资料', display_name: '我的资料', directory: id === 'mine' ? 'personal' : id, template: 'standard', system_role: id === 'mine' ? 'personal' : '', description: '', review_criteria: '完整', default_review_criteria: '建议规则', processing_model_tiers: ['light', 'generation'], chunking_config: { chunk_size: 512, chunk_overlap: 50, separators: ['\n\n'], enable_parent_child: false, parent_chunk_size: 4096, child_chunk_size: 384 }, content_types: [{ name: '笔记', enabled: true, position: 0, extract_graph: false }], relation_types: [{ name: '合作', enabled: true, position: 0 }, { name: '依赖', enabled: true, position: 1 }], feed_enabled: false, entry_count: 0, ...extra })
+const library = (id = 'mine', extra = {}) => ({ id, color: 2, name: '我的资料', display_name: '我的资料', directory: id === 'mine' ? 'personal' : id, template: 'standard', system_role: id === 'mine' ? 'personal' : '', description: '', review_criteria: '完整', default_review_criteria: '建议规则', processing_model_tiers: ['light', 'generation'], chunking_config: { chunk_size: 512, chunk_overlap: 50, separators: ['\n\n'], enable_parent_child: false, parent_chunk_size: 4096, child_chunk_size: 384 }, content_types: [{ name: '笔记', enabled: true, position: 0, extract_graph: false }], relation_types: [{ name: '合作', enabled: true, position: 0 }, { name: '依赖', enabled: true, position: 1 }], feed_enabled: false, entry_count: 0, ...extra })
 async function scenario(path: string, props: Record<string, unknown>, modules: Record<string, any>, action: (state: any) => Promise<void>, locale = 'zh-CN') {
   const filename = new URL(path, import.meta.url).pathname
   const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename })
@@ -44,6 +45,8 @@ function catalogModules(calls: any[], options: { fail?: boolean } = {}) {
   let current = library(), dialog: any
   return {
     '@/utils/libraryCatalogForm': form,
+    '@/types/entryClassification': classification,
+    '@/components/ui': { ...(entryPresentationTestModules['@/components/ui'] as object), Dialog: empty.default, toast: { success() {} }, confirm: (value: any) => { dialog = value; return { destroy() {}, update() {} } } },
     '@/utils/modelTiers': { copyModelTiers },
     'tdesign-vue-next': { DialogPlugin: { confirm: (value: any) => { dialog = value; return { destroy() {}, update() {} } } } },
     '@/api/library': {
@@ -62,7 +65,7 @@ for (const locale of ['zh-CN', 'en-US']) {
       await state.load(); assert.equal(state.dirty.value, false)
       state.draft.value.name = '  Notes  '
       state.draft.value.model_tiers.generation = 'notes-model'
-      state.updateChunking({ ...state.chunkingConfig.value, chunkSize: 256, enableParentChild: true })
+      Object.assign(state.draft.value.chunking_config, { chunk_size: 256, enable_parent_child: true })
       state.draft.value.content_types.push({ name: 'SOP', enabled: false, extract_graph: true, position: 4 })
       state.moveType(state.draft.value.content_types, 1, -1)
       state.draft.value.relation_types.splice(1, 1)
@@ -97,7 +100,6 @@ test('standard libraries expose content and relation types under the shared admi
   modules['@/api/library'].getCatalogLibrary = async () => ({ success: true, data: structuredClone(original) })
   const html = await scenario('./views/settings/LibraryCatalogSettings.vue', {}, modules, async state => {
     await state.load()
-    assert.deepEqual(state.typeSections, ['content_types', 'relation_types'])
     assert.deepEqual(state.modelTiers.value, ['generation', 'entity_resolution', 'rerank'])
     state.draft.value.name = 'Updated reports'
     await state.save()
@@ -117,7 +119,7 @@ test('deleting the last empty system library leaves the catalogue ready to creat
   const html = await scenario('./views/settings/LibraryCatalogSettings.vue', {}, modules, async state => {
     await state.load(); state.removeLibrary()
     assert.equal(calls.length, 0)
-    await modules.dialog().onConfirm()
+    await modules.dialog().onConfirm({ dialog: { update() {} } })
     assert.deepEqual(calls, [{ delete: 'mine' }])
     assert.equal(state.draft.value, null)
     assert.deepEqual(state.libraries.value, [])
@@ -135,7 +137,7 @@ test('library validation preserves failed drafts, rejects duplicate and empty ty
     state.draft.value.content_types.pop(); state.draft.value = JSON.parse(state.saved.value)
     state.fromType.value = '合作'; state.toType.value = '依赖'; state.merge()
     assert.equal(calls.length, 0); assert.ok(modules.dialog().body.includes('合作 → 依赖'))
-    await modules.dialog().onConfirm(); assert.deepEqual(calls[0].merge, ['mine', '合作', '依赖'])
+    await modules.dialog().onConfirm({ dialog: { update() {} } }); assert.deepEqual(calls[0].merge, ['mine', '合作', '依赖'])
   })
   await scenario('./views/settings/LibraryCatalogSettings.vue', {}, catalogModules([], { fail: true }), async state => {
     await state.load(); state.draft.value.name = 'Draft'; state.draft.value.model_tiers.generation = 'pending-model'; await state.save(); assert.equal(state.draft.value.name, 'Draft'); assert.equal(state.draft.value.model_tiers.generation, 'pending-model'); assert.equal(state.error.value, 'offline'); assert.equal(state.dirty.value, true)

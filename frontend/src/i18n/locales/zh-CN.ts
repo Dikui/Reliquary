@@ -1,5 +1,41 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  settingsPage: {
+    numberRequired: "请输入数值。",
+    numberRange: "请输入 {min} 到 {max} 之间的整数。",
+
+    general: "通用",
+    library: "库设置",
+    vault: "文件库",
+    queues: "任务队列",
+    workspace: "工作区",
+    modelsRuntime: "模型与运行",
+    "api": "接口与 API Key",
+    "systemGroup": "系统",
+    "navigation": "设置分组",
+    "chooseLibrary": "选择库",
+    "basicHint": "名称和说明可随时修改。英文目录在创建时确定，用于导出文件库。",
+    "color": "颜色",
+    "colorHint": "新建库时按顺序自动分配。颜色只用来区分库，可以与其他库重复。",
+    "colors": {
+      "red": "红",
+      "blue": "蓝",
+      "yellow": "黄",
+      "black": "黑",
+      "green": "绿",
+      "orange": "橙",
+      "purple": "紫",
+      "gray": "灰"
+    },
+    "chunkHint": "修改后只影响之后收录或重新处理的资料。",
+    "typesHint": "模型从这个清单里选，拿不准时选“其他”。只用于筛选。",
+    "addType": "新增内容类型",
+    "manageTypes": "编辑名称、启用与排序",
+    "feedHint": "本库的新资料进入关注动态",
+    "notEmpty": "库中还有 {count} 份资料，不能删除。",
+    "unsaved": "有 {count} 项未保存的修改",
+    "saved": "所有修改已保存"
+  },
   entityPage: {
     "number": "编号",
     "title": "标题",

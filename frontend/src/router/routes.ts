@@ -7,7 +7,7 @@ const libraryList = () => import('../views/library/LibraryList.vue')
 const entryLocation = (path: string, to: { query: Record<string, any>; hash: string }) => ({ path, query: { ...to.query }, hash: to.hash })
 const notFound = () => import('../views/NotFound.vue')
 
-// Settings is owned by the platform layout. Its route supplies only the background.
+// Settings is an independent page inside the platform shell.
 export function createApplicationRoutes(development = false): RouteRecordRaw[] {
   return [
     {
@@ -34,7 +34,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         {
           path: "settings",
           name: "settings",
-          component: libraryList,
+          component: () => import("../views/settings/Settings.vue"),
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
@@ -132,7 +132,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         },
         // Compatibility redirects for /platform/system/* URLs. System
         // administration surfaces live as dedicated sections inside the
-        // standard Settings modal; keep stable URLs for bookmarks and
+        // standard Settings page; keep stable URLs for bookmarks and
         // external links.
         {
           path: "system",

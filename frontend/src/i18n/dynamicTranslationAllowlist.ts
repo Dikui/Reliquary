@@ -3,6 +3,11 @@ import type { TranslationCall } from './translationCallAudit.ts'
 /** Reviewed runtime expressions. New expressions must be explicitly reviewed here. */
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
+    file: 'views/settings/LibraryCatalogSettings.vue',
+    expressions: ['`library.contentTypes.${name}`', '`settingsPage.colors.${colorNames[index]}`', '`knowledgeEditor.chunking.strategies.${strategy}.label`', '`knowledgeEditor.chunking.languageOptions.${language}`'],
+    reason: 'Built-in types are guarded by CONTENT_TYPES. Colors, strategies and languages come from fixed local choices; custom type names remain plain text.',
+  },
+  {
     file: 'components/GlobalCommandPalette.vue',
     expressions: ['`library.contentTypes.${value}`', '`knowledgeWorkbench.entities.types.${entity.entity_type}`'],
     reason: 'Built-in material types are checked against CONTENT_TYPES; entity types use the existing API enum.',
@@ -259,13 +264,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "expressions": [
       "key",
       "modelUsageBindingI18nKey(binding)"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
-    "file": "views/settings/Settings.vue",
-    "expressions": [
-      "`integrations.tabs.${item.key}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },

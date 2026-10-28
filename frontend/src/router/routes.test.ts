@@ -84,18 +84,20 @@ test('settings deep links and system shortcuts mount one settings instance', asy
   const platform = routes.find(route => route.name === 'Platform')!
   const settings = platform.children!.find(route => route.name === 'settings')!
   const list = platform.children!.find(route => route.name === 'libraries')!
-  assert.equal('component' in settings && settings.component, 'component' in list && list.component)
+  assert.notEqual('component' in settings && settings.component, 'component' in list && list.component)
 
   const source = readFileSync(new URL('../views/platform/index.vue', import.meta.url), 'utf8')
-  assert.equal((source.match(/<Settings\s*\/>/g) || []).length, 1)
+  assert.equal((source.match(/<Settings\s*\/>/g) || []).length, 0)
 
   const renderedRoutes = testRoutes()
   const renderedPlatform = renderedRoutes.find(route => route.name === 'Platform')!
   let settingsMounts = 0
   const settingsStub = defineComponent({ setup() { settingsMounts++; return () => h('aside', { 'data-settings-instance': '' }) } })
   if ('component' in renderedPlatform) {
-    renderedPlatform.component = defineComponent({ render: () => h('main', [h(RouterView), h(settingsStub)]) })
+    renderedPlatform.component = defineComponent({ render: () => h('main', [h(RouterView)]) })
   }
+  const renderedSettings = renderedPlatform.children!.find(route => route.name === 'settings')!
+  if ('component' in renderedSettings) renderedSettings.component = settingsStub
   for (const path of ['/platform/settings?section=space', '/platform/settings?section=runtime-queues', '/platform/system/queues']) {
     settingsMounts = 0
     const router = createRouter({ history: createMemoryHistory(), routes: renderedRoutes })
@@ -105,7 +107,7 @@ test('settings deep links and system shortcuts mount one settings instance', asy
     const html = await renderToString(app)
     assert.equal(settingsMounts, 1, path)
     assert.equal((html.match(/data-settings-instance/g) || []).length, 1, path)
-    assert.match(html, /data-page="settings"/, path)
+    assert.doesNotMatch(html, /data-page="libraries"/, path)
   }
 })
 

@@ -1,5 +1,41 @@
 import { ikb18En } from './ikb18'
 export default {
+  settingsPage: {
+    numberRequired: "Enter a number.",
+    numberRange: "Enter an integer between {min} and {max}.",
+
+    general: "General",
+    library: "Library settings",
+    vault: "File vault",
+    queues: "Task queues",
+    workspace: "Workspace",
+    modelsRuntime: "Models & runtime",
+    "api": "Interfaces & API keys",
+    "systemGroup": "System",
+    "navigation": "Settings groups",
+    "chooseLibrary": "Choose library",
+    "basicHint": "Edit the name and description at any time. The directory is fixed at creation and used for vault exports.",
+    "color": "Color",
+    "colorHint": "New libraries receive colors in order. Colors distinguish libraries and can be reused.",
+    "colors": {
+      "red": "Red",
+      "blue": "Blue",
+      "yellow": "Yellow",
+      "black": "Black",
+      "green": "Green",
+      "orange": "Orange",
+      "purple": "Purple",
+      "gray": "Gray"
+    },
+    "chunkHint": "Changes apply to newly collected or reprocessed materials.",
+    "typesHint": "The model chooses from this list and uses Other when uncertain. Types are only used for filtering.",
+    "addType": "Add content type",
+    "manageTypes": "Edit names, enabled status and order",
+    "feedHint": "Include new materials from this library in the follow feed",
+    "notEmpty": "This library contains {count} materials and cannot be deleted.",
+    "unsaved": "{count} unsaved changes",
+    "saved": "All changes saved"
+  },
   entityPage: {
     "number": "ID",
     "title": "Title",

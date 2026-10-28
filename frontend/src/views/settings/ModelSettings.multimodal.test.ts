@@ -31,7 +31,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       'tdesign-vue-next': { MessagePlugin: { success() {}, error() {}, warning() {} } },
       'vue-router': { useRouter: () => ({ push: async () => {} }) },
       '@/stores/resources': { useResourcesStore: () => ({ replaceModels() {} }) },
-      '@/stores/ui': { useUIStore: () => ({ settingsInitialSubSection: 'embedding' }) },
+      '@/stores/ui': { useUIStore: () => ({ settingsInitialSubSection: 'chat' }) },
       '@/utils/contextWindow': contextWindow,
     }
     function evaluate(code: string) {
@@ -51,6 +51,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     component.setup = (props: object, context: object) => {
       const state = setup(props, context)
       onServerPrefetch(async () => {
+        assert.equal(state.activeTypeFilter.value, 'embedding')
         await state.loadModels()
         const loaded = state.allLegacyModels.value[0]
         assert.deepEqual(loaded.pricing, { input_per_million: 2, image_input_per_million: 8, output_per_million: null, currency: 'USD' })
@@ -65,7 +66,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       })
       return state
     }
-    const app = createSSRApp(component); app.use(i18n)
+    const app = createSSRApp(component, { initialSection: 'embedding' }); app.use(i18n)
     for (const name of new Set(descriptor.template!.content.match(/t-[a-z-]+(?=[\s>])/g))) app.component(name, stub)
     const failures: unknown[] = [], warnings: string[] = []
     app.config.errorHandler = error => failures.push(error); app.config.warnHandler = warning => warnings.push(warning)
