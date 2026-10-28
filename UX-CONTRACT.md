@@ -195,3 +195,45 @@ preview. Existing pages keep their canonical TDesign owners above until migrated
   reset. Global scrollbar rules remain owned by the existing theme.
 - Component tests run with a DOM adapter, without starting a browser. Visual
   acceptance remains a separate browser task on `/platform/dev/ui`.
+
+
+## Swiss materials migration
+
+For `/platform/entries` with the documents tab, DocumentListView owns the list and
+table presentation. The list opens a preview on focus or pointer selection; J/K
+moves focus and Enter opens the existing detail destination. At 900px and below,
+the inline preview is hidden and each row offers an explicit Open button.
+DataTable owns checked rows, Shift ranges and the single current row. Checked
+rows use the soft surface; focus uses yellow. The former grid is removed.
+
+EntryPreview reads the existing detail and spans APIs, ignores old responses,
+and polls only while the focused entry is active. Missing traces, unknown counts
+and failed reads remain explicit. The list preserves the established URL filters,
+server paging and processing polling; switching view does not refetch or clear
+filters. LibraryScopeSelect's Swiss variant uses a native multiple select, and
+advanced entity/topic filters use native multiple selects. Date filters use native
+date inputs with separate start and end labels. Platform popup behavior is accepted.
+
+The materials toolbar and batch bar share EntryBatchDialog. Its existing scope
+count, action preview, fingerprint, fixed membership, result pagination and
+failed-item retry remain authoritative. Swiss Dialog/Select/Checkbox/Button own
+its presentation. The final action uses the shared confirm service; cancelling
+retains the preview. The existing ReparseConfirmDialog still owns per-entry
+processing configuration. `useLibrary` and the page now report through toast.
+The existing detail drawer keeps its controls until its own migration.
+
+The backend does not expose alternate material sort orders, today's intake count,
+or a batch Markdown export. The page does not fabricate these capabilities. Its
+sort control identifies the supported newest-collected order, and its total is the
+filtered result count. Entry identifiers come from actual IDs rather than sample
+sequence numbers. New filters invalidate old paging requests and clear checked
+rows; failed requests display retry and cannot be confused with an empty library.
+
+
+Expanded materials filters must not collapse the results to zero height. The
+page provides vertical overflow when necessary, and its results retain their own
+scrolling and a 240px minimum height. Narrow tables keep a readable title column
+and scroll horizontally inside DataTable. Focused list and table rows use the
+shared selection foreground for every descendant, including status labels,
+muted text, tags and hovered links; checked rows without focus keep their usual
+soft surface and foreground.

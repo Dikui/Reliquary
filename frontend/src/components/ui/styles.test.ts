@@ -52,3 +52,14 @@ test('checked checkboxes and radios use the accent palette in both themes', () =
   assert.equal(declarations(tokens, ':root')['--accent'], '#e2231a')
   assert.equal(declarations(tokens, ':root[theme-mode="dark"]')['--accent'], '#ff3b30')
 })
+
+test('focused rows keep status, muted and tag text on the selection palette in both themes', () => {
+  const foreground = declarations(styles, ':is(.rq-focus-row, .rq-table__row--focused),\n:is(.rq-focus-row, .rq-table__row--focused) *')
+  assert.equal(foreground.color, 'var(--on-select) !important', 'focused descendants override their semantic and hover text colors')
+  assert.equal(declarations(styles, '.rq-focus-row').background, 'var(--select)')
+  assert.equal(declarations(styles, ':is(.rq-focus-row, .rq-table__row--focused) .rq-tag').background, 'transparent', 'tag backgrounds must not hide selection text')
+  const light = declarations(tokens, ':root')
+  const dark = declarations(tokens, ':root[theme-mode="dark"]')
+  assert.equal(light['--on-select'], '#111111')
+  assert.equal(dark['--on-select'] || light['--on-select'], '#111111')
+})

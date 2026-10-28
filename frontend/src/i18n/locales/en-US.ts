@@ -1,5 +1,46 @@
 import { ikb18En } from './ikb18'
 export default {
+  entries: {
+    pagination: 'Result pages', previous: 'Previous', next: 'Next',
+    "all": "All",
+    "list": "List",
+    "table": "Table",
+    "open": "Open",
+    "preview": "Material preview",
+    "library": "Library",
+    "source": "Source",
+    "summary": "Summary",
+    "entities": "Entities",
+    "processing": "Processing steps",
+    "unknown": "Unknown",
+    "noSummary": "No summary yet",
+    "noEntities": "No entities yet",
+    "noTrace": "No processing records",
+    "previewFailed": "Could not load the material preview",
+    "traceFailed": "Could not load processing records",
+    "loadFailed": "Could not load materials. Try again.",
+    "emptyHint": "Adjust the filters or add material through the intake API.",
+    "keyboardHint": "J / K to move",
+    "sort": "Sort",
+    "newest": "Newest collected",
+    "clearSearch": "Clear material search",
+    "libraryNumber": "Library {number}",
+    "count": "{count} materials",
+    "entityCount": "Entities {count}",
+    "relationCount": "Relations {count}",
+    "duration": "{seconds} s",
+    "columns": {
+        "id": "ID",
+        "title": "Title",
+        "summary": "Overview",
+        "type": "Type",
+        "entities": "Entities",
+        "relations": "Relations",
+        "status": "Status",
+        "created": "Collected"
+    }
+},
+
   ui: {
     showOptions: 'Show options',
     clearSelection: 'Clear selection',

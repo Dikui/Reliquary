@@ -179,3 +179,27 @@ Use slots for page-specific table cells and recovery actions.
 - Do not use mockup sample numbers as application data.
 - Do not introduce element-wide resets while old pages remain in use.
 - Verify the development-only `/platform/dev/ui` route manually before a visual release.
+
+
+### Swiss materials page
+
+The materials route uses a two-column list and preview at widths above 900px.
+The compact list uses one yellow focus row; the table uses DataTable's independent
+focus and checked state. Narrow layouts retain an explicit Open button on every
+list row. The existing detail drawer remains the destination until the detail
+page migration. The page and batch dialog use the shared Swiss controls and
+feedback service. Source labels and trust markers remain visible.
+
+The header identifies the selected library with its persisted LibMark and its
+catalogue position. Counts come from the current server result. Missing per-entry
+entity/relationship counts remain unknown, without substituting fixture numbers.
+The API currently supplies newest-collected ordering only. Native select and date
+controls retain operating-system popup behavior; the page adds no custom calendar.
+
+
+Focused rows share the `rq-focus-row` palette with DataTable: all descendant text
+uses `--on-select`, including status labels, muted text and tags. Focused tags
+have a transparent background; status squares retain their semantic colors.
+The materials page can scroll when its expanded filters exceed the viewport,
+while its material scroller retains at least 240px of height. Table title content
+keeps a 266px minimum width and the shared table container owns horizontal overflow.

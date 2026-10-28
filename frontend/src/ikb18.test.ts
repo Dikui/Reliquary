@@ -1,3 +1,4 @@
+import { entryPresentationTestModules } from './views/library/entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync, readdirSync } from 'node:fs'
@@ -25,7 +26,7 @@ async function scenario(path: string, props: Record<string, unknown>, modules: R
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })
   function evaluate(code: string) {
     const out = { exports: {} as any }, compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-    new Function('require', 'module', 'exports', compiled)((name: string) => name === 'vue-i18n' ? { useI18n: () => i18n.global } : modules[name] ?? (name.endsWith('.vue') ? empty : require(name)), out, out.exports)
+    new Function('require', 'module', 'exports', compiled)((name: string) => name === 'vue-i18n' ? { useI18n: () => i18n.global } : modules[name] ?? entryPresentationTestModules[name] ?? (name.endsWith('.vue') ? empty : require(name)), out, out.exports)
     return out.exports
   }
   const component = evaluate(script.content).default
@@ -249,8 +250,10 @@ test('compact global search thumbnails expose the shared image viewer trigger', 
 test('390 wide material list and search keep controls bounded and advanced filters collapsible', async () => {
   const { compiledSFCStyleRules, styleDeclarationsAtWidth } = await import('./utils/sfcStyleTestHelpers')
   const list = await compiledSFCStyleRules(new URL('./views/library/components/DocumentListView.vue', import.meta.url))
-  assert.equal(styleDeclarationsAtWidth(list, '.doc-list-row', 390)['grid-template-columns'], '32px minmax(0, 1fr) 52px')
-  assert.equal(styleDeclarationsAtWidth(list, '.doc-list-view', 390)['overflow-x'], 'hidden')
+  assert.equal(styleDeclarationsAtWidth(list, '.entries-list__select', 390).display, 'grid')
+  assert.equal(styleDeclarationsAtWidth(list, '.entries-mobile-open', 390).display, 'block')
+  const page = await compiledSFCStyleRules(new URL('./views/library/Library.vue', import.meta.url))
+  assert.equal(styleDeclarationsAtWidth(page, '.entries-split', 390)['grid-template-columns'], 'minmax(0, 1fr)')
   const search = await compiledSFCStyleRules(new URL('./views/library/SearchView.vue', import.meta.url))
   assert.equal(styleDeclarationsAtWidth(search, '.advanced-filter-controls', 390).display, 'none')
   assert.equal(styleDeclarationsAtWidth(search, '.advanced-filter-controls.expanded', 390).display, 'grid')

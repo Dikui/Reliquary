@@ -1,3 +1,4 @@
+import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
 import { formatCountCopy } from '../i18n/countCopy'
 import assert from 'node:assert/strict'
 import * as entrySourceLabels from '../utils/entrySourceLabels'
@@ -28,7 +29,7 @@ const compile = (code: string) => ts.transpileModule(code, {
 function evaluate(code: string, modules: Record<string, unknown>, environment: Record<string, unknown> = {}) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', 'window', 'localStorage', compile(code))(
-    (name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : (name === './BodyReference.vue' ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name]) ?? (name === '@/components/SafeTextarea.vue' ? safeTextareaTestModule : name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
+    (name: string) => name.endsWith('.css') ? {} : name === '@/utils/entrySourceLabels' ? entrySourceLabels : (name === './BodyReference.vue' ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name]) ?? entryPresentationTestModules[name] ?? (name === '@/components/SafeTextarea.vue' ? safeTextareaTestModule : name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
     environment.window, environment.localStorage,
   )
   return module.exports

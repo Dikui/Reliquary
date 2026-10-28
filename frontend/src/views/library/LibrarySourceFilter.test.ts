@@ -1,3 +1,7 @@
+import { loadUiComponent } from '../../components/ui/uiTestLoader'
+import * as trace from '../../utils/entryTrace'
+import * as externalUrl from '../../utils/externalUrl'
+import * as processing from '../../utils/entryProcessingStatus'
 import * as bodyReference from '../../utils/bodyReference'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -32,7 +36,7 @@ function evaluateFile(path: string, modules: Record<string, unknown>) {
 }
 const moduleOf = <T>(value: T) => ({ __esModule: true, default: value })
 
-async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> = {}, view = 'grid', unavailable = false, customType = false, noLibraries = false) {
+async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> = {}, view = 'list', unavailable = false, customType = false, noLibraries = false, realPreview = false) {
   const previous = { window: globalThis.window, document: globalThis.document,
     storage: Object.getOwnPropertyDescriptor(globalThis, 'localStorage') }
   globalThis.window = { innerHeight: 900, setTimeout, clearTimeout, addEventListener() {}, removeEventListener() {} } as any
@@ -63,14 +67,21 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     updated_at: '2026-09-01T08:00:00Z', title: 'Unrelated document', starred: false, content_type: 'opinion' })) {
     records.push({ ...target, id: `mine-other-${field}`, [field]: value })
   }
+  const deleted = new Set<string>(), deleteCalls: string[] = []
+  let deleteFails = true, listUnavailable = false
   const transport = {
+    async del(path: string) { deleteCalls.push(path); const id = path.split('/').at(-1)!; if (deleteFails) return { success: false, message: 'Delete failed' }; deleted.add(id); return { success: true } },
     async post(path: string, data: unknown) { rebuildRequests.push({ path, data }); return rebuildResponse(path, data) },
     async get(path: string) {
       const url = new URL(path, 'http://localhost')
+      if (url.pathname.endsWith('/spans')) return { success: true, data: {} }
+      if (url.pathname.startsWith('/api/v1/entries/')) return { success: true, data: records.find(record => record.id === url.pathname.split('/').at(-1)) }
       assert.equal(url.pathname, '/api/v1/entries')
+      if (listUnavailable) throw new Error('List unavailable')
       const query = new URLSearchParams(url.searchParams)
       requests.push(query)
       const filtered = records.filter(record => {
+        if (deleted.has(record.id)) return false
         if (query.has('source_kind') && record.source_kind !== query.get('source_kind')) return false
         if (query.has('keyword') && !record.title.toLowerCase().includes(query.get('keyword')!.toLowerCase())) return false
         if (query.has('content_type') && record.content_type !== query.get('content_type')) return false
@@ -94,7 +105,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     '@/api/topics': { listTopics: async () => ({ success: true, data: [{ id: 'topic-1', name: 'Target Topic' }] }) },
     '@/api/library': api, '@/stores/entry': store,
     '../utils/index': { formatStringDate: () => '2026-10-13' },
-    'tdesign-vue-next': { MessagePlugin: {} },
+    '@/components/ui/feedback': { toast: { info() {}, error() {} } },
     '@/stores/resources': { useResourcesStore: () => ({}) },
   })
   const empty = moduleOf(defineComponent({ setup: () => () => null }))
@@ -127,22 +138,26 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     './entryDownloadFileName': {},
     './documentListFilters': documentListFilters,
   }
-  for (const path of ['./Library.vue', './components/DocumentCardView.vue', './components/DocumentListView.vue']) {
+  modules['@/components/ui'] = Object.fromEntries(['Button', 'Input', 'Select', 'Chip', 'LibMark', 'Skeleton', 'EmptyState', 'ErrorState', 'DataTable', 'Tag', 'StatusSquare', 'Checkbox', 'Dialog'].map(name => [name, loadUiComponent(name)]))
+  modules['@/components/ui'].confirm = (options: unknown) => { confirmation = options; return { destroy() {}, result: new Promise<boolean>(() => {}) } }
+  modules['@/components/ui'].toast = { info() {}, error() {}, success() {} }
+  modules['@/utils/entryProcessingStatus'] = processing
+  for (const path of ['./Library.vue', './components/DocumentListView.vue']) {
     for (const match of readFileSync(new URL(path, import.meta.url), 'utf8').matchAll(/from\s+['"]([^'"]+\.vue)['"]/g)) modules[match[1]] = empty
   }
-  modules['@/components/EmptyEntry.vue'] = moduleOf(loadComponent(new URL('../../components/EmptyEntry.vue', import.meta.url), modules))
+
   modules['@/components/EntryBatchDialog.vue'] = moduleOf(loadComponent(new URL('../../components/EntryBatchDialog.vue', import.meta.url), modules))
   modules['@/components/LibraryScopeSelect.vue'] = moduleOf(defineComponent({
     props: { single: Boolean }, emits: ['loaded', 'update:modelValue'], setup: (props, { emit }) => {
       onMounted(() => { if (props.single && !noLibraries) emit('update:modelValue', ['library-source']); emit('loaded', noLibraries ? [] : [
-        { id: 'library-source', name: 'Research', display_name: 'Research', template: 'own', content_types: [...CONTENT_TYPES, 'SOP'].map(name => ({ name, enabled: true })) },
-        { id: 'reports', name: 'AI Reports', template: 'generated', content_types: [] },
+        { id: 'library-source', color: 1, name: 'Research', display_name: 'Research', template: 'own', content_types: [...CONTENT_TYPES, 'SOP'].map(name => ({ name, enabled: true })) },
+        { id: 'reports', color: 2, name: 'AI Reports', template: 'generated', content_types: [] },
       ]) })
       return () => null
     },
   }))
   modules['@/components/SelectionCheckbox.vue'] = moduleOf(loadComponent(new URL('../../components/SelectionCheckbox.vue', import.meta.url), modules))
-  for (const view of ['Card', 'List']) modules[`./components/Document${view}View.vue`] = moduleOf(
+  for (const view of ['List']) modules[`./components/Document${view}View.vue`] = moduleOf(
     loadComponent(new URL(`./components/Document${view}View.vue`, import.meta.url), modules),
   )
   if (unavailable) {
@@ -151,6 +166,8 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     modules['./EntityGraph.vue']=empty;modules['./MergeSuggestions.vue']=empty;modules['./EntityRelations.vue']=empty;modules['@/components/FollowToggle.vue']=empty
     modules['./components/EntryWorkbench.vue']=moduleOf(loadComponent(new URL('./components/EntryWorkbench.vue',import.meta.url),modules))
   }
+  modules['@/components/ui'].Dialog = defineComponent({ props: ['modelValue'], setup: (props, { slots }) => () => props.modelValue ? h('section', slots.default?.()) : null })
+  if (realPreview) modules['./components/EntryPreview.vue'] = moduleOf(loadComponent(new URL('./components/EntryPreview.vue', import.meta.url), { ...modules, '@/utils/entryTrace': trace, '@/utils/externalUrl': externalUrl }))
   const library = loadComponent(new URL('./Library.vue', import.meta.url), modules)
   const router = vueRouter.createRouter({ history: vueRouter.createMemoryHistory(), routes: [
     { path: '/platform/library', component: library },
@@ -191,7 +208,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   }))
   delete app._context.components['t-alert']
   app.component('t-alert', defineComponent({ props: ['message'], setup: (props, { attrs, slots }) => () => h('div', attrs, [props.message, slots.operation?.()]) }))
-  for (const name of ['t-dropdown', 't-skeleton', 't-pagination']) app.component(name, empty.default)
+  for (const name of ['t-dropdown', 't-skeleton', 't-pagination', 't-empty']) app.component(name, empty.default)
   const errors: unknown[] = []
   app.config.errorHandler = error => errors.push(error)
   const root = element('root')
@@ -204,23 +221,25 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   await waitForLoad()
   const control = (label: string) => descendants(root).find(node => node.props['aria-label'] === t(label))!
   const byOptions = (value: string) => descendants(root).find(node =>
-    node.tag === 'select' && node.props['data-options']?.some((option: any) => option.value === value))!
+    node.tag === 'select' && descendants(node).some(option => option.tag === 'option' && option.props.value === value))!
+  const content = async (value: string) => { const chip = descendants(root).find(node => node.tag === 'button' && visibleText(node) === (value || t('entries.all')))!; for (const handler of Array.isArray(chip.props.onClick) ? chip.props.onClick : [chip.props.onClick]) handler(); await waitForLoad() }
+  const range = (kind: 'updated' | 'published') => ({ ...element('date-range'), props: { value: [control(`entryBatch.${kind}From`).props.value || '', control(`entryBatch.${kind}To`).props.value || ''], onChange: async (event: any) => { for (const [index, side] of ['From', 'To'].entries()) control(`entryBatch.${kind}${side}`).props.onChange({ target: { value: event.value[index] || '' } }); } } })
   const ids = () => descendants(root).filter(node => node.props['data-select-id']).map(node => node.props['data-select-id'])
   return {
-    root, router, requests, records, errors, control, byOptions, ids, t, scope, rebuildRequests, notices, previewResult, batchResult,
+    root, router, requests, records, errors, control, byOptions, ids, t, scope, rebuildRequests, notices, previewResult, batchResult, content, range, deleteCalls, setListUnavailable(value: boolean) { listUnavailable = value }, allowDelete() { deleteFails = false },
     get confirmation() { return confirmation },
     setRebuildResponse(response: (path: string, data: unknown) => Promise<any>) { rebuildResponse = response },
     recover() { backendAvailable = true },
     get route() { return router.currentRoute.value },
-    async change(node: ReturnType<typeof element>, value: unknown) { node.props.onChange({ value }); await waitForLoad() },
+    async change(node: ReturnType<typeof element>, value: unknown) { if (node.tag === 'select') node.props.onChange({ target: { value, selectedOptions: (Array.isArray(value) ? value : [value]).map(value => ({ value })) } }); else if (node.tag === 'input') node.props.onInput({ target: { value, selectedOptions: (Array.isArray(value) ? value : [value]).map(value => ({ value })) } }); else node.props.onChange({ value }); await waitForLoad() },
     async navigate(query: Record<string, any>) { await router.push({ path: '/platform/library', query }); await waitForLoad() },
     async leave() { await router.push('/platform/search'); await waitForLoad() },
     async back() { router.back(); await waitForLoad() },
     async forward() { router.forward(); await waitForLoad() },
     async list() {
-      descendants(root).find(node => hasClass(node, 'doc-view-toggle-btn') && node.props['aria-pressed'] === false)!.props.onClick()
+      descendants(root).find(node => node.tag === 'button' && visibleText(node) === t('entries.table'))!.props.onClick()
       await settle()
-      assert.ok(descendants(root).some(node => hasClass(node, 'doc-list-row')))
+      assert.ok(descendants(root).some(node => hasClass(node, 'rq-table__row')))
     },
     cleanup() {
       app.unmount()
@@ -237,7 +256,7 @@ test('a space with no libraries finishes loading and displays the material empty
   try {
     assert.equal(env.requests.length, 0)
     assert.equal(descendants(env.root).some(node => hasClass(node, 'entry-card-skeleton')), false)
-    assert.ok(descendants(env.root).some(node => hasClass(node, 'doc-empty-state')))
+    assert.ok(descendants(env.root).some(node => hasClass(node, 'rq-empty')))
     assert.ok(visibleText(env.root).includes(env.t('library.emptyArticles')))
   } finally { env.cleanup() }
 })
@@ -255,7 +274,7 @@ for (const locale of ['zh-CN', 'en-US']) {
     const env = await mountLibrary(locale)
     try {
       const source = env.control('library.materialCategory')
-      assert.deepEqual(source.props['data-options'], [
+      assert.deepEqual(descendants(source).filter(node => node.tag === 'option').map(node => ({ value: node.props.value, label: visibleText(node) })), [
         { value: '', label: env.t('library.allMaterialCategories') },
         ...SEARCH_SOURCES.map(value => ({ value, label: env.t(`knowledgeSearch.sources.${value}`) })),
       ])
@@ -296,12 +315,12 @@ test('source filters combine with existing filters and retain URL state on reloa
   try {
     assert.ok(env.ids().every(id => id.startsWith('mine')))
     assert.equal(env.requests[0].get('source_kind'), 'mine')
-    await env.change(env.byOptions('tutorial'), 'tutorial')
+    await env.content('tutorial')
     await env.change(env.control('articleJudgments.starLabel'), 'true')
     await env.change(env.byOptions('md'), 'md')
     await env.change(env.byOptions('completed'), 'completed')
     await env.change(env.control('library.channelLabel'), 'api')
-    const date = descendants(env.root).find(node => hasClass(node, 'doc-date-range--updated'))!
+    const date = env.range('updated')
     await env.change(date, ['2026-10-01', '2026-10-13'])
     const keyword = descendants(env.root).find(node => hasClass(node, 'doc-search-input'))!
     await env.change(keyword, 'Needle')
@@ -336,13 +355,13 @@ const combinedAPIQuery = {
 }
 function assertFilters(env: Awaited<ReturnType<typeof mountLibrary>>, filters: Partial<typeof combinedQuery>) {
   for (const [key, node] of Object.entries({
-    source_kind: env.control('library.materialCategory'), content_type: env.byOptions('tutorial'),
+    source_kind: env.control('library.materialCategory'),
     starred: env.control('articleJudgments.starLabel'), file_type: env.byOptions('md'),
     parse_status: env.byOptions('completed'), source: env.control('library.channelLabel'),
     keyword: descendants(env.root).find(node => hasClass(node, 'doc-search-input'))!,
   })) assert.equal(node.props.value, filters[key as keyof typeof combinedQuery] || '', `restored ${key} control`)
-  const date = descendants(env.root).find(node => hasClass(node, 'doc-date-range--updated'))!
-  assert.deepEqual(date.props.value, filters.start_date || filters.end_date ? [filters.start_date || '', filters.end_date || ''] : [])
+  const date = env.range('updated')
+  assert.deepEqual(date.props.value, [filters.start_date || '', filters.end_date || ''])
 }
 function assertCombinedLoad(env: Awaited<ReturnType<typeof mountLibrary>>, view: string) {
   assertFilters(env, combinedQuery)
@@ -352,20 +371,20 @@ function assertCombinedLoad(env: Awaited<ReturnType<typeof mountLibrary>>, view:
   assert.equal(request.get('page'), '1')
   assert.equal(env.route.query.preserved, 'value')
   assert.equal(env.route.query.tab, 'documents')
-  assert.ok(descendants(env.root).some(node => hasClass(node, view === 'list' ? 'doc-list-row' : 'entry-card')))
+  assert.ok(descendants(env.root).some(node => hasClass(node, view === 'table' ? 'rq-table__row' : 'entries-list__row')))
 }
 
-for (const locale of ['zh-CN', 'en-US']) for (const view of ['grid', 'list']) {
+for (const locale of ['zh-CN', 'en-US']) for (const view of ['list', 'table']) {
   test(`${locale} ${view}: every filter persists and restores through reload, route return, history back and forward`, async () => {
     let env = await mountLibrary(locale, { tab: 'documents' }, view)
     try {
       await env.change(env.control('library.materialCategory'), combinedQuery.source_kind)
-      await env.change(env.byOptions('tutorial'), combinedQuery.content_type)
+      await env.content(combinedQuery.content_type)
       await env.change(env.control('articleJudgments.starLabel'), combinedQuery.starred)
       await env.change(env.byOptions('md'), combinedQuery.file_type)
       await env.change(env.byOptions('completed'), combinedQuery.parse_status)
       await env.change(env.control('library.channelLabel'), combinedQuery.source)
-      await env.change(descendants(env.root).find(node => hasClass(node, 'doc-date-range--updated'))!, [combinedQuery.start_date, combinedQuery.end_date])
+      await env.change(env.range('updated'), [combinedQuery.start_date, combinedQuery.end_date])
       await env.change(descendants(env.root).find(node => hasClass(node, 'doc-search-input'))!, combinedQuery.keyword)
       await new Promise(resolve => setTimeout(resolve, 330))
       await settle()
@@ -425,12 +444,12 @@ test('default and invalid URL filters are omitted while unrelated query paramete
 })
 
 test('source and star filter changes clear selected entries before loading filtered data', async () => {
-  const env = await mountLibrary('zh-CN', {}, 'list')
+  const env = await mountLibrary('zh-CN', {}, 'table')
   try {
-    const selected = () => descendants(env.root).filter(node => node.props['data-select-id'] && hasClass(node, 'selected'))
+    const selected = () => descendants(env.root).filter(node => node.props['data-select-id'] && hasClass(node, 'rq-table__row--selected'))
     const select = (id: string) => {
       const row = descendants(env.root).find(node => node.props['data-select-id'] === id)!
-      descendants(row).find(node => node.tag === 'input')!.props.onChange({ checked: true })
+      descendants(row).find(node => node.tag === 'input')!.props.onChange({ target: { checked: true } })
     }
     select('article')
     await settle()
@@ -462,13 +481,13 @@ test('library-defined content types and Markdown aliases survive a shared URL an
   const env = await mountLibrary('zh-CN', { content_type: 'SOP', file_type: 'manual', source: 'api' }, 'grid', false, true)
   try {
     assert.deepEqual(env.ids(), ['sop'])
-    assert.equal(env.byOptions('SOP').props.value, 'SOP')
+    assert.equal(descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === 'SOP')!.props['aria-pressed'], true)
     assert.equal(env.byOptions('md').props.value, 'md')
     assert.equal(env.route.query.content_type, 'SOP')
     assert.equal(env.route.query.file_type, 'md')
     assert.equal(env.requests.at(-1)!.get('content_type'), 'SOP')
     assert.equal(env.requests.at(-1)!.get('file_type'), 'md')
-    const channels = env.control('library.channelLabel').props['data-options'] as Array<{ value: string }>
+    const channels = descendants(env.control('library.channelLabel')).filter(node => node.tag === 'option').map(node => ({ value: node.props.value }))
     assert.ok(!channels.some(item => ['manual', 'url'].includes(item.value)))
     assert.ok(env.control('library.materialCategory'))
     env.scope.value = ['reports']; await new Promise(resolve => setImmediate(resolve)); await settle()
@@ -521,7 +540,7 @@ test('bulk management retains exact filters and server count across both steps a
     assert.equal(button('entryBatch.confirm')!.props.disabled, true)
     button('entryBatch.confirm')!.props.onClick(); await settle()
     assert.equal(env.rebuildRequests.length, 2)
-    descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ checked: true }); await settle()
+    descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ target: { checked: true } }); await settle()
     button('entryBatch.changeScope')!.props.onClick(); await settle()
     assert.equal(button('entryBatch.confirm'), undefined)
     assert.ok(summary().includes(env.t('entryBatch.matchedCount', { count: 41 })))
@@ -531,10 +550,12 @@ test('bulk management retains exact filters and server count across both steps a
     assert.equal(env.rebuildRequests.length, 2, 'moving between steps preserves the scope count')
     button('entryBatch.preview')!.props.onClick(); await settle()
     assert.equal(button('entryBatch.confirm')!.props.disabled, true)
-    descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ checked: true }); await settle()
+    descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ target: { checked: true } }); await settle()
     let finish!: (response: unknown) => void
     env.setRebuildResponse(() => new Promise(resolve => { finish = resolve }))
     button('entryBatch.confirm')!.props.onClick(); await settle()
+    assert.ok(env.confirmation)
+    void env.confirmation.onConfirm(); await settle()
     assert.equal(button('entryBatch.confirm')!.props.disabled, true)
     button('entryBatch.confirm')!.props.onClick(); await settle()
     assert.equal(env.rebuildRequests.length, 4, 'busy submit rejects duplicate calls')
@@ -548,14 +569,14 @@ test('bulk management retains exact filters and server count across both steps a
 })
 
 test('scope changes ignore stale counts and checked summaries distinguish unavailable IDs', async () => {
-  const env = await mountLibrary('en-US', {}, 'list')
+  const env = await mountLibrary('en-US', {}, 'table')
   const button = (key: string) => descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t(key))!
   const summary = () => visibleText(env.control('entryBatch.scopeSummary'))
   try {
     let finishOld!: (response: unknown) => void
     env.setRebuildResponse(async (_path, data: any) => data.selection.ids ? new Promise(resolve => { finishOld = resolve }) : { success: true, data: { ...env.previewResult.data, matched: 0 } })
     const row = descendants(env.root).find(node => node.props['data-select-id'] === 'mine')!
-    descendants(row).find(node => node.tag === 'input')!.props.onChange({ checked: true }); await settle()
+    descendants(row).find(node => node.tag === 'input')!.props.onChange({ target: { checked: true } }); await settle()
     button('entryBatch.title').props.onClick(); await settle()
     assert.equal(env.control('entryBatch.scope').props.value, 'selected')
     assert.ok(summary().includes(env.t('entryBatch.checkedHint')))
@@ -601,9 +622,43 @@ test('scope count failures block advancement until retry and action conflicts re
     button('entryBatch.preview').props.onClick(); await settle()
     assert.ok(!visibleText(env.root).includes('A processing task is already running in this library.'))
     assert.equal(button('entryBatch.confirm').props.disabled, true)
-    descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ checked: true }); await settle()
+    descendants(env.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ target: { checked: true } }); await settle()
     button('entryBatch.confirm').props.onClick(); await settle()
+    await env.confirmation.onConfirm(); await settle()
     assert.ok(visibleText(env.root).includes(env.t('entryBatch.status.completed')))
     assert.equal(env.rebuildRequests.length, 5)
+  } finally { env.cleanup() }
+})
+
+for (const kind of ['article', 'mine']) test(`${kind}: preview deletion waits for confirmation, retries failure and keeps the original deletion endpoint`, async () => {
+  const env = await mountLibrary('en-US', { source_kind: kind }, 'list', false, false, false, true)
+  try {
+    const remove = descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t('library.deleteDocument'))!
+    assert.ok(remove)
+    remove.props.onClick(); await settle()
+    assert.deepEqual(env.deleteCalls, [])
+    assert.ok(env.confirmation.body.includes(kind === 'article' ? 'Needle article' : 'Needle document'))
+    await assert.rejects(() => env.confirmation.onConfirm())
+    assert.ok(env.ids().includes(kind))
+    env.allowDelete()
+    await env.confirmation.onConfirm(); await settle()
+    assert.deepEqual(env.deleteCalls, [`/api/v1/${kind === 'article' ? 'entries' : 'documents'}/${kind}`, `/api/v1/${kind === 'article' ? 'entries' : 'documents'}/${kind}`])
+    assert.ok(!env.ids().includes(kind))
+  } finally { env.cleanup() }
+})
+
+test('a failed list request is distinct from an empty result and retries the same filters', async () => {
+  const env = await mountLibrary('en-US')
+  try {
+    env.setListUnavailable(true)
+    await env.change(env.control('library.materialCategory'), 'mine')
+    assert.ok(visibleText(env.root).includes(env.t('entries.loadFailed')))
+    assert.ok(!visibleText(env.root).includes(env.t('library.emptyArticles')))
+    env.setListUnavailable(false)
+    const retry = descendants(env.root).find(node => node.tag === 'button' && visibleText(node) === env.t('common.retry'))!
+    retry.props.onClick(); await new Promise(resolve => setImmediate(resolve)); await settle()
+    assert.ok(!visibleText(env.root).includes(env.t('entries.loadFailed')))
+    assert.ok(env.ids().every(id => id.startsWith('mine')))
+    assert.equal(env.requests.at(-1)!.get('source_kind'), 'mine')
   } finally { env.cleanup() }
 })

@@ -1,3 +1,4 @@
+import { entryPresentationTestModules } from './entryPresentationTestModules'
 import * as bodyReference from '../../utils/bodyReference'
 import * as libraryScopeHelpers from '../../utils/libraryScope'
 import assert from 'node:assert/strict'
@@ -25,7 +26,7 @@ function evaluate(code: string, modules: Record<string, unknown>) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', output)((name: string) => name === '@/components/SelectionCheckbox.vue'
     ? moduleOf(component('../../components/SelectionCheckbox.vue', {}))
-    : name === '@/utils/entrySourceLabels' ? entrySourceLabels : name === '@/utils/markdownPlainText' ? markdownPlainText : name.endsWith('.png') ? '/image.png' : (name === '@/utils/bodyReference' ? bodyReference : name === '@/utils/libraryScope' ? libraryScopeHelpers : name === '@/composables/useLibraryScope' ? { useLibraryScope: () => ref([]) } : (name.endsWith('LibraryScopeSelect.vue') ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name])) ?? require(name), module, module.exports)
+    : name === '@/utils/entrySourceLabels' ? entrySourceLabels : name === '@/utils/markdownPlainText' ? markdownPlainText : name.endsWith('.png') ? '/image.png' : (name === '@/utils/bodyReference' ? bodyReference : name === '@/utils/libraryScope' ? libraryScopeHelpers : name === '@/composables/useLibraryScope' ? { useLibraryScope: () => ref([]) } : (name.endsWith('LibraryScopeSelect.vue') ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name])) ?? entryPresentationTestModules[name] ?? require(name), module, module.exports)
   return module.exports
 }
 function source(path: string) { return readFileSync(new URL(path, import.meta.url), 'utf8') }
@@ -173,7 +174,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       getEntryBatch: async () => ({ success: true, data: { batch_id: 'legacy-review', action: 'review', status: 'completed', total: 1, succeeded: 1, failed: 0, skipped: 0, pending: 0, running: 0, warnings: 0, items: [], page: 1, page_size: 20 } }),
       submitEntryBatch: async () => assert.fail('Historical results must not create a review task'),
     }
-    const dialog = component('../../components/EntryBatchDialog.vue', { '@/api/entry-batches': api, '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) } })
+    const dialog = component('../../components/EntryBatchDialog.vue', { '@/components/ui': { ...(entryPresentationTestModules['@/components/ui'] as object), Dialog: defineComponent({ setup: (_, { slots }) => () => h('section', slots.default?.()) }) }, '@/api/entry-batches': api, '@/api/topics': { listTopics: async () => ({ success: true, data: [] }) } })
     const html = await render(dialog, { visible: true, batchId: 'legacy-review', libraries: [] }, locale, async state => {
       state.ready.value = true
       assert.ok(!state.actions.includes('review'))

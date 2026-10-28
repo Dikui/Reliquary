@@ -1,3 +1,4 @@
+import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -15,7 +16,7 @@ const require = createRequire(import.meta.url)
 function evaluate(path: string, modules: Record<string, any>) {
  const code = ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
  const value = { exports: {} as any }
- new Function('require', 'module', 'exports', code)((name: string) => modules[name] ?? require(name), value, value.exports)
+ new Function('require', 'module', 'exports', code)((name: string) => modules[name] ?? entryPresentationTestModules[name] ?? require(name), value, value.exports)
  return value.exports
 }
 function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', previousCache = false) {

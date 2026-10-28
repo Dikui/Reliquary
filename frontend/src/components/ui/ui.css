@@ -75,7 +75,11 @@
 .rq-table__check { width: 48px; }
 .rq-table__row:hover, .rq-table__row--selected td { background: var(--surface-soft); }
 .rq-table__row--focused td { background: var(--select); color: var(--on-select); }
-.rq-table__row--focused a { color: inherit; }
+/* The focused row owns every text color, including component and hover colors. */
+.rq-focus-row { background: var(--select); }
+:is(.rq-focus-row, .rq-table__row--focused),
+:is(.rq-focus-row, .rq-table__row--focused) * { color: var(--on-select) !important; }
+:is(.rq-focus-row, .rq-table__row--focused) .rq-tag { background: transparent; }
 .rq-overlay { position: fixed; inset: 0; z-index: 200; background: var(--overlay); }
 .rq-dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 201; display: flex; flex-direction: column; gap: var(--space-4); width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); background: var(--surface); border: 2px solid var(--rule); box-shadow: var(--shadow-float); padding: var(--space-5); }
 .rq-dialog--drawer { top: 0; bottom: 0; left: auto; right: 0; transform: none; width: min(100%, 480px); max-height: 100dvh; border-block: 0; border-right: 0; }

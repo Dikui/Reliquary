@@ -1,3 +1,4 @@
+import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import * as entrySourceLabels from '../utils/entrySourceLabels'
 import * as markdownPlainText from '../utils/markdownPlainText'
@@ -22,7 +23,7 @@ function evaluate(code: string, modules: Record<string, unknown>) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', output)((name: string) => name === '@/components/SelectionCheckbox.vue'
     ? { __esModule: true, default: component('./SelectionCheckbox.vue', {}) }
-    : name === '@/utils/entrySourceLabels' ? entrySourceLabels : name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : modules[name] ?? require(name), module, module.exports)
+    : name === '@/utils/entrySourceLabels' ? entrySourceLabels : name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : modules[name] ?? entryPresentationTestModules[name] ?? require(name), module, module.exports)
   return module.exports
 }
 function component(path: string, modules: Record<string, unknown>) {
@@ -73,7 +74,7 @@ function articleLoadingHook(record: Record<string, unknown>) {
     pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
     '../utils/index': { formatStringDate: () => '2026-10-12' },
     'tdesign-vue-next': { MessagePlugin: {} },
-    '@/api/library': { listEntryFiles: async () => ({ data: [record], total: 1 }) },
+    '@/api/library': { listEntryFiles: async () => ({ success: true, data: [record], total: 1 }) },
     '@/stores/entry': { entryStore: () => ({}) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/stores/resources': { useResourcesStore: () => ({}) },
@@ -81,12 +82,12 @@ function articleLoadingHook(record: Record<string, unknown>) {
 }
 for (const locale of ['zh-CN', 'en-US'] as const) {
   const copy = messages[locale].library
-  test(`${locale}: cards and rows show and hide ingest markers through the production list loading hook`, async () => {
+  test(`${locale}: the material list show and hide ingest markers through the production list loading hook`, async () => {
     for (const parse_status of ['completed', 'processing', 'failed']) for (const flagged of [true, false, undefined]) {
       const hook = articleLoadingHook({ ...article, parse_status, acquisition: flagged ? 'model_written' : 'verbatim', ...(flagged !== undefined ? { incomplete: flagged } : {}), updated_at: '2026-10-12T00:00:00Z' })
       await hook.loadEntries()
-      for (const path of ['../views/library/components/DocumentCardView.vue', '../views/library/components/DocumentListView.vue']) {
-        const html = await render(component(path, listModules), { ...props, items: hook.cardList.value }, locale)
+      for (const path of ['../views/library/components/DocumentListView.vue']) for (const mode of ['list', 'table']) {
+        const html = await render(component(path, listModules), { ...props, mode, items: hook.cardList.value }, locale)
         assert.equal(html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged), path)
         assert.equal(html.includes(messages[locale].ingestStatus.incomplete), false, path)
         for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
@@ -102,7 +103,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 test('content type filters use enabled types from the selected libraries', () => {
   const page = readFileSync(new URL('../views/library/Library.vue', import.meta.url), 'utf8')
   const api = readFileSync(new URL('../api/library.ts', import.meta.url), 'utf8')
-  assert.match(page, /v-model="selectedContentType"/)
+  assert.match(page, /:model-value="selectedContentType === option.value"/)
   assert.match(page, /content_type: selectedContentType\.value/)
   assert.match(page, /libraryCatalog\.value\.filter/)
   assert.match(page, /content_types \|\| \[\]/)
@@ -114,41 +115,23 @@ test('content type filters use enabled types from the selected libraries', () =>
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: historical RSS and web article channels keep their localized labels`, async () => {
-    const card = component('../views/library/components/DocumentCardView.vue', listModules)
-    const setup = card.setup
-    card.setup = (props: object, context: object) => {
-      const state = setup(props, context)
-      onServerPrefetch(() => {
-        assert.equal(state.getEntryType({ ...article, channel: 'rss' }), 'Markdown')
-        assert.equal(state.getChannelLabel({ channel: 'rss' }), messages[locale].library.channelRSS)
-        assert.equal(state.getChannelLabel({ channel: 'web' }), messages[locale].library.channelWeb)
-      })
-      return state
-    }
-    await render(card, { ...props, items: [{ ...article, channel: 'rss' }, { ...article, channel: 'web' }] }, locale)
-    const row = component('../views/library/components/DocumentListView.vue', listModules)
-    const rowSetup = row.setup
-    row.setup = (props: object, context: object) => {
-      const state = rowSetup(props, context)
-      onServerPrefetch(() => {
-        assert.equal(state.getSourceInfo({ ...article, channel: 'rss' }).label, messages[locale].library.channelRSS)
-        assert.equal(state.getSourceInfo({ ...article, type: 'url', channel: 'web' }).label, messages[locale].library.channelWeb)
-      })
-      return state
-    }
-    await render(row, { ...props, items: [{ ...article, channel: 'rss' }, { ...article, type: 'url', channel: 'web' }] }, locale)
+    const card = component('../views/library/components/DocumentListView.vue', listModules)
+    const html = await render(card, { ...props, items: [{ ...article, channel: 'rss' }, { ...article, channel: 'web' }] }, locale)
+    assert.ok(html.includes(messages[locale].library.channelRSS))
+    assert.ok(html.includes(messages[locale].library.channelWeb))
+
   })
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: AI reports display their trust marker in classification, cards and rows`, async () => {
+  test(`${locale}: AI reports display their trust marker in classification, the material list`, async () => {
     const report = { ...article, source_kind: 'report', cannot_be_fact: true, content_type: '', structured_summary: null, entities: [], topics: [] }
     const html = await render(classification, { entry: report }, locale)
     assert.ok(html.includes(messages[locale].ingestStatus.cannotBeFact))
     const ordinary = await render(classification, { entry: article }, locale)
     assert.ok(!ordinary.includes(messages[locale].ingestStatus.cannotBeFact))
-    for (const path of ['../views/library/components/DocumentCardView.vue', '../views/library/components/DocumentListView.vue']) {
-      const html = await render(component(path, listModules), { ...props, items: [report] }, locale)
+    for (const path of ['../views/library/components/DocumentListView.vue']) for (const mode of ['list', 'table']) {
+      const html = await render(component(path, listModules), { ...props, mode, items: [report] }, locale)
       assert.ok(html.includes(messages[locale].ingestStatus.cannotBeFact), path)
     }
   })

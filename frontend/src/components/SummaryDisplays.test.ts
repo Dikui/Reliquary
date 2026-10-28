@@ -1,3 +1,4 @@
+import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -29,7 +30,7 @@ const sourceRecord = { id: 'summary-article', title: 'Summary article', file_nam
 function evaluate(code: string, modules: Record<string, unknown>) {
   const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const value = { exports: {} as any }
-  new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? (name.endsWith('.vue') ? empty : name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : require(name)), value, value.exports)
+  new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? entryPresentationTestModules[name] ?? (name.endsWith('.vue') ? empty : name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : require(name)), value, value.exports)
   return value.exports
 }
 
@@ -114,7 +115,7 @@ function environment(locale: keyof typeof messages) {
 }
 
 function summaryFields(root: Element, localizedImage: string, structured: boolean) {
-  const overview = descendants(root).find(node => hasClass(node, structured ? 'summary-overview' : 'summary-description'))!
+  const overview = descendants(root).find(node => hasClass(node, structured ? 'summary-overview' : 'summary-description') || hasClass(node, 'entries-list__summary'))!
   assert.ok(overview, 'the summary component rendered its loaded data')
   const text = visibleText(overview)
   for (const value of ['Summary heading', 'bold read', `${localizedImage} ${localizedImage}`, '*literal* **literal**']) assert.ok(text.includes(value), value)
@@ -138,11 +139,10 @@ function browserGlobals() {
 for (const locale of ['zh-CN', 'en-US'] as const) {
   const image = locale === 'zh-CN' ? '[图片]' : '[Image]'
   for (const structured of [true, false]) {
-    test(`${locale}: API and store loaded ${structured ? 'structured' : 'fallback'} summaries render as text in cards, list rows and detail while the body keeps Markdown`, async () => {
+    test(`${locale}: API and store loaded ${structured ? 'structured' : 'fallback'} summaries render as text in the material list and detail while the body keeps Markdown`, async () => {
       const restore = browserGlobals()
       const env = environment(locale)
       if (!structured) env.record.structured_summary = null as any
-      const card = component('../views/library/components/DocumentCardView.vue', env.modules)
       const list = component('../views/library/components/DocumentListView.vue', env.modules)
       const detail = component('./DocContent.vue', env.modules)
       let hook: any
@@ -152,7 +152,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
           const opened = ref(false)
           onMounted(async () => { await hook.loadEntries(); hook.getCardDetails(hook.cardList.value[0]); opened.value = true })
           return () => h('main', [
-            h('section', { 'data-display': 'card' }, h(card, { items: hook.cardList.value, selectedIds: new Set(), batchMode: false, traceAvailableById: {} })),
             h('section', { 'data-display': 'list' }, h(list, { items: hook.cardList.value, selectedIds: new Set(), traceVisibleIds: {} })),
             h('section', { 'data-display': 'detail' }, opened.value && hook.details.id ? [h(detail, { visible: true, details: hook.details })] : []),
           ])
@@ -161,7 +160,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       try {
         await settle()
         assert.deepEqual(env.errors, [])
-        for (const display of ['card', 'list', 'detail']) summaryFields(descendants(mounted.root).find(node => node.props['data-display'] === display)!, image, structured)
+        for (const display of ['list', 'detail']) summaryFields(descendants(mounted.root).find(node => node.props['data-display'] === display)!, image, display === 'detail' && structured)
         const html = descendants(mounted.root).filter(node => hasClass(node, 'md-content')).map(node => node.props.innerHTML || '').join('')
         assert.match(html, /<h1>Article body<\/h1>/)
         assert.match(html, /<strong>Body bold<\/strong>/)

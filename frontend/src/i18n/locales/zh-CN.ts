@@ -1,5 +1,46 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  entries: {
+    pagination: '结果分页', previous: '上一页', next: '下一页',
+    "all": "全部",
+    "list": "列表",
+    "table": "表格",
+    "open": "打开",
+    "preview": "资料预览",
+    "library": "库",
+    "source": "来源",
+    "summary": "摘要",
+    "entities": "实体",
+    "processing": "处理步骤",
+    "unknown": "未知",
+    "noSummary": "暂无摘要",
+    "noEntities": "暂无实体",
+    "noTrace": "暂无处理记录",
+    "previewFailed": "资料预览加载失败",
+    "traceFailed": "处理记录加载失败",
+    "loadFailed": "资料列表加载失败，请重试。",
+    "emptyHint": "可以调整筛选条件，或通过收录接口添加资料。",
+    "keyboardHint": "J / K 切换",
+    "sort": "排序",
+    "newest": "最新收录",
+    "clearSearch": "清除资料搜索",
+    "libraryNumber": "库 {number}",
+    "count": "{count} 份资料",
+    "entityCount": "实体 {count}",
+    "relationCount": "关系 {count}",
+    "duration": "{seconds} 秒",
+    "columns": {
+        "id": "编号",
+        "title": "标题",
+        "summary": "一句话概述",
+        "type": "类型",
+        "entities": "实体",
+        "relations": "关系",
+        "status": "状态",
+        "created": "收录"
+    }
+},
+
   ui: {
     showOptions: '显示选项',
     clearSelection: '清除选择',

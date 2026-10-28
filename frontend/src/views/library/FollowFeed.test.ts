@@ -1,3 +1,4 @@
+import { entryPresentationTestModules } from './entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import * as entrySourceLabels from '../../utils/entrySourceLabels'
 import { readFileSync } from 'node:fs'
@@ -21,8 +22,8 @@ const moduleOf = (value: unknown) => ({ __esModule: true, default: value })
 async function settle() { await settleNodes(); await new Promise<void>(resolve => setImmediate(resolve)); await settleNodes() }
 async function click(node: Element) { await clickNode(node); await settle() }
 const empty = moduleOf(defineComponent({ setup: () => () => null }))
-const entity = { id: 'entity-a', canonical_name: 'Aurora', entity_type: 'company', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }
-const topic = { id: 'topic-a', name: 'Space research', description: 'Space missions', entry_count: 2, created_at: '', updated_at: '' }
+const entity = { library_id: 'fixture-library', id: 'entity-a', canonical_name: 'Aurora', entity_type: 'company', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }
+const topic = { library_id: 'fixture-library', id: 'topic-a', name: 'Space research', description: 'Space missions', entry_count: 2, created_at: '', updated_at: '' }
 const follow = (type: 'entity' | 'topic', id: string, name: string) => ({ target_type: type, target_id: id, name, created_at: '2026-10-01T00:00:00Z', recent_entry_count: 2 })
 const entityFollow = follow('entity', entity.id, entity.canonical_name), topicFollow = follow('topic', topic.id, topic.name)
 const previous = '2026-10-10T08:00:00Z', openedAt = '2026-10-11T12:00:00Z', markedAt = '2026-10-11T14:00:00Z'
@@ -31,7 +32,7 @@ function evaluateFile(path: string, modules: Record<string, unknown>) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const value = { exports: {} as any }
-  new Function('require', 'module', 'exports', code)((name: string) => (name === './BodyReference.vue' || name === './EntityRelations.vue' ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name]) ?? require(name), value, value.exports)
+  new Function('require', 'module', 'exports', code)((name: string) => (name === './BodyReference.vue' || name === './EntityRelations.vue' ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name]) ?? entryPresentationTestModules[name] ?? require(name), value, value.exports)
   return value.exports
 }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
@@ -51,6 +52,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
     const delayed = transport.intercept(method, url, body)
     if (delayed) return delayed
     if (transport.fail(method, url, body)) throw new Error('transport unavailable')
+    if (method === 'get' && url === '/api/v1/libraries') return envelope([{ id: 'fixture-library', name: 'Fixture library', display_name: 'Fixture library', color: 1 }])
     if (method === 'get' && url === '/api/v1/follows') return envelope(transport.targets)
     if (method === 'get' && url === '/api/v1/follows/state') return envelope(state())
     if (method === 'post' && url === '/api/v1/follows/view') { transport.checkpoint = body?.viewed_at || markedAt; return envelope(state()) }
@@ -73,12 +75,12 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
       if (method === 'put') transport.targets.push(value)
       return envelope(method === 'put' ? value : null)
     }
-    if (method === 'get' && url === '/api/v1/topics') return envelope([topic])
+    if (method === 'get' && url.startsWith('/api/v1/topics?')) return envelope([topic])
     if (method === 'get' && url.endsWith('/backfill')) return envelope(null)
     if (method === 'del' && url === `/api/v1/topics/${topic.id}`) { transport.targets = transport.targets.filter((value: any) => value.target_id !== topic.id); return envelope(null) }
     if (method === 'get' && url.includes('/name-embeddings/rebuild')) return envelope({ pending_count: 0, latest_run: null })
     if (method === 'get' && url.startsWith('/api/v1/entities?')) return envelope([entity])
-    if (method === 'get' && url === `/api/v1/entities/${entity.id}`) return envelope({ entity, entry: [{ id: 'new', title: 'Article new', created_at: openedAt }] })
+    if (method === 'get' && url === `/api/v1/entities/${entity.id}`) return envelope({ entity, entries: [{ id: 'new', title: 'Article new', created_at: openedAt }] })
     if (method === 'post' && url === '/api/v1/entities/merge') { transport.targets = transport.targets.filter((value: any) => value.target_id !== body.merge_entity_id); transport.targets.push(follow('entity', body.keep_entity_id, 'Retained entity')); return envelope(null) }
     if (method === 'get' && url.startsWith('/api/v1/entries?')) return { ...envelope([{ ...transport.articles[0], id: 'new', file_name: 'Article new', type: 'manual', parse_status: 'completed', updated_at: openedAt }]), total: 1 }
     if (method === 'get' && url.startsWith('/api/v1/chunks/new?')) return { ...envelope([]), total: 0 }
@@ -98,7 +100,8 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const urls: any[] = []
   const router = { replace: async (value: any) => { urls.push(value); route.query = value.query || {} }, push: async (value: any) => { urls.push(value) } }
   const i18n = createI18n({ legacy: false, locale, messages })
-  const modules: Record<string, any> = { '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
+  const modules: Record<string, any> = { ...entryPresentationTestModules, '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
+  modules['@/components/LibraryScopeSelect.vue'] = moduleOf(loadComponent(new URL('../../components/LibraryScopeSelect.vue', import.meta.url), modules))
   modules['@/components/EntryUpdateNotice.vue'] = modules['./EntryUpdateNotice.vue'] = empty
   modules['./EntityRelations.vue'] = modules['./EntityGraph.vue'] = modules['./BodyReference.vue'] = empty
   modules['@/utils/entrySourceLabels'] = entrySourceLabels
@@ -211,7 +214,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(env.store.isFollowing('topic', topic.id), true)
       await click(env.followButton(topics.root, 'topic', true))
       assert.equal(env.store.isFollowing('topic', topic.id), false)
-      assert.ok(env.calls.some(call => call.url === '/api/v1/topics'))
+      assert.ok(env.calls.some(call => call.url === '/api/v1/topics?library_id=fixture-library'))
       assert.deepEqual(env.calls.filter(call => ['put', 'del'].includes(call.method) && call.url.startsWith('/api/v1/follows/')).map(call => [call.method, call.url]), [['put', `/api/v1/follows/entity/${entity.id}`], ['del', `/api/v1/follows/entity/${entity.id}`], ['put', `/api/v1/follows/topic/${topic.id}`], ['del', `/api/v1/follows/topic/${topic.id}`]])
       assert.deepEqual(env.errors, [])
     } finally { topics.close() }
