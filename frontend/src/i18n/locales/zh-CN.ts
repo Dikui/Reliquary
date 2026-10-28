@@ -424,6 +424,7 @@ export default {
     "parameters": "筛选条件"
 },
  ikb23: { view: '查看输入输出', input: '输入', output: '输出', raw: '完整原始内容', body: '正文', characters: '{n} 字符', copy: '复制', copied: '已复制', copyFailed: '复制失败', unavailable: '内容未保存或已按保留策略清理', loading: '正在读取内容', retry: '重试', call: '调用', partial: '响应未完整接收', close: '关闭', details: '其他字段' },
+  diagnosticsB: { firstHit: '首个正确结果排名', invalidGraph: '请填写有效的图谱参数 JSON。' },
   ikb19: {
     elapsed: '耗时',
     refreshDetail: '刷新运行详情',

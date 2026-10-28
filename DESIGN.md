@@ -282,3 +282,18 @@ source quotations. The current quotation uses the shared focus colors. Below
 900px the batch list precedes the findings. Both diagnostic pages keep 24px of
 top padding below the mobile navigation. Native date and time controls retain
 platform-owned pickers, while the shared dialog owns weekly schedule editing.
+
+### Swiss evaluation and model calls
+
+Evaluation and model calls share a 1280px content measure and 24px mobile top
+clearance. Evaluation has three tabs, with question and candidate editing in
+shared dialogs. Five metrics use large monospaced values; comparison deltas use
+success and danger tokens with explicit signs. Reference links use the material
+detail route, retaining full IDs in titles when labels are shortened.
+
+Model calls show actual aggregate values above daily column charts and grouped
+and detailed tables. Each currency has a separate plot with a common scale;
+calls stack successful and failed requests in text and danger colors. Token
+and cost plots show the available totals without estimating a failure split.
+Tables scroll within their own containers. The call drawer overrides the shared
+content viewer's legacy styles with square neutral surfaces in both themes.

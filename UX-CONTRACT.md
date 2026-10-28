@@ -359,3 +359,23 @@ and expose a confirmed recheck of unfinished materials. Schedule edits stay in
 a draft until saved, use active models, and preserve the backend's Beijing time
 semantics. Cancel leaves the saved schedule unchanged. Shared Swiss primitives
 own forms, feedback, overlays and keyboard focus on these migrated pages.
+
+## Swiss evaluation and model calls
+
+Evaluation retains set management, all existing question and record filters,
+relevance grades, graph parameters, candidate scope, vector selectors, reranking,
+similarity collapse, run snapshots and pagination. The backend determines which
+confirmed questions run, including each question's retrieval method. Comparison
+uses two completed runs of one set and preserves all five deltas, question
+revisions and gained or lost hits. Shared dialogs, confirmation and toast services
+own editing, deletion and feedback. Failed saves retain the draft and show the
+error inside the dialog; changing sets clears old question rows.
+
+Model calls retain UTC inclusive start and exclusive end dates, model, purpose,
+material, period and grouping controls. Unknown values remain distinct from
+zero and subscription costs; currencies are never added together. Missing trend
+days are zero while unknown buckets remain gaps. Only call counts can be split
+by success from the existing aggregate API. Clicking a call row or activating it
+with the keyboard opens the shared drawer with metadata and the existing complete
+request/response viewer. A failed page load cannot leave the previous call rows
+under a new page number.

@@ -91,3 +91,23 @@ test('button labels stay on one line inside containers that wrap long text anywh
   assert.equal(buttonText['white-space'], 'nowrap')
   assert.equal(buttonText['overflow-wrap'], 'normal')
 })
+
+test('screen reader text stays clipped inside positioned tables and skeletons', () => {
+  for (const selector of ['.rq-table-wrap', '.rq-skeleton']) {
+    assert.equal(declarations(styles, selector).position, 'relative', `${selector} contains its absolute accessible label`)
+  }
+  const hidden = declarations(styles, '.rq-sr-only')
+  assert.equal(hidden.position, 'absolute')
+  assert.equal(hidden.top, '0')
+  assert.equal(hidden.left, '0')
+  assert.equal(hidden.width, '1px')
+  assert.equal(hidden.height, '1px')
+  assert.equal(hidden.overflow, 'hidden')
+  assert.equal(hidden.clip, 'rect(0, 0, 0, 0)')
+  assert.equal(hidden['clip-path'], 'inset(50%)')
+  assert.equal(hidden['white-space'], 'nowrap')
+  assert.equal(hidden.padding, '0')
+  assert.equal(hidden.border, '0')
+  assert.notEqual(hidden.display, 'none', 'accessible names remain in the accessibility tree')
+  assert.notEqual(hidden.visibility, 'hidden')
+})
