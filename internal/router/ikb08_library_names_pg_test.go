@@ -54,7 +54,7 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 		count := 0
 		switch v := value.(type) {
 		case map[string]any:
-			if id, ok := v["library_id"].(string); ok && id != "" {
+			if id, ok := v["library_id"].(string); ok && id != "" && v["library_name"] != nil {
 				require.Contains(t, expected, id)
 				require.Equal(t, expected[id], v["library_name"], "%+v", v)
 				count++
@@ -72,7 +72,15 @@ func TestArticleLibraryNamesHTTPAndMCP(t *testing.T) {
 	var articles []*types.Entry
 	for _, library := range []*types.Library{systemLibrary, customLibrary} {
 		f.library = library
-		article := mcpFollowArticle(t, f, "Librarynamefixture", time.Now().Add(-time.Hour), entity.ID, topic.ID)
+		localEntity, localTopic := entity, topic
+		if library.ID != systemLibrary.ID {
+			localEntity.ID, localEntity.LibraryID = uuid.NewString(), library.ID
+			localTopic.ID, localTopic.LibraryID = uuid.NewString(), library.ID
+			require.NoError(t, f.db.Create(&localEntity).Error)
+			require.NoError(t, f.db.Create(&localTopic).Error)
+			mcpCall(t, client, "follow", map[string]any{"target_type": "topic", "target_id": localTopic.ID}, nil)
+		}
+		article := mcpFollowArticle(t, f, "Librarynamefixture", time.Now().Add(-time.Hour), localEntity.ID, localTopic.ID)
 		articles = append(articles, article)
 		f.seedPending(t, "Librarynamefixture pending")
 		require.NoError(t, f.db.Model(article).Update("incomplete", true).Error)

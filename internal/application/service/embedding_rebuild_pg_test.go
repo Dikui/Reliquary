@@ -25,9 +25,19 @@ type allRebuildEmbedder struct {
 	imageCalls    int
 	onEmbed       func(context.Context, string) error
 	onImage       func(context.Context) error
+	supportFusion bool
+	fusionCalls   int
 }
 
 func (e *allRebuildEmbedder) SupportsImages() bool { return e.supportImages }
+func (e *allRebuildEmbedder) SupportsFusion() bool { return e.supportFusion }
+func (e *allRebuildEmbedder) EmbedFusion(ctx context.Context, text string, images []string) ([]float32, error) {
+	if !types.IsBackgroundTask(ctx) || types.ModelTierFromContext(ctx) != types.ModelTierEmbedding || len(images) == 0 || len(types.ModelCallImagesFromContext(ctx)) != len(images) {
+		return nil, errors.New("fusion rebuild requires background tier and image references")
+	}
+	e.fusionCalls++
+	return []float32{0, 0, 1}, nil
+}
 func (e *allRebuildEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	if !types.IsBackgroundTask(ctx) || types.ModelTierFromContext(ctx) != types.ModelTierEmbedding {
 		return nil, errors.New("all rebuild calls must use background embedding tier")
@@ -73,7 +83,7 @@ func newAllRebuildFixture(t *testing.T, images bool) *allRebuildFixture {
 	h.add(t, "summary", "article", "2026-10-02", "tutorial", "semanticlaunch", 0)
 	h.add(t, "mine", "mine", "", "", "personal", 1)
 	h.add(t, "report", "report", "", "", "analysis", 1)
-	require.NoError(t, h.db.Create(&types.Entity{ID: "entity", SpaceID: 1, CanonicalName: "Rebuild Entity", NormalizedName: "rebuild entity", EntityType: "product", EmbeddingNeedsRebuild: true,
+	require.NoError(t, h.db.Create(&types.Entity{ID: "entity", SpaceID: 1, LibraryID: h.library.ID, CanonicalName: "Rebuild Entity", NormalizedName: "rebuild entity", EntityType: "product", EmbeddingNeedsRebuild: true,
 		EmbeddingModelID: "fixture-model", EmbeddingDimension: 3, NameEmbedding: types.EntityNameEmbedding{0, 1, 0}}).Error)
 	root := t.TempDir()
 	vault, err := NewVaultService(h.db, &config.Config{Vault: &config.VaultConfig{Root: root}})
@@ -109,6 +119,8 @@ func (h *allRebuildFixture) state(t *testing.T) *types.EmbeddingRebuildRun {
 
 func TestAllEmbeddingRebuildProgressAndEveryVectorIdentity(t *testing.T) {
 	h := newAllRebuildFixture(t, true)
+	h.embedder.supportFusion = true
+	require.NoError(t, h.db.Model(&types.Chunk{}).Where("id='full-chunk-000'").Update("content", "Related illustration ![image]("+h.imagePath+")").Error)
 	run, err := h.rebuilder.Start(h.ctx, 1)
 	require.NoError(t, err)
 	require.EqualValues(t, 8, run.TotalCount)
@@ -121,7 +133,8 @@ func TestAllEmbeddingRebuildProgressAndEveryVectorIdentity(t *testing.T) {
 	require.Equal(t, "completed", status.Status)
 	require.EqualValues(t, 8, status.CompletedCount)
 	require.Zero(t, status.FailedCount)
-	require.Equal(t, 7, h.embedder.calls)
+	require.Equal(t, 6, h.embedder.calls)
+	require.Equal(t, 1, h.embedder.fusionCalls)
 	require.Equal(t, 1, h.embedder.imageCalls)
 	for _, table := range []string{"embeddings", "article_embeddings", "image_embeddings"} {
 		var wrong int64
@@ -141,7 +154,25 @@ func TestAllEmbeddingRebuildProgressAndEveryVectorIdentity(t *testing.T) {
 	require.Contains(t, strings.Join(h.embedder.texts, "\n"), "整理结果")
 	// Consuming the previously queued task cannot rerun completed work.
 	require.NoError(t, h.rebuilder.Handle(h.ctx, h.queue.last(t)))
-	require.Equal(t, 7, h.embedder.calls)
+	require.Equal(t, 6, h.embedder.calls)
+	// Candidate validation binds fusion vectors to original image bytes.
+	h.config.ImageVectorEnabled = false
+	require.NoError(t, h.db.Model(&types.Space{}).Where("id=1").Update("retrieval_config", h.config).Error)
+	copy := *h.rebuilder
+	copy.targetModelID = "replacement-model"
+	candidate, err := copy.Start(h.ctx, 1)
+	require.NoError(t, err)
+	require.NoError(t, h.rebuilder.Run(h.ctx, 1, candidate.ID, nil))
+	require.Equal(t, 2, h.embedder.fusionCalls)
+	imageFile := filepath.Join(h.rebuilder.vault.root, "attachments", h.full.ID, "photo.png")
+	original, err := os.ReadFile(imageFile)
+	require.NoError(t, err)
+	changed, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(articleImageDataURI(t, 88), "data:image/png;base64,"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(imageFile, changed, 0644))
+	require.ErrorContains(t, h.rebuilder.SwitchCandidate(h.ctx, 1, candidate.ID), "sources changed")
+	require.NoError(t, os.WriteFile(imageFile, original, 0644))
+	require.NoError(t, h.rebuilder.SwitchCandidate(h.ctx, 1, candidate.ID))
 }
 
 func TestMaintenanceEmbeddingRebuildPreservesAllEntityProfileColumns(t *testing.T) {

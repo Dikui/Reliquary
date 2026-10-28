@@ -53,7 +53,7 @@ func TestOfflineReembedPersistsAuditWithoutExportOnCompletionCancellationAndFail
 			require.NoError(t, db.Save(library).Error)
 			require.NoError(t, db.Model(&types.Space{}).Where("id=?", library.SpaceID).Update("embedding_model_id", model.ID).Error)
 			for _, id := range []string{"first", "second"} {
-				require.NoError(t, db.Create(&types.Entity{ID: id, SpaceID: 1, CanonicalName: id, NormalizedName: id, EntityType: "product", Description: "Preserve original profile", UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}).Error)
+				require.NoError(t, db.Create(&types.Entity{ID: id, SpaceID: 1, LibraryID: library.ID, CanonicalName: id, NormalizedName: id, EntityType: "product", Description: "Preserve original profile", UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}).Error)
 			}
 			configureOfflineReembed(t, db, root, uploads)
 			initial, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: root, HeaderDebounce: time.Hour}})

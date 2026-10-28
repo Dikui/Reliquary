@@ -11,12 +11,20 @@ import (
 func TestIKB09TopicLibrariesAssignmentHistoryAndRetention(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	svc, model, ctx := newTopicManagementService(t, h)
-	articles := historicalTopicArticles(t, h, 2)
+	historicalTopicArticles(t, h, 2)
 	other := types.Library{ID: "other-topic-library", SpaceID: h.library.SpaceID, Name: "Other", Template: types.TemplateOwn}
 	require.NoError(t, h.db.Create(&other).Error)
 	outside := types.Entry{ID: "outside-topic", SpaceID: h.library.SpaceID, LibraryID: other.ID, Type: "manual", SourceKind: "mine", Description: "Historical summary", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 	require.NoError(t, h.db.Create(&outside).Error)
-	topic, err := svc.CreateTopic(ctx, &types.Topic{Name: "Scoped topic", Description: "Products", LibraryIDs: []string{h.library.ID}})
+	_, err := svc.ListTopics(ctx, "")
+	require.Error(t, err)
+	_, err = svc.CreateTopic(ctx, &types.Topic{Name: "Missing library"})
+	require.Error(t, err)
+	otherTopic, err := svc.CreateTopic(ctx, &types.Topic{LibraryID: other.ID, Name: "Scoped topic"})
+	require.NoError(t, err)
+	require.NotEmpty(t, otherTopic.ID)
+
+	topic, err := svc.CreateTopic(ctx, &types.Topic{Name: "Scoped topic", Description: "Products", LibraryID: h.library.ID})
 	require.NoError(t, err)
 	job := runTopicJob(t, svc, ctx, topic.ID)
 	require.Equal(t, 2, job.Total)
@@ -27,21 +35,18 @@ func TestIKB09TopicLibrariesAssignmentHistoryAndRetention(t *testing.T) {
 	require.Error(t, svc.SetUserEntryTopics(ctx, outside.ID, []string{topic.ID}))
 	eligible, err := svc.TopicsForLibrary(ctx, other.ID)
 	require.NoError(t, err)
-	require.Empty(t, eligible)
-	_, err = svc.UpdateTopic(ctx, topic.ID, nil, nil, []string{other.ID})
+	require.Len(t, eligible, 1)
+	require.Equal(t, otherTopic.ID, eligible[0].ID)
+	description := "Updated products"
+	_, err = svc.UpdateTopic(ctx, topic.ID, nil, &description)
 	require.NoError(t, err)
-	require.Len(t, topicLinks(t, svc, topic.ID), 2, "scope edits retain previous links")
-	require.NoError(t, svc.ReplaceEntryTopics(ctx, articles[0].ID, []string{}))
-	require.Len(t, topicLinks(t, svc, topic.ID), 2, "reprocessing outside the scope also retains links")
 	job = runTopicJob(t, svc, ctx, topic.ID)
-	require.Equal(t, 1, job.Total)
-	require.Len(t, topicLinks(t, svc, topic.ID), 3)
-	_, err = svc.UpdateTopic(ctx, topic.ID, nil, nil, []string{})
-	require.NoError(t, err)
+	require.Equal(t, 2, job.Total)
+	require.Len(t, topicLinks(t, svc, topic.ID), 2)
 	eligible, err = svc.TopicsForLibrary(ctx, h.library.ID)
 	require.NoError(t, err)
 	require.Len(t, eligible, 1)
-	_, err = svc.CreateTopic(ctx, &types.Topic{Name: "Invalid", LibraryIDs: []string{"unknown"}})
+	_, err = svc.CreateTopic(ctx, &types.Topic{Name: "Invalid", LibraryID: "unknown"})
 	require.Error(t, err)
 }
 
@@ -57,7 +62,16 @@ func TestIKB09FeedLibrariesWatermarksFoldingAndEntityGroups(t *testing.T) {
 	for _, item := range []struct{ id, library string }{{"one", h.library.ID}, {"two", other.ID}, {"two-similar", other.ID}, {"hidden", disabled.ID}} {
 		h.add(t, item.id, "article", "2026-10-01", "event", "semanticlaunch", 0, item.library)
 		h.collected(t, item.id, now.Add(-time.Minute))
-		h.link(t, item.id, true, false)
+		if item.library == h.library.ID {
+			h.link(t, item.id, true, false)
+		} else {
+			entityID := "entity-" + item.library
+			entity := types.Entity{ID: entityID, SpaceID: 1, LibraryID: item.library, CanonicalName: "Followed company", NormalizedName: "followed company", EntityType: "company"}
+			require.NoError(t, h.db.Where("id=?", entityID).FirstOrCreate(&entity).Error)
+			_, err := h.follows.Follow(h.ctx, "entity", entityID)
+			require.NoError(t, err)
+			require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: item.id, EntityID: entityID, CreatedAt: now.Add(-time.Minute)}).Error)
+		}
 	}
 	state, err := h.follows.State(h.ctx)
 	require.NoError(t, err)
@@ -89,34 +103,25 @@ func TestIKB09FeedLibrariesWatermarksFoldingAndEntityGroups(t *testing.T) {
 	require.Zero(t, n)
 	entity, err := NewEntityService(h.db, nil).EntityDetail(h.ctx, "entity-follow")
 	require.NoError(t, err)
-	require.Len(t, entity.LibraryGroups, 3, "entity identity and related material span enabled and disabled libraries")
+	require.Len(t, entity.LibraryGroups, 1, "entity profiles only contain their own library")
 	counts := map[string]int{}
 	for _, group := range entity.LibraryGroups {
 		counts[group.LibraryID] = group.Count
 		require.NotEmpty(t, group.LibraryName)
 	}
-	require.Equal(t, map[string]int{h.library.ID: 1, other.ID: 2, disabled.ID: 1}, counts)
+	require.Equal(t, map[string]int{h.library.ID: 1}, counts)
 }
 
-func TestIKB09RetainedTopicLinkDoesNotEnterFeedOutsideScope(t *testing.T) {
+func TestIKB09TopicUpdateRetainsLibrary(t *testing.T) {
 	h := newFollowFixture(t)
 	h.followBoth(t)
 	h.add(t, "topic-scope", "article", "2026-10-01", "event", "semanticlaunch", 0)
 	h.link(t, "topic-scope", false, true)
+	name := "Renamed local topic"
+	topic, err := NewTopicService(h.db).UpdateTopic(h.ctx, "topic-follow", &name, nil)
+	require.NoError(t, err)
+	require.Equal(t, h.library.ID, topic.LibraryID)
 	require.Len(t, h.feed(t, types.FollowFeedRequest{IncludeSeen: true}).Results, 1)
-	other := types.Library{ID: "scope-other", SpaceID: 1, Name: "Other", Template: types.TemplateOwn}
-	require.NoError(t, h.db.Create(&other).Error)
-	_, err := NewTopicService(h.db).UpdateTopic(h.ctx, "topic-follow", nil, nil, []string{other.ID})
-	require.NoError(t, err)
-	require.Empty(t, h.feed(t, types.FollowFeedRequest{IncludeSeen: true}).Results)
-	var links int64
-	require.NoError(t, h.db.Table("entry_topics").Count(&links).Error)
-	require.EqualValues(t, 1, links)
-	targets, err := h.follows.ListFollows(h.ctx)
-	require.NoError(t, err)
-	for _, target := range targets {
-		require.Zero(t, target.RecentEntryCount)
-	}
 }
 
 func TestIKB09FeedUsesDatabaseClockAndPreservesArrivals(t *testing.T) {
@@ -139,11 +144,11 @@ func TestIKB09FeedUsesDatabaseClockAndPreservesArrivals(t *testing.T) {
 func TestIKB09ProcessingOnlyReceivesApplicableTopics(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	topics := NewTopicService(h.db)
-	allowed, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Allowed", LibraryIDs: []string{h.library.ID}})
+	allowed, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Allowed", LibraryID: h.library.ID})
 	require.NoError(t, err)
 	other := types.Library{ID: "other-processing-scope", SpaceID: h.library.SpaceID, Name: "Other", Template: types.TemplateOwn}
 	require.NoError(t, h.db.Create(&other).Error)
-	excluded, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Excluded", LibraryIDs: []string{other.ID}})
+	excluded, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Excluded", LibraryID: other.ID})
 	require.NoError(t, err)
 	h.processor.output = articleProcessingOutput(t, "event", nil, []string{allowed.ID, excluded.ID})
 	entry := h.upload(t, "scope-model-input", "# Original product\n\nA complete product announcement with evidence.")

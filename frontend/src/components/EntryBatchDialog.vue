@@ -30,7 +30,9 @@ const topicsError = ref(''), topicsLoading = ref(false)
 let topicsGeneration = 0
 async function loadTopics() {
   const current = ++topicsGeneration; topicsLoading.value = true; topicsError.value = ''
-  try { const response = await listTopics(); if (disposed || current !== topicsGeneration || !props.visible) return; if (!response.success) throw new Error(); topics.value = response.data || [] }
+  topics.value = []
+  if (!singleLibrary.value) { topicsLoading.value = false; return }
+  try { const response = await listTopics(singleLibrary.value.id); if (disposed || current !== topicsGeneration || !props.visible) return; if (!response.success) throw new Error(); topics.value = response.data || [] }
   catch { if (!disposed && current === topicsGeneration && props.visible) topicsError.value = t('entryBatch.choicesFailed') }
   finally { if (!disposed && current === topicsGeneration) topicsLoading.value = false }
 }
@@ -83,7 +85,7 @@ const filterSummary = computed(() => {
   if (f.include_rejected) add(t('entryBatch.includeRejected'), t('common.yes'))
   return rows
 })
-const valid = computed(() => actions.includes(action.value) && scopeValid.value && scopeKnown.value && (action.value !== 'content_type' || Boolean(contentType.value)) && (action.value !== 'topics' || topicIds.value.length > 0))
+const valid = computed(() => actions.includes(action.value) && scopeValid.value && scopeKnown.value && (action.value !== 'content_type' || Boolean(contentType.value)) && (action.value !== 'topics' || Boolean(singleLibrary.value && !topicsLoading.value && !topicsError.value && topicIds.value.length)))
 const active = computed(() => Boolean(batch.value && ['pending', 'running'].includes(batch.value.status)))
 const scopeText = computed(() => props.batchId && !preview.value ? t('entryBatch.fixedScope') : props.scopeLabel || t(scope.value === 'selected' ? 'entryBatch.selectedScope' : 'entryBatch.matchedScope', { count: props.ids?.length || 0 }))
 async function changeStep(value: 'scope' | 'action') {
@@ -134,8 +136,8 @@ watch(() => [props.visible, props.batchId] as const, async ([visible, batchId]) 
   if (batchId) { void refresh(); return }
   step.value = props.scopeLabel ? 'action' : 'scope'
   scope.value = props.scopeLabel || !props.ids?.length ? 'matched' : 'selected'; action.value = props.initialAction && actions.includes(props.initialAction) ? props.initialAction : 'star'; contentType.value = ''; topicIds.value = []
-  void loadTopics()
 }, { immediate: true })
+watch([() => props.visible, singleLibrary], ([visible]) => { topicsGeneration++; topicIds.value = []; if (visible) void loadTopics() }, { immediate: true })
 watch([() => props.visible, () => props.batchId, selection], ([visible, batchId]) => {
   scopeGeneration++; scopeLoading.value = false; scopeCount.value = undefined; scopeError.value = ''
   if (visible && !batchId) void loadScope()
@@ -171,7 +173,7 @@ onUnmounted(() => { disposed = true; trigger = null; generation++; readGeneratio
         <label><span>{{ t('entryBatch.action') }}</span><t-select v-model="action" :disabled="busy || !!scopeLabel" :aria-label="t('entryBatch.action')" :options="actions.map(value => ({ value, label: t(`entryBatch.actions.${value}`) }))" /></label>
         <label v-if="action === 'star'"><span>{{ t('entryBatch.actions.star') }}</span><t-select v-model="starred" :disabled="busy" :aria-label="t('entryBatch.actions.star')" :options="[{ value: true, label: t('entryBatch.star') }, { value: false, label: t('entryBatch.unstar') }]" /></label>
         <label v-if="action === 'content_type'"><span>{{ t('entryBatch.actions.content_type') }}</span><t-select v-model="contentType" :disabled="busy" :aria-label="t('entryBatch.actions.content_type')" :options="contentTypes" /><small v-if="!singleLibrary">{{ t('entryBatch.singleLibrary') }}</small></label>
-        <template v-if="action === 'topics'"><label><span>{{ t('entryBatch.topicMode') }}</span><t-select v-model="topicMode" :disabled="busy" :aria-label="t('entryBatch.topicMode')" :options="[{ value: 'add', label: t('entryBatch.addTopics') }, { value: 'remove', label: t('entryBatch.removeTopics') }]" /></label><label><span>{{ t('entryBatch.actions.topics') }}</span><t-select v-model="topicIds" multiple filterable :loading="topicsLoading" :disabled="busy" :aria-label="t('entryBatch.actions.topics')" :options="topics.map(topic => ({ value: topic.id, label: topic.name }))" /></label></template>
+        <template v-if="action === 'topics'"><label><span>{{ t('entryBatch.topicMode') }}</span><t-select v-model="topicMode" :disabled="busy" :aria-label="t('entryBatch.topicMode')" :options="[{ value: 'add', label: t('entryBatch.addTopics') }, { value: 'remove', label: t('entryBatch.removeTopics') }]" /></label><label><span>{{ t('entryBatch.actions.topics') }}</span><t-select v-model="topicIds" multiple filterable :loading="topicsLoading" :disabled="busy || !singleLibrary" :aria-label="t('entryBatch.actions.topics')" :options="topics.map(topic => ({ value: topic.id, label: topic.name }))" /></label><small v-if="!singleLibrary">{{ t('entryBatch.singleLibrary') }}</small></template>
         <p v-if="action === 'topics' && topicsError" role="alert">{{ topicsError }} <t-button variant="text" :loading="topicsLoading" @click="loadTopics">{{ t('common.retry') }}</t-button></p>
         <t-alert v-if="action === 'delete'" theme="warning" :message="t('entryBatch.deleteHint')" />
         <t-alert v-if="action === 'reprocess'" theme="warning" :message="t('entryBatch.reprocessHint')" />

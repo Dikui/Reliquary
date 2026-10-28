@@ -10,8 +10,8 @@ const props = withDefaults(defineProps<{ options?: SearchOptions; loading?: bool
 })
 const { t } = useI18n()
 const contentTypeOptions = computed(() => props.options.content_types?.map(value => ({ value, label: value })) || CONTENT_TYPES.map(value => ({ value, label: t(`library.contentTypes.${value}`) })))
-const entityOptions = computed(() => props.options.entities.map(entity => ({ value: entity.id, label: entity.canonical_name })))
-const topicOptions = computed(() => props.options.topics.map(topic => ({ value: topic.id, label: topic.name })))
+const entityOptions = computed(() => props.options.entities.map(entity => ({ value: entity.id, label: entity.library_id ? `${entity.canonical_name} · ${entity.library_id}` : entity.canonical_name })))
+const topicOptions = computed(() => props.options.topics.map(topic => ({ value: topic.id, label: topic.library_id ? `${topic.name} · ${topic.library_id}` : topic.name })))
 const starOptions = computed(() => [
   { value: '', label: t('articleJudgments.allStars') },
   { value: 'true', label: t('articleJudgments.starredOnly') },

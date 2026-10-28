@@ -37,4 +37,7 @@ type IndexInfo struct {
 	EntryType     string     // Type of the entry (e.g., "manual", "file")
 	IsEnabled     bool       // Whether the chunk is enabled for retrieval
 	IsRecommended bool       // Whether the chunk is recommended
+
+	Images          []string                  `json:"-" gorm:"-"` // Prepared fusion inputs; never persisted.
+	ImageReferences []ModelCallImageReference `json:"-" gorm:"-"`
 }

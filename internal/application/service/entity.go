@@ -13,7 +13,7 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// EntityService owns canonical identities and article mentions in the personal space.
+// EntityService owns library-scoped canonical identities and article mentions.
 type EntityService struct {
 	db                     *gorm.DB
 	models                 interfaces.ModelService
@@ -95,7 +95,7 @@ func (s *EntityService) resolveEntityCandidates(ctx context.Context, entryID str
 	if err != nil {
 		return nil, nil, err
 	}
-	planned, mentions, err := s.resolveEntities(types.WithModelTier(ctx, types.ModelTierEntityResolution), model, spaceID, entryID, candidates)
+	planned, mentions, err := s.resolveEntities(types.WithModelTier(ctx, types.ModelTierEntityResolution), model, spaceID, article.LibraryID, entryID, candidates)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -104,7 +104,7 @@ func (s *EntityService) resolveEntityCandidates(ctx context.Context, entryID str
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Recheck the article while writing so a concurrent deletion cannot leave mentions.
 		var current types.Entry
-		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id").Where("id=? AND space_id=?", entryID, spaceID).First(&current).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id").Where("id=? AND space_id=? AND library_id=?", entryID, spaceID, article.LibraryID).First(&current).Error; err != nil {
 			return err
 		}
 		ids, err := persistEntities(tx, planned)
@@ -137,13 +137,23 @@ func (s *EntityService) resolveEntityCandidates(ctx context.Context, entryID str
 	return entities, resolvedMentions, nil
 }
 
-func (s *EntityService) resolveLibrary(ctx context.Context) (uint64, string, error) {
+func (s *EntityService) resolveLibrary(ctx context.Context, libraryID string) (uint64, string, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return 0, "", err
 	}
 
-	return spaceID, "", nil
+	libraryID = strings.TrimSpace(libraryID)
+	if libraryID == "" {
+		return 0, "", werrors.NewBadRequestError("library_id is required")
+	}
+	var library types.Library
+	if err := s.db.WithContext(ctx).Where("space_id=? AND id=?", spaceID, libraryID).First(&library).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, "", werrors.NewNotFoundError("library not found")
+	} else if err != nil {
+		return 0, "", err
+	}
+	return spaceID, libraryID, nil
 }
 func entityQueryLimit(limit int) int {
 	if limit < 1 {
@@ -174,14 +184,12 @@ func (s *EntityService) loadAliases(ctx context.Context, spaceID uint64, entitie
 	return nil
 }
 func (s *EntityService) ListEntities(ctx context.Context, q types.EntityQuery) ([]types.Entity, error) {
-	spaceID, libraryID, err := s.resolveLibrary(ctx)
+	spaceID, libraryID, err := s.resolveLibrary(ctx, q.LibraryID)
 	if err != nil {
 		return nil, err
 	}
 	query := s.db.WithContext(ctx).Model(&types.Entity{}).Where("entities.space_id=? AND entities.merged_into_id=''", spaceID)
-	if libraryID != "" {
-		query = query.Where(`EXISTS (SELECT 1 FROM entry_entities links JOIN entries k ON k.id=links.entry_id AND k.space_id=links.space_id WHERE links.space_id=entities.space_id AND links.entity_id=entities.id AND k.library_id=? AND k.deleted_at IS NULL)`, libraryID)
-	}
+	query = query.Where("entities.library_id=?", libraryID)
 	if q.EntityType != "" {
 		query = query.Where("entities.entity_type=?", types.NormalizeEntityType(q.EntityType))
 	}
@@ -214,7 +222,7 @@ func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.Ent
 		return nil, err
 	}
 	result := &types.EntityDetail{Entity: entities[0], Entries: []types.Entry{}, LibraryGroups: []types.EntityLibraryGroup{}}
-	err = s.db.WithContext(ctx).Model(&types.Entry{}).Joins("JOIN entry_entities links ON links.entry_id=entries.id AND links.space_id=entries.space_id").Where("entries.space_id=? AND links.entity_id=?", spaceID, entity.ID).Order("entries.created_at DESC,entries.id").Find(&result.Entries).Error
+	err = s.db.WithContext(ctx).Model(&types.Entry{}).Joins("JOIN entry_entities links ON links.entry_id=entries.id AND links.space_id=entries.space_id").Where("entries.space_id=? AND entries.library_id=? AND links.entity_id=?", spaceID, entity.LibraryID, entity.ID).Order("entries.created_at DESC,entries.id").Find(&result.Entries).Error
 	if err == nil {
 		entries := make([]*types.Entry, len(result.Entries))
 		for i := range result.Entries {

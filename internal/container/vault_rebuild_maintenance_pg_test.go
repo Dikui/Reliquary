@@ -21,9 +21,9 @@ func TestReplicaVaultRebuildPausesBeforeWorkerStartupWithoutLosingInterruptedTas
 	source, target := pgtest.Open(t), pgtest.Open(t)
 	root, uploads := t.TempDir(), t.TempDir()
 	t.Setenv("LOCAL_STORAGE_BASE_DIR", uploads)
-	_, err := repository.EnsureSystemLibraries(ctx, source, types.SingleSpaceID, "")
+	library, err := repository.EnsureSystemLibraries(ctx, source, types.SingleSpaceID, "")
 	require.NoError(t, err)
-	require.NoError(t, source.Create(&types.Entity{ID: "preserved-profile", SpaceID: 1, CanonicalName: "Preserved owner profile", NormalizedName: "preserved owner profile", EntityType: "product", Description: "Keep user information while configuring recovery"}).Error)
+	require.NoError(t, source.Create(&types.Entity{ID: "preserved-profile", SpaceID: 1, LibraryID: library.ID, CanonicalName: "Preserved owner profile", NormalizedName: "preserved owner profile", EntityType: "product", Description: "Keep user information while configuring recovery"}).Error)
 	jobs := redistest.NewClient(t, source)
 	for _, state := range []string{"active", "pending"} {
 		_, err := jobs.Enqueue(queue.NewTask(types.TypeManualProcess, []byte(`{"entry_id":"preserved-article","original":"accepted original"}`)), queue.TaskID(state), queue.MaxRetry(7))

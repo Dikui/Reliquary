@@ -78,6 +78,9 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 				copy[table] = legacyEntryRule(table, rule)
 			}
 		}
+		for table, rule := range copy {
+			copy[table] = catalogSchemaRule(table, rule, migration.Version)
+		}
 		result = copy
 	}()
 	if migration.Dirty {

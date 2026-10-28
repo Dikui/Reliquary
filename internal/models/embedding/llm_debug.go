@@ -14,6 +14,26 @@ type debugEmbedder struct {
 	inner Embedder
 }
 
+func (d *debugEmbedder) SupportsFusion() bool {
+	e, ok := d.inner.(FusionEmbedder)
+	return ok && e.SupportsFusion()
+}
+
+func (d *debugEmbedder) EmbedFusion(ctx context.Context, text string, images []string) ([]float32, error) {
+	e, ok := d.inner.(FusionEmbedder)
+	if !ok || !e.SupportsFusion() {
+		return nil, fmt.Errorf("embedding model does not support fusion")
+	}
+	start := time.Now()
+	result, err := e.EmbedFusion(ctx, text, images)
+	inputs := []string{text}
+	for _, image := range images {
+		inputs = append(inputs, fmt.Sprintf("image data URI (%d bytes)", len(image)))
+	}
+	logEmbeddingDebug(ctx, d.inner.GetModelName(), inputs, singleToDouble(result), err, time.Since(start))
+	return result, err
+}
+
 func (d *debugEmbedder) GetProfileHash() string {
 	if model, ok := d.inner.(ProfiledEmbedder); ok {
 		return model.GetProfileHash()

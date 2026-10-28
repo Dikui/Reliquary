@@ -446,11 +446,19 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 	} else if !strings.HasSuffix(item.Kind, "_chunk") {
 		return nil, fmt.Errorf("unsupported embedding rebuild kind %q", item.Kind)
 	}
-	vector, err := rebuildTextVector(ctx, profile, content)
+	input := &types.IndexInfo{Content: content}
+	hash := vaultContentHash(content)
+	if strings.HasSuffix(item.Kind, "_chunk") {
+		var err error
+		input, hash, err = r.chunkEmbeddingInput(ctx, profile.embedder, &article, content, chunk.Content, false)
+		if err != nil {
+			return nil, err
+		}
+	}
+	vector, err := rebuildInputVector(ctx, profile, input)
 	if err != nil {
 		return nil, err
 	}
-	hash := vaultContentHash(content)
 	return func(tx *gorm.DB) error {
 		var current types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id=?", run.SpaceID, article.ID).First(&current).Error; err != nil {
@@ -476,7 +484,11 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id=?", run.SpaceID, chunk.ID).First(&currentChunk).Error; err != nil {
 			return err
 		}
-		if vaultContentHash(buildEntryIndexContent(&current, currentChunk.Content)) != hash {
+		_, currentHash, err := r.chunkEmbeddingInput(ctx, profile.embedder, &current, buildEntryIndexContent(&current, currentChunk.Content), currentChunk.Content, true)
+		if err != nil {
+			return err
+		}
+		if currentHash != hash {
 			return errors.New("document chunk changed while embedding; retry this item")
 		}
 		if err := tx.Exec(`INSERT INTO embeddings (source_id,source_type,chunk_id,entry_id,library_id,model_id,dimension,embedding,is_enabled)
@@ -496,8 +508,23 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 }
 
 func rebuildTextVector(ctx context.Context, profile entityEmbeddingProfile, content string) ([]float32, error) {
+	return rebuildInputVector(ctx, profile, &types.IndexInfo{Content: content})
+}
+
+func rebuildInputVector(ctx context.Context, profile entityEmbeddingProfile, input *types.IndexInfo) ([]float32, error) {
 	types.RecordModelCall(ctx, profile.modelID)
-	vector, err := profile.embedder.Embed(ctx, content)
+	var vector []float32
+	var err error
+	if len(input.Images) > 0 {
+		fusion, ok := profile.embedder.(embedding.FusionEmbedder)
+		if !ok || !fusion.SupportsFusion() {
+			return nil, errors.New("embedding model does not support fusion")
+		}
+		ctx = types.WithModelCallImages(ctx, input.ImageReferences)
+		vector, err = fusion.EmbedFusion(ctx, input.Content, input.Images)
+	} else {
+		vector, err = profile.embedder.Embed(ctx, input.Content)
+	}
 	if err != nil {
 		return nil, err
 	}

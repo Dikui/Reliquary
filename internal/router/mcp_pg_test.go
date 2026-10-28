@@ -322,7 +322,7 @@ func TestMCPRequiresValidBearerAPIKeyOnEveryRequest(t *testing.T) {
 		})
 	}
 	// Normal HTTP routes accept the same API key in Authorization as /mcp.
-	response := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities", "", f.key, false)
+	response := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities?library_id="+f.library.ID, "", f.key, false)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	client := f.connect(t, "2025-11-25")
 	_, err := client.ListTools(context.Background(), nil)
@@ -459,11 +459,11 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	f := newMCPFixture(t)
 	article := f.seedArticle(t, "MCP searchfixture article", "full", "# MCP searchfixture\n\n中文与 emoji 🙂 support complete segments.\n")
 	approve, discard := f.seedPending(t, "Approve fixture"), f.seedPending(t, "Discard fixture")
-	topic := types.Topic{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, Name: "MCP topic", Description: "Fixture observations"}
+	topic := types.Topic{LibraryID: f.library.ID, ID: uuid.NewString(), SpaceID: types.SingleSpaceID, Name: "MCP topic", Description: "Fixture observations"}
 	require.NoError(t, f.db.Create(&topic).Error)
-	entity := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, CanonicalName: "MCP Acme", NormalizedName: "mcp acme", EntityType: "company"}
+	entity := types.Entity{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: f.library.ID, CanonicalName: "MCP Acme", NormalizedName: "mcp acme", EntityType: "company"}
 	require.NoError(t, f.db.Create(&entity).Error)
-	require.NoError(t, f.db.Create(&types.EntityAlias{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, EntityID: entity.ID, Alias: "MCP alias", NormalizedAlias: "mcp alias", EntityType: "company"}).Error)
+	require.NoError(t, f.db.Create(&types.EntityAlias{ID: uuid.NewString(), SpaceID: types.SingleSpaceID, LibraryID: f.library.ID, EntityID: entity.ID, Alias: "MCP alias", NormalizedAlias: "mcp alias", EntityType: "company"}).Error)
 	require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: types.SingleSpaceID, EntryID: article.ID, EntityID: entity.ID}).Error)
 	require.NoError(t, f.db.Create(&types.EntryTopic{SpaceID: types.SingleSpaceID, EntryID: article.ID, TopicID: topic.ID, Source: "user"}).Error)
 	client := f.connect(t, "2025-11-25")
@@ -499,13 +499,13 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	var topics struct {
 		Topics []types.Topic `json:"topics"`
 	}
-	mcpCall(t, client, "list_topics", map[string]any{}, &topics)
+	mcpCall(t, client, "list_topics", map[string]any{"library_id": f.library.ID}, &topics)
 	require.Len(t, topics.Topics, 1)
 	require.EqualValues(t, 1, topics.Topics[0].EntryCount)
 	var entities struct {
 		Entities []types.Entity `json:"entities"`
 	}
-	mcpCall(t, client, "list_entities", map[string]any{"entity": "alias", "entity_type": "company", "limit": 10, "offset": 0}, &entities)
+	mcpCall(t, client, "list_entities", map[string]any{"library_id": f.library.ID, "entity": "alias", "entity_type": "company", "limit": 10, "offset": 0}, &entities)
 	require.Len(t, entities.Entities, 1)
 	require.Equal(t, entity.ID, entities.Entities[0].ID)
 	var detail types.EntityDetail

@@ -19,9 +19,9 @@ func TestNamingFixedQueries(t *testing.T) {
 	h.add(t, "mine", "mine", "", "", "semanticlaunch", 2)
 	h.add(t, "report", "report", "", "", "othersemantic", 1)
 	h.add(t, "missing", "article", "", "research", "othersemantic", 1)
-	require.NoError(t, h.db.Create(&types.Entity{ID: "entity", SpaceID: 1, CanonicalName: "Canonicalneedle", NormalizedName: "canonicalneedle", EntityType: "company"}).Error)
+	require.NoError(t, h.db.Create(&types.Entity{ID: "entity", SpaceID: 1, LibraryID: h.library.ID, CanonicalName: "Canonicalneedle", NormalizedName: "canonicalneedle", EntityType: "company"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: "alpha", EntityID: "entity"}).Error)
-	require.NoError(t, h.db.Create(&types.Topic{ID: "topic", SpaceID: 1, Name: "Topicneedle"}).Error)
+	require.NoError(t, h.db.Create(&types.Topic{LibraryID: h.library.ID, ID: "topic", SpaceID: 1, Name: "Topicneedle"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: "alpha", TopicID: "topic"}).Error)
 	require.NoError(t, h.db.Model(&types.Entry{}).Where("id='alpha'").Update("starred", true).Error)
 	no := false

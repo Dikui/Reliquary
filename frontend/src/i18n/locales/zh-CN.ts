@@ -677,7 +677,7 @@ export default {
   "nameExists": "此名称已存在，请使用其他名称。",
   "noDescription": "尚未填写说明。",
   "descriptionHint": "修改说明会重新判断历史资料，保留手动加入的关联。",
-  "historyHint": "历史归入使用适用库中已完成资料的标题与摘要。未指定适用库时使用全部库。新建主题或修改说明后，后台自动开始。",
+  "historyHint": "历史归入只使用当前库中已完成资料的标题与摘要。新建主题或修改说明后，后台自动开始。主题创建后不能迁移到其他库。",
   "articleCount": "{count} 篇资料",
   "progress": "已处理 {processed} / {total}",
   "failures": "失败 {articles} 篇，{batches} 批",
@@ -696,6 +696,7 @@ export default {
   "deleteDescription": "删除“{name}”及其资料关联？资料仍然保留，相关资料的表头会更新。",
   "batchFailure": "第 {ordinal} 批，{count} 篇，已尝试 {attempts} 次：{reason}",
   "status": {
+    "cancelled": "历史归入已取消",
     "pending": "等待历史归入",
     "running": "正在归入历史资料",
     "completed": "历史归入完成",

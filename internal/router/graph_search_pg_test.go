@@ -32,6 +32,7 @@ type graphSearchFixture struct {
 	store     *graphreplica.Store
 	tasks     *queue.Client
 	ids       []string
+	otherIDs  []string
 	libraries []string
 }
 
@@ -46,12 +47,6 @@ func newGraphSearchFixture(t *testing.T) *graphSearchFixture {
 	require.NoError(t, store.Available(f.ctx))
 	tasks := queue.NewClientWithRedis(f.db, asynq.RedisClientOpt{Addr: os.Getenv("RELIQUARY_TEST_REDIS_ADDR"), DB: 2})
 	out := &graphSearchFixture{mcpFixture: f, store: store, tasks: tasks, graph: service.NewGraphSearchService(f.db, store), replica: graphreplica.NewService(f.db, store, tasks)}
-	for _, kind := range []string{"company", "person", "product", "project", "other"} {
-		id := uuid.NewString()
-		out.ids = append(out.ids, id)
-		name := "Graph " + strings.ToUpper(kind)
-		require.NoError(t, f.db.Create(&types.Entity{ID: id, SpaceID: 1, CanonicalName: name, NormalizedName: strings.ToLower(name), EntityType: kind}).Error)
-	}
 	var opinions types.Library
 	require.NoError(t, f.db.Where("space_id=1 AND directory='media'").First(&opinions).Error)
 	f.library = &opinions
@@ -59,15 +54,29 @@ func newGraphSearchFixture(t *testing.T) *graphSearchFixture {
 	var mine types.Library
 	require.NoError(t, f.db.Where("space_id=1 AND directory='personal'").First(&mine).Error)
 	out.libraries = append(out.libraries, mine.ID)
+	for _, kind := range []string{"company", "person", "product", "project", "other"} {
+		id := uuid.NewString()
+		out.ids = append(out.ids, id)
+		name := "Graph " + strings.ToUpper(kind)
+		require.NoError(t, f.db.Create(&types.Entity{ID: id, SpaceID: 1, LibraryID: out.libraries[0], CanonicalName: name, NormalizedName: strings.ToLower(name), EntityType: kind}).Error)
+	}
+	for _, id := range out.ids {
+		var entity types.Entity
+		require.NoError(t, f.db.First(&entity, "id=?", id).Error)
+		entity.ID = uuid.NewString()
+		entity.LibraryID = out.libraries[1]
+		out.otherIDs = append(out.otherIDs, entity.ID)
+		require.NoError(t, f.db.Create(&entity).Error)
+	}
 	for _, lib := range out.libraries {
 		for _, name := range []string{"cooperates", "supports"} {
 			require.NoError(t, f.db.Create(&types.LibraryRelationType{LibraryID: lib, Name: name, Enabled: true}).Error)
 		}
 	}
 	for i := 0; i < 2; i++ {
-		require.NoError(t, f.db.Create(&types.EntityAlias{ID: uuid.NewString(), SpaceID: 1, EntityID: out.ids[i], Alias: "Shared", NormalizedAlias: "shared", EntityType: []string{"company", "person"}[i]}).Error)
+		require.NoError(t, f.db.Create(&types.EntityAlias{ID: uuid.NewString(), SpaceID: 1, LibraryID: out.libraries[0], EntityID: out.ids[i], Alias: "Shared", NormalizedAlias: "shared", EntityType: []string{"company", "person"}[i]}).Error)
 	}
-	require.NoError(t, f.db.Create(&types.EntityAlias{ID: uuid.NewString(), SpaceID: 1, EntityID: out.ids[0], Alias: "Alias A", NormalizedAlias: "alias a", EntityType: "company"}).Error)
+	require.NoError(t, f.db.Create(&types.EntityAlias{ID: uuid.NewString(), SpaceID: 1, LibraryID: out.libraries[0], EntityID: out.ids[0], Alias: "Alias A", NormalizedAlias: "alias a", EntityType: "company"}).Error)
 	f.router.POST("/api/v1/graph/search", handler.NewGraphSearchHandler(out.graph).Search)
 	f.router.Any("/graph-mcp", gin.WrapH(mcpserver.New(mcpserver.Services{Entries: f.articles, Graph: out.graph})))
 	evaluations := service.NewEvaluationService(f.db, nil, nil)
@@ -91,7 +100,7 @@ func newGraphSearchFixture(t *testing.T) *graphSearchFixture {
 		driver, err := neo4j.NewDriver(cfg.URI, neo4j.BasicAuth(cfg.Username, cfg.Password, ""))
 		require.NoError(t, err)
 		defer driver.Close(context.Background())
-		_, err = neo4j.ExecuteQuery(context.Background(), driver, `MATCH (e:Entity {namespace:'',space_id:1}) WHERE e.id IN $ids DETACH DELETE e`, map[string]any{"ids": out.ids}, neo4j.EagerResultTransformer)
+		_, err = neo4j.ExecuteQuery(context.Background(), driver, `MATCH (e:Entity {namespace:'',space_id:1}) WHERE e.id IN $ids DETACH DELETE e`, map[string]any{"ids": append(append([]string{}, out.ids...), out.otherIDs...)}, neo4j.EagerResultTransformer)
 		require.NoError(t, err)
 		require.NoError(t, store.Close())
 	})
@@ -103,9 +112,13 @@ func (f *graphSearchFixture) add(t *testing.T, index, a, b, library int, kind st
 	entry := &types.Entry{ID: id, SpaceID: 1, LibraryID: f.libraries[library], Title: "Graph source " + id, Type: "manual", ParseStatus: "completed", EnableStatus: "enabled", ContentType: "event"}
 	require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "approved", SourceInfo: types.SourceInfo{PublishedAt: "2026-10-01", Author: "Speaker"}}))
 	require.NoError(t, f.db.Create(entry).Error)
-	relation := types.Relation{ID: strings.Repeat("0", index) + uuid.NewString()[index:], SpaceID: 1, LibraryID: entry.LibraryID, SubjectID: f.ids[a], ObjectID: f.ids[b], RelationType: kind, Version: 1}
+	ids := f.ids
+	if library == 1 {
+		ids = f.otherIDs
+	}
+	relation := types.Relation{ID: strings.Repeat("0", index) + uuid.NewString()[index:], SpaceID: 1, LibraryID: entry.LibraryID, SubjectID: ids[a], ObjectID: ids[b], RelationType: kind, Version: 1}
 	require.NoError(t, f.db.Create(&relation).Error)
-	require.NoError(t, f.db.Create(&types.RelationSource{RelationID: relation.ID, EntryID: id, RunID: "test", BodyHash: "hash", Evidence: []types.RelationEvidence{{Locations: []types.SourceLocation{{HeadingPath: []string{"Evidence"}, Paragraph: 2, Start: 10, End: 20, BodyHash: "hash", Mapping: "exact"}}, Speaker: &types.ProcessingSpeaker{EntityID: f.ids[1], Name: "Speaker", Selection: "author"}}}}).Error)
+	require.NoError(t, f.db.Create(&types.RelationSource{RelationID: relation.ID, EntryID: id, RunID: "test", BodyHash: "hash", Evidence: []types.RelationEvidence{{Locations: []types.SourceLocation{{HeadingPath: []string{"Evidence"}, Paragraph: 2, Start: 10, End: 20, BodyHash: "hash", Mapping: "exact"}}, Speaker: &types.ProcessingSpeaker{EntityID: ids[1], Name: "Speaker", Selection: "author"}}}}).Error)
 	for _, entity := range []string{relation.SubjectID, relation.ObjectID} {
 		require.NoError(t, f.db.Create(&types.GraphPendingSync{ID: uuid.NewString(), SpaceID: 1, EntityID: entity, RelationID: relation.ID, RelationVersion: 1}).Error)
 	}
@@ -139,7 +152,7 @@ func TestGraphSearchNamesHopsPathsScopeSourcesAndPending(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, out.Edges)
 	require.EqualValues(t, 8, out.PendingSync.Global)
-	require.EqualValues(t, 2, out.PendingSync.Involved)
+	require.EqualValues(t, 1, out.PendingSync.Involved)
 	f.sync(t)
 	for hop := 1; hop <= 3; hop++ {
 		request.Hops = hop
@@ -175,7 +188,7 @@ func TestGraphSearchNamesHopsPathsScopeSourcesAndPending(t *testing.T) {
 	request.Hops = 1
 	multi, err := f.graph.Search(f.ctx, request)
 	require.NoError(t, err)
-	require.Len(t, multi.Edges, 2)
+	require.Len(t, multi.Edges, 1)
 	request = f.request()
 	request.Mode = "path"
 	request.Hops = 3
@@ -197,7 +210,7 @@ func TestGraphSearchNamesHopsPathsScopeSourcesAndPending(t *testing.T) {
 	request.Libraries = append(request.Libraries, f.libraries[1])
 	included, err := f.graph.Search(f.ctx, request)
 	require.NoError(t, err)
-	require.Len(t, included.Paths, 1)
+	require.Empty(t, included.Paths, "independent library identities cannot connect paths")
 	// The replica still has a source whose document was deleted in PG.
 	require.NoError(t, f.db.Exec("UPDATE entries SET deleted_at=now() WHERE id=?", first).Error)
 	request = f.request()

@@ -138,11 +138,11 @@ func entrySearchNoCollapse() *bool { value := false; return &value }
 func TestEntrySearchPostgresHeaderTermsAndAssociations(t *testing.T) {
 	h := newEntrySearchFixture(t)
 	h.add(t, "summary", "article", "2026-10-01", "reference", "semanticlaunch", 0)
-	entity := &types.Entity{ID: "entity-a", SpaceID: 1, CanonicalName: "Canonicalneedle", NormalizedName: "canonicalneedle", EntityType: "company"}
+	entity := &types.Entity{ID: "entity-a", SpaceID: 1, LibraryID: h.library.ID, CanonicalName: "Canonicalneedle", NormalizedName: "canonicalneedle", EntityType: "company"}
 	require.NoError(t, h.db.Create(entity).Error)
 	require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: "summary", EntityID: entity.ID}).Error)
-	require.NoError(t, h.db.Create(&types.EntityAlias{ID: "alias-a", SpaceID: 1, EntityID: entity.ID, Alias: "Aliasneedle", NormalizedAlias: "aliasneedle", EntityType: "company"}).Error)
-	require.NoError(t, h.db.Create(&types.Topic{ID: "topic-a", SpaceID: 1, Name: "Topicneedle"}).Error)
+	require.NoError(t, h.db.Create(&types.EntityAlias{ID: "alias-a", SpaceID: 1, LibraryID: h.library.ID, EntityID: entity.ID, Alias: "Aliasneedle", NormalizedAlias: "aliasneedle", EntityType: "company"}).Error)
+	require.NoError(t, h.db.Create(&types.Topic{LibraryID: h.library.ID, ID: "topic-a", SpaceID: 1, Name: "Topicneedle"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: "summary", TopicID: "topic-a"}).Error)
 	h.add(t, "unrelated", "article", "2026-10-01", "reference", "othersemantic", 0)
 	h.library.IndexingStrategy = types.IndexingStrategy{KeywordEnabled: true}
@@ -157,14 +157,26 @@ func TestEntrySearchPostgresHeaderTermsAndAssociations(t *testing.T) {
 			require.Equal(t, "Topicneedle", response.Results[0].Topics[0].Name)
 		})
 	}
-	options, err := h.svc.Options(h.ctx)
+	options, err := h.svc.Options(h.ctx, nil)
 	require.NoError(t, err)
 	require.Len(t, options.Entities, 1)
 	require.Equal(t, []string{"Aliasneedle"}, options.Entities[0].Aliases)
 	require.Len(t, options.Topics, 1)
+	otherLibrary := types.Library{ID: "other-options-library", SpaceID: 1, Name: "Other options"}
+	otherLibrary.EnsureDefaults()
+	require.NoError(t, h.db.Create(&otherLibrary).Error)
+	require.NoError(t, h.db.Create(&types.Entity{ID: "other-options-entity", SpaceID: 1, LibraryID: otherLibrary.ID, CanonicalName: "Other", NormalizedName: "other", EntityType: "company"}).Error)
+	require.NoError(t, h.db.Create(&types.Topic{ID: "other-options-topic", SpaceID: 1, LibraryID: otherLibrary.ID, Name: "Other topic"}).Error)
+	require.NoError(t, h.db.Create(&types.LibraryContentType{LibraryID: otherLibrary.ID, Name: "other-content", Enabled: true}).Error)
+	scoped, err := h.svc.Options(h.ctx, []string{h.library.ID})
+	require.NoError(t, err)
+	require.Len(t, scoped.Entities, 1)
+	require.Equal(t, entity.ID, scoped.Entities[0].ID)
+	require.Len(t, scoped.Topics, 1)
+	require.NotContains(t, scoped.ContentTypes, "other-content")
 	// Header indexes track aliases and topic names when they change.
 	require.NoError(t, h.db.Model(&types.EntityAlias{}).Where("id='alias-a'").Updates(map[string]interface{}{"alias": "Renamedaliasneedle", "normalized_alias": "renamedaliasneedle"}).Error)
-	require.NoError(t, h.db.Model(&types.Topic{}).Where("id='topic-a'").Update("name", "Renamedtopicneedle").Error)
+	require.NoError(t, h.db.Model(&types.Topic{LibraryID: h.library.ID}).Where("id='topic-a'").Update("name", "Renamedtopicneedle").Error)
 	for _, term := range []string{"Renamedaliasneedle", "Renamedtopicneedle"} {
 		require.Equal(t, []string{"summary"}, entrySearchIDs(h.search(t, types.EntrySearchRequest{Query: term})))
 	}
@@ -180,8 +192,8 @@ func TestEntrySearchPostgresFiltersAndMissingPublicationCount(t *testing.T) {
 	h.add(t, "mine", "mine", "", "", "semanticlaunch", 1)
 	h.add(t, "report", "report", "", "", "semanticlaunch", 1)
 	for _, id := range []string{"a", "b"} {
-		require.NoError(t, h.db.Create(&types.Entity{ID: "entity-" + id, SpaceID: 1, CanonicalName: id, NormalizedName: id, EntityType: "company"}).Error)
-		require.NoError(t, h.db.Create(&types.Topic{ID: "topic-" + id, SpaceID: 1, Name: id}).Error)
+		require.NoError(t, h.db.Create(&types.Entity{ID: "entity-" + id, SpaceID: 1, LibraryID: h.library.ID, CanonicalName: id, NormalizedName: id, EntityType: "company"}).Error)
+		require.NoError(t, h.db.Create(&types.Topic{LibraryID: h.library.ID, ID: "topic-" + id, SpaceID: 1, Name: id}).Error)
 		require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: id, EntityID: "entity-" + id}).Error)
 		require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: id, TopicID: "topic-" + id}).Error)
 	}

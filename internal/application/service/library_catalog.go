@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"reliquary/internal/application/graph"
 	"reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
@@ -121,6 +122,10 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 
 func (s *libraryService) DeleteLibrary(ctx context.Context, id string) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		spaceID := types.MustSpaceIDFromContext(ctx)
+		if err := lockEntitySpace(tx, spaceID); err != nil {
+			return err
+		}
 		var library types.Library
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", id, types.MustSpaceIDFromContext(ctx)).First(&library).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -134,6 +139,34 @@ func (s *libraryService) DeleteLibrary(ctx context.Context, id string) error {
 		}
 		if count > 0 {
 			return apperrors.NewBadRequestError("library contains entries")
+		}
+		if err := graph.Lock(tx, spaceID); err != nil {
+			return err
+		}
+		var ids []string
+		if err := tx.Model(&types.Entity{}).Where("space_id=? AND library_id=?", spaceID, id).Pluck("id", &ids).Error; err != nil {
+			return err
+		}
+		for _, model := range []any{&types.Relation{}, &types.RelationSuppression{}, &types.Topic{}} {
+			if err := tx.Where("space_id=? AND library_id=?", spaceID, id).Delete(model).Error; err != nil {
+				return err
+			}
+		}
+		if len(ids) > 0 {
+			if err := tx.Where("space_id=? AND (new_entity_id IN ? OR candidate_entity_id IN ?)", spaceID, ids, ids).Delete(&types.EntityMergeSuggestion{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("space_id=? AND (keep_entity_id IN ? OR merge_entity_id IN ?)", spaceID, ids, ids).Delete(&types.EntityMergeRecord{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("space_id=? AND library_id=?", spaceID, id).Delete(&types.Entity{}).Error; err != nil {
+				return err
+			}
+			for _, entityID := range ids {
+				if err := notifyEntityProjection(tx, spaceID, entityID); err != nil {
+					return err
+				}
+			}
 		}
 		// The row lock and foreign keys serialize creation against this empty-library deletion.
 		return tx.Unscoped().Delete(&library).Error

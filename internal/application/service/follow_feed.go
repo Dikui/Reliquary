@@ -23,11 +23,11 @@ func (s *FollowService) eligibleFeed(ctx context.Context, spaceID uint64, cutoff
 	query = query.Joins(`JOIN LATERAL (
  SELECT MAX(matches.entered_at) AS entered_at, COUNT(*) AS match_count, ARRAY_AGG(matches.target_id) AS target_ids FROM (
  SELECT GREATEST(COALESCE(k.follow_ready_at,k.processed_at,k.created_at),ke.created_at) AS entered_at, f.target_id
- FROM entry_entities ke JOIN follows f ON f.space_id=ke.space_id AND f.target_type='entity' AND f.target_id=ke.entity_id
+ FROM entry_entities ke JOIN entities scoped_entity ON scoped_entity.id=ke.entity_id AND scoped_entity.space_id=ke.space_id AND scoped_entity.library_id=k.library_id JOIN follows f ON f.space_id=ke.space_id AND f.target_type='entity' AND f.target_id=ke.entity_id
  WHERE ke.space_id=k.space_id AND ke.entry_id=k.id AND ke.created_at<=? AND f.created_at<=?
  UNION ALL
  SELECT CASE WHEN kt.is_historical THEN NULL ELSE GREATEST(COALESCE(k.follow_ready_at,k.processed_at,k.created_at),kt.created_at) END, f.target_id
- FROM entry_topics kt JOIN topics t ON t.id=kt.topic_id AND t.space_id=kt.space_id AND (t.library_ids='[]'::jsonb OR t.library_ids @> jsonb_build_array(k.library_id)) JOIN follows f ON f.space_id=kt.space_id AND f.target_type='topic' AND f.target_id=kt.topic_id
+ FROM entry_topics kt JOIN topics t ON t.id=kt.topic_id AND t.space_id=kt.space_id AND t.library_id=k.library_id JOIN follows f ON f.space_id=kt.space_id AND f.target_type='topic' AND f.target_id=kt.topic_id
  WHERE kt.space_id=k.space_id AND kt.entry_id=k.id AND kt.created_at<=? AND f.created_at<=?
  ) matches) entry ON entry.match_count>0`, cutoff, cutoff, cutoff, cutoff)
 	if len(targetIDs) > 0 {
@@ -351,13 +351,22 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 	if err != nil {
 		return nil, err
 	}
-	topics, err := NewTopicService(s.db).ListTopics(ctx)
+	var topics []types.Topic
+	err = s.db.WithContext(ctx).Where("space_id=?", spaceID).Find(&topics).Error
 	if err != nil {
 		return nil, err
 	}
-	scopes := map[string][]string{}
+	scopes := map[string]string{}
 	for _, topic := range topics {
-		scopes[topic.ID] = topic.LibraryIDs
+		scopes[topic.ID] = topic.LibraryID
+	}
+	var entities []types.Entity
+	if err := s.db.WithContext(ctx).Select("id,library_id").Where("space_id=? AND merged_into_id=''", spaceID).Find(&entities).Error; err != nil {
+		return nil, err
+	}
+	entityLibraries := map[string]string{}
+	for _, entity := range entities {
+		entityLibraries[entity.ID] = entity.LibraryID
 	}
 	byTarget := map[string]types.FollowTarget{}
 	for _, follow := range follows {
@@ -372,12 +381,12 @@ func (s *FollowService) feedSnapshot(ctx context.Context, spaceID uint64, reques
 			article.Snippets[i].Score, article.Snippets[i].MatchType = 0, "summary"
 		}
 		for _, entity := range article.Entities {
-			if follow, ok := byTarget[types.FollowTargetEntity+":"+entity.ID]; ok {
+			if follow, ok := byTarget[types.FollowTargetEntity+":"+entity.ID]; ok && entityLibraries[entity.ID] == article.LibraryID {
 				matched[article.EntryID] = append(matched[article.EntryID], follow)
 			}
 		}
 		for _, topic := range article.Topics {
-			if follow, ok := byTarget[types.FollowTargetTopic+":"+topic.ID]; ok && (len(scopes[topic.ID]) == 0 || slices.Contains(scopes[topic.ID], article.LibraryID)) {
+			if follow, ok := byTarget[types.FollowTargetTopic+":"+topic.ID]; ok && scopes[topic.ID] == article.LibraryID {
 				matched[article.EntryID] = append(matched[article.EntryID], follow)
 			}
 		}

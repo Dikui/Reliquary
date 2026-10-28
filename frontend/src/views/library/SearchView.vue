@@ -71,15 +71,18 @@ async function runSearch(updateURL = true) {
     error.value = searchErrorMessage(cause, t)
   } finally { if (current === sequence) loading.value = false }
 }
+let optionsSequence = 0
 async function loadOptions() {
+  const current = ++optionsSequence
   optionsLoading.value = true
   optionsError.value = ''
   try {
-    const response = await getSearchOptions()
+    const response = await getSearchOptions(libraryScope.value)
+    if (current !== optionsSequence) return
     if (!response.success) throw new Error(response.message)
     options.value = response.data
-  } catch { optionsError.value = t('knowledgeSearch.optionsFailed') }
-  finally { optionsLoading.value = false }
+  } catch { if (current === optionsSequence) optionsError.value = t('knowledgeSearch.optionsFailed') }
+  finally { if (current === optionsSequence) optionsLoading.value = false }
 }
 function clearQuery() {
   query.value = ''
@@ -94,7 +97,7 @@ function clearQuery() {
 function finishComposition() { composing.value = false; scheduleSearch() }
 function openArticle(article: Article, location?: SourceLocation) { void router.push({ path: '/platform/entries', query: referenceQuery(article.entry_id, location) }) }
 function filterEntity(id: string) { filters.value.entity_ids = [id] }
-watch(libraryScope, scheduleSearch, { deep: true })
+watch(libraryScope, () => { filters.value.entity_ids = []; filters.value.topic_ids = []; options.value = { entities: [], topics: [] }; void loadOptions(); scheduleSearch() }, { deep: true })
 watch(stateKey, () => { if (!synchronizing) scheduleSearch() })
 watch(() => route.query, incoming => {
   const state = searchStateFromURL(incoming)
@@ -106,7 +109,7 @@ watch(() => route.query, incoming => {
   void nextTick(() => { synchronizing = false; void runSearch(false) })
 }, { immediate: true })
 onMounted(() => { void loadOptions() })
-onUnmounted(invalidate)
+onUnmounted(() => { optionsSequence++; invalidate() })
 </script>
 
 <template>

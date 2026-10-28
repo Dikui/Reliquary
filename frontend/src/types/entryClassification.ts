@@ -4,7 +4,7 @@ import type { Acquisition } from './ingest'
 export const CONTENT_TYPES = ['event', 'opinion', 'research', 'tutorial', 'case', 'reference', 'other'] as const
 export type ContentType = typeof CONTENT_TYPES[number]
 export interface StructuredSummary { overview: string; points: string[]; key_terms: string[] }
-export interface EntryTopic { id: string; name: string; description?: string }
+export interface EntryTopic { id: string; library_id?: string; name: string; description?: string }
 export interface ClassifiedEntry {
   summary_status?: string
   error_message?: string

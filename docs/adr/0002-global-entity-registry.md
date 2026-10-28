@@ -1,6 +1,6 @@
 # 0002 对象身份在团队空间内全局统一
 
-Status: accepted
+Status: superseded by [0016](0016-library-catalogs.md)
 日期：2026-10-07
 
 ## 背景

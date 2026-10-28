@@ -52,7 +52,8 @@ type dashscopeEmbedRequest struct {
 }
 
 type dashscopeEmbedParameters struct {
-	Dimension int `json:"dimension"`
+	Dimension    int  `json:"dimension,omitempty"`
+	EnableFusion bool `json:"enable_fusion,omitempty"`
 }
 
 type dashscopeEmbedResponse struct {
@@ -78,17 +79,42 @@ type multimodalEmbedRequest struct {
 
 func (e *OpenAIEmbedder) SupportsImages() bool { return e.supportsImages }
 
+func (e *OpenAIEmbedder) SupportsFusion() bool {
+	return e.supportsImages && e.multimodalFormat == multimodalFormatDashScope &&
+		(e.modelName == "qwen3-vl-embedding" || strings.HasPrefix(e.modelName, "qwen3-vl-embedding-"))
+}
+
+func (e *OpenAIEmbedder) EmbedFusion(ctx context.Context, text string, images []string) ([]float32, error) {
+	if !e.SupportsFusion() {
+		return nil, fmt.Errorf("embedding model does not support fusion")
+	}
+	if strings.TrimSpace(text) == "" {
+		return nil, fmt.Errorf("fusion text embedding input must not be empty")
+	}
+	if len(images) == 0 || len(images) > 10 || len(images)+1 > dashscopeMaxContents {
+		return nil, &secutils.ImageInputError{Reason: fmt.Sprintf("fusion embedding requires 1 to 10 images and at most %d content elements", dashscopeMaxContents)}
+	}
+	inputs := make([]multimodalEmbedInput, 1, len(images)+1)
+	inputs[0].Text = text
+	for _, image := range images {
+		if err := validateEmbeddingImage(image); err != nil {
+			return nil, err
+		}
+		inputs = append(inputs, multimodalEmbedInput{Image: image})
+	}
+	vectors, err := e.multimodalEmbedRequest(ctx, inputs, true)
+	if err != nil {
+		return nil, err
+	}
+	return vectors[0], nil
+}
+
 func (e *OpenAIEmbedder) EmbedImage(ctx context.Context, image string) ([]float32, error) {
 	if !e.supportsImages {
 		return nil, fmt.Errorf("embedding model does not support images")
 	}
-	header, payload, found := strings.Cut(image, ",")
-	if !found || !strings.HasPrefix(header, "data:image/") || !strings.HasSuffix(header, ";base64") {
-		return nil, fmt.Errorf("image embedding input must be an image base64 data URI")
-	}
-	data, err := base64.StdEncoding.DecodeString(payload)
-	if err != nil || len(data) == 0 {
-		return nil, fmt.Errorf("image embedding input contains invalid or empty base64")
+	if err := validateEmbeddingImage(image); err != nil {
+		return nil, err
 	}
 	vectors, err := e.multimodalEmbed(ctx, []multimodalEmbedInput{{Image: image}})
 	if err != nil {
@@ -97,9 +123,25 @@ func (e *OpenAIEmbedder) EmbedImage(ctx context.Context, image string) ([]float3
 	return vectors[0], nil
 }
 
+func validateEmbeddingImage(image string) error {
+	header, payload, found := strings.Cut(image, ",")
+	if !found || !strings.HasPrefix(header, "data:image/") || !strings.HasSuffix(header, ";base64") {
+		return fmt.Errorf("image embedding input must be an image base64 data URI")
+	}
+	data, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil || len(data) == 0 {
+		return fmt.Errorf("image embedding input contains invalid or empty base64")
+	}
+	return nil
+}
+
 func (e *OpenAIEmbedder) multimodalEmbed(ctx context.Context, inputs []multimodalEmbedInput) ([][]float32, error) {
+	return e.multimodalEmbedRequest(ctx, inputs, false)
+}
+
+func (e *OpenAIEmbedder) multimodalEmbedRequest(ctx context.Context, inputs []multimodalEmbedInput, fusion bool) ([][]float32, error) {
 	dashscope := e.multimodalFormat == multimodalFormatDashScope
-	if dashscope && len(inputs) > dashscopeMaxContents {
+	if dashscope && !fusion && len(inputs) > dashscopeMaxContents {
 		vectors := make([][]float32, 0, len(inputs))
 		for start := 0; start < len(inputs); start += dashscopeMaxContents {
 			part, err := e.multimodalEmbed(ctx, inputs[start:min(start+dashscopeMaxContents, len(inputs))])
@@ -115,8 +157,14 @@ func (e *OpenAIEmbedder) multimodalEmbed(ctx context.Context, inputs []multimoda
 	if dashscope {
 		request := dashscopeEmbedRequest{Model: e.modelName}
 		request.Input.Contents = inputs
+		if fusion {
+			request.Parameters = &dashscopeEmbedParameters{EnableFusion: true}
+		}
 		if e.supportsDimensionsParam() {
-			request.Parameters = &dashscopeEmbedParameters{Dimension: e.dimensions}
+			if request.Parameters == nil {
+				request.Parameters = &dashscopeEmbedParameters{}
+			}
+			request.Parameters.Dimension = e.dimensions
 		}
 		data, err = json.Marshal(request)
 	} else {
@@ -162,10 +210,14 @@ func (e *OpenAIEmbedder) multimodalEmbed(ctx context.Context, inputs []multimoda
 	if err != nil {
 		return nil, fmt.Errorf("decode multimodal embedding response: %w", err)
 	}
-	if len(result.Data) != len(inputs) {
-		return nil, fmt.Errorf("multimodal embedding count mismatch: got %d, expected %d", len(result.Data), len(inputs))
+	expected := len(inputs)
+	if fusion {
+		expected = 1
 	}
-	vectors := make([][]float32, len(inputs))
+	if len(result.Data) != expected {
+		return nil, fmt.Errorf("multimodal embedding count mismatch: got %d, expected %d", len(result.Data), expected)
+	}
+	vectors := make([][]float32, expected)
 	for _, item := range result.Data {
 		if item.Index < 0 || item.Index >= len(vectors) || vectors[item.Index] != nil {
 			return nil, fmt.Errorf("multimodal embedding response has invalid or duplicate index %d", item.Index)

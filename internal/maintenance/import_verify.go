@@ -45,8 +45,11 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 	}
 	projectLibraryLabelsSnapshot(original, current.schemaVersion)
 	projectLibraryDirectoriesSnapshot(original, current.schemaVersion)
-	if db.Migrator().HasColumn("topics", "library_ids") {
+	if db.Migrator().HasTable("follow_feed_library_states") {
 		projectFollowSnapshot(original)
+	}
+	if err := projectCatalogSnapshot(original, current.schemaVersion); err != nil {
+		return err
 	}
 	if db.Migrator().HasColumn("entries", "source_ref") {
 		projectIngestSnapshot(original)

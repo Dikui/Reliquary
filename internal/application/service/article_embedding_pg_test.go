@@ -213,7 +213,7 @@ func TestImportedDocumentHasSummaryVectorsAndReportsKeepChunkPrefixes(t *testing
 
 func TestArticleHeaderFullTextIncludesEntitiesAliasesTopicsAndAllSummaryFields(t *testing.T) {
 	h, _ := newArticleIndexingHarness(t)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Topicmarker"})
+	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{LibraryID: h.library.ID, Name: "Topicmarker"})
 	require.NoError(t, err)
 	h.processor.output = articleProcessingOutput(t, "reference", []types.EntityCandidate{{Name: "Entitymarker", EntityType: "company"}}, []string{topic.ID})
 	article := h.upload(t, "Headermarker", "discardedfixture reference source body")

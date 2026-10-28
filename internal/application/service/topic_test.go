@@ -15,21 +15,25 @@ import (
 func TestTopicsCatalogSelectionAndArticleDisplay(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
+	library := &types.Library{ID: uuid.NewString(), SpaceID: 1, Name: "First"}
+	require.NoError(t, db.Create(library).Error)
 	svc := NewTopicService(db)
-	first, err := svc.CreateTopic(ctx, &types.Topic{Name: "Artificial intelligence", Description: "Products and research"})
+	first, err := svc.CreateTopic(ctx, &types.Topic{LibraryID: library.ID, Name: "Artificial intelligence", Description: "Products and research"})
 	require.NoError(t, err)
-	second, err := svc.CreateTopic(ctx, &types.Topic{Name: "Engineering", Description: "Implementation guides"})
+	second, err := svc.CreateTopic(ctx, &types.Topic{LibraryID: library.ID, Name: "Engineering", Description: "Implementation guides"})
 	require.NoError(t, err)
-	_, err = svc.CreateTopic(ctx, &types.Topic{Name: first.Name})
-	require.Error(t, err, "topic names are unique inside a space")
+	_, err = svc.CreateTopic(ctx, &types.Topic{LibraryID: library.ID, Name: first.Name})
+	require.Error(t, err, "topic names are unique inside a library")
 	otherCtx := context.WithValue(ctx, types.SpaceIDContextKey, uint64(2))
-	other, err := svc.CreateTopic(otherCtx, &types.Topic{Name: first.Name})
+	otherLibrary := &types.Library{ID: uuid.NewString(), SpaceID: 2, Name: "Other"}
+	require.NoError(t, db.Create(otherLibrary).Error)
+	other, err := svc.CreateTopic(otherCtx, &types.Topic{LibraryID: otherLibrary.ID, Name: first.Name})
 	require.NoError(t, err)
-	catalog, err := svc.ListTopics(ctx)
+	catalog, err := svc.ListTopics(ctx, library.ID)
 	require.NoError(t, err)
 	require.Len(t, catalog, 2)
 
-	article := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: uuid.NewString(), Type: "file", Title: "Event", Source: "manual", ParseStatus: types.ParseStatusCompleted}
+	article := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: library.ID, Type: "file", Title: "Event", Source: "manual", ParseStatus: types.ParseStatusCompleted}
 	require.NoError(t, db.Create(article).Error)
 	require.NoError(t, svc.ReplaceEntryTopics(ctx, article.ID, []string{first.ID, first.ID, "missing", other.ID}))
 	var links []types.EntryTopic
@@ -38,7 +42,7 @@ func TestTopicsCatalogSelectionAndArticleDisplay(t *testing.T) {
 	require.Equal(t, first.ID, links[0].TopicID)
 	require.Error(t, svc.ReplaceEntryTopics(otherCtx, article.ID, []string{other.ID}))
 
-	entity := &types.Entity{ID: uuid.NewString(), SpaceID: 1, CanonicalName: "Reliquary", NormalizedName: "reliquary", EntityType: "project"}
+	entity := &types.Entity{LibraryID: library.ID, ID: uuid.NewString(), SpaceID: 1, CanonicalName: "Reliquary", NormalizedName: "reliquary", EntityType: "project"}
 	require.NoError(t, db.Create(entity).Error)
 	require.NoError(t, db.Create(&types.EntryEntity{SpaceID: 1, EntryID: article.ID, EntityID: entity.ID}).Error)
 	kg := &entryService{db: db, repo: repository.NewEntryRepository(db)}

@@ -45,7 +45,7 @@ func fixture(t *testing.T) (*Service, *types.Entry) {
 	require.NoError(t, db.Create(&types.LibraryContentType{LibraryID: "library", Name: "text", Enabled: true, ExtractGraph: true}).Error)
 	require.NoError(t, db.Create(&types.LibraryRelationType{LibraryID: "library", Name: "cooperates", Enabled: true}).Error)
 	for _, id := range []string{"a", "b", "c"} {
-		require.NoError(t, db.Create(&types.Entity{ID: id, SpaceID: 1, CanonicalName: strings.ToUpper(id), NormalizedName: id, EntityType: "company", CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error)
+		require.NoError(t, db.Create(&types.Entity{ID: id, SpaceID: 1, LibraryID: "library", CanonicalName: strings.ToUpper(id), NormalizedName: id, EntityType: "company", CreatedAt: time.Now(), UpdatedAt: time.Now()}).Error)
 	}
 	entry := &types.Entry{ID: "entry", SpaceID: 1, LibraryID: "library", Title: "Source", Type: types.EntryTypeManual, ContentType: "text", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	require.NoError(t, db.Create(entry).Error)

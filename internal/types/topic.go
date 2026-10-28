@@ -2,16 +2,14 @@ package types
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
-// Topic describes a user-defined direction within the personal space.
+// Topic describes a user-defined direction within one library.
 type Topic struct {
-	LibraryIDs  []string  `json:"library_ids" gorm:"serializer:json;type:jsonb;not null"`
+	LibraryID   string    `json:"library_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_topics_space_library_name"`
 	ID          string    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	SpaceID     uint64    `json:"space_id" gorm:"not null;uniqueIndex:idx_topics_space_name"`
-	Name        string    `json:"name" gorm:"type:varchar(255);not null;uniqueIndex:idx_topics_space_name"`
+	SpaceID     uint64    `json:"space_id" gorm:"not null;uniqueIndex:idx_topics_space_library_name"`
+	Name        string    `json:"name" gorm:"type:varchar(255);not null;uniqueIndex:idx_topics_space_library_name"`
 	Description string    `json:"description" gorm:"type:text;not null;default:''"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -70,10 +68,3 @@ type TopicBackfillBatch struct {
 }
 
 func (TopicBackfillBatch) TableName() string { return "topic_backfill_batches" }
-
-func (t *Topic) BeforeCreate(_ *gorm.DB) error {
-	if t.LibraryIDs == nil {
-		t.LibraryIDs = []string{}
-	}
-	return nil
-}

@@ -23,7 +23,7 @@ function evaluate(code: string, modules: Record<string, unknown>) {
   return module.exports
 }
 function component(path: string, modules: Record<string, unknown>) {
-  modules = { '@/api/library': { listLibraries: async () => ({ success: true, data: [{ id: 'lib-a', name: 'Library A', display_name: 'Library A' }, { id: 'lib-b', name: 'Library B', display_name: 'Library B' }] }) }, '@/components/FollowToggle.vue': empty, '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) }, ...modules }
+  modules = { '@/components/LibraryScopeSelect.vue': empty, '@/api/library': { listLibraries: async () => ({ success: true, data: [{ id: 'lib-a', name: 'Library A', display_name: 'Library A' }, { id: 'lib-b', name: 'Library B', display_name: 'Library B' }] }) }, '@/components/FollowToggle.vue': empty, '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) }, ...modules }
   const filename = path.split('/').at(-1)!
   const { descriptor, errors } = parse(readFileSync(new URL(path, import.meta.url), 'utf8'), { filename })
   assert.deepEqual(errors, [])
@@ -57,8 +57,8 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   return html
 }
 const notifications = { MessagePlugin: { success() {} } }
-const topic = { id: 'topic-a', name: 'Space research', description: 'Space missions and research', entry_count: 3, created_at: '', updated_at: '' }
-const article = { id: 'article-a', content_type: 'event', processing_mode: 'full', starred: false, topics: [{ id: 'old-topic', name: 'Old topic' }], parse_status: 'completed' }
+const topic = { id: 'topic-a', library_id: 'lib-a', name: 'Space research', description: 'Space missions and research', entry_count: 3, created_at: '', updated_at: '' }
+const article = { id: 'article-a', library_id: 'lib-a', content_type: 'event', processing_mode: 'full', starred: false, topics: [{ id: 'old-topic', name: 'Old topic' }], parse_status: 'completed' }
 function judgments(api: Record<string, unknown>, details?: unknown, notificationModule: { MessagePlugin: { success: (message: string) => unknown } } = notifications) {
   return component('../../components/EntryArticleJudgments.vue', {
     '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-judgments': api,
@@ -131,7 +131,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         retryTopicBackfill: async (id: string) => { calls.push(['retry', id]); run = { ...run, status: 'completed', failed_entries: 0, failed_batches: 0, batches: [] }; return { success: true, data: run } },
       },
     })
-    const html = await render(view, {}, locale, async state => { await state.load() })
+    const html = await render(view, {}, locale, async state => { state.libraryScope.value = ['lib-a']; await state.load() })
     assert.ok(html.includes(topic.name))
     assert.ok(html.includes('31 / 31'))
     assert.ok(html.includes('Model timeout'))
@@ -147,19 +147,22 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       },
     })
     await render(fresh, {}, locale, async state => {
+      state.libraryScope.value = ['lib-a']
       await state.load()
       await state.retry(topic.id)
       state.openEditor()
-      state.draft.value = { name: ' New topic ', description: ' New description ', library_ids: ['lib-a'] }
+      state.draft.value = { name: ' New topic ', description: ' New description ' }
       await state.save()
       state.openEditor(topic)
-      assert.deepEqual(state.draft.value.library_ids, [])
+      assert.equal('library_ids' in state.draft.value, false)
       state.draft.value.description = 'Changed description'
       await state.save()
+      state.progress[topic.id] = { ...run, status: 'cancelled', failed_batches: 1 }
+      await state.retry(topic.id)
       state.requestDelete(topic)
       await state.remove()
     })
-    assert.deepEqual(calls, [['retry', topic.id], ['create', { name: 'New topic', description: 'New description', library_ids: ['lib-a'] }], ['update', topic.id, { name: topic.name, description: 'Changed description', library_ids: [] }], ['delete', topic.id]])
+    assert.deepEqual(calls, [['retry', topic.id], ['create', { name: 'New topic', description: 'New description', library_id: 'lib-a' }], ['update', topic.id, { name: topic.name, description: 'Changed description' }], ['delete', topic.id]])
   })
   test(`${locale}: operation log displays before and after, time and type filters`, async () => {
     const calls: unknown[] = [], urls: unknown[] = [], route = { path: '/platform/settings', query: { section: 'operation-logs', operation_type: 'star', page: '2' } }
@@ -206,6 +209,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/api/topics': { createTopic: async () => { throw { status: 409 } } },
     })
     const html = await render(view, {}, locale, async state => {
+      state.libraryScope.value = ['lib-a']
+      await nextTick()
       state.openEditor()
       state.draft.value = { name: topic.name, description: 'My description' }
       await state.save()
@@ -231,8 +236,8 @@ test('topic, judgment and operation log API wrappers use the supported routes an
   const request = Object.fromEntries(['get', 'post', 'put', 'del'].map(method => [method, (url: string, body?: unknown) => { calls.push({ method, url, ...(body === undefined ? {} : { body }) }); return Promise.resolve({ success: true }) }]))
   const api = (path: string) => evaluate(readFileSync(new URL(path, import.meta.url), 'utf8'), { '@/utils/request': request })
   const topics = api('../../api/topics.ts'), judgments = api('../../api/entry-judgments.ts'), logs = api('../../api/operation-logs.ts')
-  await topics.listTopics()
-  await topics.createTopic({ name: 'Name', description: 'Description' })
+  await topics.listTopics('lib/a')
+  await topics.createTopic({ library_id: 'lib/a', name: 'Name', description: 'Description' })
   await topics.updateTopic('t/a', { name: 'Name 2', description: 'Description 2' })
   await topics.deleteTopic('t/a')
   await topics.getTopicBackfill('t/a')
@@ -242,8 +247,8 @@ test('topic, judgment and operation log API wrappers use the supported routes an
   await judgments.correctEntryTopics('k/a', [])
   await logs.listOperationLogs({ operation_type: 'unstar', page: 2, page_size: 30 })
   assert.deepEqual(calls, [
-    { method: 'get', url: '/api/v1/topics' },
-    { method: 'post', url: '/api/v1/topics', body: { name: 'Name', description: 'Description' } },
+    { method: 'get', url: '/api/v1/topics?library_id=lib%2Fa' },
+    { method: 'post', url: '/api/v1/topics', body: { library_id: 'lib/a', name: 'Name', description: 'Description' } },
     { method: 'put', url: '/api/v1/topics/t%2Fa', body: { name: 'Name 2', description: 'Description 2' } },
     { method: 'del', url: '/api/v1/topics/t%2Fa' },
     { method: 'get', url: '/api/v1/topics/t%2Fa/backfill' },

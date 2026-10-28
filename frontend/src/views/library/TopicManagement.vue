@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SafeTextarea from '@/components/SafeTextarea.vue'
 import FollowToggle from '@/components/FollowToggle.vue'
-import { listLibraries, type LibraryCatalogItem } from '@/api/library'
+import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue'
 import { useFollowStore } from '@/stores/follows'
 import { createTopic, deleteTopic, getTopicBackfill, listTopics, retryTopicBackfill, updateTopic, type Topic, type TopicBackfill } from '@/api/topics'
 
@@ -13,10 +13,9 @@ const followStore = useFollowStore()
 const topics = ref<Topic[]>([]), loading = ref(false), error = ref('')
 const progress = reactive<Record<string, TopicBackfill | null>>({})
 const progressErrors = reactive<Record<string, string>>({}), retrying = reactive<Record<string, boolean>>({})
-const editorVisible = ref(false), editing = ref<Topic | null>(null), draft = ref({ name: '', description: '', library_ids: [] as string[] })
-const libraries = ref<LibraryCatalogItem[]>([]), librariesError = ref(false)
-const libraryOptions = computed(() => libraries.value.map(lib => ({ value: lib.id, label: lib.display_name || lib.name })))
-async function loadLibraries() { try { const response = await listLibraries(); if (!response.success) throw new Error(); libraries.value = response.data || []; librariesError.value = false } catch { librariesError.value = true } }
+const editorVisible = ref(false), editing = ref<Topic | null>(null), draft = ref({ name: '', description: '' })
+const libraryScope = ref<string[]>([])
+const libraryId = computed(() => libraryScope.value[0] || '')
 const saving = ref(false), saveError = ref(''), deleting = ref(false), deleteError = ref(''), deleteTarget = ref<Topic | null>(null)
 const deleteVisible = computed({ get: () => Boolean(deleteTarget.value), set: value => { if (!value && !deleting.value) deleteTarget.value = null } })
 let generation = 0, pollTimer: ReturnType<typeof setTimeout> | undefined, disposed = false
@@ -36,7 +35,7 @@ function schedulePoll() {
     await Promise.all(topics.value.filter(topic => active(progress[topic.id])).map(topic => readProgress(topic.id, current)))
     if (current !== generation || disposed) return
     try {
-      const response = await listTopics()
+      const response = await listTopics(libraryId.value)
       if (current === generation && !disposed && response.success) topics.value = response.data || []
     } catch { /* Existing counts remain visible until the next refresh. */ }
     schedulePoll()
@@ -45,10 +44,11 @@ function schedulePoll() {
 async function load() {
   const current = ++generation
   clearTimeout(pollTimer)
+  if (!libraryId.value) { topics.value = []; loading.value = false; return }
   loading.value = true
   error.value = ''
   try {
-    const response = await listTopics()
+    const response = await listTopics(libraryId.value)
     if (!response.success) throw new Error(response.message)
     if (current !== generation || disposed) return
     topics.value = response.data || []
@@ -59,19 +59,18 @@ async function load() {
 }
 function openEditor(topic?: Topic) {
   editing.value = topic || null
-  draft.value = { name: topic?.name || '', description: topic?.description || '', library_ids: [...(topic?.library_ids || [])] }
-  void loadLibraries()
+  draft.value = { name: topic?.name || '', description: topic?.description || '' }
   saveError.value = ''
   editorVisible.value = true
 }
 async function save() {
-  if (saving.value) return
-  const input = { name: draft.value.name.trim(), description: draft.value.description.trim(), library_ids: draft.value.library_ids }
+  if (saving.value || !libraryId.value) return
+  const input = { name: draft.value.name.trim(), description: draft.value.description.trim() }
   if (!input.name) { saveError.value = t('topicManagement.nameRequired'); return }
   saving.value = true
   saveError.value = ''
   try {
-    const response = editing.value ? await updateTopic(editing.value.id, input) : await createTopic(input)
+    const response = editing.value ? await updateTopic(editing.value.id, input) : await createTopic({ ...input, library_id: libraryId.value })
     if (!response.success) throw new Error(response.message)
     editorVisible.value = false
     MessagePlugin.success(t(editing.value ? 'topicManagement.updated' : 'topicManagement.created'))
@@ -97,7 +96,7 @@ async function remove() {
   finally { deleting.value = false }
 }
 async function retry(id: string) {
-  if (retrying[id] || active(progress[id])) return
+  if (retrying[id] || active(progress[id]) || progress[id]?.status === 'cancelled') return
   retrying[id] = true
   delete progressErrors[id]
   try {
@@ -108,26 +107,28 @@ async function retry(id: string) {
   } catch { progressErrors[id] = t('topicManagement.retryFailed') }
   finally { retrying[id] = false }
 }
+watch(libraryId, () => { topics.value = []; editorVisible.value = false; deleteTarget.value = null; void load() })
 onMounted(load)
 onUnmounted(() => { disposed = true; generation++; clearTimeout(pollTimer) })
 </script>
 
 <template>
   <main class="topic-page">
-    <header class="topic-page-header"><div><h1>{{ t('topicManagement.title') }}</h1><p>{{ t('topicManagement.description') }}</p></div><t-button @click="openEditor()"><template #icon><t-icon name="add" /></template>{{ t('topicManagement.create') }}</t-button></header>
+    <header class="topic-page-header"><div><h1>{{ t('topicManagement.title') }}</h1><p>{{ t('topicManagement.description') }}</p></div><t-button :disabled="!libraryId" @click="openEditor()"><template #icon><t-icon name="add" /></template>{{ t('topicManagement.create') }}</t-button></header>
+    <LibraryScopeSelect v-model="libraryScope" single :disabled="saving || deleting || editorVisible" />
     <p class="topic-hint">{{ t('topicManagement.historyHint') }}</p>
     <div v-if="error" class="topic-error" role="alert">{{ error }} <t-button variant="text" @click="load">{{ t('common.retry') }}</t-button></div>
     <t-loading :loading="loading">
       <ul v-if="topics.length" class="topic-list">
         <li v-for="topic in topics" :key="topic.id" class="topic-card">
-          <div class="topic-heading"><h2>{{ topic.name }}</h2><a :href="`/platform/entries?tab=documents&topic_ids=${encodeURIComponent(topic.id)}`">{{ t('topicManagement.articleCount', { count: topic.entry_count }) }} · {{ t('entryBatch.manageRelated') }}</a></div>
+          <div class="topic-heading"><h2>{{ topic.name }}</h2><a :href="`/platform/entries?tab=documents&libraries=${encodeURIComponent(topic.library_id)}&topic_ids=${encodeURIComponent(topic.id)}`">{{ t('topicManagement.articleCount', { count: topic.entry_count }) }} · {{ t('entryBatch.manageRelated') }}</a></div>
           <p class="topic-description">{{ topic.description || t('topicManagement.noDescription') }}</p>
           <div v-if="progress[topic.id]" class="topic-progress" aria-live="polite">
             <span>{{ t(`topicManagement.status.${progress[topic.id]!.status}`) }}</span>
             <span>{{ t('topicManagement.progress', { processed: progress[topic.id]!.processed, total: progress[topic.id]!.total }) }}</span>
             <span>{{ t('topicManagement.failures', { articles: progress[topic.id]!.failed_entries, batches: progress[topic.id]!.failed_batches }) }}</span>
             <progress :value="progress[topic.id]!.processed" :max="Math.max(1, progress[topic.id]!.total)" :aria-label="t('topicManagement.historyProgress')" />
-            <t-button v-if="progress[topic.id]!.failed_batches > 0" size="small" variant="outline" :loading="retrying[topic.id]" :disabled="active(progress[topic.id])" @click="retry(topic.id)">{{ t('topicManagement.retryFailedBatches') }}</t-button>
+            <t-button v-if="progress[topic.id]!.failed_batches > 0" size="small" variant="outline" :loading="retrying[topic.id]" :disabled="active(progress[topic.id]) || progress[topic.id]!.status === 'cancelled'" @click="retry(topic.id)">{{ t('topicManagement.retryFailedBatches') }}</t-button>
           </div>
           <ul v-if="progress[topic.id]?.batches?.some(batch => batch.status === 'failed')" class="topic-batch-errors">
             <li v-for="batch in progress[topic.id]!.batches!.filter(batch => batch.status === 'failed')" :key="batch.id">{{ t('topicManagement.batchFailure', { ordinal: batch.ordinal, count: batch.entry_count, attempts: batch.attempts, reason: batch.error || t('common.error') }) }}</li>
@@ -142,9 +143,6 @@ onUnmounted(() => { disposed = true; generation++; clearTimeout(pollTimer) })
       <form class="topic-form" novalidate @submit.prevent="save">
         <label><span>{{ t('topicManagement.name') }}</span><t-input v-model="draft.name" :maxlength="255" :disabled="saving" :aria-label="t('topicManagement.name')" :aria-invalid="Boolean(saveError)" /></label>
         <label><span>{{ t('topicManagement.topicDescription') }}</span><SafeTextarea v-model="draft.description" :autosize="{ minRows: 3, maxRows: 8 }" :maxlength="2000" :disabled="saving" :aria-label="t('topicManagement.topicDescription')" /></label>
-        <label><span>{{ t('topicManagement.libraries') }}</span><t-select v-model="draft.library_ids" multiple clearable :options="libraryOptions" :disabled="saving || librariesError" :placeholder="t('follows.allLibraries')" :aria-label="t('topicManagement.libraries')" /></label>
-        <p class="topic-hint">{{ t('topicManagement.libraryHint') }}</p>
-        <p v-if="librariesError" role="alert">{{ t('topicManagement.libraryLoadFailed') }} <t-button variant="text" @click="loadLibraries">{{ t('common.retry') }}</t-button></p>
         <p class="topic-hint">{{ t('topicManagement.descriptionHint') }}</p>
         <p v-if="saveError" class="topic-error" role="alert">{{ saveError }}</p>
       </form>

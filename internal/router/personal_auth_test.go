@@ -168,7 +168,7 @@ func seedPersonalEntities(t *testing.T, f *personalAuthFixture) {
 		entryID := fmt.Sprintf("personal-message-%d", i)
 		entityID := fmt.Sprintf("personal-entity-%d", i)
 		require.NoError(t, f.db.Create(&types.Entry{ID: entryID, SpaceID: 1, LibraryID: libraryID, Type: types.EntryTypeManual, Title: "Acme source", FileName: entryID, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: now, UpdatedAt: now}).Error)
-		require.NoError(t, f.db.Create(&types.Entity{ID: entityID, SpaceID: 1, CanonicalName: fmt.Sprintf("Acme %d", i), NormalizedName: fmt.Sprintf("acme %d", i), EntityType: "company", CreatedAt: now, UpdatedAt: now}).Error)
+		require.NoError(t, f.db.Create(&types.Entity{ID: entityID, SpaceID: 1, LibraryID: libraryID, CanonicalName: fmt.Sprintf("Acme %d", i), NormalizedName: fmt.Sprintf("acme %d", i), EntityType: "company", CreatedAt: now, UpdatedAt: now}).Error)
 
 		require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: entryID, EntityID: entityID, CreatedAt: now}).Error)
 	}
@@ -177,9 +177,11 @@ func seedPersonalEntities(t *testing.T, f *personalAuthFixture) {
 func TestPersonalAPIKeyAndLocalUserReturnAllEntities(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	seedPersonalEntities(t, f)
+	library, err := f.params.LibraryService.GetSystemLibrary(context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID))
+	require.NoError(t, err)
 	cases := []struct{ method, path, body string }{
 		{http.MethodGet, "/api/v1/entries/search?keyword=Acme", ""},
-		{http.MethodGet, "/api/v1/entities", ""},
+		{http.MethodGet, "/api/v1/entities?library_id=" + library.ID, ""},
 		{http.MethodGet, "/api/v1/entities/personal-entity-2", ""},
 	}
 	for _, tc := range cases {
@@ -199,10 +201,12 @@ func TestPersonalAPIKeyAndLocalUserReturnAllEntities(t *testing.T) {
 func TestEntityRoutesIgnoreRemovedScopeParameter(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	seedPersonalEntities(t, f)
-	expected := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities", "", f.token, false)
+	library, err := f.params.LibraryService.GetSystemLibrary(context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID))
+	require.NoError(t, err)
+	expected := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities?library_id="+library.ID, "", f.token, false)
 	require.Equal(t, http.StatusOK, expected.Code, expected.Body.String())
-	for _, query := range []string{"scope=team", "scope=library&library_id=missing", "scope=all"} {
-		got := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities?"+query, "", f.key, true)
+	for _, query := range []string{"scope=team", "scope=library", "scope=all"} {
+		got := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities?library_id="+library.ID+"&"+query, "", f.key, true)
 		require.Equal(t, http.StatusOK, got.Code, got.Body.String())
 		require.JSONEq(t, expected.Body.String(), got.Body.String())
 	}
@@ -210,6 +214,8 @@ func TestEntityRoutesIgnoreRemovedScopeParameter(t *testing.T) {
 
 func TestPersonalAPIKeyWithoutExpirationIsUsable(t *testing.T) {
 	f := newPersonalAuthFixture(t)
+	library, err := f.params.LibraryService.GetSystemLibrary(context.WithValue(context.Background(), types.SpaceIDContextKey, types.SingleSpaceID))
+	require.NoError(t, err)
 	for _, body := range []string{`{"name":"No expiration"}`, `{"name":"Zero expiration","expires_at_unix":0}`} {
 		created := personalRequest(t, f.router, http.MethodPost, "/api/v1/space/api-keys", body, f.token, false)
 		require.Equal(t, http.StatusCreated, created.Code, created.Body.String())
@@ -225,7 +231,7 @@ func TestPersonalAPIKeyWithoutExpirationIsUsable(t *testing.T) {
 		var stored types.APIKey
 		require.NoError(t, f.db.First(&stored, response.Data.ID).Error)
 		require.Nil(t, stored.ExpiresAt)
-		queried := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities", "", response.Data.Token, true)
+		queried := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities?library_id="+library.ID, "", response.Data.Token, true)
 		require.Equal(t, http.StatusOK, queried.Code, queried.Body.String())
 	}
 }

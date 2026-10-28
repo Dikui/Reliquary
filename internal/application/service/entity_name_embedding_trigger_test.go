@@ -162,7 +162,7 @@ func (e *nameEmbeddingTriggerEmbedder) BatchEmbed(_ context.Context, texts []str
 
 func TestNameEmbeddingConfigurationAndEmptyWorkbenchIntegrateWithDurableTask(t *testing.T) {
 	db, ctx := nameEmbeddingTriggerDB(t)
-	entity := types.Entity{ID: "historical-name", SpaceID: 1, CanonicalName: "Historical entity", NormalizedName: "historical entity", EntityType: "company", Description: "Existing entity", NameEmbedding: types.EntityNameEmbedding{0, 1, 0}, EmbeddingModelID: "retired-vector", EmbeddingDimension: 3, EmbeddingNeedsRebuild: false}
+	entity := types.Entity{ID: "historical-name", SpaceID: 1, LibraryID: "trigger-library", CanonicalName: "Historical entity", NormalizedName: "historical entity", EntityType: "company", Description: "Existing entity", NameEmbedding: types.EntityNameEmbedding{0, 1, 0}, EmbeddingModelID: "retired-vector", EmbeddingDimension: 3, EmbeddingNeedsRebuild: false}
 	require.NoError(t, db.Create(&entity).Error)
 	queue := &nameEmbeddingTriggerQueue{}
 	models := &nameEmbeddingTriggerModels{embedder: &nameEmbeddingTriggerEmbedder{}}

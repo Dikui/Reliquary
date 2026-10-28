@@ -8,6 +8,26 @@ import (
 	"reliquary/internal/types"
 )
 
+func (w *concurrencyEmbedder) SupportsFusion() bool {
+	e, ok := w.inner.(FusionEmbedder)
+	return ok && e.SupportsFusion()
+}
+
+func (w *concurrencyEmbedder) EmbedFusion(ctx context.Context, text string, images []string) ([]float32, error) {
+	e, ok := w.inner.(FusionEmbedder)
+	if !ok || !e.SupportsFusion() {
+		return nil, fmt.Errorf("embedding model does not support fusion")
+	}
+	ctx = types.WithModelTier(ctx, types.ModelTierEmbedding)
+	if err := limiter.WaitRate(ctx, w.inner.GetModelID(), w.requestsPerMinute); err != nil {
+		return nil, err
+	}
+	release := limiter.GateNamedN(ctx, w.inner.GetModelID(), w.inner.GetModelName(), w.limit)
+	defer release()
+	ctx = types.WithModelCallAccounting(ctx, w.accounting)
+	return e.EmbedFusion(ctx, text, images)
+}
+
 func (w *concurrencyEmbedder) SupportsImages() bool {
 	e, ok := w.inner.(ImageEmbedder)
 	return ok && e.SupportsImages()

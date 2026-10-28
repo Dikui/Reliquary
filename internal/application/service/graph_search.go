@@ -80,8 +80,8 @@ func validateGraphRequest(r *types.GraphSearchRequest) error {
 	}
 	return nil
 }
-func (s *GraphSearchService) resolveEntity(ctx context.Context, space uint64, input types.GraphEntityInput) ([]types.EntrySearchEntity, error) {
-	q := s.db.WithContext(ctx).Model(&types.Entity{}).Where("space_id=? AND coalesce(merged_into_id,'')=''", space)
+func (s *GraphSearchService) resolveEntity(ctx context.Context, space uint64, libraries []string, input types.GraphEntityInput) ([]types.EntrySearchEntity, error) {
+	q := s.db.WithContext(ctx).Model(&types.Entity{}).Where("space_id=? AND library_id IN ? AND coalesce(merged_into_id,'')=''", space, libraries)
 	if input.ID != "" {
 		q = q.Where("id=?", input.ID)
 	} else {
@@ -153,14 +153,14 @@ func (s *GraphSearchService) Search(ctx context.Context, request types.GraphSear
 		}
 	}()
 	out = &types.GraphSearchResponse{Status: "ok", Libraries: request.Libraries, Mode: request.Mode, Hops: request.Hops, ExpansionLimit: s.expansionLimit, Candidates: map[string][]types.EntrySearchEntity{}, Entities: []types.EntrySearchEntity{}, Edges: []types.GraphSearchEdge{}, Paths: []types.GraphSearchPath{}, Documents: []*types.EntrySearchResult{}, Truncations: []types.GraphTruncation{}}
-	candidates, err := s.resolveEntity(ctx, space, request.Entity)
+	candidates, err := s.resolveEntity(ctx, space, request.Libraries, request.Entity)
 	if err != nil {
 		return nil, err
 	}
 	out.Candidates["entity"] = candidates
 	var targets []types.EntrySearchEntity
 	if request.Target != nil {
-		targets, err = s.resolveEntity(ctx, space, *request.Target)
+		targets, err = s.resolveEntity(ctx, space, request.Libraries, *request.Target)
 		if err != nil {
 			return nil, err
 		}

@@ -246,7 +246,7 @@ func TestIKB11ProcessingPromptsAndSwitches(t *testing.T) {
 			if override != nil {
 				mode = fmt.Sprint(*override)
 			}
-			k := &types.Entry{Graph: override}
+			k := &types.Entry{LibraryID: h.library.ID, Graph: override}
 			name := defaults.SystemRole + "-" + mode
 			prompt := libraryProcessingPrompt(defaults, k)
 			require.Contains(t, prompt, "输入 title 为空时")
@@ -314,6 +314,7 @@ func TestIKB11SegmentRelationsResolveGlobalIDsAndKeepAllEvidence(t *testing.T) {
 	require.Len(t, result.Relations, 1)
 	require.Len(t, result.Relations[0].Evidence, 2)
 	stored := entityRecord("acme-existing", "Acme", "company")
+	stored.LibraryID = h.library.ID
 	require.NoError(t, h.db.Create(&stored).Error)
 	models := h.service.modelService.(articleProcessingModels)
 	models.summaryStateModelService.model = &entityCountingChat{reply: func(_ context.Context, messages []chat.Message) string {

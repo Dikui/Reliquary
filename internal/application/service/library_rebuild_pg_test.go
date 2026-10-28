@@ -81,7 +81,7 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.NoError(t, err)
 	originalImages := rebuildAttachments(t, vault.root, k.ID)
 	require.NotEmpty(t, originalImages)
-	userTopic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "User selected"})
+	userTopic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{LibraryID: h.library.ID, Name: "User selected"})
 	require.NoError(t, err)
 	require.NoError(t, NewTopicService(h.db).SetUserEntryTopics(h.ctx, k.ID, []string{userTopic.ID}))
 	k.Starred, k.CollectReason, k.ContentTypeCorrected = true, "Keep my decision", true
@@ -103,15 +103,24 @@ func TestLibraryRebuildPreservesSourcesAndJudgments(t *testing.T) {
 	require.NoError(t, h.db.Create(other).Error)
 	var shared []types.Entity
 	require.NoError(t, h.db.Where("canonical_name IN ?", []string{"OldCo", "Partner"}).Find(&shared).Error)
+	otherEntityIDs := map[string]string{}
 	for _, entity := range shared {
+		originalID := entity.ID
+		entity.ID, entity.LibraryID = uuid.NewString(), otherLibrary.ID
+		require.NoError(t, h.db.Create(&entity).Error)
+		otherEntityIDs[originalID] = entity.ID
 		require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: k.SpaceID, EntryID: other.ID, EntityID: entity.ID}).Error)
 	}
 	completed := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: k.LibraryID, SourceKind: "article", ParseStatus: types.ParseStatusCompleted, VaultBody: "Already completed source"}
 	require.NoError(t, h.db.Create(completed).Error)
+	for _, entity := range shared {
+		require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: k.SpaceID, EntryID: completed.ID, EntityID: entity.ID}).Error)
+	}
 	cancelled := &types.Entry{ID: uuid.NewString(), SpaceID: k.SpaceID, LibraryID: k.LibraryID, SourceKind: "article", ParseStatus: types.ParseStatusCancelled, VaultBody: "Cancelled source"}
 	require.NoError(t, h.db.Create(cancelled).Error)
 	otherRelation := oldRelation
 	otherRelation.ID, otherRelation.LibraryID = uuid.NewString(), otherLibrary.ID
+	otherRelation.SubjectID, otherRelation.ObjectID = otherEntityIDs[oldRelation.SubjectID], otherEntityIDs[oldRelation.ObjectID]
 	require.NoError(t, h.db.Create(&types.LibraryRelationType{LibraryID: otherLibrary.ID, Name: oldRelation.RelationType, Enabled: true}).Error)
 	require.NoError(t, h.db.Create(&otherRelation).Error)
 	require.NoError(t, h.db.Create(&types.RelationSource{RelationID: otherRelation.ID, EntryID: other.ID, Evidence: []types.RelationEvidence{}}).Error)

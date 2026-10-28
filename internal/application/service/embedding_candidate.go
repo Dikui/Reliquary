@@ -60,57 +60,73 @@ func (r *EmbeddingRebuilder) StartCandidateAndEnqueue(ctx context.Context, space
 	return copy.StartAndEnqueue(ctx, spaceID)
 }
 
-func (r *EmbeddingRebuilder) candidateContent(ctx context.Context, db *gorm.DB, spaceID uint64, item types.EmbeddingRebuildItem) (string, *types.Entry, error) {
+func (r *EmbeddingRebuilder) candidateContent(ctx context.Context, db *gorm.DB, spaceID uint64, item types.EmbeddingRebuildItem) (string, *types.Entry, string, error) {
 	if item.Kind == "entity" {
 		var entity types.Entity
 		if err := db.WithContext(ctx).Where("space_id=? AND id=? AND merged_into_id=''", spaceID, item.SourceID).First(&entity).Error; err != nil {
-			return "", nil, err
+			return "", nil, "", err
 		}
-		return entityNameEmbeddingText(entity.CanonicalName, entity.EntityType, entity.Description), nil, nil
+		return entityNameEmbeddingText(entity.CanonicalName, entity.EntityType, entity.Description), nil, "", nil
 	}
 	entryID := item.SourceID
 	var chunk types.Chunk
 	if strings.HasSuffix(item.Kind, "_chunk") {
 		if err := db.WithContext(ctx).Where("space_id=? AND id=?", spaceID, item.SourceID).First(&chunk).Error; err != nil {
-			return "", nil, err
+			return "", nil, "", err
 		}
 		entryID = chunk.EntryID
 	}
 	var entry types.Entry
 	if err := db.WithContext(ctx).Where("space_id=? AND id=? AND parse_status=?", spaceID, entryID, types.ParseStatusCompleted).First(&entry).Error; err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
 	if item.Kind == "article" {
 		if entry.StructuredSummary == nil {
-			return "", nil, errors.New("summary removed during rebuild")
+			return "", nil, "", errors.New("summary removed during rebuild")
 		}
-		return strings.TrimSpace(entry.Title) + "\n" + entry.StructuredSummary.RenderText(), &entry, nil
+		return strings.TrimSpace(entry.Title) + "\n" + entry.StructuredSummary.RenderText(), &entry, "", nil
 	}
 	if item.Kind == "image" {
 		if r.vault == nil {
-			return "", nil, errors.New("image store unavailable")
+			return "", nil, "", errors.New("image store unavailable")
 		}
 		f, err := r.vault.ReadImage(&entry, item.AttachmentPath)
 		if err != nil {
-			return "", nil, err
+			return "", nil, "", err
 		}
 		defer f.Close()
 		hash := sha256.New()
 		_, err = io.Copy(hash, f)
 		if err != nil {
-			return "", nil, err
+			return "", nil, "", err
 		}
-		return fmt.Sprintf("%x", hash.Sum(nil)), &entry, nil
+		return fmt.Sprintf("%x", hash.Sum(nil)), &entry, "", nil
 	}
-	return buildEntryIndexContent(&entry, chunk.Content), &entry, nil
+	return buildEntryIndexContent(&entry, chunk.Content), &entry, chunk.Content, nil
 }
+
+func (r *EmbeddingRebuilder) candidateInput(ctx context.Context, db *gorm.DB, spaceID uint64, item types.EmbeddingRebuildItem, model embedding.Embedder, sourceOnly bool) (*types.IndexInfo, string, *types.Entry, error) {
+	content, entry, body, err := r.candidateContent(ctx, db, spaceID, item)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	if strings.HasSuffix(item.Kind, "_chunk") {
+		input, hash, err := r.chunkEmbeddingInput(ctx, model, entry, content, body, sourceOnly)
+		return input, hash, entry, err
+	}
+	hash := vaultContentHash(content)
+	if item.Kind == "image" {
+		hash = content // Image rows retain the original file hash used by vault maintenance.
+	}
+	return &types.IndexInfo{Content: content}, hash, entry, nil
+}
+
 func (r *EmbeddingRebuilder) prepareCandidateItem(ctx context.Context, run *types.EmbeddingRebuildRun, item types.EmbeddingRebuildItem, p entityEmbeddingProfile) (embeddingItemWrite, error) {
-	content, entry, err := r.candidateContent(ctx, r.db, run.SpaceID, item)
+	input, contentHash, entry, err := r.candidateInput(ctx, r.db, run.SpaceID, item, p.embedder, false)
 	if err != nil {
 		return nil, err
 	}
 	var vector []float32
-	contentHash := vaultContentHash(content)
 	if item.Kind == "image" {
 		imageModel, ok := p.embedder.(embedding.ImageEmbedder)
 		if !ok || !imageModel.SupportsImages() {
@@ -130,7 +146,7 @@ func (r *EmbeddingRebuilder) prepareCandidateItem(ctx context.Context, run *type
 		ctx = types.WithModelCallImages(ctx, []types.ModelCallImageReference{{Path: item.AttachmentPath, SHA256: fmt.Sprintf("%x", sha256.Sum256(data))}})
 		vector, err = imageModel.EmbedImage(ctx, "data:"+http.DetectContentType(data)+";base64,"+base64.StdEncoding.EncodeToString(data))
 	} else {
-		vector, err = rebuildTextVector(ctx, p, content)
+		vector, err = rebuildInputVector(ctx, p, input)
 	}
 	if err != nil {
 		return nil, err
@@ -143,13 +159,9 @@ func (r *EmbeddingRebuilder) prepareCandidateItem(ctx context.Context, run *type
 		row.EntryID, row.LibraryID = entry.ID, entry.LibraryID
 	}
 	return func(tx *gorm.DB) error {
-		current, _, err := r.candidateContent(ctx, tx, run.SpaceID, item)
+		_, currentHash, _, err := r.candidateInput(ctx, tx, run.SpaceID, item, p.embedder, true)
 		if err != nil {
 			return err
-		}
-		currentHash := vaultContentHash(current)
-		if item.Kind == "image" {
-			currentHash = current
 		}
 		if currentHash != row.ContentHash {
 			return errors.New("candidate source changed; retry item")
@@ -184,6 +196,10 @@ func (r *EmbeddingRebuilder) SwitchCandidate(ctx context.Context, spaceID uint64
 		if types.EmbeddingProfileHash(run.ModelID, run.Dimension, &model) != run.ProfileHash {
 			return apperrors.NewBadRequestError("candidate model changed")
 		}
+		client, err := r.profiles.models.GetEmbeddingModel(types.WithModelTier(ctx, types.ModelTierEmbedding), run.ModelID)
+		if err != nil {
+			return err
+		}
 		var vectors []candidateVector
 		if err := tx.Where("run_id=?", run.ID).Find(&vectors).Error; err != nil {
 			return err
@@ -200,11 +216,7 @@ func (r *EmbeddingRebuilder) SwitchCandidate(ctx context.Context, spaceID uint64
 			if strings.HasSuffix(v.Kind, "_chunk") {
 				chunkCount++
 			}
-			content, _, err := r.candidateContent(ctx, tx, spaceID, types.EmbeddingRebuildItem{Kind: v.Kind, SourceID: v.SourceID, AttachmentPath: v.AttachmentPath})
-			currentHash := vaultContentHash(content)
-			if v.Kind == "image" {
-				currentHash = content
-			}
+			_, currentHash, _, err := r.candidateInput(ctx, tx, spaceID, types.EmbeddingRebuildItem{Kind: v.Kind, SourceID: v.SourceID, AttachmentPath: v.AttachmentPath}, client, true)
 			if err != nil || currentHash != v.ContentHash {
 				return apperrors.NewBadRequestError("sources changed during rebuild; rebuild before switching")
 			}

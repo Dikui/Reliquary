@@ -167,6 +167,21 @@ type tierEmbedder struct {
 	modelID string
 }
 
+func (m *tierEmbedder) SupportsFusion() bool {
+	fusion, ok := m.inner.(embedding.FusionEmbedder)
+	return ok && fusion.SupportsFusion()
+}
+
+func (m *tierEmbedder) EmbedFusion(ctx context.Context, text string, images []string) ([]float32, error) {
+	fusion, ok := m.inner.(embedding.FusionEmbedder)
+	if !ok || !fusion.SupportsFusion() {
+		return nil, fmt.Errorf("embedding model does not support fusion")
+	}
+	ctx = types.WithModelTier(ctx, types.ModelTierEmbedding)
+	types.RecordModelCall(ctx, m.GetModelID())
+	return fusion.EmbedFusion(ctx, text, images)
+}
+
 func (m *tierEmbedder) GetProfileHash() string {
 	if model, ok := m.inner.(embedding.ProfiledEmbedder); ok {
 		return model.GetProfileHash()

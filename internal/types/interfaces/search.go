@@ -7,5 +7,5 @@ import (
 
 type SearchService interface {
 	Search(ctx context.Context, request types.EntrySearchRequest) (*types.EntrySearchResponse, error)
-	Options(ctx context.Context) (*types.EntrySearchOptions, error)
+	Options(ctx context.Context, libraries []string) (*types.EntrySearchOptions, error)
 }

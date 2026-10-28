@@ -247,6 +247,7 @@ func TestChatGPTGenerationRunsProcessingEntityJudgementAndTopicHistory(t *testin
 	// Identity judgment needs a candidate; empty recall now creates directly.
 	existing := entityRecord("existing-acme", "Fixture Acme", "organization")
 	existing.SpaceID = h.library.SpaceID
+	existing.LibraryID = h.library.ID
 	require.NoError(t, h.db.Create(&existing).Error)
 	image := articleImageDataURI(t, 22)
 	article := h.upload(t, "chatgpt-original", "# Original product announcement\n\nFixture Acme published measured product capabilities and deployment details.\n\n![chart]("+image+")")
@@ -263,7 +264,7 @@ func TestChatGPTGenerationRunsProcessingEntityJudgementAndTopicHistory(t *testin
 	require.Equal(t, "Fixture Acme", entities[0].CanonicalName)
 	topics := NewTopicService(h.db)
 	topics.SetModelService(h.models)
-	topic, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Original product announcements", Description: "Measured product capabilities"})
+	topic, err := topics.CreateTopic(h.ctx, &types.Topic{LibraryID: h.library.ID, Name: "Original product announcements", Description: "Measured product capabilities"})
 	require.NoError(t, err)
 	job := runTopicJob(t, topics, h.ctx, topic.ID)
 	require.Equal(t, "completed", job.Status)
@@ -357,7 +358,7 @@ func TestChatGPTQuotaDefersHistoricalTopicBatchWithoutOrdinaryFailureAttempt(t *
 	h.upload(t, "topic-quota", "Fixture Acme published an original technical announcement with complete source details and measured capabilities.")
 	topics := NewTopicService(h.db)
 	topics.SetModelService(h.models)
-	topic, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Products", Description: "Product capabilities"})
+	topic, err := topics.CreateTopic(h.ctx, &types.Topic{LibraryID: h.library.ID, Name: "Products", Description: "Product capabilities"})
 	require.NoError(t, err)
 	quota.Store(true)
 	job := runTopicJob(t, topics, h.ctx, topic.ID)

@@ -8,6 +8,7 @@ export interface EntityActionEnvelope { success: boolean; error?: string }
 export interface Entity {
   id: string
   space_id: number
+  library_id: string
   canonical_name: string
   entity_type: EntityType
   description?: string
@@ -26,6 +27,7 @@ export interface EntityEntry {
 }
 export interface EntityDetail { entity: Entity; entries: EntityEntry[] }
 export interface EntityListParams {
+  library_id: string
   entity?: string
   entity_type?: EntityType
   limit?: number
@@ -37,7 +39,7 @@ function queryString(params?: EntityListParams & { status?: string }): string {
   return query.size ? `?${query}` : ''
 }
 const base = '/api/v1/entities'
-export const listEntities = (params?: EntityListParams) => get<EntityEnvelope<Entity[]>>(`${base}${queryString(params)}`)
+export const listEntities = (params: EntityListParams) => get<EntityEnvelope<Entity[]>>(`${base}${queryString(params)}`)
 export const getEntity = (id: string) => get<EntityEnvelope<EntityDetail>>(`${base}/${encodeURIComponent(id)}`)
 export const mergeEntities = (input: { keep_entity_id: string; merge_entity_id: string }) => post<EntityActionEnvelope>(`${base}/merge`, input)
 export interface EntityMergeRecord { id: string; keep_entity_id: string; merge_entity_id: string; actor?: string; created_at: string }

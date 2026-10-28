@@ -13,7 +13,7 @@ type TopicHandler struct{ service *service.TopicService }
 
 func NewTopicHandler(s *service.TopicService) *TopicHandler { return &TopicHandler{service: s} }
 func (h *TopicHandler) List(c *gin.Context) {
-	items, err := h.service.ListTopics(c.Request.Context())
+	items, err := h.service.ListTopics(c.Request.Context(), c.Query("library_id"))
 	if err != nil {
 		c.Error(err)
 		return
@@ -22,15 +22,15 @@ func (h *TopicHandler) List(c *gin.Context) {
 }
 func (h *TopicHandler) Create(c *gin.Context) {
 	var input struct {
-		LibraryIDs  []string `json:"library_ids"`
-		Name        string   `json:"name" binding:"required"`
-		Description string   `json:"description"`
+		LibraryID   string `json:"library_id" binding:"required"`
+		Name        string `json:"name" binding:"required"`
+		Description string `json:"description"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.Error(werrors.NewBadRequestError("topic name is required"))
+		c.Error(werrors.NewBadRequestError("library_id and topic name are required"))
 		return
 	}
-	item, err := h.service.CreateTopic(c.Request.Context(), &types.Topic{Name: input.Name, Description: input.Description, LibraryIDs: input.LibraryIDs})
+	item, err := h.service.CreateTopic(c.Request.Context(), &types.Topic{Name: input.Name, Description: input.Description, LibraryID: input.LibraryID})
 	if err != nil {
 		c.Error(err)
 		return
@@ -39,19 +39,14 @@ func (h *TopicHandler) Create(c *gin.Context) {
 }
 func (h *TopicHandler) Update(c *gin.Context) {
 	var input struct {
-		LibraryIDs  *[]string `json:"library_ids"`
-		Name        *string   `json:"name"`
-		Description *string   `json:"description"`
+		Name        *string `json:"name"`
+		Description *string `json:"description"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.Error(werrors.NewBadRequestError("invalid topic update"))
 		return
 	}
-	var scopes [][]string
-	if input.LibraryIDs != nil {
-		scopes = append(scopes, *input.LibraryIDs)
-	}
-	item, err := h.service.UpdateTopic(c.Request.Context(), c.Param("id"), input.Name, input.Description, scopes...)
+	item, err := h.service.UpdateTopic(c.Request.Context(), c.Param("id"), input.Name, input.Description)
 	if err != nil {
 		c.Error(err)
 		return

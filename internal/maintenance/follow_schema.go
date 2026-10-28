@@ -10,6 +10,9 @@ import (
 // Migration 15 retains the legacy space watermark and copies it to each library.
 func projectFollowSnapshot(snapshot *Snapshot) {
 	for _, row := range snapshot.Tables["topics"] {
+		if snapshot.schemaVersion >= 33 {
+			continue
+		}
 		if _, ok := row["library_ids"]; !ok {
 			row["library_ids"] = []any{}
 		}

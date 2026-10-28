@@ -36,7 +36,7 @@ func entityArticle(t *testing.T, db *gorm.DB, id string) *types.Entry {
 	return article
 }
 func entityRecord(id, name, kind string) types.Entity {
-	return types.Entity{ID: id, SpaceID: 1, CanonicalName: name, NormalizedName: normalizeEntityName(name), EntityType: types.NormalizeEntityType(kind), CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	return types.Entity{ID: id, SpaceID: 1, LibraryID: "entity-library", CanonicalName: name, NormalizedName: normalizeEntityName(name), EntityType: types.NormalizeEntityType(kind), CreatedAt: time.Now(), UpdatedAt: time.Now()}
 }
 
 type entityChatInterface interface{ chat.Chat }
@@ -97,7 +97,7 @@ func TestEntityExactNamesRecallAliasesAndVersions(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	entities := []types.Entity{entityRecord("moonshot", "Moonshot AI", "company"), entityRecord("kimi-k2", "Kimi K2", "product"), entityRecord("different-type", "Same Name", "product")}
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { _, err := persistEntities(tx, entities); return err }))
-	require.NoError(t, db.Create(&types.EntityAlias{ID: "moonshot-cn", SpaceID: 1, EntityType: "company", EntityID: "moonshot", Alias: "月之暗面", NormalizedAlias: "月之暗面", CreatedAt: time.Now()}).Error)
+	require.NoError(t, db.Create(&types.EntityAlias{ID: "moonshot-cn", SpaceID: 1, LibraryID: "entity-library", EntityType: "company", EntityID: "moonshot", Alias: "月之暗面", NormalizedAlias: "月之暗面", CreatedAt: time.Now()}).Error)
 	model := &entityCountingChat{reply: func(_ context.Context, messages []chat.Message) string {
 		var payload struct {
 			Mention    string `json:"mention"`
@@ -113,7 +113,7 @@ func TestEntityExactNamesRecallAliasesAndVersions(t *testing.T) {
 		return `{"decision":"new","confidence":1}`
 	}}
 	input := []entityResolutionInput{{Mention: "MOONSHOT AI", Canonical: "Moonshot AI", EntityType: "company"}, {Mention: "月之暗面", Canonical: "Moonshot AI", EntityType: "company"}, {Mention: "MoonshotAI", Canonical: "MoonshotAI", EntityType: "company"}, {Mention: "Kimi K2.5", Canonical: "Kimi K2", EntityType: "product"}, {Mention: "Same Name", Canonical: "Same Name", EntityType: "company"}}
-	resolved, mentions, err := svc.resolveEntities(ctx, model, 1, "entity-library", input)
+	resolved, mentions, err := svc.resolveEntities(ctx, model, 1, "entity-library", "entity-library", input)
 	require.NoError(t, err)
 	require.Equal(t, 2, model.count())
 	require.Equal(t, "moonshot", mentions[entityNameKey("company", "MoonshotAI")].ID)
@@ -125,7 +125,7 @@ func TestEntityExactNamesRecallAliasesAndVersions(t *testing.T) {
 	require.NoError(t, db.First(&alias, "normalized_alias=?", "moonshotai").Error)
 	require.Equal(t, "model", alias.ResolutionMethod)
 	before := model.count()
-	_, _, err = svc.resolveEntities(ctx, model, 1, "entity-library", []entityResolutionInput{input[2]})
+	_, _, err = svc.resolveEntities(ctx, model, 1, "entity-library", "entity-library", []entityResolutionInput{input[2]})
 	require.NoError(t, err)
 	require.Equal(t, before, model.count())
 }
@@ -157,7 +157,7 @@ func TestEntityVectorRecallSkipsStaleModelsAndMismatchedDimensions(t *testing.T)
 		require.Equal(t, "vector-good", payload.Candidates[0].ID)
 		return `{"decision":"match","entity_id":"vector-good","confidence":0.99}`
 	}}
-	_, mentions, err := svc.resolveEntities(ctx, judgment, 1, "entity-library", []entityResolutionInput{{Mention: "中文不同名称", Canonical: "中文不同名称", EntityType: "product"}})
+	_, mentions, err := svc.resolveEntities(ctx, judgment, 1, "entity-library", "entity-library", []entityResolutionInput{{Mention: "中文不同名称", Canonical: "中文不同名称", EntityType: "product"}})
 	require.NoError(t, err)
 	require.Equal(t, "vector-good", mentions[entityNameKey("product", "中文不同名称")].ID)
 	require.Equal(t, 1, embedder.calls)
@@ -171,7 +171,7 @@ func TestEntityVectorRecallSkipsStaleModelsAndMismatchedDimensions(t *testing.T)
 func TestEntityDifferentMentionsOfOneNewCanonicalEntityWithoutCandidatesShareCreationPlan(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	model := &entityCountingChat{reply: func(context.Context, []chat.Message) string { return `{"decision":"new","confidence":1}` }}
-	resolved, mentions, err := svc.resolveEntities(ctx, model, 1, "entity-library", []entityResolutionInput{{Mention: "Alpha Inc", Canonical: "Alpha", EntityType: "company"}, {Mention: "A Corp", Canonical: "Alpha", EntityType: "company"}})
+	resolved, mentions, err := svc.resolveEntities(ctx, model, 1, "entity-library", "entity-library", []entityResolutionInput{{Mention: "Alpha Inc", Canonical: "Alpha", EntityType: "company"}, {Mention: "A Corp", Canonical: "Alpha", EntityType: "company"}})
 	require.NoError(t, err)
 	require.Zero(t, model.count())
 	require.Len(t, resolved, 1)
@@ -210,7 +210,7 @@ func TestEntityResolutionCreatesAliasesAndIdempotentArticleMentions(t *testing.T
 	require.NoError(t, err)
 	require.Len(t, detail.Entries, 1)
 	require.Equal(t, article.ID, detail.Entries[0].ID)
-	entities, err := svc.ListEntities(ctx, types.EntityQuery{Entity: "艾克米", EntityType: "company"})
+	entities, err := svc.ListEntities(ctx, types.EntityQuery{LibraryID: "entity-library", Entity: "艾克米", EntityType: "company"})
 	require.NoError(t, err)
 	require.Len(t, entities, 1)
 }
@@ -240,7 +240,7 @@ func TestEntityResolutionUncertainIdentityCreatesDecidableSuggestions(t *testing
 	require.NoError(t, err)
 	require.Len(t, entities, 1)
 	require.NotEqual(t, "acme", entities[0].ID)
-	suggestions, err := svc.ListMergeSuggestions(ctx, types.EntityQuery{}, "pending")
+	suggestions, err := svc.ListMergeSuggestions(ctx, types.EntityQuery{LibraryID: "entity-library"}, "pending")
 	require.NoError(t, err)
 	require.Len(t, suggestions, 1)
 	require.Equal(t, article.ID, suggestions[0].EntryID)
@@ -303,9 +303,9 @@ func TestEntityMergeTransfersAliasesArticlesAndKeepsAudit(t *testing.T) {
 func TestEntityConcurrentPersistenceRechecksNamesAndMergedIdentity(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	model := &entityCountingChat{reply: func(context.Context, []chat.Message) string { return `{"decision":"new","confidence":1}` }}
-	a, _, err := svc.resolveEntities(ctx, model, 1, "", []entityResolutionInput{{Mention: "Concurrent", Canonical: "Concurrent", EntityType: "company"}})
+	a, _, err := svc.resolveEntities(ctx, model, 1, "entity-library", "", []entityResolutionInput{{Mention: "Concurrent", Canonical: "Concurrent", EntityType: "company"}})
 	require.NoError(t, err)
-	b, _, err := svc.resolveEntities(ctx, model, 1, "", []entityResolutionInput{{Mention: "Concurrent", Canonical: "Concurrent", EntityType: "company"}})
+	b, _, err := svc.resolveEntities(ctx, model, 1, "entity-library", "", []entityResolutionInput{{Mention: "Concurrent", Canonical: "Concurrent", EntityType: "company"}})
 	require.NoError(t, err)
 	done := make(chan error, 2)
 	for _, plan := range [][]types.Entity{a, b} {
@@ -369,7 +369,7 @@ func TestEntityAliasesAndCanonicalNamesAreUniqueBySpaceAndType(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	model := &entityCountingChat{reply: func(context.Context, []chat.Message) string { return `{"decision":"new","confidence":1}` }}
 	for _, kind := range []string{"company", "company", "product"} {
-		entities, _, err := svc.resolveEntities(ctx, model, 1, "", []entityResolutionInput{{Mention: "Acme", Canonical: "Acme", EntityType: kind}})
+		entities, _, err := svc.resolveEntities(ctx, model, 1, "entity-library", "", []entityResolutionInput{{Mention: "Acme", Canonical: "Acme", EntityType: kind}})
 		require.NoError(t, err)
 		require.NoError(t, db.Transaction(func(tx *gorm.DB) error { _, err := persistEntities(tx, entities); return err }))
 	}
@@ -381,7 +381,7 @@ func TestEntityAliasesAndCanonicalNamesAreUniqueBySpaceAndType(t *testing.T) {
 	require.Len(t, aliases, 2)
 	duplicate := entityRecord("duplicate", "Acme", "company")
 	require.Error(t, db.Create(&duplicate).Error)
-	duplicateAlias := types.EntityAlias{ID: "duplicate-alias", SpaceID: 1, EntityType: "company", EntityID: entities[0].ID, Alias: "Acme", NormalizedAlias: "acme", CreatedAt: time.Now()}
+	duplicateAlias := types.EntityAlias{ID: "duplicate-alias", SpaceID: 1, LibraryID: "entity-library", EntityType: "company", EntityID: entities[0].ID, Alias: "Acme", NormalizedAlias: "acme", CreatedAt: time.Now()}
 	require.Error(t, db.Create(&duplicateAlias).Error)
 }
 
@@ -389,7 +389,7 @@ func TestEntityMergeAliasCollisionRollsBackGlobalChanges(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
 	entities := []types.Entity{entityRecord("keep", "Keep", "company"), entityRecord("merge", "Merged", "product"), entityRecord("third", "Third", "company")}
 	require.NoError(t, db.Create(&entities).Error)
-	aliases := []types.EntityAlias{{ID: "source-alias", SpaceID: 1, EntityType: "product", EntityID: "merge", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}, {ID: "third-alias", SpaceID: 1, EntityType: "company", EntityID: "third", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}}
+	aliases := []types.EntityAlias{{ID: "source-alias", SpaceID: 1, LibraryID: "entity-library", EntityType: "product", EntityID: "merge", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}, {ID: "third-alias", SpaceID: 1, LibraryID: "entity-library", EntityType: "company", EntityID: "third", Alias: "Shared", NormalizedAlias: "shared", CreatedAt: time.Now()}}
 	require.NoError(t, db.Create(&aliases).Error)
 	err := svc.MergeEntities(ctx, "keep", "merge")
 	require.ErrorContains(t, err, "conflicts")
@@ -578,4 +578,49 @@ func TestEntityResolutionProtectsConcurrentDescriptionsAndReturnsPersistedIDs(t 
 	var notifications int64
 	require.NoError(t, db.Model(&types.GraphPendingSync{}).Where("entity_id=?", guarded.ID).Count(&notifications).Error)
 	require.Zero(t, notifications)
+}
+
+func TestEntityLibrariesKeepNamesAliasesRecallAndMergesIndependent(t *testing.T) {
+	db, ctx, svc := entityFixture(t)
+	otherLibrary := types.Library{ID: "other-entity-library", SpaceID: 1, Name: "Independent", SummaryModelID: "entity-chat"}
+	otherLibrary.EnsureDefaults()
+	require.NoError(t, db.Create(&otherLibrary).Error)
+	firstArticle := entityArticle(t, db, "first-library-article")
+	secondArticle := *firstArticle
+	secondArticle.ID = "second-library-article"
+	secondArticle.LibraryID = otherLibrary.ID
+	require.NoError(t, db.Create(&secondArticle).Error)
+	model := &entityCountingChat{reply: func(context.Context, []chat.Message) string { return `{"decision":"new","confidence":1}` }}
+	svc.models = entityTestModels{model: model}
+	candidates := []types.EntityCandidate{{Name: "Acme", EntityType: "company", Aliases: []string{"艾克米"}}}
+	first, err := svc.ResolveEntities(ctx, firstArticle.ID, candidates)
+	require.NoError(t, err)
+	second, err := svc.ResolveEntities(ctx, secondArticle.ID, candidates)
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+	require.Len(t, second, 1)
+	require.NotEqual(t, first[0].ID, second[0].ID)
+	require.Equal(t, otherLibrary.ID, second[0].LibraryID)
+	require.Zero(t, model.count(), "another library must not become a judgment candidate")
+	alias, err := svc.exactEntity(ctx, 1, otherLibrary.ID, entityResolutionInput{Mention: "艾克米", EntityType: "company"})
+	require.NoError(t, err)
+	require.Equal(t, second[0].ID, alias.ID)
+	// Both lexical and vector recall must exclude the first library's entity.
+	require.NoError(t, db.Model(&types.Entity{}).Where("id=?", first[0].ID).Updates(map[string]any{"name_embedding": types.EntityNameEmbedding{1, 0}, "embedding_model_id": "test-vector", "embedding_dimension": 2, "embedding_needs_rebuild": false}).Error)
+	recalled, err := svc.recallEntities(ctx, 1, otherLibrary.ID, entityResolutionInput{Mention: "Acme", Canonical: "Acme", EntityType: "company"}, types.EntityNameEmbedding{1, 0}, "test-vector", 20)
+	require.NoError(t, err)
+	require.Len(t, recalled, 1)
+	require.Equal(t, second[0].ID, recalled[0].ID)
+	listed, err := svc.ListEntities(ctx, types.EntityQuery{LibraryID: otherLibrary.ID})
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Equal(t, second[0].ID, listed[0].ID)
+	require.ErrorContains(t, svc.MergeEntities(ctx, first[0].ID, second[0].ID), "same library")
+	_, err = svc.RenameEntity(ctx, second[0].ID, "Independent Acme")
+	require.NoError(t, err)
+	detail, err := svc.EntityDetail(ctx, first[0].ID)
+	require.NoError(t, err)
+	require.Equal(t, "Acme", detail.Entity.CanonicalName)
+	require.Len(t, detail.Entries, 1)
+	require.Equal(t, firstArticle.ID, detail.Entries[0].ID)
 }

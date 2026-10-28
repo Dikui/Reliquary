@@ -72,7 +72,9 @@ func TestHTTPProcessingEntrypointsResumeFailedAndCancelledSegments(t *testing.T)
 				f := newMCPFixture(t, mcpProcessingFixture{chat: model, maxBodyChars: 140})
 				f.seedProcessingModels(t)
 				router := ingestAuthHTTPRouter(f)
-				oldTopic := &types.Topic{ID: "old-global-topic", SpaceID: types.SingleSpaceID, Name: "Old measurements"}
+				var topicLibrary types.Library
+				require.NoError(t, f.db.Where("system_role=?", "personal").First(&topicLibrary).Error)
+				oldTopic := &types.Topic{LibraryID: topicLibrary.ID, ID: "old-global-topic", SpaceID: types.SingleSpaceID, Name: "Old measurements"}
 				require.NoError(t, f.db.Create(oldTopic).Error)
 				body, _ := json.Marshal(map[string]any{"items": []any{map[string]any{"library": "personal", "title": "HTTP segmented original", "acquisition": "verbatim", "content": "# Measurements\n\n" + strings.Repeat("Complete original measurements. ", 30)}}})
 				response := personalRequest(t, router, http.MethodPost, "/api/v1/ingest", string(body), f.key, true)
@@ -93,8 +95,8 @@ func TestHTTPProcessingEntrypointsResumeFailedAndCancelledSegments(t *testing.T)
 				require.NoError(t, f.db.Table("entry_segment_runs").Select("id").Where("entry_id=? AND phase='processing'", id).Scan(&runID).Error)
 				require.NotEmpty(t, runID)
 				// A live topic catalog update must not invalidate completed document work.
-				require.NoError(t, f.db.Model(oldTopic).Update("library_ids", `["another-library"]`).Error)
-				topic := &types.Topic{ID: "new-global-topic", SpaceID: types.SingleSpaceID, Name: "Measurements"}
+				require.NoError(t, f.db.Delete(oldTopic).Error)
+				topic := &types.Topic{LibraryID: topicLibrary.ID, ID: "new-global-topic", SpaceID: types.SingleSpaceID, Name: "Measurements"}
 				require.NoError(t, f.db.Create(topic).Error)
 				request := func(path string) {
 					response := personalRequest(t, router, http.MethodPost, "/api/v1/entries/"+id+"/"+path, `{}`, f.key, true)

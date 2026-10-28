@@ -21,12 +21,16 @@ func TestIKB06SearchListAndFeedFoldOnlyWithinTimelyLibraries(t *testing.T) {
 			library.SourceEvidenceRule = "link_required"
 		}
 		require.NoError(t, h.db.Create(library).Error)
+		entity := types.Entity{ID: "fold-entity-" + library.ID, SpaceID: 1, LibraryID: library.ID, CanonicalName: "Followed company", NormalizedName: "followed company", EntityType: "company"}
+		require.NoError(t, h.db.Create(&entity).Error)
+		_, err := h.follows.Follow(h.ctx, "entity", entity.ID)
+		require.NoError(t, err)
 		for j := 0; j < 2; j++ {
 			id := fmt.Sprintf("fold-%d-%d", i, j)
 			// Source kind is deliberately identical: template rules decide eligibility.
 			h.add(t, id, "article", "2026-10-01", "event", "semanticlaunch", 0, library.ID)
 			owners[id] = library
-			h.link(t, id, true, false)
+			require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: id, EntityID: entity.ID}).Error)
 			h.collected(t, id, now.Add(time.Duration(-i*2-j-1)*time.Minute))
 		}
 	}

@@ -23,7 +23,7 @@ func TestIKB12RelationHTTPGroupingSourcesScopeDeleteAndTypeMerge(t *testing.T) {
 		require.NoError(t, db.Create(&types.LibraryRelationType{LibraryID: "graph-lib", Name: kind, Enabled: true}).Error)
 	}
 	for _, id := range []string{"a", "b"} {
-		require.NoError(t, db.Create(&types.Entity{ID: id, SpaceID: 1, CanonicalName: id, NormalizedName: id, EntityType: "company"}).Error)
+		require.NoError(t, db.Create(&types.Entity{ID: id, SpaceID: 1, LibraryID: "graph-lib", CanonicalName: id, NormalizedName: id, EntityType: "company"}).Error)
 	}
 	entry := types.Entry{ID: "graph-entry", SpaceID: 1, LibraryID: "graph-lib", Title: "Evidence source", ContentType: "on", ParseStatus: types.ParseStatusCompleted, Type: types.EntryTypeManual}
 	require.NoError(t, db.Create(&entry).Error)

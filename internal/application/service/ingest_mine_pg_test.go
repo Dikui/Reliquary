@@ -36,7 +36,9 @@ func captureMineReview(h *articleProcessingHarness) *mineReviewCapture {
 func TestIngestMineProcessesWithoutReviewAndExportsPortableHeader(t *testing.T) {
 	h, vault := newIngestHarness(t)
 	capture := captureMineReview(h)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Personal measurements", Description: "Measurements and calibration notes"})
+	var personalLibrary types.Library
+	require.NoError(t, h.db.Where("system_role=?", "personal").First(&personalLibrary).Error)
+	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{LibraryID: personalLibrary.ID, Name: "Personal measurements", Description: "Measurements and calibration notes"})
 	require.NoError(t, err)
 	h.processor.output = articleProcessingOutput(t, "笔记", []types.EntityCandidate{{Name: "Spectrometer", EntityType: "product"}}, []string{topic.ID})
 	content := "# Calibration notes\n\nSpectrometer observations record verified values. Follow the measured calibration procedure and compare the original readings.\n\n来源: https://example.org/reference-not-my-document"

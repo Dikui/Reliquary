@@ -64,7 +64,7 @@ func TestImportedReplicaVerificationPreservesCredentialsNullTypesAndMaterialized
 	}{
 		{"missing_row", `DELETE FROM entry_topics WHERE entry_id='article'`, `INSERT INTO entry_topics SELECT * FROM jsonb_populate_record(NULL::entry_topics,?::jsonb)`, "table entry_topics", []any{string(originalRelation)}},
 		{"changed_description", `UPDATE topics SET description='Changed user description' WHERE id='topic'`, `UPDATE topics SET description='User topic description' WHERE id='topic'`, "table topics", nil},
-		{"unexpected_row", `INSERT INTO topics(id,space_id,name,description) VALUES('unexpected',1,'Unexpected','Must not be absorbed into a fresh baseline')`, `DELETE FROM topics WHERE id='unexpected'`, "table topics", nil},
+		{"unexpected_row", `INSERT INTO topics(id,space_id,library_id,name,description) VALUES('unexpected',1,'library','Unexpected','Must not be absorbed into a fresh baseline')`, `DELETE FROM topics WHERE id='unexpected'`, "table topics", nil},
 		{"literal_null_changed_to_sql_null", `UPDATE entries SET structured_summary=NULL WHERE id='pending'`, `UPDATE entries SET structured_summary='null'::jsonb WHERE id='pending'`, "table JSONB null types entries", nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {

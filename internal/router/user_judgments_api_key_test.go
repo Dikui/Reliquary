@@ -42,7 +42,7 @@ func TestAPIKeyJudgmentsPersistAuditAndRefreshHeader(t *testing.T) {
 	require.NoError(t, v.WriteArticle(ctx, k, "API original body.\n", nil))
 	r := personalRequest(t, f.router, http.MethodPut, "/api/v1/entries/"+k.ID+"/star", `{"starred":true}`, f.key, true)
 	require.Equal(t, http.StatusOK, r.Code, r.Body.String())
-	r = personalRequest(t, f.router, http.MethodPost, "/api/v1/topics", `{"name":"API topic","description":"API fixture observations"}`, f.key, true)
+	r = personalRequest(t, f.router, http.MethodPost, "/api/v1/topics", `{"library_id":"`+library.Data.ID+`","name":"API topic","description":"API fixture observations"}`, f.key, true)
 	require.Equal(t, http.StatusCreated, r.Code, r.Body.String())
 	var topic struct{ Data types.Topic }
 	require.NoError(t, json.Unmarshal(r.Body.Bytes(), &topic))

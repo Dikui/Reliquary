@@ -40,7 +40,7 @@ func (s *entrySearchHandlerService) Search(_ context.Context, request types.Entr
 		SimilarReports: []*types.EntrySearchResult{{EntryID: "similar"}}, VaultPath: "articles/article.md", OriginalURL: "https://example.org/article"}}, ExcludedMissingPublishedAt: 2}, nil
 }
 
-func (s *entrySearchHandlerService) Options(context.Context) (*types.EntrySearchOptions, error) {
+func (s *entrySearchHandlerService) Options(context.Context, []string) (*types.EntrySearchOptions, error) {
 	if s.failure != nil {
 		return nil, s.failure
 	}

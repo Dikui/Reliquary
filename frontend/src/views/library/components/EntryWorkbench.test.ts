@@ -17,7 +17,7 @@ const { descriptor } = parse(source, { filename })
 const script = compileScript(descriptor, { id: filename })
 const template = compileTemplate({ id: filename, filename, source: descriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: script.bindings } })
 assert.deepEqual(template.errors, [])
-const entity = { id: 'entity-a', space_id: 1, canonical_name: 'Aurora', entity_type: 'company', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' } satisfies Entity
+const entity = { id: 'entity-a', space_id: 1, library_id: 'library-a', canonical_name: 'Aurora', entity_type: 'company', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' } satisfies Entity
 const envelope = (data: unknown) => Promise.resolve({ success: true, data })
 async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Record<string, unknown>; status?: object; entities?: Entity[]; scenario?: (state: any, cleanup: () => void) => void | Promise<void> } = {}) {
   const i18n = createI18n({ legacy: false, locale: options.locale || 'zh-CN', messages: { 'zh-CN': zhCN, 'en-US': enUS } })
@@ -32,7 +32,7 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
   const modules: Record<string, unknown> = {
     vue: { ...require('vue'), onBeforeUnmount: (callback: () => void) => cleanups.push(callback) },
     'vue-i18n': { useI18n: () => i18n.global }, 'tdesign-vue-next': { MessagePlugin: { success() {} } },
-    '@/api/entities': api,
+    '@/api/entities': api, '@/components/LibraryScopeSelect.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
     '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
     '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
     './MergeSuggestions.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('div', { class: 'merge-suggestions-test' }, i18n.global.t('mergeSuggestions.title')) }) } }
@@ -40,7 +40,7 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
   const component = evaluate(script.content).default; component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup; let state: any
   component.setup = (props: object, context: object) => { state = setup(props, context); onServerPrefetch(async () => { try { await state.refreshAll(); await options.scenario?.(state, () => cleanups.forEach(callback => callback())); await nextTick() } finally { state.clearNameEmbeddingPoll(); if (state.entitySearchTimer) clearTimeout(state.entitySearchTimer) } }); return state }
-  const app = createSSRApp(component)
+  const app = createSSRApp(component, { libraryId: 'library-a' })
   const stub = defineComponent({ props: ['message', 'description', 'disabled', 'visible'], setup: (props, { attrs, slots }) => () => props.visible === false ? null : h('div', { ...attrs, 'data-disabled': props.disabled || undefined }, [props.message, props.description, slots.operation?.(), slots.default?.()]) })
   for (const name of ['t-button', 't-icon', 't-select', 't-input', 't-alert', 't-empty', 't-loading', 't-dialog']) app.component(name, stub)
   const errors: unknown[] = []; app.config.errorHandler = error => errors.push(error)
@@ -90,7 +90,7 @@ test('older entity details cannot replace a more recently selected entity', asyn
   await renderWorkbench({ api: { getEntity: (id: string) => id === entity.id ? new Promise(resolve => { resolveOld = resolve }) : envelope({ entity: second, entries: [] }) }, scenario: async state => { const old = state.selectEntity(entity); await state.selectEntity(second); resolveOld({ success: true, data: { entity, entries: [] } }); await old; assert.equal(state.selectedEntity.value.id, second.id) } })
 })
 test('failed entity detail loads keep the selection and expose retry feedback', async () => { const { html } = await renderWorkbench({ api: { getEntity: () => Promise.resolve({ success: false, error: 'Article list unavailable' }) }, scenario: state => state.selectEntity(entity) }); assert.match(html, /Aurora/); assert.match(html, /Article list unavailable/) })
-test('type filters are sent to the entity list API', async () => { const { requests } = await renderWorkbench({ scenario: async state => { state.entityTypeFilter.value = 'company'; await nextTick(); await state.loadEntities() } }); assert.equal(requests.lists.at(-1).scope, undefined); assert.equal(requests.lists.at(-1).entity_type, 'company'); assert.equal(requests.lists.at(-1).library_id, undefined) })
+test('type filters are sent to the entity list API', async () => { const { requests } = await renderWorkbench({ scenario: async state => { state.entityTypeFilter.value = 'company'; await nextTick(); await state.loadEntities() } }); assert.equal(requests.lists.at(-1).scope, undefined); assert.equal(requests.lists.at(-1).entity_type, 'company'); assert.equal(requests.lists.at(-1).library_id, 'library-a') })
 test('merge transfers the selected entity into the explicit retained target', async () => { const { requests } = await renderWorkbench({ scenario: async state => { await state.selectEntity(entity); state.mergeTargetId.value = 'entity-b'; await state.confirmMerge(); assert.equal(state.mergeVisible.value, false) } }); assert.deepEqual(requests.merges, [{ keep_entity_id: 'entity-b', merge_entity_id: 'entity-a' }]) })
 
 for (const locale of ['zh-CN','en-US'] as const) test(`${locale}: entity request failure is visible and retry restores the list`,async()=>{

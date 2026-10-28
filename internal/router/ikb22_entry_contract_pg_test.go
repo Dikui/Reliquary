@@ -109,7 +109,7 @@ func TestIKB22HTTPAndMCPEntryContractsAndRejectedAliases(t *testing.T) {
 		})
 	}
 	source := f.seedArticle(t, "Entrycontract searchfixture", "", "# Evidence\n\nsearchfixture original text")
-	entity := types.Entity{ID: uuid.NewString(), SpaceID: 1, CanonicalName: "Entrycontract", NormalizedName: "entrycontract", EntityType: "company"}
+	entity := types.Entity{ID: uuid.NewString(), SpaceID: 1, LibraryID: source.LibraryID, CanonicalName: "Entrycontract", NormalizedName: "entrycontract", EntityType: "company"}
 	require.NoError(t, f.db.Create(&entity).Error)
 	require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: source.ID, EntityID: entity.ID}).Error)
 	_, err := follows.Follow(f.ctx, types.FollowTargetEntity, entity.ID)

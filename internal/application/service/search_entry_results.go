@@ -266,7 +266,7 @@ func (s *searchService) entryEntityAliases(ctx context.Context, spaceID uint64, 
 	return aliases, err
 }
 
-func (s *searchService) Options(ctx context.Context) (*types.EntrySearchOptions, error) {
+func (s *searchService) Options(ctx context.Context, libraries []string) (*types.EntrySearchOptions, error) {
 	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok {
 		return nil, apperrors.NewUnauthorizedError("workspace ID not found in context")
@@ -275,11 +275,19 @@ func (s *searchService) Options(ctx context.Context) (*types.EntrySearchOptions,
 		return nil, fmt.Errorf("entry search requires PostgreSQL")
 	}
 	options := &types.EntrySearchOptions{ContentTypes: []string{}, Entities: []types.EntrySearchEntity{}, Topics: []types.EntrySearchTopic{}}
-	if err := s.db.WithContext(ctx).Table("entities").Where("space_id=? AND merged_into_id=''", spaceID).
+	entitiesQuery := s.db.WithContext(ctx).Table("entities").Where("space_id=? AND merged_into_id=''", spaceID)
+	contentTypesQuery := s.db.WithContext(ctx).Table("library_content_types ct").Joins("JOIN libraries l ON l.id=ct.library_id").Where("l.space_id=? AND l.deleted_at IS NULL AND ct.enabled=true", spaceID)
+	topicsQuery := s.db.WithContext(ctx).Table("topics").Where("space_id=?", spaceID)
+	if len(libraries) > 0 {
+		entitiesQuery = entitiesQuery.Where("library_id IN ?", libraries)
+		contentTypesQuery = contentTypesQuery.Where("ct.library_id IN ?", libraries)
+		topicsQuery = topicsQuery.Where("library_id IN ?", libraries)
+	}
+	if err := entitiesQuery.
 		Select("id,canonical_name,entity_type").Order("canonical_name,id").Scan(&options.Entities).Error; err != nil {
 		return nil, err
 	}
-	if err := s.db.WithContext(ctx).Table("library_content_types ct").Joins("JOIN libraries l ON l.id=ct.library_id").Where("l.space_id=? AND l.deleted_at IS NULL AND ct.enabled=true", spaceID).Distinct().Order("ct.name").Pluck("ct.name", &options.ContentTypes).Error; err != nil {
+	if err := contentTypesQuery.Distinct().Order("ct.name").Pluck("ct.name", &options.ContentTypes).Error; err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, len(options.Entities))
@@ -296,7 +304,7 @@ func (s *searchService) Options(ctx context.Context) (*types.EntrySearchOptions,
 			options.Entities[i].Aliases = []string{}
 		}
 	}
-	err = s.db.WithContext(ctx).Table("topics").Where("space_id=?", spaceID).
+	err = topicsQuery.
 		Select("id,name").Order("name,id").Scan(&options.Topics).Error
 	return options, err
 }

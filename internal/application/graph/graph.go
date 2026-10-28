@@ -119,7 +119,7 @@ func MapType(tx *gorm.DB, libraryID, name string) (string, error) {
 		name = row.ToType
 	}
 }
-func canonicalEntity(tx *gorm.DB, spaceID uint64, id string) (string, error) {
+func canonicalEntity(tx *gorm.DB, spaceID uint64, libraryID, id string) (string, error) {
 	seen := map[string]bool{}
 	for {
 		if seen[id] {
@@ -127,7 +127,7 @@ func canonicalEntity(tx *gorm.DB, spaceID uint64, id string) (string, error) {
 		}
 		seen[id] = true
 		var row types.Entity
-		if err := tx.Select("id,merged_into_id").Where("id=? AND space_id=?", id, spaceID).First(&row).Error; err != nil {
+		if err := tx.Select("id,merged_into_id").Where("id=? AND space_id=? AND library_id=?", id, spaceID, libraryID).First(&row).Error; err != nil {
 			return "", err
 		}
 		if row.MergedIntoID == "" {
@@ -162,11 +162,11 @@ func (c *changes) add(entry *types.Entry, output *types.EntryProcessingOutput) e
 		return nil
 	}
 	for _, input := range output.Relations {
-		a, err := canonicalEntity(c.tx, entry.SpaceID, input.SubjectID)
+		a, err := canonicalEntity(c.tx, entry.SpaceID, entry.LibraryID, input.SubjectID)
 		if err != nil {
 			return err
 		}
-		b, err := canonicalEntity(c.tx, entry.SpaceID, input.ObjectID)
+		b, err := canonicalEntity(c.tx, entry.SpaceID, entry.LibraryID, input.ObjectID)
 		if err != nil {
 			return err
 		}
@@ -192,7 +192,7 @@ func (c *changes) add(entry *types.Entry, output *types.EntryProcessingOutput) e
 				speaker := *e.Speaker
 				evidence[i].Speaker = &speaker
 				if speaker.EntityID != "" {
-					id, err := canonicalEntity(c.tx, entry.SpaceID, speaker.EntityID)
+					id, err := canonicalEntity(c.tx, entry.SpaceID, entry.LibraryID, speaker.EntityID)
 					if err != nil {
 						return err
 					}
@@ -480,6 +480,13 @@ func (c *changes) enforceSuppressions(spaceID uint64) error {
 	return nil
 }
 func MergeEntityTx(tx *gorm.DB, spaceID uint64, from, to string) error {
+	var identities []types.Entity
+	if err := tx.Select("id,library_id").Where("space_id=? AND id IN ?", spaceID, []string{from, to}).Find(&identities).Error; err != nil {
+		return err
+	}
+	if len(identities) != 2 || identities[0].LibraryID != identities[1].LibraryID {
+		return errors.New("entities must belong to the same library")
+	}
 	if err := Lock(tx, spaceID); err != nil {
 		return err
 	}

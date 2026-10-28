@@ -247,29 +247,26 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in entryInput) (any, error) {
 			return services.Entries.ReadEntry(ctx, in.ID, in.Offset, in.Length)
 		})
-	addTool(server, "list_topics", "列出用户定义的主题，返回 topics 数组，包含主题 ID、名称、说明、适用库 library_ids 和资料数。library_ids 为空表示全部库。", object(map[string]any{}),
-		func(ctx context.Context, _ struct{}) (any, error) {
-			items, err := services.Topics.ListTopics(ctx)
+	addTool(server, "list_topics", "列出指定库中用户定义的主题，返回 topics 数组，包含 ID、名称、说明、library_id 和资料数。", object(map[string]any{"library_id": text("所属库 ID，必填")}, "library_id"),
+		func(ctx context.Context, in struct {
+			LibraryID string `json:"library_id"`
+		}) (any, error) {
+			items, err := services.Topics.ListTopics(ctx, in.LibraryID)
 			return map[string]any{"topics": items}, err
 		})
-	addTool(server, "create_topic", "创建主题，library_ids 为空或省略表示全部库。"+externalContentNotice, object(map[string]any{"name": text("主题名称"), "description": text("主题说明"), "library_ids": stringArray("适用库 ID；空数组表示全部库")}, "name"), func(ctx context.Context, in types.Topic) (any, error) { return services.Topics.CreateTopic(ctx, &in) })
-	addTool(server, "update_topic", "修改主题；省略 library_ids 保持原范围，空数组恢复全部库。已有范围外归入保留，但不进入关注动态。"+externalContentNotice, object(map[string]any{"id": text("主题 ID"), "name": text("主题名称"), "description": text("主题说明"), "library_ids": stringArray("适用库 ID")}, "id"), func(ctx context.Context, in struct {
-		ID          string    `json:"id"`
-		Name        *string   `json:"name"`
-		Description *string   `json:"description"`
-		LibraryIDs  *[]string `json:"library_ids"`
+	addTool(server, "create_topic", "在指定库中创建用户定义主题。"+externalContentNotice, object(map[string]any{"name": text("主题名称"), "description": text("主题说明"), "library_id": text("所属库 ID，必填")}, "name", "library_id"), func(ctx context.Context, in types.Topic) (any, error) { return services.Topics.CreateTopic(ctx, &in) })
+	addTool(server, "update_topic", "修改主题名称或说明，所属库不可变更。"+externalContentNotice, object(map[string]any{"id": text("主题 ID"), "name": text("主题名称"), "description": text("主题说明")}, "id"), func(ctx context.Context, in struct {
+		ID          string  `json:"id"`
+		Name        *string `json:"name"`
+		Description *string `json:"description"`
 	}) (any, error) {
-		var scopes [][]string
-		if in.LibraryIDs != nil {
-			scopes = append(scopes, *in.LibraryIDs)
-		}
-		return services.Topics.UpdateTopic(ctx, in.ID, in.Name, in.Description, scopes...)
+		return services.Topics.UpdateTopic(ctx, in.ID, in.Name, in.Description)
 	})
 
-	addTool(server, "list_entities", "查询个人空间的实体档案，名称和别名支持模糊查询，类型可选。返回 entities 数组及每个实体的别名。"+externalContentNotice,
-		object(map[string]any{"entity": text("名称或别名中的文本，省略查询全部"),
+	addTool(server, "list_entities", "查询指定库的实体档案，名称和别名支持模糊查询，类型可选。返回 entities 数组及每个实体的别名。"+externalContentNotice,
+		object(map[string]any{"library_id": text("所属库 ID，必填"), "entity": text("名称或别名中的文本，省略查询全部"),
 			"entity_type": enum("实体类型，省略查询全部", types.EntityTypes...),
-			"limit":       integer("返回条数，默认 50，最大 100", 1, 100), "offset": integer("跳过的实体数，默认 0", 0, 0)}),
+			"limit":       integer("返回条数，默认 50，最大 100", 1, 100), "offset": integer("跳过的实体数，默认 0", 0, 0)}, "library_id"),
 		func(ctx context.Context, in types.EntityQuery) (any, error) {
 			items, err := services.Entities.ListEntities(ctx, in)
 			return map[string]any{"entities": items}, err

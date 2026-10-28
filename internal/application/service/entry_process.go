@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -379,23 +380,37 @@ func (s *entryService) processChunks(ctx context.Context,
 		// Parent chunks are stored for context retrieval but do not need vector embeddings.
 		// Supply the article source prefix only to the vector input.
 		indexInfoList := make([]*types.IndexInfo, 0, len(textChunks))
+		var prepareErr error
 		for _, chunk := range textChunks {
 			// Heading breadcrumbs remain stored separately. Vector inputs use
 			// exactly one article prefix line followed by the chunk body.
 			indexContent := buildEntryIndexContent(entry, chunk.Content)
-			indexInfoList = append(indexInfoList, &types.IndexInfo{
-				Content:    indexContent,
-				SourceID:   chunk.ID,
-				SourceType: types.ChunkSourceType,
-				ChunkID:    chunk.ID,
-				EntryID:    entry.ID,
-				LibraryID:  entry.LibraryID,
-				IsEnabled:  true,
+			input, _, inputErr := prepareChunkEmbeddingInput(ctx, embeddingModel, indexContent, chunk.Content, false, func(ref string) (io.ReadCloser, error) {
+				return s.processingImageReader(ctx, library, entry, ref)
 			})
+			if inputErr != nil {
+				prepareErr = inputErr
+				break
+			}
+			input.SourceID, input.SourceType, input.ChunkID = chunk.ID, types.ChunkSourceType, chunk.ID
+			input.EntryID, input.LibraryID, input.IsEnabled = entry.ID, entry.LibraryID, true
+			if len(input.Images) > 0 {
+				if aborted, _ := s.isEntryAborted(ctx, entry.SpaceID, entry.ID); aborted {
+					break
+				}
+				// Release each block's prepared image bytes before loading the next.
+				prepareErr = retrieveEngine.Index(ctx, embeddingModel, input)
+				if prepareErr != nil {
+					break
+				}
+				totalStorageSize += retrieveEngine.EstimateStorageSize(ctx, embeddingModel, []*types.IndexInfo{input})
+				continue
+			}
+			indexInfoList = append(indexInfoList, input)
 		}
 
 		// Calculate storage size required for embeddings
-		totalStorageSize = retrieveEngine.EstimateStorageSize(ctx, embeddingModel, indexInfoList)
+		totalStorageSize += retrieveEngine.EstimateStorageSize(ctx, embeddingModel, indexInfoList)
 
 		// Check again before batch indexing (heavy operation).
 		// deleting → row is going away anyway, drop the chunks we just wrote.
@@ -410,12 +425,15 @@ func (s *entryService) processChunks(ctx context.Context,
 			return
 		}
 
-		err = retrieveEngine.BatchIndex(ctx, embeddingModel, indexInfoList)
+		err = prepareErr
+		if err == nil {
+			err = retrieveEngine.BatchIndex(ctx, embeddingModel, indexInfoList)
+		}
 		if err != nil {
 			vectorErr = err
 			s.skipStage(ctx, entry.ID, types.StageEmbedding, "vector_unavailable")
 		} else {
-			s.endStage(ctx, entry.ID, types.StageEmbedding, types.JSONMap{"vectors_written": len(indexInfoList), "storage_bytes": totalStorageSize})
+			s.endStage(ctx, entry.ID, types.StageEmbedding, types.JSONMap{"vectors_written": len(textChunks), "storage_bytes": totalStorageSize})
 		}
 
 		// Final check before marking as completed.

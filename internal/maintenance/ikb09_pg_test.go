@@ -37,7 +37,7 @@ func TestIKB09ReplicaUpgradeImportAndTamperDetection(t *testing.T) {
 	after, err := BuildManifest(ctx, db, root, "")
 	require.NoError(t, err)
 	require.Empty(t, CompareManifest(before, after))
-	require.NoError(t, db.Exec(`UPDATE topics SET library_ids='["one"]'`).Error)
+	require.NoError(t, db.Exec(`UPDATE topics SET description='Tampered'`).Error)
 	tampered, err := BuildManifest(ctx, db, root, "")
 	require.NoError(t, err)
 	require.Contains(t, CompareManifest(before, tampered), "table topics")

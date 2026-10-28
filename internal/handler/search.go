@@ -79,7 +79,7 @@ func rewriteEntrySearch(ctx context.Context, rewriter *storageurl.Rewriter, resp
 }
 
 func (h *SearchHandler) Options(c *gin.Context) {
-	options, err := h.service.Options(c.Request.Context())
+	options, err := h.service.Options(c.Request.Context(), strings.FieldsFunc(c.Query("libraries"), func(r rune) bool { return r == ',' }))
 	if err != nil {
 		logger.ErrorWithFields(c.Request.Context(), err, nil)
 		c.Error(searchClientError(err))

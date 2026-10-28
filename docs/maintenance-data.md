@@ -28,8 +28,8 @@
 | `public.embedding_rebuild_vectors` | 无 | 无 | `run_id`、`kind`、`source_id`、`attachment_path`、`entry_id`、`library_id`、`model_id`、`dimension`、`embedding`、`content_hash` | 无 |
 | `public.embedding_vector_archives` | 无 | 无 | `run_id`、`space_id`、`payload`、`created_at` | 无 |
 | `public.embeddings` | 无 | 无 | `id`、`created_at`、`updated_at`、`source_id`、`source_type`、`chunk_id`、`entry_id`、`library_id`、`model_id`、`dimension`、`embedding`、`is_enabled` | 无 |
-| `public.entities` | `id`、`space_id`、`canonical_name`、`normalized_name`、`entity_type`、`description`、`merged_into_id`、`created_at`、`updated_at` | 无 | `name_embedding`、`embedding_model_id`、`embedding_dimension`、`embedding_needs_rebuild` | 无 |
-| `public.entity_aliases` | `id`、`space_id`、`entity_type`、`entity_id`、`alias`、`normalized_alias`、`resolution_method`、`created_at` | 无 | 无 | 无 |
+| `public.entities` | `id`、`space_id`、`library_id`、`canonical_name`、`normalized_name`、`entity_type`、`description`、`merged_into_id`、`created_at`、`updated_at` | 无 | `name_embedding`、`embedding_model_id`、`embedding_dimension`、`embedding_needs_rebuild` | 无 |
+| `public.entity_aliases` | `id`、`space_id`、`library_id`、`entity_type`、`entity_id`、`alias`、`normalized_alias`、`resolution_method`、`created_at` | 无 | 无 | 无 |
 | `public.entity_embedding_rebuild_runs` | `id`、`space_id`、`status`、`reason`、`error`、`model_id`、`dimension`、`profile_hash`、`processed_count`、`total_count`、`model_calls`、`attempts`、`attempt_id`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 | 无 |
 | `public.entity_merge_records` | `id`、`space_id`、`keep_entity_id`、`merge_entity_id`、`actor`、`created_at` | 无 | 无 | 无 |
 | `public.entity_merge_suggestions` | `id`、`space_id`、`new_entity_id`、`candidate_entity_id`、`entry_id`、`reason`、`status`、`created_at`、`decided_at` | 无 | 无 | 无 |
@@ -77,7 +77,7 @@
 | `public.task_queue_counters` | `queue`、`day`、`processed`、`failed` | 无 | 无 | 无 |
 | `public.topic_backfill_batches` | `id`、`job_id`、`ordinal`、`entry_ids`、`entry_count`、`status`、`attempts`、`error`、`created_at`、`updated_at`、`retry_at` | 无 | 无 | 无 |
 | `public.topic_backfill_jobs` | `id`、`space_id`、`topic_id`、`topic_name`、`topic_description`、`status`、`total`、`processed`、`failed_entries`、`failed_batches`、`created_at`、`updated_at` | 无 | 无 | 无 |
-| `public.topics` | `id`、`space_id`、`name`、`description`、`created_at`、`updated_at`、`library_ids` | 无 | 无 | 无 |
+| `public.topics` | `id`、`space_id`、`name`、`description`、`created_at`、`updated_at`、`library_id` | 无 | 无 | 无 |
 | `public.users` | `id`、`username`、`email`、`password_hash`、`avatar`、`space_id`、`is_active`、`created_at`、`updated_at`、`deleted_at` | 无 | 无 | 无 |
 | `tiger.addr` | 无 | 无 | `gid`、`tlid`、`fromhn`、`tohn`、`side`、`zip`、`plus4`、`fromtyp`、`totyp`、`fromarmid`、`toarmid`、`arid`、`mtfcc`、`statefp` | 无 |
 | `tiger.addrfeat` | 无 | 无 | `gid`、`tlid`、`statefp`、`aridl`、`aridr`、`linearid`、`fullname`、`lfromhn`、`ltohn`、`rfromhn`、`rtohn`、`zipl`、`zipr`、`edge_mtfcc`、`parityl`、`parityr`、`plus4l`、`plus4r`、`lfromtyp`、`ltotyp`、`rfromtyp`、`rtotyp`、`offsetl`、`offsetr`、`the_geom` | 无 |
@@ -138,8 +138,8 @@
 | `embedding_rebuild_items` | 无 | `id`、`run_id`、`kind`、`source_id`、`attachment_path`、`status`、`attempts`、`error`、`created_at`、`updated_at` | 无 | 无 |
 | `embedding_rebuild_runs` | 无 | `id`、`space_id`、`status`、`model_id`、`model_name`、`dimension`、`profile_hash`、`total_count`、`completed_count`、`failed_count`、`error`、`attempt_id`、`lease_until`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 |
 | `embeddings` | 无 | 无 | `id`、`created_at`、`updated_at`、`source_id`、`source_type`、`chunk_id`、`entry_id`、`library_id`、`model_id`、`dimension`、`embedding`、`is_enabled` | 无 |
-| `entities` | 无 | `id`、`space_id`、`canonical_name`、`normalized_name`、`entity_type`、`description`、`merged_into_id`、`created_at`、`updated_at` | `name_embedding`、`embedding_model_id`、`embedding_dimension`、`embedding_needs_rebuild` | 无 |
-| `entity_aliases` | 无 | `id`、`space_id`、`entity_type`、`entity_id`、`alias`、`normalized_alias`、`resolution_method`、`created_at` | 无 | 无 |
+| `entities` | 无 | `id`、`space_id`、`library_id`、`canonical_name`、`normalized_name`、`entity_type`、`description`、`merged_into_id`、`created_at`、`updated_at` | `name_embedding`、`embedding_model_id`、`embedding_dimension`、`embedding_needs_rebuild` | 无 |
+| `entity_aliases` | 无 | `id`、`space_id`、`library_id`、`entity_type`、`entity_id`、`alias`、`normalized_alias`、`resolution_method`、`created_at` | 无 | 无 |
 | `entity_embedding_rebuild_runs` | 无 | `id`、`space_id`、`status`、`reason`、`error`、`model_id`、`dimension`、`profile_hash`、`processed_count`、`total_count`、`model_calls`、`attempts`、`attempt_id`、`created_at`、`updated_at`、`started_at`、`finished_at` | 无 | 无 |
 | `entity_merge_records` | 无 | `id`、`space_id`、`keep_entity_id`、`merge_entity_id`、`actor`、`created_at` | 无 | 无 |
 | `entity_merge_suggestions` | 无 | `id`、`space_id`、`new_entity_id`、`candidate_entity_id`、`entry_id`、`reason`、`status`、`created_at`、`decided_at` | 无 | 无 |
@@ -171,7 +171,7 @@
 | `spaces` | 无 | 无 | 无 | `id`、`name`、`description`、`status`、`business`、`storage_used`、`created_at`、`updated_at`、`deleted_at`、`retrieval_config`、`credentials` |
 | `topic_backfill_batches` | 无 | `id`、`job_id`、`ordinal`、`entry_ids`、`entry_count`、`status`、`attempts`、`error`、`created_at`、`updated_at`、`retry_at` | 无 | 无 |
 | `topic_backfill_jobs` | 无 | `id`、`space_id`、`topic_id`、`topic_name`、`topic_description`、`status`、`total`、`processed`、`failed_entries`、`failed_batches`、`created_at`、`updated_at` | 无 | 无 |
-| `topics` | 无 | `id`、`space_id`、`name`、`description`、`library_ids`、`created_at`、`updated_at` | 无 | 无 |
+| `topics` | 无 | `id`、`space_id`、`name`、`description`、`library_id`、`created_at`、`updated_at` | 无 | 无 |
 | `users` | 无 | 无 | 无 | `id`、`username`、`email`、`password_hash`、`avatar`、`space_id`、`is_active`、`created_at`、`updated_at`、`deleted_at` |
 
 非 public 扩展表的逐列归属如下。表头、实时副本和配置均不另存这些行；可重新生成分类只在扩展拥有者、固定版本、关系类型、完整列集合、行数与默认内容 SHA256 全部一致时成立。扩展 SQL 安装脚本是默认内容的来源，不凭表名把自定义数据当作缓存。目录包含没有列的空表，新增其他 schema 下的表也不能绕过检查。
@@ -422,6 +422,9 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 副本 manifest 的可选 `schema_version` 记录来源结构版本，防止对当前配置重复施加历史默认值。版本 14 升级仅允许迁移定义的本地默认模型、空空间模型选择和运行字段默认值；模型参数或已有配置的任意其他变化仍拒绝。恢复正文分块时重新计算位置；`rebuild-files` 只重建文件，不改变已保存的分块位置。
 
 000015 的主题适用库和分库查看时间均属于 Sidecar。分库检查点经 `PersistentTables` 登记；原空间检查点保留。升级及旧副本导入按空间为每个已有库复制旧检查点，主题默认适用全部库；其他原有字段及行必须完全保留。
+
+
+结构版本 33 将实体、别名和主题的 `library_id` 归为 Sidecar，并移除主题的 `library_ids`。升级和旧副本导入使用相同的确定性拆分：实体按资料、关系和合并记录的关联库复制；没有关联的实体复制到空间内全部库。主题按原适用库和已有资料关联库复制。排序第一的库保留原 ID，其他库使用迁移定义的 MD5 ID。别名、关注、合并记录和资料关联同步复制或改指向。已拆分主题的活动历史归类任务取消，任务历史和批次保留。仅处理结果、检查点和关系证据中的完整 ID 字符串被改写，正文和用户元数据保持不变。没有可归属库时停止迁移或导入。当前结构副本不重复转换，转换后仍严格核对数据与副本文件。
 
 ## 长文处理检查点
 

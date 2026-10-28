@@ -62,6 +62,7 @@ const pendingCounts = usePendingCountsStore();
 const libraryId = computed(() => resources.library?.id || '');
 const libraryInfo = ref<any>(null);
 const libraryScope = useLibraryScope();
+if (typeof route.query.libraries === 'string') libraryScope.value = route.query.libraries.split(',').filter(Boolean);
 const libraryCatalog = ref<import('@/api/library').LibraryCatalogItem[]>([]);
 const referencedEntryId = ref(typeof route.query.entry_id === 'string' ? route.query.entry_id : '');
 const activeReference = ref<SourceLocation | undefined>(parseReference(route.query.reference));
@@ -153,24 +154,32 @@ const selectedEntityIds = ref(initialDocumentFilters.entityIds);
 const selectedTopicIds = ref(initialDocumentFilters.topicIds);
 const publishedRange = ref<string[]>(initialDocumentFilters.publishedFrom || initialDocumentFilters.publishedTo ? [initialDocumentFilters.publishedFrom, initialDocumentFilters.publishedTo] : []);
 const entityChoices = ref<Entity[]>([]), topicChoices = ref<Topic[]>([]), choicesError = ref(''), choicesLoading = ref(false), moreEntityChoices = ref(true);
-let choicesGeneration = 0, choicesDisposed = false;
+let choicesGeneration = 0, choicesDisposed = false, choicesOffset = 0;
 async function loadFilterChoices(more = false) {
   const current = ++choicesGeneration; choicesLoading.value = true; choicesError.value = '';
+  const libraries = libraryScope.value.length ? libraryScope.value : libraryCatalog.value.map(lib => lib.id);
+  if (!more) choicesOffset = 0;
+  if (!libraries.length) { entityChoices.value = []; topicChoices.value = []; moreEntityChoices.value = false; choicesLoading.value = false; return; }
   try {
-    const [entities, topics] = await Promise.all([listEntities({ limit: 50, offset: more ? entityChoices.value.length : 0 }), listTopics()]);
+    const choices = await Promise.all(libraries.map(async library_id => {
+      const [entities, topics] = await Promise.all([listEntities({ library_id, limit: 50, offset: choicesOffset }), listTopics(library_id)]);
+      if (!entities.success || !topics.success) throw new Error(t('entryBatch.choicesFailed'));
+      return { entities: entities.data, topics: topics.data };
+    }));
     if (choicesDisposed || current !== choicesGeneration) return;
-    if (!entities.success || !topics.success) throw new Error(t('entryBatch.choicesFailed'));
-    entityChoices.value = more ? [...entityChoices.value, ...entities.data] : entities.data;
-    moreEntityChoices.value = entities.data.length === 50; topicChoices.value = topics.data;
+    entityChoices.value = more ? [...entityChoices.value, ...choices.flatMap(choice => choice.entities)] : choices.flatMap(choice => choice.entities);
+    moreEntityChoices.value = choices.some(choice => choice.entities.length === 50);
+    topicChoices.value = choices.flatMap(choice => choice.topics);
+    choicesOffset += 50;
   } catch { if (!choicesDisposed && current === choicesGeneration) choicesError.value = t('entryBatch.choicesFailed'); }
   finally { if (!choicesDisposed && current === choicesGeneration) choicesLoading.value = false; }
 }
-onMounted(() => loadFilterChoices());
+watch([libraryScope, libraryCatalog], () => { entityChoices.value = []; topicChoices.value = []; void loadFilterChoices(); }, { deep: true });
 onUnmounted(() => { choicesDisposed = true; choicesGeneration++; });
 const entityFilterValues = computed({ get: () => selectedEntityIds.value.split(',').filter(Boolean), set: (ids: string[]) => { selectedEntityIds.value = ids.join(','); } });
 const topicFilterValues = computed({ get: () => selectedTopicIds.value.split(',').filter(Boolean), set: (ids: string[]) => { selectedTopicIds.value = ids.join(','); } });
-const entityFilterOptions = computed(() => [...new Map([...entityFilterValues.value.map(id => ({ value: id, label: id })), ...entityChoices.value.map(item => ({ value: item.id, label: item.canonical_name }))].map(item => [item.value, item])).values()]);
-const topicFilterOptions = computed(() => [...new Map([...topicFilterValues.value.map(id => ({ value: id, label: id })), ...topicChoices.value.map(item => ({ value: item.id, label: item.name }))].map(item => [item.value, item])).values()]);
+const entityFilterOptions = computed(() => [...new Map([...entityFilterValues.value.map(id => ({ value: id, label: id })), ...entityChoices.value.map(item => ({ value: item.id, label: `${item.canonical_name}${item.library_id ? ` · ${libraryCatalog.value.find(lib => lib.id === item.library_id)?.display_name || item.library_id}` : ''}` }))].map(item => [item.value, item])).values()]);
+const topicFilterOptions = computed(() => [...new Map([...topicFilterValues.value.map(id => ({ value: id, label: id })), ...topicChoices.value.map(item => ({ value: item.id, label: `${item.name}${item.library_id ? ` · ${libraryCatalog.value.find(lib => lib.id === item.library_id)?.display_name || item.library_id}` : ''}` }))].map(item => [item.value, item])).values()]);
 const starredOptions = computed(() => [
   { value: '', label: t('articleJudgments.allStars') },
   { value: 'true', label: t('articleJudgments.starredOnly') },
@@ -360,7 +369,7 @@ watch(() => libraryId.value, (newLibraryId, oldLibraryId) => {
   loadLibraryInfo(newLibraryId);
 }, { immediate: true });
 
-watch(libraryScope, () => { selectedIds.value.clear(); resetPage(); void loadEntryFiles(libraryId.value); }, { deep: true });
+watch(libraryScope, () => { selectedEntityIds.value = ''; selectedTopicIds.value = ''; selectedIds.value.clear(); resetPage(); void loadEntryFiles(libraryId.value); }, { deep: true });
 
 // Restore all filters together before requesting the list after history navigation.
 let documentFiltersRestoredFromRoute = false;
@@ -985,7 +994,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </div>
 
       <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area">
-        <EntryWorkbench :initial-entity-id="selectedEntityId"
+        <EntryWorkbench :library-id="libraryScope[0] || libraryId" :initial-entity-id="selectedEntityId"
           @open-source="openSourceDoc" />
       </div>
 

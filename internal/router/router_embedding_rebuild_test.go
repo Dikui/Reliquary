@@ -51,7 +51,7 @@ func TestEmbeddingRebuildHTTPProgressPauseResumeAndRetry(t *testing.T) {
 	require.NoError(t, db.Create(&types.Library{ID: "http-library", SpaceID: 1, Name: "HTTP", ModelTiers: types.ModelTierConfig{Embedding: "http-embedding"}}).Error)
 	require.NoError(t, db.Create(&types.Model{ID: "http-embedding", SpaceID: 1, Name: "HTTP embedding", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive,
 		Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 2}}}).Error)
-	require.NoError(t, db.Create(&types.Entity{ID: "rebuild-http-entity", SpaceID: 1, CanonicalName: "HTTP", NormalizedName: "http", EntityType: "product", EmbeddingNeedsRebuild: true}).Error)
+	require.NoError(t, db.Create(&types.Entity{ID: "rebuild-http-entity", SpaceID: 1, LibraryID: "http-library", CanonicalName: "HTTP", NormalizedName: "http", EntityType: "product", EmbeddingNeedsRebuild: true}).Error)
 	vault, err := service.NewVaultService(db, &config.Config{Vault: &config.VaultConfig{Root: t.TempDir()}})
 	require.NoError(t, err)
 	embedder := &rebuildRouteEmbedder{fail: true}

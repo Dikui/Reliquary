@@ -2,6 +2,7 @@ package retriever
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -72,11 +73,11 @@ func (v *KeywordsVectorHybridRetrieveEngineService) Index(ctx context.Context,
 	params := make(map[string]any)
 	embeddingMap := make(map[string][]float32)
 	if slices.Contains(retrieverTypes, types.VectorRetrieverType) {
-		embedding, err := embedder.Embed(ctx, sanitizeForEmbedding(ctx, indexInfo.Content))
+		vector, err := embedIndexInput(ctx, embedder, indexInfo)
 		if err != nil {
 			return err
 		}
-		embeddingMap[indexInfo.SourceID] = embedding
+		embeddingMap[indexInfo.SourceID] = vector
 		params["model_id"] = embedder.GetModelID()
 		params["model_profile_hash"] = embedderProfileHash(embedder)
 	}
@@ -95,12 +96,31 @@ func (v *KeywordsVectorHybridRetrieveEngineService) BatchIndex(ctx context.Conte
 
 	if slices.Contains(retrieverTypes, types.VectorRetrieverType) {
 		var contentList []string
-		for _, indexInfo := range indexInfoList {
-			contentList = append(contentList, sanitizeForEmbedding(ctx, indexInfo.Content))
+		var textPositions []int
+		embeddings := make([][]float32, len(indexInfoList))
+		for i, indexInfo := range indexInfoList {
+			if len(indexInfo.Images) > 0 {
+				vector, err := embedIndexInput(ctx, embedder, indexInfo)
+				if err != nil {
+					return err
+				}
+				embeddings[i] = vector
+			} else {
+				contentList = append(contentList, sanitizeForEmbedding(ctx, indexInfo.Content))
+				textPositions = append(textPositions, i)
+			}
 		}
-		embeddings, err := batchEmbedWithBackoff(ctx, embedder, contentList)
-		if err != nil {
-			return err
+		if len(contentList) > 0 {
+			textVectors, err := batchEmbedWithBackoff(ctx, embedder, contentList)
+			if err != nil {
+				return err
+			}
+			if len(textVectors) != len(textPositions) {
+				return fmt.Errorf("text embedding count mismatch: got %d, expected %d", len(textVectors), len(textPositions))
+			}
+			for i, position := range textPositions {
+				embeddings[position] = textVectors[i]
+			}
 		}
 
 		batchSize := 40
@@ -125,6 +145,18 @@ func (v *KeywordsVectorHybridRetrieveEngineService) BatchIndex(ctx context.Conte
 		return v.concurrentBatchSaveNoEmbedding(ctx, chunks)
 	}
 	return v.boundedConcurrentBatchSaveNoEmbedding(ctx, chunks, maxConcurrency)
+}
+
+func embedIndexInput(ctx context.Context, model embedding.Embedder, input *types.IndexInfo) ([]float32, error) {
+	if len(input.Images) == 0 {
+		return model.Embed(ctx, sanitizeForEmbedding(ctx, input.Content))
+	}
+	fusion, ok := model.(embedding.FusionEmbedder)
+	if !ok || !fusion.SupportsFusion() {
+		return nil, fmt.Errorf("embedding model does not support fusion")
+	}
+	ctx = types.WithModelCallImages(ctx, input.ImageReferences)
+	return fusion.EmbedFusion(ctx, sanitizeForEmbedding(ctx, input.Content), input.Images)
 }
 
 // batchEmbedWithBackoff calls BatchEmbedWithPool with exponential backoff on

@@ -268,14 +268,8 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 					reason = "unsupported_material"
 				}
 				for _, topic := range topics {
-					if len(topic.LibraryIDs) > 0 {
-						applicable := false
-						for _, id := range topic.LibraryIDs {
-							applicable = applicable || id == entry.LibraryID
-						}
-						if !applicable {
-							reason = "topic_library_mismatch"
-						}
+					if topic.LibraryID != entry.LibraryID {
+						reason = "topic_library_mismatch"
 					}
 				}
 			}
@@ -693,7 +687,7 @@ func (s *entryService) batchTopics(ctx context.Context, item *types.EntryBatchIt
 			}
 			ids := uniqueTopicIDs(req.TopicIDs)
 			var topics []types.Topic
-			if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id IN ? AND (library_ids='[]'::jsonb OR library_ids @> ?::jsonb)", item.SpaceID, ids, topicLibrariesJSON([]string{entry.LibraryID})).Order("id").Find(&topics).Error; err != nil {
+			if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("space_id=? AND id IN ? AND library_id=?", item.SpaceID, ids, entry.LibraryID).Order("id").Find(&topics).Error; err != nil {
 				return err
 			}
 			if len(topics) != len(ids) {

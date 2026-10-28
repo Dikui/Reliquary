@@ -2,6 +2,8 @@
 
 HTTP 为 `POST /api/v1/search`，网页不带凭据，外部工具使用收录 API Key。MCP 为 `search`，参数相同。HTTP 返回 `{"success":true,"data":...}`；MCP 使用同样的资料字段，资料 ID 为 `entry_id`。
 
+支持图片的 DashScope `qwen3-vl-embedding` 会将每个有图正文块及其已保存图片融合为一个向量，命中仍返回该正文块及原文位置。纯文本块、摘要、查询和单图索引沿用各自的向量。此方式适用于新收录、重新处理和向量重建；已有正文块向量需要重建，不会自动转换。检索请求与返回格式不变。
+
 ```json
 {
   "query": "仪器校准",
@@ -115,7 +117,7 @@ HTTP 为 `POST /api/v1/graph/search`，MCP 工具为 `graph_search`。两者复�
 | `relation_types` | 可选，最多 100 个关系类型名称，空数组表示全部 |
 | `limit` | 1 至 100，默认 20；限制邻居边数或路径数，并独立限制资料级 documents 列表 |
 
-名称按实体档案既有 NFKC、大小写和空白规范化规则精确匹配规范名与别名，不使用模型或模糊猜测。ID 查询只接受未合并的现有实体；已合并 ID 返回 404，调用方可通过实体详情取得保留档案 ID。无匹配返回 404。多个匹配返回 200、`status="needs_selection"`，在 `candidates.entity` 或 `candidates.target` 中列出 ID、规范名、实体类型与别名，边和路径为空。调用方选定 ID 后重新请求，不自动选第一个候选。无效参数或未知库返回 400。
+实体档案按库独立。名称与 ID 只在所选库内解析；跨库的同名对象保留不同 ID。名称按实体档案既有 NFKC、大小写和空白规范化规则精确匹配规范名与别名，不使用模型或模糊猜测。ID 查询只接受未合并的现有实体；已合并 ID 返回 404，调用方可通过实体详情取得保留档案 ID。无匹配返回 404。多个匹配返回 200、`status="needs_selection"`，在 `candidates.entity` 或 `candidates.target` 中列出 ID、规范名、实体类型与别名，边和路径为空。调用方选定 ID 后重新请求，不自动选第一个候选。无效参数或未知库返回 400。
 
 路径示例：
 
@@ -184,3 +186,12 @@ HTTP 为 `POST /api/v1/graph/search`，MCP 工具为 `graph_search`。两者复�
 `pending_sync.global` 是当前个人空间内 `completed_at IS NULL` 的记录数，不按库缩小。`involved` 是涉及最终返回实体和查询端点的记录数；候选响应使用全部候选实体。统计按记录行计数，同一实体多条记录分别计数，两项在同一个 PG 查询中读取。计数提示副本可能落后，不能证明 PG 和 Neo4j 是同一时间点快照。多次 Neo4j 读取与 PG 回填之间不持有跨数据库锁。Neo4j 连接或查询失败时，HTTP 返回 503 和明确的 `Neo4j query replica unavailable` 错误，MCP 返回同样含义的工具错误。
 
 服务入口统一保存 `Method="graph"` 的检索记录：原始请求、实体名或 ID、已校验的稳定库 ID、documents 排名与耗时。HTTP、网页和 MCP 来源沿用可信上下文，测评来源携带运行 ID。有效范围内的查询失败也保存错误；保存记录失败会返回错误。
+
+
+## 实体与主题目录接口
+
+实体列表 `GET /api/v1/entities` 与合并建议列表必须传 `library_id`。详情和编辑按实体 ID 定位，返回的实体包含 `library_id`；跨库合并被拒绝。
+
+主题列表 `GET /api/v1/topics?library_id=...` 和创建请求都必须指定唯一 `library_id`。主题更新只修改名称、说明，不能换库。资料归入主题时只接受本库主题 ID。MCP 的 `list_entities`、`list_topics` 和 `create_topic` 使用相同的 `library_id` 规则，不再使用 `library_ids`。
+
+`GET /api/v1/search/options?libraries=库ID1,库ID2` 返回所选库的实体、主题和内容类别；省略时返回全部库选项。选择多个库不会合并同名实体或主题。

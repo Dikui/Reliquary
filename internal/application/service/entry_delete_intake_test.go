@@ -20,8 +20,10 @@ type intakeDeleteRepo struct {
 
 func TestDeleteArticleRemovesEntityAssociationsAndRetainsEntity(t *testing.T) {
 	db := pgtest.Open(t)
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Delete fixture"}).Error)
+	require.NoError(t, db.Create(&types.Library{ID: "library", SpaceID: 1, Name: "Delete fixture", Template: types.TemplateOwn, Directory: "delete-fixture"}).Error)
 	article := &types.Entry{ID: "article", SpaceID: 1, LibraryID: "library", ParseStatus: types.ParseStatusCompleted}
-	entity := &types.Entity{ID: "entity", SpaceID: 1, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
+	entity := &types.Entity{ID: "entity", SpaceID: 1, LibraryID: article.LibraryID, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
 	require.NoError(t, db.Create(article).Error)
 	require.NoError(t, db.Create(entity).Error)
 	require.NoError(t, db.Create(&types.EntryEntity{SpaceID: 1, EntryID: article.ID, EntityID: entity.ID}).Error)

@@ -11,8 +11,8 @@ var Rules = map[string]Rule{
 	"chatgpt_policy":                {Configuration: "id daily_limit daily_used day paused reason retry_at fallback_model_id updated_at"},
 	"chunks":                        {Regenerated: "id space_id library_id entry_id content chunk_index is_enabled start_at end_at pre_chunk_id next_chunk_id chunk_type parent_chunk_id image_info relation_chunks indirect_relation_chunks created_at updated_at deleted_at metadata status content_hash flags seq_id video_info context_header search_title source_locations"},
 	"embeddings":                    {Regenerated: "id created_at updated_at source_id source_type chunk_id entry_id library_id model_id dimension embedding is_enabled"},
-	"entities":                      {Sidecar: "id space_id canonical_name normalized_name entity_type description merged_into_id created_at updated_at", Regenerated: "name_embedding embedding_model_id embedding_dimension embedding_needs_rebuild"},
-	"entity_aliases":                {Sidecar: "id space_id entity_type entity_id alias normalized_alias resolution_method created_at"},
+	"entities":                      {Sidecar: "id space_id library_id canonical_name normalized_name entity_type description merged_into_id created_at updated_at", Regenerated: "name_embedding embedding_model_id embedding_dimension embedding_needs_rebuild"},
+	"entity_aliases":                {Sidecar: "id space_id library_id entity_type entity_id alias normalized_alias resolution_method created_at"},
 	"entity_embedding_rebuild_runs": {Sidecar: "id space_id status reason error model_id dimension profile_hash processed_count total_count model_calls attempts attempt_id created_at updated_at started_at finished_at"},
 	"entity_merge_records":          {Sidecar: "id space_id keep_entity_id merge_entity_id actor created_at"},
 	"entity_merge_suggestions":      {Sidecar: "id space_id new_entity_id candidate_entity_id entry_id reason status created_at decided_at"},
@@ -42,6 +42,6 @@ var Rules = map[string]Rule{
 	"spaces":                        {Configuration: "embedding_model_id id name description status business storage_used created_at updated_at deleted_at retrieval_config credentials"},
 	"topic_backfill_batches":        {Sidecar: "id job_id ordinal entry_ids entry_count status attempts error created_at updated_at retry_at"},
 	"topic_backfill_jobs":           {Sidecar: "id space_id topic_id topic_name topic_description status total processed failed_entries failed_batches created_at updated_at"},
-	"topics":                        {Sidecar: "id space_id name description library_ids created_at updated_at"},
+	"topics":                        {Sidecar: "id space_id library_id name description created_at updated_at"},
 	"users":                         {Configuration: "id username email password_hash avatar space_id is_active created_at updated_at deleted_at"},
 }

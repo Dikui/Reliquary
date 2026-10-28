@@ -45,9 +45,9 @@ func entityIdentityVersionsCompatible(left, right string) bool {
 	return len(a) == 0 || len(b) == 0 || strings.Join(a, ":") == strings.Join(b, ":")
 }
 
-func (s *EntityService) exactEntity(ctx context.Context, spaceID uint64, item entityResolutionInput) (types.Entity, error) {
+func (s *EntityService) exactEntity(ctx context.Context, spaceID uint64, libraryID string, item entityResolutionInput) (types.Entity, error) {
 	var entity types.Entity
-	err := s.db.WithContext(ctx).Where("space_id = ? AND merged_into_id = '' AND lower(entity_type) IN ? AND normalized_name = ?", spaceID, compatibleEntityTypes(item.EntityType), normalizeEntityName(item.Mention)).Order("id").First(&entity).Error
+	err := s.db.WithContext(ctx).Where("space_id = ? AND library_id = ? AND merged_into_id = '' AND lower(entity_type) IN ? AND normalized_name = ?", spaceID, libraryID, compatibleEntityTypes(item.EntityType), normalizeEntityName(item.Mention)).Order("id").First(&entity).Error
 	if err == nil {
 		return entity, nil
 	}
@@ -55,8 +55,8 @@ func (s *EntityService) exactEntity(ctx context.Context, spaceID uint64, item en
 		return entity, err
 	}
 	err = s.db.WithContext(ctx).Model(&types.Entity{}).
-		Joins("JOIN entity_aliases a ON a.space_id = entities.space_id AND a.entity_id = entities.id").
-		Where("entities.space_id = ? AND entities.merged_into_id = '' AND lower(a.entity_type) IN ? AND a.normalized_alias = ?", spaceID, compatibleEntityTypes(item.EntityType), normalizeEntityName(item.Mention)).
+		Joins("JOIN entity_aliases a ON a.space_id = entities.space_id AND a.library_id = entities.library_id AND a.entity_id = entities.id").
+		Where("entities.space_id = ? AND entities.library_id = ? AND entities.merged_into_id = '' AND lower(a.entity_type) IN ? AND a.normalized_alias = ?", spaceID, libraryID, compatibleEntityTypes(item.EntityType), normalizeEntityName(item.Mention)).
 		Order("entities.id").First(&entity).Error
 	return entity, err
 }
@@ -66,7 +66,7 @@ type entityScored struct {
 	RecallScore float64 `gorm:"column:recall_score"`
 }
 
-func (s *EntityService) recallEntities(ctx context.Context, spaceID uint64, item entityResolutionInput, vector types.EntityNameEmbedding, modelID string, limit int) ([]types.Entity, error) {
+func (s *EntityService) recallEntities(ctx context.Context, spaceID uint64, libraryID string, item entityResolutionInput, vector types.EntityNameEmbedding, modelID string, limit int) ([]types.Entity, error) {
 	recallTypes := compatibleEntityTypes(item.EntityType)
 	if item.EntityType == "company" || item.EntityType == "organization" {
 		recallTypes = []string{"company", "organization"}
@@ -75,13 +75,13 @@ func (s *EntityService) recallEntities(ctx context.Context, spaceID uint64, item
 	var namesResult []entityScored
 	err := s.db.WithContext(ctx).Raw(`WITH scores AS (
  SELECT id AS entity_id, GREATEST(similarity(normalized_name, ?), similarity(normalized_name, ?)) AS score
- FROM entities WHERE space_id=? AND merged_into_id='' AND lower(entity_type) IN ? AND (normalized_name % ? OR normalized_name % ?)
+ FROM entities WHERE space_id=? AND library_id=? AND merged_into_id='' AND lower(entity_type) IN ? AND (normalized_name % ? OR normalized_name % ?)
  UNION ALL
  SELECT a.entity_id, GREATEST(similarity(a.normalized_alias, ?), similarity(a.normalized_alias, ?)) AS score
- FROM entity_aliases a JOIN entities matched ON matched.space_id=a.space_id AND matched.id=a.entity_id
- WHERE a.space_id=? AND matched.merged_into_id='' AND lower(matched.entity_type) IN ? AND (a.normalized_alias % ? OR a.normalized_alias % ?))
+ FROM entity_aliases a JOIN entities matched ON matched.space_id=a.space_id AND matched.library_id=a.library_id AND matched.id=a.entity_id
+ WHERE a.space_id=? AND a.library_id=? AND matched.merged_into_id='' AND lower(matched.entity_type) IN ? AND (a.normalized_alias % ? OR a.normalized_alias % ?))
  SELECT e.*, MAX(scores.score) AS recall_score FROM scores JOIN entities e ON e.id=scores.entity_id AND e.space_id=?
- GROUP BY e.id ORDER BY recall_score DESC,e.id LIMIT ?`, names[0], names[1], spaceID, recallTypes, names[0], names[1], names[0], names[1], spaceID, recallTypes, names[0], names[1], spaceID, limit).Scan(&namesResult).Error
+ GROUP BY e.id ORDER BY recall_score DESC,e.id LIMIT ?`, names[0], names[1], spaceID, libraryID, recallTypes, names[0], names[1], names[0], names[1], spaceID, libraryID, recallTypes, names[0], names[1], spaceID, limit).Scan(&namesResult).Error
 	if err != nil {
 		return nil, err
 	}
@@ -94,10 +94,10 @@ func (s *EntityService) recallEntities(ctx context.Context, spaceID uint64, item
 		encoded, _ := json.Marshal(vector)
 		// MATERIALIZED isolates valid dimensions before evaluating pgvector distance.
 		err = s.db.WithContext(ctx).Raw(`WITH compatible AS MATERIALIZED (
-   SELECT * FROM entities WHERE space_id=? AND merged_into_id='' AND lower(entity_type) IN ?
+   SELECT * FROM entities WHERE space_id=? AND library_id=? AND merged_into_id='' AND lower(entity_type) IN ?
     AND embedding_model_id=? AND embedding_dimension=? AND vector_dims(name_embedding)=? AND NOT embedding_needs_rebuild)
    SELECT compatible.*, 1 - (name_embedding <=> ?::vector) AS recall_score FROM compatible
-   ORDER BY name_embedding <=> ?::vector,id LIMIT ?`, spaceID, recallTypes, modelID, len(vector), len(vector), string(encoded), string(encoded), limit).Scan(&vectorResult).Error
+   ORDER BY name_embedding <=> ?::vector,id LIMIT ?`, spaceID, libraryID, recallTypes, modelID, len(vector), len(vector), string(encoded), string(encoded), limit).Scan(&vectorResult).Error
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +157,10 @@ func (s *EntityService) entityNameEmbedder(ctx context.Context, spaceID uint64) 
 	return profile.embedder, profile.modelID, profile.hash, nil
 }
 
-func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, spaceID uint64, entryID string, input []entityResolutionInput) ([]types.Entity, map[string]types.Entity, error) {
+func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, spaceID uint64, libraryID, entryID string, input []entityResolutionInput) ([]types.Entity, map[string]types.Entity, error) {
+	if strings.TrimSpace(libraryID) == "" {
+		return nil, nil, errors.New("entity library is required")
+	}
 	ctx = types.WithModelCallEntry(ctx, entryID)
 	embedder, embeddingModelID, embeddingHash, err := s.entityNameEmbedder(ctx, spaceID)
 	if err != nil {
@@ -185,7 +188,7 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, sp
 			entity = touched[id]
 		}
 		if entity.ID == "" {
-			entity, err = s.exactEntity(ctx, spaceID, item)
+			entity, err = s.exactEntity(ctx, spaceID, libraryID, item)
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, nil, err
 			}
@@ -200,7 +203,7 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, sp
 					vector = value
 				}
 			}
-			candidates, recallErr := s.recallEntities(ctx, spaceID, item, vector, embeddingModelID, limit)
+			candidates, recallErr := s.recallEntities(ctx, spaceID, libraryID, item, vector, embeddingModelID, limit)
 			if recallErr != nil {
 				return nil, nil, recallErr
 			}
@@ -263,7 +266,7 @@ func (s *EntityService) resolveEntities(ctx context.Context, model chat.Chat, sp
 						vector = value
 					}
 				}
-				entity = types.Entity{ID: uuid.NewString(), SpaceID: spaceID, CanonicalName: canonical, NormalizedName: normalizeEntityName(canonical), EntityType: normalizeEntityName(item.EntityType), Description: strings.TrimSpace(item.Description), CreatedAt: time.Now(), UpdatedAt: time.Now(), NameEmbedding: vector, NameEmbeddingProfileHash: embeddingHash, EmbeddingModelID: embeddingModelID, EmbeddingDimension: len(vector), EmbeddingNeedsRebuild: len(vector) == 0}
+				entity = types.Entity{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: libraryID, CanonicalName: canonical, NormalizedName: normalizeEntityName(canonical), EntityType: normalizeEntityName(item.EntityType), Description: strings.TrimSpace(item.Description), CreatedAt: time.Now(), UpdatedAt: time.Now(), NameEmbedding: vector, NameEmbeddingProfileHash: embeddingHash, EmbeddingModelID: embeddingModelID, EmbeddingDimension: len(vector), EmbeddingNeedsRebuild: len(vector) == 0}
 				// Equal canonical identities in this message share one creation plan.
 				if id, ok := localNames[entityNameKey(item.EntityType, canonical)]; ok && decision.Decision == "new" && entityIdentityVersionsCompatible(item.Mention, canonical) {
 					entity = touched[id]
@@ -386,6 +389,11 @@ func (s *EntityService) judgeEntity(ctx context.Context, model chat.Chat, item e
 	return result, nil
 }
 func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, error) {
+	for _, entity := range entities {
+		if strings.TrimSpace(entity.LibraryID) == "" {
+			return nil, errors.New("entity library is required")
+		}
+	}
 	if len(entities) > 0 {
 		if err := lockEntitySpaceShared(tx, entities[0].SpaceID); err != nil {
 			return nil, err
@@ -393,7 +401,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 		keys := []string{}
 		for _, entity := range entities {
 			for _, name := range append([]string{entity.CanonicalName}, entity.Aliases...) {
-				keys = append(keys, entityNameKey(entity.EntityType, name))
+				keys = append(keys, fmt.Sprintf("%q:%s", entity.LibraryID, entityNameKey(entity.EntityType, name)))
 			}
 		}
 		if err := lockEntityIdentities(tx, entities[0].SpaceID, keys); err != nil {
@@ -404,9 +412,9 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 	for _, planned := range entities {
 		entity := planned
 		var existing types.Entity
-		err := tx.Where("id=? AND space_id=?", entity.ID, entity.SpaceID).First(&existing).Error
+		err := tx.Where("id=? AND space_id=? AND library_id=?", entity.ID, entity.SpaceID, entity.LibraryID).First(&existing).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			err = tx.Where("space_id=? AND lower(entity_type) IN ? AND normalized_name=?", entity.SpaceID, compatibleEntityTypes(entity.EntityType), entity.NormalizedName).Order("id").First(&existing).Error
+			err = tx.Where("space_id=? AND library_id=? AND lower(entity_type) IN ? AND normalized_name=?", entity.SpaceID, entity.LibraryID, compatibleEntityTypes(entity.EntityType), entity.NormalizedName).Order("id").First(&existing).Error
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			var alias types.EntityAlias
@@ -414,9 +422,9 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			for _, name := range entity.Aliases {
 				names = appendUniqueEntityString(names, normalizeEntityName(name))
 			}
-			aliasErr := tx.Where("space_id=? AND lower(entity_type) IN ? AND normalized_alias IN ?", entity.SpaceID, compatibleEntityTypes(entity.EntityType), names).Order("id").First(&alias).Error
+			aliasErr := tx.Where("space_id=? AND library_id=? AND lower(entity_type) IN ? AND normalized_alias IN ?", entity.SpaceID, entity.LibraryID, compatibleEntityTypes(entity.EntityType), names).Order("id").First(&alias).Error
 			if aliasErr == nil {
-				err = tx.Where("space_id=? AND id=?", entity.SpaceID, alias.EntityID).First(&existing).Error
+				err = tx.Where("space_id=? AND library_id=? AND id=?", entity.SpaceID, entity.LibraryID, alias.EntityID).First(&existing).Error
 			} else if !errors.Is(aliasErr, gorm.ErrRecordNotFound) {
 				return nil, aliasErr
 			}
@@ -425,7 +433,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			for existing.MergedIntoID != "" {
 				next := existing.MergedIntoID
 				existing = types.Entity{}
-				if err := tx.Where("space_id=? AND id=?", entity.SpaceID, next).First(&existing).Error; err != nil {
+				if err := tx.Where("space_id=? AND library_id=? AND id=?", entity.SpaceID, entity.LibraryID, next).First(&existing).Error; err != nil {
 					return nil, err
 				}
 			}
@@ -440,7 +448,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 					entity.EmbeddingNeedsRebuild = true
 				}
 			}
-			created := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "entity_type"}, {Name: "normalized_name"}}, DoNothing: true}).Create(&entity)
+			created := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "entity_type"}, {Name: "normalized_name"}}, DoNothing: true}).Create(&entity)
 			if created.Error != nil {
 				return nil, created.Error
 			}
@@ -449,7 +457,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 					return nil, err
 				}
 			}
-			if err := tx.Where("space_id=? AND entity_type=? AND normalized_name=?", entity.SpaceID, entity.EntityType, entity.NormalizedName).First(&existing).Error; err != nil {
+			if err := tx.Where("space_id=? AND library_id=? AND entity_type=? AND normalized_name=?", entity.SpaceID, entity.LibraryID, entity.EntityType, entity.NormalizedName).First(&existing).Error; err != nil {
 				return nil, err
 			}
 			entity = existing
@@ -479,7 +487,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			}
 			seen[key] = true
 			var collision types.EntityAlias
-			found := tx.Where("space_id=? AND lower(entity_type) IN ? AND normalized_alias=?", entity.SpaceID, compatibleEntityTypes(entity.EntityType), key).First(&collision).Error
+			found := tx.Where("space_id=? AND library_id=? AND lower(entity_type) IN ? AND normalized_alias=?", entity.SpaceID, entity.LibraryID, compatibleEntityTypes(entity.EntityType), key).First(&collision).Error
 			if found == nil {
 				continue
 			}
@@ -489,6 +497,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			alias := resolutions[key]
 			alias.ID = uuid.NewString()
 			alias.SpaceID = entity.SpaceID
+			alias.LibraryID = entity.LibraryID
 			alias.EntityType = entity.EntityType
 			alias.EntityID = entity.ID
 			alias.Alias = strings.TrimSpace(name)
@@ -497,7 +506,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			if alias.ResolutionMethod == "" {
 				alias.ResolutionMethod = "exact"
 			}
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "entity_type"}, {Name: "normalized_alias"}}, DoNothing: true}).Create(&alias).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "entity_type"}, {Name: "normalized_alias"}}, DoNothing: true}).Create(&alias).Error; err != nil {
 				return nil, err
 			}
 		}
@@ -514,14 +523,14 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 				continue
 			}
 			var candidate types.Entity
-			if err := tx.Where("space_id=? AND id=?", suggestion.SpaceID, suggestion.CandidateEntityID).First(&candidate).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := tx.Where("space_id=? AND library_id=? AND id=?", suggestion.SpaceID, entity.LibraryID, suggestion.CandidateEntityID).First(&candidate).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 				continue
 			} else if err != nil {
 				return nil, err
 			}
 			for candidate.MergedIntoID != "" {
 				next := candidate.MergedIntoID
-				if err := tx.Where("space_id=? AND id=?", suggestion.SpaceID, next).First(&candidate).Error; err != nil {
+				if err := tx.Where("space_id=? AND library_id=? AND id=?", suggestion.SpaceID, entity.LibraryID, next).First(&candidate).Error; err != nil {
 					return nil, err
 				}
 			}

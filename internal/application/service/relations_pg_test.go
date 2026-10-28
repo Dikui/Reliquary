@@ -119,7 +119,14 @@ func TestIKB12SourcesVersionsSuppressionAndLibraryIsolation(t *testing.T) {
 	require.NoError(t, db.Create(&types.LibraryContentType{LibraryID: other.ID, Name: "on", Enabled: true, ExtractGraph: true}).Error)
 	four := &types.Entry{ID: "four", SpaceID: 1, LibraryID: other.ID, ContentType: "on", ParseStatus: types.ParseStatusCompleted, Type: types.EntryTypeManual}
 	require.NoError(t, db.Create(four).Error)
-	graphPublish(t, db, ctx, svc, four, graphInput("a", "合作", "b"))
+	for _, id := range []string{"a", "b", "c"} {
+		entity := entityRecord("other-"+id, id, "company")
+		entity.LibraryID = other.ID
+		require.NoError(t, db.Create(&entity).Error)
+	}
+	input := graphInput("other-a", "合作", "other-b")
+	input.Evidence[0].Speaker.EntityID = "other-c"
+	graphPublish(t, db, ctx, svc, four, input)
 	require.Len(t, graphRows(t, db), 1)
 	require.Equal(t, other.ID, graphRows(t, db)[0].LibraryID)
 }

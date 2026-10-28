@@ -38,6 +38,13 @@ type ImageEmbedder interface {
 	SupportsImages() bool
 }
 
+// FusionEmbedder encodes related text and images into one vector.
+// Callers must check SupportsFusion before using it.
+type FusionEmbedder interface {
+	EmbedFusion(context.Context, string, []string) ([]float32, error)
+	SupportsFusion() bool
+}
+
 // ProfiledEmbedder identifies the model configuration used to create a client.
 type ProfiledEmbedder interface{ GetProfileHash() string }
 

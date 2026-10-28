@@ -108,6 +108,58 @@ func TestMultimodalEmbeddingUsesDashScopeNativeAPI(t *testing.T) {
 	require.Equal(t, "qwen3-vl-embedding", requests[2]["model"])
 }
 
+func TestFusionEmbeddingUsesTextAndImagesThroughDecorators(t *testing.T) {
+	requests := []map[string]any{}
+	embedder := newMultimodalTestEmbedder(t, func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, dashscopeMultimodalPath, r.URL.Path)
+		var request map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		requests = append(requests, request)
+		contents := request["input"].(map[string]any)["contents"].([]any)
+		count := len(contents)
+		if parameters, ok := request["parameters"].(map[string]any); ok && parameters["enable_fusion"] == true {
+			count = 1
+		}
+		items := make([]map[string]any, count)
+		for i := range items {
+			items[i] = map[string]any{"index": i, "embedding": []float32{1, 0, 0}}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"output": map[string]any{"embeddings": items}})
+	})
+	client := embedder.(*concurrencyEmbedder).inner.(*OpenAIEmbedder)
+	require.False(t, client.SupportsFusion(), "Jina image support does not imply fusion support")
+	client.multimodalFormat = multimodalFormatDashScope
+	require.False(t, client.SupportsFusion(), "other DashScope models do not imply fusion support")
+	client.modelName = "qwen3-vl-embedding-2026-01-01"
+	debug := &debugEmbedder{inner: embedder}
+	require.True(t, debug.SupportsFusion())
+	const image = "data:image/png;base64,iVBORw0KGgo="
+	vector, err := debug.EmbedFusion(context.Background(), "related paragraph", []string{image, image})
+	require.NoError(t, err)
+	require.Equal(t, []float32{1, 0, 0}, vector)
+	require.Equal(t, []any{map[string]any{"text": "related paragraph"}, map[string]any{"image": image}, map[string]any{"image": image}}, requests[0]["input"].(map[string]any)["contents"])
+	require.Equal(t, map[string]any{"enable_fusion": true}, requests[0]["parameters"], "fusion does not require a dimension override")
+	client.supportsDimensionOverride = true
+	_, err = debug.EmbedFusion(context.Background(), "related paragraph", []string{image})
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"enable_fusion": true, "dimension": float64(3)}, requests[1]["parameters"])
+	vectors, err := debug.BatchEmbed(context.Background(), []string{"first", "second"})
+	require.NoError(t, err)
+	require.Len(t, vectors, 2)
+	require.Equal(t, map[string]any{"dimension": float64(3)}, requests[2]["parameters"], "ordinary text batches stay separate")
+}
+
+func TestFusionEmbeddingRejectsWrongVectorCount(t *testing.T) {
+	embedder := newMultimodalTestEmbedder(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"output":{"embeddings":[{"index":0,"embedding":[1,0,0]},{"index":1,"embedding":[0,1,0]}]}}`))
+	})
+	client := embedder.(*concurrencyEmbedder).inner.(*OpenAIEmbedder)
+	client.modelName = "qwen3-vl-embedding"
+	client.multimodalFormat = multimodalFormatDashScope
+	_, err := embedder.(FusionEmbedder).EmbedFusion(context.Background(), "related paragraph", []string{"data:image/png;base64,iVBORw0KGgo="})
+	require.ErrorContains(t, err, "count mismatch: got 2, expected 1")
+}
+
 func TestMultimodalEmbeddingRejectsInvalidResponseAndInput(t *testing.T) {
 	for _, test := range []struct {
 		name, body, message string

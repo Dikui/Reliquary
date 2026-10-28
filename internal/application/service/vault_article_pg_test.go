@@ -234,6 +234,7 @@ func TestVaultAcceptedEntityMergeSuggestionRefreshesHeader(t *testing.T) {
 	var old types.Entity
 	require.NoError(t, h.db.Where("canonical_name=?", "待合并实体").First(&old).Error)
 	keep := entityRecord(uuid.NewString(), "规范实体", "company")
+	keep.LibraryID = h.library.ID
 	require.NoError(t, h.db.Create(&keep).Error)
 	suggestion := &types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: h.library.SpaceID, NewEntityID: old.ID, CandidateEntityID: keep.ID, EntryID: k.ID, Reason: "同一主体", Status: "pending", CreatedAt: time.Now()}
 	require.NoError(t, h.db.Create(suggestion).Error)

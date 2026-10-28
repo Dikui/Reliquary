@@ -120,7 +120,7 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 	var names []string
 	if err = v.db.WithContext(ctx).Table("entities e").Select("e.canonical_name").
 		Joins("JOIN entry_entities links ON links.entity_id=e.id AND links.space_id=e.space_id").
-		Where("links.entry_id=? AND links.space_id=?", k.ID, k.SpaceID).Pluck("e.canonical_name", &names).Error; err != nil {
+		Where("links.entry_id=? AND links.space_id=? AND e.library_id=?", k.ID, k.SpaceID, k.LibraryID).Pluck("e.canonical_name", &names).Error; err != nil {
 		return h, err
 	}
 	for _, name := range names {
@@ -128,7 +128,7 @@ func (v *VaultService) articleHeader(ctx context.Context, k *types.Entry) (Vault
 	}
 	if err = v.db.WithContext(ctx).Table("topics t").Select("t.name").
 		Joins("JOIN entry_topics links ON links.topic_id=t.id AND links.space_id=t.space_id").
-		Where("links.entry_id=? AND links.space_id=?", k.ID, k.SpaceID).Pluck("t.name", &h.Topics).Error; err != nil {
+		Where("links.entry_id=? AND links.space_id=? AND t.library_id=?", k.ID, k.SpaceID, k.LibraryID).Pluck("t.name", &h.Topics).Error; err != nil {
 		return h, err
 	}
 	return h, nil

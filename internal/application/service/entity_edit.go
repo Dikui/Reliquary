@@ -44,6 +44,9 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 				return err
 			}
 		}
+		if keep.LibraryID != merged.LibraryID {
+			return werrors.NewBadRequestError("entities must belong to the same library")
+		}
 		if merged.MergedIntoID == keep.ID {
 			return nil
 		}
@@ -56,10 +59,10 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 		}
 		for _, alias := range aliases {
 			var collision types.EntityAlias
-			err := tx.Where("space_id = ? AND entity_type = ? AND normalized_alias = ? AND entity_id <> ?", spaceID, keep.EntityType, alias.NormalizedAlias, merged.ID).First(&collision).Error
+			err := tx.Where("space_id = ? AND library_id = ? AND entity_type = ? AND normalized_alias = ? AND entity_id <> ?", spaceID, keep.LibraryID, keep.EntityType, alias.NormalizedAlias, merged.ID).First(&collision).Error
 			if err == nil {
 				if collision.EntityID != keep.ID {
-					return werrors.NewBadRequestError("merge alias conflicts with another space entity")
+					return werrors.NewBadRequestError("merge alias conflicts with another library entity")
 				}
 				if err := tx.Delete(&alias).Error; err != nil {
 					return err
@@ -171,7 +174,7 @@ func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string)
 			return err
 		}
 		var collisions int64
-		if err := tx.Model(&types.Entity{}).Where("space_id=? AND entity_type=? AND normalized_name=? AND id<>? AND merged_into_id=''", spaceID, entity.EntityType, normalizeEntityName(name), entity.ID).Count(&collisions).Error; err != nil {
+		if err := tx.Model(&types.Entity{}).Where("space_id=? AND library_id=? AND entity_type=? AND normalized_name=? AND id<>? AND merged_into_id=''", spaceID, entity.LibraryID, entity.EntityType, normalizeEntityName(name), entity.ID).Count(&collisions).Error; err != nil {
 			return err
 		}
 		if collisions > 0 {
@@ -256,7 +259,7 @@ func saveEntityAlias(tx *gorm.DB, entity types.Entity, name, method string) erro
 		return nil
 	}
 	var collision types.EntityAlias
-	if err := tx.Where("space_id=? AND entity_type=? AND normalized_alias=?", entity.SpaceID, entity.EntityType, normalizeEntityName(name)).First(&collision).Error; err == nil {
+	if err := tx.Where("space_id=? AND library_id=? AND entity_type=? AND normalized_alias=?", entity.SpaceID, entity.LibraryID, entity.EntityType, normalizeEntityName(name)).First(&collision).Error; err == nil {
 		if collision.EntityID != entity.ID {
 			return werrors.NewBadRequestError("merge alias conflicts with another entity")
 		}
@@ -264,6 +267,6 @@ func saveEntityAlias(tx *gorm.DB, entity types.Entity, name, method string) erro
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
-	alias := types.EntityAlias{ID: uuid.NewString(), SpaceID: entity.SpaceID, EntityType: entity.EntityType, EntityID: entity.ID, Alias: name, NormalizedAlias: normalizeEntityName(name), ResolutionMethod: method, CreatedAt: time.Now()}
-	return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "entity_type"}, {Name: "normalized_alias"}}, DoNothing: true}).Create(&alias).Error
+	alias := types.EntityAlias{ID: uuid.NewString(), SpaceID: entity.SpaceID, LibraryID: entity.LibraryID, EntityType: entity.EntityType, EntityID: entity.ID, Alias: name, NormalizedAlias: normalizeEntityName(name), ResolutionMethod: method, CreatedAt: time.Now()}
+	return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "entity_type"}, {Name: "normalized_alias"}}, DoNothing: true}).Create(&alias).Error
 }

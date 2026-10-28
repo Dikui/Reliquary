@@ -24,13 +24,15 @@ async function loadTopics() {
   optionsLoading.value = true
   optionsError.value = ''
   try {
-    const response = await listTopics()
+    if (!props.entry.library_id) throw new Error()
+    const response = await listTopics(props.entry.library_id || '')
     if (!response.success) throw new Error(response.message)
     if (generation === optionsGeneration) topics.value = response.data || []
   } catch { if (generation === optionsGeneration) optionsError.value = t('articleJudgments.topicsLoadFailed') }
   finally { if (generation === optionsGeneration) optionsLoading.value = false }
 }
-watch(() => props.entry.id, () => {
+watch(() => [props.entry.id, props.entry.library_id], () => {
+  topics.value = []
   void loadTopics()
 }, { immediate: true })
 watch(() => props.entry.content_type, value => { typeDraft.value = value || '' }, { immediate: true })

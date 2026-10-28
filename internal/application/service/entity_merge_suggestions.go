@@ -13,7 +13,7 @@ import (
 )
 
 func (s *EntityService) ListMergeSuggestions(ctx context.Context, q types.EntityQuery, status string) ([]types.EntityMergeSuggestion, error) {
-	spaceID, libraryID, err := s.resolveLibrary(ctx)
+	spaceID, libraryID, err := s.resolveLibrary(ctx, q.LibraryID)
 	if err != nil {
 		return nil, err
 	}
@@ -30,9 +30,7 @@ func (s *EntityService) ListMergeSuggestions(ctx context.Context, q types.Entity
 		Joins("JOIN entities fresh ON fresh.space_id=entity_merge_suggestions.space_id AND fresh.id=entity_merge_suggestions.new_entity_id").
 		Joins("JOIN entities candidate ON candidate.space_id=entity_merge_suggestions.space_id AND candidate.id=entity_merge_suggestions.candidate_entity_id").
 		Where("entity_merge_suggestions.space_id=?", spaceID)
-	if libraryID != "" {
-		query = query.Where("EXISTS (SELECT 1 FROM entries k WHERE k.id=entity_merge_suggestions.entry_id AND k.space_id=entity_merge_suggestions.space_id AND k.library_id=? AND k.deleted_at IS NULL)", libraryID)
-	}
+	query = query.Where("fresh.library_id=? AND candidate.library_id=?", libraryID, libraryID)
 	if status != "all" {
 		query = query.Where("entity_merge_suggestions.status=?", status)
 	}

@@ -83,7 +83,7 @@ func (s *EntityService) ListRelations(ctx context.Context, id, libraryID string)
 				return err
 			}
 		}
-		q := tx.Where("space_id=? AND (subject_id=? OR object_id=?)", spaceID, id, id)
+		q := tx.Where("space_id=? AND library_id=? AND (subject_id=? OR object_id=?)", spaceID, entity.LibraryID, id, id)
 		if libraryID != "" {
 			var count int64
 			if err := tx.Model(&types.Library{}).Where("space_id=? AND id=?", spaceID, libraryID).Count(&count).Error; err != nil {
@@ -105,7 +105,7 @@ func (s *EntityService) ListRelations(ctx context.Context, id, libraryID string)
 				peer = row.SubjectID
 				item.Direction = "incoming"
 			}
-			if err := tx.Where("id=? AND space_id=?", peer, spaceID).First(&item.Peer).Error; err != nil {
+			if err := tx.Where("id=? AND space_id=? AND library_id=?", peer, spaceID, entity.LibraryID).First(&item.Peer).Error; err != nil {
 				return err
 			}
 			var library types.Library

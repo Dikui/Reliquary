@@ -268,7 +268,9 @@ func TestAllTemplatesProcessEntitiesAndGraph(t *testing.T) {
 	for _, library := range []string{"personal", "references", "ai-output"} {
 		t.Run(library, func(t *testing.T) {
 			h, vault := newIngestHarness(t)
-			topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Deployment notes", Description: "Acme and Beta deployment measurements"})
+			var topicLibrary types.Library
+			require.NoError(t, h.db.Where("system_role=?", library).First(&topicLibrary).Error)
+			topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{LibraryID: topicLibrary.ID, Name: "Deployment notes", Description: "Acme and Beta deployment measurements"})
 			require.NoError(t, err)
 			kind := "方案"
 			if library == "references" {
@@ -325,9 +327,9 @@ func TestAllTemplatesProcessEntitiesAndGraph(t *testing.T) {
 
 func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t *testing.T) {
 	h := newArticleProcessingHarness(t, true)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Product news", Description: "Original product announcements"})
+	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{LibraryID: h.library.ID, Name: "Product news", Description: "Original product announcements"})
 	require.NoError(t, err)
-	secondTopic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Research", Description: "Experimental results"})
+	secondTopic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{LibraryID: h.library.ID, Name: "Research", Description: "Experimental results"})
 	require.NoError(t, err)
 	h.processor.output = articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "Acme", EntityType: "company", Aliases: []string{"Acme Inc"}}}, []string{topic.ID, "missing-topic"})
 	body := "# First announcement\n\nAcme released a widget with original measurements.\n\n![chart](" + articleImageDataURI(t, 10) + ")"
@@ -370,7 +372,7 @@ func TestArticleProcessingFullMarkdownPersistsSummaryEntitiesTopicsAndVectors(t 
 	require.NoError(t, err)
 	read.Close()
 	require.NotEmpty(t, article.FilePath)
-	firstEntities, err := NewEntityService(h.db, h.service.modelService).ListEntities(h.ctx, types.EntityQuery{})
+	firstEntities, err := NewEntityService(h.db, h.service.modelService).ListEntities(h.ctx, types.EntityQuery{LibraryID: article.LibraryID})
 	require.NoError(t, err)
 	require.Len(t, firstEntities, 1)
 	require.NotEmpty(t, firstEntities[0].Description)

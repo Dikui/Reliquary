@@ -20,16 +20,16 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 	library := types.Library{ID: "route-library", SpaceID: 1, Name: "Articles", Type: "document"}
 	library.EnsureDefaults()
 	require.NoError(t, db.Create(&library).Error)
-	entity := types.Entity{ID: "route-entity", SpaceID: 1, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
+	entity := types.Entity{ID: "route-entity", SpaceID: 1, LibraryID: library.ID, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
 	require.NoError(t, db.Create(&entity).Error)
-	require.NoError(t, db.Create(&types.EntityAlias{ID: "route-alias", SpaceID: 1, EntityID: entity.ID, EntityType: "company", Alias: "艾克米", NormalizedAlias: "艾克米", ResolutionMethod: "exact", CreatedAt: time.Now()}).Error)
+	require.NoError(t, db.Create(&types.EntityAlias{ID: "route-alias", SpaceID: 1, LibraryID: library.ID, EntityID: entity.ID, EntityType: "company", Alias: "艾克米", NormalizedAlias: "艾克米", ResolutionMethod: "exact", CreatedAt: time.Now()}).Error)
 	article := types.Entry{ID: "route-article", SpaceID: 1, LibraryID: library.ID, Title: "Article mention", Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 	require.NoError(t, db.Create(&article).Error)
 	require.NoError(t, db.Create(&types.EntryEntity{SpaceID: 1, EntryID: article.ID, EntityID: entity.ID, CreatedAt: time.Now()}).Error)
 	engine := gin.New()
 	engine.Use(middleware.ErrorHandler(), entityIdentityMiddleware())
 	RegisterEntityRoutes(engine.Group("/api/v1"), handler.NewEntityHandler(service.NewEntityService(db, nil)))
-	response := entityRequest(t, engine, http.MethodGet, "/api/v1/entities?entity_type=company&entity=艾克米&limit=1&offset=0", "", 1, entityOwnerID)
+	response := entityRequest(t, engine, http.MethodGet, "/api/v1/entities?library_id=route-library&entity_type=company&entity=艾克米&limit=1&offset=0", "", 1, entityOwnerID)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var envelope entityEnvelope
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
@@ -46,7 +46,7 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 	require.Equal(t, []string{"艾克米"}, detail.Entity.Aliases)
 	require.Len(t, detail.Entries, 1)
 	require.Equal(t, article.ID, detail.Entries[0].ID)
-	for _, query := range []string{"limit=0", "limit=101", "offset=-1"} {
+	for _, query := range []string{"", "library_id=route-library&limit=0", "library_id=route-library&limit=101", "library_id=route-library&offset=-1"} {
 		response = entityRequest(t, engine, http.MethodGet, "/api/v1/entities?"+query, "", 1, entityOwnerID)
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	}

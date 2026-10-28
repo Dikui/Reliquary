@@ -224,7 +224,7 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 		if kind == "report" {
 			for _, topicID := range header.TopicIDs {
 				var count int64
-				if err := tx.Model(&types.Topic{}).Where("space_id=? AND id=?", library.SpaceID, topicID).Count(&count).Error; err != nil {
+				if err := tx.Model(&types.Topic{}).Where("space_id=? AND library_id=? AND id=?", library.SpaceID, library.ID, topicID).Count(&count).Error; err != nil {
 					return err
 				}
 				if count > 0 {
@@ -237,9 +237,9 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 		}
 		for _, name := range sortedUniqueNames(header.Topics) {
 			var topic types.Topic
-			err := tx.Where("space_id=? AND name=?", library.SpaceID, name).First(&topic).Error
+			err := tx.Where("space_id=? AND library_id=? AND name=?", library.SpaceID, library.ID, name).First(&topic).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				topic = types.Topic{ID: uuid.NewString(), SpaceID: library.SpaceID, Name: name, CreatedAt: now, UpdatedAt: now}
+				topic = types.Topic{ID: uuid.NewString(), SpaceID: library.SpaceID, LibraryID: library.ID, Name: name, CreatedAt: now, UpdatedAt: now}
 				err = tx.Create(&topic).Error
 			}
 			if err != nil {

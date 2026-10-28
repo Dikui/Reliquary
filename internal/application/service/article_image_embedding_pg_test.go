@@ -30,9 +30,16 @@ type articleImageFixtureEmbedder struct {
 	enabled bool
 	images  []string
 	err     error
+	fusion  bool
+	fused   [][]string
 }
 
 func (e *articleImageFixtureEmbedder) SupportsImages() bool { return e.enabled }
+func (e *articleImageFixtureEmbedder) SupportsFusion() bool { return e.fusion }
+func (e *articleImageFixtureEmbedder) EmbedFusion(_ context.Context, text string, images []string) ([]float32, error) {
+	e.fused = append(e.fused, append([]string{text}, images...))
+	return []float32{0, 0, 1}, e.err
+}
 func (e *articleImageFixtureEmbedder) EmbedImage(_ context.Context, image string) ([]float32, error) {
 	e.images = append(e.images, image)
 	return []float32{0, 1, 0}, e.err
@@ -65,6 +72,7 @@ func newArticleImageHarness(t *testing.T, enabled bool) (*articleProcessingHarne
 
 func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T) {
 	h, vault, e := newArticleImageHarness(t, true)
+	e.fusion = true
 	firstImage := articleImageDataURI(t, 29)
 	var large bytes.Buffer
 	require.NoError(t, png.Encode(&large, image.NewNRGBA(image.Rect(0, 0, 5000, 40))))
@@ -74,6 +82,34 @@ func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T)
 	paths := articleImagePaths(article)
 	require.Len(t, paths, 3, "repeated attachment is vectorized once")
 	require.Len(t, e.images, 3)
+	require.NotEmpty(t, e.fused, "body blocks encode their saved images together with text")
+	groups, err := h.service.retrieveEngine.Retrieve(h.ctx, []types.RetrieveParams{{Embedding: []float32{0, 0, 1}, LibraryIDs: []string{h.library.ID}, EntryIDs: []string{article.ID}, RetrieverType: types.VectorRetrieverType, TopK: 20, Threshold: 0.9}})
+	require.NoError(t, err)
+	hitChunks := []string{}
+	for _, group := range groups {
+		require.NoError(t, group.Error)
+		for _, hit := range group.Results {
+			hitChunks = append(hitChunks, hit.ChunkID)
+		}
+	}
+	var chunks []types.Chunk
+	require.NoError(t, h.db.Where("entry_id=?", article.ID).Find(&chunks).Error)
+	for _, chunk := range chunks {
+		var row struct{ Embedding pgvector.HalfVector }
+		require.NoError(t, h.db.Table("embeddings").Select("embedding").Where("chunk_id=?", chunk.ID).Scan(&row).Error)
+		if len(articleImagesInOrder(chunk.Content, nil)) > 0 {
+			require.Equal(t, []float32{0, 0, 1}, row.Embedding.Slice())
+			require.NotEmpty(t, chunk.ID)
+			require.NotEmpty(t, chunk.SourceLocations, "fusion keeps the original body location")
+			require.Contains(t, hitChunks, chunk.ID, "fusion vectors remain searchable through the chunk channel")
+		}
+	}
+	fusedCount := len(e.fused)
+	plain := h.upload(t, "Plain observations", "This paragraph has no image and keeps its text vector.")
+	require.Equal(t, fusedCount, len(e.fused))
+	var plainVector struct{ Embedding pgvector.HalfVector }
+	require.NoError(t, h.db.Table("embeddings").Select("embedding").Where("entry_id=?", plain.ID).Limit(1).Scan(&plainVector).Error)
+	require.Equal(t, []float32{1, 0, 0}, plainVector.Embedding.Slice())
 	type row struct {
 		ModelID, AttachmentPath, ContentHash string
 		Dimension                            int

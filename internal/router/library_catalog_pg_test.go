@@ -113,12 +113,12 @@ func TestMultipleLibraryReadSearchAndFeed(t *testing.T) {
 	require.NoError(t, f.db.Model(&types.Library{}).Where("space_id=?", types.SingleSpaceID).Update("indexing_strategy", types.IndexingStrategy{KeywordEnabled: true}).Error)
 	var libraries []types.Library
 	require.NoError(t, f.db.Find(&libraries).Error)
-	entity := types.Entity{ID: "multi-entity", SpaceID: 1, CanonicalName: "Multi entity", NormalizedName: "multi entity", EntityType: "company"}
-	require.NoError(t, f.db.Create(&entity).Error)
 	follows := service.NewFollowService(f.db)
-	_, err := follows.Follow(f.ctx, "entity", entity.ID)
-	require.NoError(t, err)
 	for _, library := range libraries {
+		entity := types.Entity{ID: "entity-" + library.SystemRole, SpaceID: 1, LibraryID: library.ID, CanonicalName: "Multi entity", NormalizedName: "multi entity", EntityType: "company"}
+		require.NoError(t, f.db.Create(&entity).Error)
+		_, err := follows.Follow(f.ctx, "entity", entity.ID)
+		require.NoError(t, err)
 		entry := types.Entry{ID: library.SystemRole + "-entry", SpaceID: 1, LibraryID: library.ID, Title: "catalogneedle shared", Type: "manual", SourceKind: map[string]string{"personal": "mine", "ai-output": "report", "official": "article", "media": "article", "references": "article"}[library.SystemRole], ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", VaultBody: "Full original body"}
 		require.NoError(t, f.db.Create(&entry).Error)
 		require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: entry.ID, EntityID: entity.ID, CreatedAt: time.Now().Add(-time.Second)}).Error)

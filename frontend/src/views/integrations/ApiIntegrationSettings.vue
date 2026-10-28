@@ -172,7 +172,7 @@ async function loadSearchOptions() {
   searchOptionsLoading.value = true
   searchOptionsError.value = ''
   try {
-    const response = await getSearchOptions()
+    const response = await getSearchOptions(playgroundLibraries.value)
     if (!response.success) throw new Error(response.message)
     searchOptions.value = response.data
   } catch { searchOptionsError.value = t('knowledgeSearch.optionsFailed') }

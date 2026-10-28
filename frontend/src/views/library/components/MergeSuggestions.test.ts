@@ -39,7 +39,7 @@ async function renderSuggestions(locale: 'zh-CN' | 'en-US', count: number, statu
     onServerPrefetch(async () => { state.status.value = status; await nextTick(); await state.refresh() })
     return state
   }
-  const app = createSSRApp(component)
+  const app = createSSRApp(component, { libraryId: 'library-a' })
   const stub = defineComponent({ props: ['message', 'description'], setup: (props, { attrs, slots }) => () => h('div', attrs, [props.message, props.description, slots.default?.()]) })
   for (const name of ['t-alert', 't-button', 't-empty', 't-loading', 't-select', 't-tag']) app.component(name, stub)
   return renderToString(app)

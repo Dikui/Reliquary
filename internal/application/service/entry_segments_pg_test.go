@@ -145,7 +145,7 @@ func TestSegmentProcessingRetryAndMerge(t *testing.T) {
 	_, attempt, err := h.service.tracker().OpenAttempt(h.ctx, k.ID)
 	require.NoError(t, err)
 	h.ctx = withAttempt(h.ctx, attempt)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Segments", Description: "fixture"})
+	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{LibraryID: h.library.ID, Name: "Segments", Description: "fixture"})
 	require.NoError(t, err)
 	m.topic = topic.ID
 	body := "# Main\n\n" + strings.Repeat("paragraph with meaningful original material. ", 13)
@@ -248,7 +248,7 @@ func TestShortArticleStillOneCallAndTypeTie(t *testing.T) {
 
 func TestSegmentPersistenceResolvesGlobalProvenance(t *testing.T) {
 	h, m := segmentedHarness(t)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Long original", Description: "Original fixture"})
+	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{LibraryID: h.library.ID, Name: "Long original", Description: "Original fixture"})
 	require.NoError(t, err)
 	m.topic = topic.ID
 	k := h.upload(t, "long-persisted", "# Original\n\n"+strings.Repeat("This original document describes Acme products and measurements. ", 15))
@@ -358,7 +358,7 @@ func TestSegmentUnverifiedFingerprintRepeatsOldWorkAndThenRetainsVerifiedCheckpo
 	h, model := segmentedHarness(t)
 	k := segmentedEntry(t, h)
 	body := "# Original\n\n" + strings.Repeat("Complete original measurements. ", 30)
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Original topic"})
+	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{LibraryID: h.library.ID, Name: "Original topic"})
 	require.NoError(t, err)
 	model.fail = 4
 	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)

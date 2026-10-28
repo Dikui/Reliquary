@@ -87,7 +87,7 @@ func TestGeneratedReparseRunsProcessingAndPreservesUserTopics(t *testing.T) {
 	k.StructuredSummary = &types.EntrySummary{Overview: "Caller overview", Points: []string{"One", "Two", "Three"}, KeyTerms: []string{}}
 	k.SummaryStatus = types.SummaryStatusCompleted
 	require.NoError(t, h.service.repo.UpdateEntry(h.ctx, k))
-	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{Name: "Caller topic"})
+	topic, err := NewTopicService(h.db).CreateTopic(h.ctx, &types.Topic{LibraryID: h.library.ID, Name: "Caller topic"})
 	require.NoError(t, err)
 	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: k.SpaceID, EntryID: k.ID, TopicID: topic.ID, Source: types.TopicSourceUser}).Error)
 	_, err = h.service.ReparseEntry(h.ctx, k.ID, nil)

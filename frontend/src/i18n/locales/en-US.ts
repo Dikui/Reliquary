@@ -677,7 +677,7 @@ export default {
   "nameExists": "This name already exists. Choose another name.",
   "noDescription": "No description yet.",
   "descriptionHint": "Changing the description reassesses past materials and preserves manually added associations.",
-  "historyHint": "Historical assignment uses titles and summaries of completed materials in the applicable libraries. With no library selection, all libraries apply. Creating a topic or changing its description starts assignment.",
+  "historyHint": "Historical assignment uses titles and summaries of completed materials in the selected library. Creating a topic or changing its description starts assignment. A topic stays in its original library.",
   "articleCount": "{count} materials",
   "progress": "Processed {processed} / {total}",
   "failures": "Failed: {materials} materials in {batches} batches",
@@ -696,6 +696,7 @@ export default {
   "deleteDescription": "Delete “{name}” and its material associations? Materials are retained and their headers are updated.",
   "batchFailure": "Batch {ordinal}, {count} materials, {attempts} attempts: {reason}",
   "status": {
+    "cancelled": "Historical assignment cancelled",
     "pending": "Waiting for historical assignment",
     "running": "Assigning past materials",
     "completed": "Historical assignment complete",

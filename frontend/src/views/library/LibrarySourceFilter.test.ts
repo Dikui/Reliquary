@@ -133,11 +133,11 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   modules['@/components/EmptyEntry.vue'] = moduleOf(loadComponent(new URL('../../components/EmptyEntry.vue', import.meta.url), modules))
   modules['@/components/EntryBatchDialog.vue'] = moduleOf(loadComponent(new URL('../../components/EntryBatchDialog.vue', import.meta.url), modules))
   modules['@/components/LibraryScopeSelect.vue'] = moduleOf(defineComponent({
-    emits: ['loaded'], setup: (_, { emit }) => {
-      onMounted(() => emit('loaded', noLibraries ? [] : [
+    props: { single: Boolean }, emits: ['loaded', 'update:modelValue'], setup: (props, { emit }) => {
+      onMounted(() => { if (props.single && !noLibraries) emit('update:modelValue', ['library-source']); emit('loaded', noLibraries ? [] : [
         { id: 'library-source', name: 'Research', display_name: 'Research', template: 'own', content_types: [...CONTENT_TYPES, 'SOP'].map(name => ({ name, enabled: true })) },
         { id: 'reports', name: 'AI Reports', template: 'generated', content_types: [] },
-      ]))
+      ]) })
       return () => null
     },
   }))
@@ -486,6 +486,8 @@ test('bulk management retains exact filters and server count across both steps a
     for (const key of ['library.rebuildLibrary', 'library.rebuildLibraryAll']) assert.equal(button(key), undefined)
     assert.equal(button('entryBatch.title')!.props.disabled, false)
     env.scope.value = ['library-source']; await settle()
+    await env.change(env.control('entryBatch.entities'), ['entity-1'])
+    await env.change(env.control('entryBatch.topics'), ['topic-1'])
     button('entryBatch.title')!.props.onClick(); await settle()
     assert.ok(visibleText(env.root).includes(env.t('entryBatch.scopeStep')))
     assert.equal(env.control('entryBatch.action'), undefined)

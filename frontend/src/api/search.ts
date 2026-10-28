@@ -12,4 +12,4 @@ export async function searchEntries(request: SearchRequest) {
   }
   return post<SearchEnvelope<SearchData>>('/api/v1/search', request)
 }
-export const getSearchOptions = () => get<SearchEnvelope<SearchOptions>>('/api/v1/search/options')
+export const getSearchOptions = (libraries: string[] = readLibraryScope()) => get<SearchEnvelope<SearchOptions>>(`/api/v1/search/options${libraries.length ? `?libraries=${encodeURIComponent(libraries.join(','))}` : ''}`)

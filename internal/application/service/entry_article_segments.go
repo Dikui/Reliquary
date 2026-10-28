@@ -134,7 +134,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 	// segments use the current candidates and persistence revalidates all IDs.
 	fingerprintInput := input
 	fingerprintInput.ExistingTopics = []articleProcessingTopic{}
-	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{fingerprintInput, prompt, articleGraphVerificationPrompt(), segmentSummaryPrompt(), entityResolutionPrompt(), segmentModelIdentity(model), budget})
+	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{"library-scoped-topics-v1", k.LibraryID, fingerprintInput, prompt, articleGraphVerificationPrompt(), segmentSummaryPrompt(), entityResolutionPrompt(), segmentModelIdentity(model), budget})
 	if err != nil {
 		return nil, err
 	}

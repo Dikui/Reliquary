@@ -24,8 +24,11 @@ func newFollowFixture(t *testing.T) *followFixture {
 	h := newEntrySearchFixture(t)
 	h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalWebUser, ID: "follow-owner"})
 	entities := []types.Entity{entityRecord("entity-follow", "Followed company", "company"), entityRecord("entity-other", "Other company", "company")}
+	for i := range entities {
+		entities[i].LibraryID = h.library.ID
+	}
 	require.NoError(t, h.db.Create(&entities).Error)
-	require.NoError(t, h.db.Create(&types.Topic{ID: "topic-follow", SpaceID: 1, Name: "Followed research"}).Error)
+	require.NoError(t, h.db.Create(&types.Topic{LibraryID: h.library.ID, ID: "topic-follow", SpaceID: 1, Name: "Followed research"}).Error)
 	return &followFixture{entrySearchFixture: h, follows: NewFollowService(h.db)}
 }
 
@@ -346,7 +349,7 @@ func TestFollowFeedPostgresLateEligibilityAndAssociationTimes(t *testing.T) {
 		}
 	}
 	// Adding a follow never changes an old article's entrance time.
-	require.NoError(t, h.db.Create(&types.Topic{SpaceID: 1, ID: "history-follow", Name: "New historical follow"}).Error)
+	require.NoError(t, h.db.Create(&types.Topic{LibraryID: h.library.ID, SpaceID: 1, ID: "history-follow", Name: "New historical follow"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: "historical", TopicID: "history-follow", CreatedAt: old}).Error)
 	_, err = h.follows.Follow(h.ctx, "topic", "history-follow")
 	require.NoError(t, err)
@@ -415,7 +418,7 @@ func TestFollowFeedPostgresRealTopicBackfillPreservesHistoricalLinks(t *testing.
 	follows := NewFollowService(h.db)
 	_, err := follows.MarkViewed(ctx, nil)
 	require.NoError(t, err)
-	topic, err := topics.CreateTopic(ctx, &types.Topic{Name: "Historical follow", Description: "Products"})
+	topic, err := topics.CreateTopic(ctx, &types.Topic{LibraryID: h.library.ID, Name: "Historical follow", Description: "Products"})
 	require.NoError(t, err)
 	_, err = follows.Follow(ctx, "topic", topic.ID)
 	require.NoError(t, err)
@@ -473,7 +476,16 @@ func TestFollowFeedPostgresEligibilityMatchesFiltersAndNewWatermark(t *testing.T
 		library := &types.Library{ID: "disabled-" + source, SpaceID: 1, Name: source, Template: types.TemplateOwn}
 		require.NoError(t, h.db.Create(library).Error)
 		h.add(t, source, source, "2026-10-01", "", "semanticlaunch", 0, library.ID)
-		h.link(t, source, true, true)
+		entity := types.Entity{ID: "entity-" + source, SpaceID: 1, LibraryID: library.ID, CanonicalName: "Followed company", NormalizedName: "followed company", EntityType: "company"}
+		topic := types.Topic{ID: "topic-" + source, SpaceID: 1, LibraryID: library.ID, Name: "Followed research"}
+		require.NoError(t, h.db.Create(&entity).Error)
+		require.NoError(t, h.db.Create(&topic).Error)
+		_, err := h.follows.Follow(h.ctx, "entity", entity.ID)
+		require.NoError(t, err)
+		_, err = h.follows.Follow(h.ctx, "topic", topic.ID)
+		require.NoError(t, err)
+		require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: source, EntityID: entity.ID}).Error)
+		require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: source, TopicID: topic.ID}).Error)
 	}
 	request := types.FollowFeedRequest{IncludeSeen: true, CollapseSimilar: entrySearchNoCollapse()}
 	result := h.feed(t, request)
@@ -492,7 +504,11 @@ func TestFollowFeedPostgresEligibilityMatchesFiltersAndNewWatermark(t *testing.T
 	items, err := h.follows.ListFollows(h.ctx)
 	require.NoError(t, err)
 	for _, item := range items {
-		require.EqualValues(t, 2, item.RecentEntryCount, "old, ineligible, mine and report do not contribute")
+		if item.TargetID == "entity-follow" || item.TargetID == "topic-follow" {
+			require.EqualValues(t, 2, item.RecentEntryCount)
+		} else {
+			require.Zero(t, item.RecentEntryCount, "disabled libraries do not contribute")
+		}
 	}
 	request.TargetIDs = []string{"topic-follow"}
 	filtered := h.feed(t, request)

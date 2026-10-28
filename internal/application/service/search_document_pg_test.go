@@ -18,8 +18,8 @@ func TestImportedDocumentSearchUsesSummaryFiltersAndFolding(t *testing.T) {
 	vector := pgvector.NewHalfVector(entrySearchFixtureEmbedding(mine.Title + "\n" + mine.Description))
 	require.NoError(t, h.db.Exec(`INSERT INTO article_embeddings(entry_id,space_id,library_id,model_id,dimension,embedding,content_hash)
 		VALUES (?,1,?,'fixture-model',3,?,'fixture')`, mine.ID, h.library.ID, vector).Error)
-	require.NoError(t, h.db.Create(&types.Entity{ID: "document-entity", SpaceID: 1, CanonicalName: "Document entity", NormalizedName: "document entity", EntityType: "project"}).Error)
-	require.NoError(t, h.db.Create(&types.Topic{ID: "document-topic", SpaceID: 1, Name: "Document topic"}).Error)
+	require.NoError(t, h.db.Create(&types.Entity{ID: "document-entity", SpaceID: 1, LibraryID: h.library.ID, CanonicalName: "Document entity", NormalizedName: "document entity", EntityType: "project"}).Error)
+	require.NoError(t, h.db.Create(&types.Topic{LibraryID: h.library.ID, ID: "document-topic", SpaceID: 1, Name: "Document topic"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: mine.ID, EntityID: "document-entity"}).Error)
 	require.NoError(t, h.db.Create(&types.EntryTopic{SpaceID: 1, EntryID: mine.ID, TopicID: "document-topic"}).Error)
 	h.library.IndexingStrategy.KeywordEnabled = false

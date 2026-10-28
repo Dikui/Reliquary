@@ -46,23 +46,21 @@ func (m *scopedSegmentChat) Chat(ctx context.Context, messages []chat.Message, o
 
 func TestSegmentTopicsRespectLibraryAtEveryCallAndPersistence(t *testing.T) {
 	for _, scopeChanges := range []bool{false, true} {
-		t.Run(map[bool]string{false: "stable_scope", true: "scope_changes_before_persistence"}[scopeChanges], func(t *testing.T) {
+		t.Run(map[bool]string{false: "stable_scope", true: "topic_deleted_before_persistence"}[scopeChanges], func(t *testing.T) {
 			h, _ := segmentedHarness(t)
 			other := types.Library{ID: "segment-other-library", SpaceID: h.library.SpaceID, Name: "Other", Template: types.TemplateOwn}
 			require.NoError(t, h.db.Create(&other).Error)
 			topics := NewTopicService(h.db)
-			allowed, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Allowed here", LibraryIDs: []string{h.library.ID}})
+			allowed, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Allowed here", LibraryID: h.library.ID})
 			require.NoError(t, err)
-			shared, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "All libraries"})
+			shared, err := topics.CreateTopic(h.ctx, &types.Topic{LibraryID: h.library.ID, Name: "Second local topic"})
 			require.NoError(t, err)
-			excluded, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Other only", LibraryIDs: []string{other.ID}})
+			excluded, err := topics.CreateTopic(h.ctx, &types.Topic{Name: "Other only", LibraryID: other.ID})
 			require.NoError(t, err)
 			m := &scopedSegmentChat{topicIDs: []string{allowed.ID, shared.ID, excluded.ID, allowed.ID}}
 			if scopeChanges {
 				m.beforeMerge = func() {
-					raw, err := json.Marshal([]string{other.ID})
-					require.NoError(t, err)
-					require.NoError(t, h.db.Exec("UPDATE topics SET library_ids=?::jsonb WHERE id=?", string(raw), allowed.ID).Error)
+					require.NoError(t, topics.DeleteTopic(h.ctx, allowed.ID))
 				}
 			}
 			models := h.service.modelService.(articleProcessingModels)

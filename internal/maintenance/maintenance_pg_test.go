@@ -50,6 +50,15 @@ func seedCurrentNames(t *testing.T, db *gorm.DB) {
 		`UPDATE maintenance_state SET backup_at='2026-10-01T12:00:00Z',backup_status='success',backup_path='/old-machine/backup',backup_size_bytes=1234,backup_error='',drill_at='2026-10-02T12:00:00Z',drill_status='failed',drill_error='retained historical failure' WHERE id=true`,
 	}
 	for _, statement := range statements {
+		if db.Migrator().HasColumn("topics", "library_id") {
+			statement = strings.ReplaceAll(statement, "INSERT INTO entities(id,space_id,", "INSERT INTO entities(id,space_id,library_id,")
+			statement = strings.ReplaceAll(statement, "VALUES('entity-a',1,", "VALUES('entity-a',1,'library',")
+			statement = strings.ReplaceAll(statement, "('entity-b',1,", "('entity-b',1,'library',")
+			statement = strings.ReplaceAll(statement, "INSERT INTO entity_aliases(id,space_id,", "INSERT INTO entity_aliases(id,space_id,library_id,")
+			statement = strings.ReplaceAll(statement, "VALUES('alias',1,", "VALUES('alias',1,'library',")
+			statement = strings.ReplaceAll(statement, "INSERT INTO topics(id,space_id,", "INSERT INTO topics(id,space_id,library_id,")
+			statement = strings.ReplaceAll(statement, "VALUES('topic',1,", "VALUES('topic',1,'library',")
+		}
 		if !db.Migrator().HasTable("task_pending_ops") {
 			statement = strings.ReplaceAll(statement, "task_pending_ops", "task_jobs")
 		}

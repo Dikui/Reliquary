@@ -4,6 +4,7 @@
       <div><h2>{{ t('knowledgeWorkbench.title') }}</h2><p>{{ t('knowledgeWorkbench.subtitle') }}</p></div>
       <t-button variant="outline" :loading="loading" @click="refreshAll"><template #icon><t-icon name="refresh" /></template>{{ t('knowledgeWorkbench.refresh') }}</t-button>
     </header>
+    <LibraryScopeSelect v-model="libraryScope" single :disabled="merging" />
     <section class="name-embedding-rebuild" :aria-label="t('knowledgeWorkbench.nameEmbeddings.title')">
       <div class="name-embedding-rebuild__summary">
         <div><h3>{{ t('knowledgeWorkbench.nameEmbeddings.title') }}</h3><p role="status">{{ t('knowledgeWorkbench.nameEmbeddings.pending', { count: nameEmbeddingStatus?.pending_count ?? (nameEmbeddingStatusLoading ? t('common.loading') : t('knowledgeWorkbench.nameEmbeddings.unknown')) }, nameEmbeddingStatus?.pending_count ?? 0) }}</p></div>
@@ -48,13 +49,13 @@
               <EntityRelations v-if="relationView === 'list'" :entity-id="selectedEntity.id" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" />
               <EntityGraph v-if="graphVisited" v-show="relationView === 'graph'" :entity="selectedEntity" :active="relationView === 'graph'" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @open-profile="id => { relationView = 'list'; void selectInitialEntity(id) }" />
               <t-alert v-if="entityDetailError" theme="error" :message="entityDetailError" role="alert"><template #operation><t-button variant="text" :loading="entityDetailLoading" @click="selectEntity(selectedEntity)">{{ t('knowledgeWorkbench.refresh') }}</t-button></template></t-alert>
-              <t-loading :loading="entityDetailLoading" show-overlay><div class="entity-articles"><h4>{{ t('knowledgeWorkbench.entities.articles') }}</h4><a v-if="selectedEntity" :href="`/platform/entries?tab=documents&entity_ids=${encodeURIComponent(selectedEntity.id)}`">{{ t('entryBatch.manageRelated') }}</a><t-empty v-if="!entityEntries.length && !entityDetailLoading && !entityDetailError" :description="t('knowledgeWorkbench.entities.noArticles')" /><section v-for="group in entityLibraryGroups" :key="group.id" class="entity-library-group"><h5>{{ group.name }} ({{ group.entries.length }})</h5><ul><li v-for="article in group.entries" :key="article.id"><t-button variant="text" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('knowledgeWorkbench.entities.untitledArticle') }}</t-button><small>{{ formatDate(article.created_at) }}</small></li></ul></section></div></t-loading>
+              <t-loading :loading="entityDetailLoading" show-overlay><div class="entity-articles"><h4>{{ t('knowledgeWorkbench.entities.articles') }}</h4><a v-if="selectedEntity" :href="`/platform/entries?tab=documents&libraries=${encodeURIComponent(selectedEntity.library_id)}&entity_ids=${encodeURIComponent(selectedEntity.id)}`">{{ t('entryBatch.manageRelated') }}</a><t-empty v-if="!entityEntries.length && !entityDetailLoading && !entityDetailError" :description="t('knowledgeWorkbench.entities.noArticles')" /><section v-for="group in entityLibraryGroups" :key="group.id" class="entity-library-group"><h5>{{ group.name }} ({{ group.entries.length }})</h5><ul><li v-for="article in group.entries" :key="article.id"><t-button variant="text" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('knowledgeWorkbench.entities.untitledArticle') }}</t-button><small>{{ formatDate(article.created_at) }}</small></li></ul></section></div></t-loading>
             </section>
           </div>
         </div>
       </t-loading>
     </section>
-    <MergeSuggestions v-else ref="mergeSuggestions" @open-source="emit('open-source', $event)" @changed="refreshAfterMerge" />
+    <MergeSuggestions v-else ref="mergeSuggestions" :library-id="selectedLibraryId" @open-source="emit('open-source', $event)" @changed="refreshAfterMerge" />
     <t-dialog v-model:visible="mergeVisible" :header="t('knowledgeWorkbench.entities.mergeTitle')" :footer="false" :close-on-overlay-click="false" :close-btn="!merging" :close-on-esc-keydown="!merging" width="min(520px, 95vw)">
       <div class="merge-form"><p>{{ t('knowledgeWorkbench.entities.mergeHint') }}</p><p>{{ t('knowledgeWorkbench.entities.mergeSource') }}: {{ selectedEntity?.canonical_name }}</p><label><span>{{ t('knowledgeWorkbench.entities.mergeTarget') }}</span><t-select v-model="mergeTargetId" filterable :options="mergeTargetOptions" :loading="mergeTargetsLoading" :disabled="merging" :placeholder="t('knowledgeWorkbench.entities.mergeTargetPlaceholder')" :aria-label="t('knowledgeWorkbench.entities.mergeTarget')" /></label><t-alert theme="warning" :message="t('knowledgeWorkbench.entities.mergeWarning')" /><p v-if="mergeError" class="run-error" role="alert">{{ mergeError }}</p><div class="merge-actions"><t-button variant="outline" :disabled="merging" @click="mergeVisible = false">{{ t('common.cancel') }}</t-button><t-button theme="primary" :loading="merging" :disabled="!mergeTargetId || mergeTargetsLoading" @click="confirmMerge">{{ t('knowledgeWorkbench.entities.merge') }}</t-button></div><t-button v-if="hasMoreMergeTargets" variant="text" :loading="mergeTargetsLoading" :disabled="merging" @click="loadMergeTargets(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button></div>
     </t-dialog>
@@ -70,12 +71,15 @@ import EntityGraph from './EntityGraph.vue'
 import type { SourceLocation } from '@/types/search'
 import MergeSuggestions from './MergeSuggestions.vue'
 import FollowToggle from '@/components/FollowToggle.vue'
+import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue'
 import { useFollowStore } from '@/stores/follows'
 
-const props = withDefaults(defineProps<{ initialEntityId?: string }>(), { initialEntityId: '' })
+const props = withDefaults(defineProps<{ initialEntityId?: string; libraryId?: string }>(), { initialEntityId: '', libraryId: '' })
 const emit = defineEmits<{ 'open-source': [entryId: string, location?: SourceLocation] }>()
 const { t, locale } = useI18n()
 const followStore = useFollowStore()
+const libraryScope = ref<string[]>(props.libraryId ? [props.libraryId] : [])
+const selectedLibraryId = computed(() => libraryScope.value[0] || '')
 const pageSize = 50
 const sections = ['entities', 'merges'] as const
 const activeSection = ref<typeof sections[number]>('entities')
@@ -105,15 +109,16 @@ function errorMessage(cause: unknown) { return cause instanceof Error ? cause.me
 async function loadEntities(more = false) {
   if (more && entitiesLoading.value) return
   const current = ++entityRequest
+  if (!selectedLibraryId.value) { entities.value = []; hasMoreEntities.value = false; entitiesLoading.value = false; return }
   entitiesLoading.value = true; loadError.value = ''
-  try { const page = envelopeData(await listEntities({ entity: entityFilter.value.trim(), entity_type: entityTypeFilter.value || undefined, limit: pageSize, offset: more ? entities.value.length : 0 })) || []; if (current === entityRequest) { entities.value = more ? [...entities.value, ...page] : page; hasMoreEntities.value = page.length === pageSize } }
+  try { const page = envelopeData(await listEntities({ library_id: selectedLibraryId.value, entity: entityFilter.value.trim(), entity_type: entityTypeFilter.value || undefined, limit: pageSize, offset: more ? entities.value.length : 0 })) || []; if (current === entityRequest) { entities.value = more ? [...entities.value, ...page] : page; hasMoreEntities.value = page.length === pageSize } }
   catch (cause) { if (current === entityRequest) loadError.value = errorMessage(cause) }
   finally { if (current === entityRequest) entitiesLoading.value = false }
 }
 async function selectEntity(entity: Entity) {
   const current = ++detailRequest
   selectedEntity.value = entity; entityEntries.value = []; entityDetailError.value = ''; entityDetailLoading.value = true
-  try { const result = envelopeData(await getEntity(entity.id)); if (current === detailRequest) { selectedEntity.value = result.entity; entityEntries.value = result.entries || [] } }
+  try { const result = envelopeData(await getEntity(entity.id)); if (current === detailRequest) { libraryScope.value = [result.entity.library_id]; selectedEntity.value = result.entity; entityEntries.value = result.entries || [] } }
   catch (cause) { if (current === detailRequest) entityDetailError.value = errorMessage(cause) }
   finally { if (current === detailRequest) entityDetailLoading.value = false }
 }
@@ -125,8 +130,9 @@ async function refreshAfterMerge() { selectedEntity.value = null; entityEntries.
 async function refreshAll() { loading.value = true; try { await Promise.all([loadEntities(), loadNameEmbeddingStatus(), selectedEntity.value ? selectEntity(selectedEntity.value) : Promise.resolve(), mergeSuggestions.value?.refresh()]) } finally { loading.value = false } }
 async function loadMergeTargets(more = false) {
   if (more && mergeTargetsLoading.value) return
+  if (!selectedLibraryId.value) return
   const current = ++mergeTargetRequest; mergeTargetsLoading.value = true; mergeError.value = ''
-  try { const page = envelopeData(await listEntities({ limit: pageSize, offset: more ? mergeTargets.value.length : 0 })) || []; if (current === mergeTargetRequest) { mergeTargets.value = more ? [...mergeTargets.value, ...page] : page; hasMoreMergeTargets.value = page.length === pageSize } }
+  try { const page = envelopeData(await listEntities({ library_id: selectedLibraryId.value, limit: pageSize, offset: more ? mergeTargets.value.length : 0 })) || []; if (current === mergeTargetRequest) { mergeTargets.value = more ? [...mergeTargets.value, ...page] : page; hasMoreMergeTargets.value = page.length === pageSize } }
   catch (cause) { if (current === mergeTargetRequest) mergeError.value = errorMessage(cause) }
   finally { if (current === mergeTargetRequest) mergeTargetsLoading.value = false }
 }
@@ -158,6 +164,7 @@ async function rebuildNameEmbeddings() {
   catch (cause) { if (current === nameEmbeddingRequest) nameEmbeddingError.value = errorMessage(cause) }
   finally { if (current === nameEmbeddingRequest) nameEmbeddingRebuilding.value = false }
 }
+watch(selectedLibraryId, () => { mergeTargetRequest++; mergeVisible.value = false; mergeTargets.value = []; resetEntityList() }, { flush: 'sync' })
 watch(entityFilter, scheduleEntitySearch)
 watch(entityTypeFilter, resetEntityList)
 async function selectInitialEntity(id: string) {
@@ -165,7 +172,7 @@ async function selectInitialEntity(id: string) {
   activeSection.value = 'entities';
   const current = ++detailRequest;
   entityEntries.value = []; entityDetailError.value = ''; entityDetailLoading.value = true;
-  try { const result = envelopeData(await getEntity(id)); if (current === detailRequest) { selectedEntity.value = result.entity; entityEntries.value = result.entries || [] } }
+  try { const result = envelopeData(await getEntity(id)); if (current === detailRequest) { libraryScope.value = [result.entity.library_id]; selectedEntity.value = result.entity; entityEntries.value = result.entries || [] } }
   catch (cause) { if (current === detailRequest) entityDetailError.value = errorMessage(cause) }
   finally { if (current === detailRequest) entityDetailLoading.value = false }
 }

@@ -5,8 +5,9 @@ import (
 	"time"
 )
 
-// Entity is a canonical entity shared by the personal space.
+// Entity is a canonical identity within a library.
 type Entity struct {
+	LibraryID                string                  `json:"library_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_canonical"`
 	ID                       string                  `json:"id" gorm:"type:varchar(36);primaryKey"`
 	SpaceID                  uint64                  `json:"space_id" gorm:"not null;uniqueIndex:idx_entity_canonical"`
 	CanonicalName            string                  `json:"canonical_name" gorm:"type:varchar(512);not null"`
@@ -30,6 +31,7 @@ func (Entity) TableName() string { return "entities" }
 
 // EntityAlias stores normalized names used to resolve future mentions.
 type EntityAlias struct {
+	LibraryID        string    `json:"library_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_alias"`
 	EntityType       string    `json:"entity_type" gorm:"type:varchar(128);not null;default:'';uniqueIndex:idx_entity_alias"`
 	ID               string    `json:"id" gorm:"type:varchar(36);primaryKey"`
 	SpaceID          uint64    `json:"space_id" gorm:"not null;uniqueIndex:idx_entity_alias"`
@@ -90,6 +92,7 @@ type EntityCandidate struct {
 }
 
 type EntityQuery struct {
+	LibraryID  string `json:"library_id"`
 	Entity     string `json:"entity,omitempty"`
 	EntityType string `json:"entity_type,omitempty"`
 	Limit      int    `json:"limit,omitempty"`

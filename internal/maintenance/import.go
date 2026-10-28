@@ -99,6 +99,7 @@ func Load(root string) (*Snapshot, error) {
 		if !known {
 			return nil, fmt.Errorf("unknown replica table %s", table)
 		}
+		rule = catalogSchemaRule(table, rule, manifest.SchemaVersion)
 		decoder := json.NewDecoder(bytes.NewReader(data))
 		decoder.UseNumber()
 		var rows []map[string]any
@@ -250,8 +251,11 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 			return nil, err
 		}
 	}
-	if db.Migrator().HasColumn("topics", "library_ids") {
+	if db.Migrator().HasTable("follow_feed_library_states") {
 		projectFollowSnapshot(snapshot)
+	}
+	if err := projectCatalogSnapshot(snapshot, targetVersion); err != nil {
+		return nil, err
 	}
 	if db.Migrator().HasColumn("entries", "source_ref") {
 		projectIngestSnapshot(snapshot)
