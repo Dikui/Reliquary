@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Dialog from './Dialog.vue'
-const props = withDefaults(defineProps<{ modelValue?: boolean; title: string; description?: string; placement?: 'left' | 'right'; contentClass?: string; closeOnOverlayClick?: boolean; closeOnEscKeydown?: boolean; closable?: boolean }>(), { placement: 'right', closeOnOverlayClick: true, closeOnEscKeydown: true, closable: true })
+const props = withDefaults(defineProps<{ modelValue?: boolean; title: string; description?: string; placement?: 'left' | 'right'; contentClass?: string; layer?: number; closeOnOverlayClick?: boolean; closeOnEscKeydown?: boolean; closable?: boolean }>(), { placement: 'right', closeOnOverlayClick: true, closeOnEscKeydown: true, closable: true })
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; openAutoFocus: [event: Event]; closeAutoFocus: [event: Event] }>()
 </script>
 <template>

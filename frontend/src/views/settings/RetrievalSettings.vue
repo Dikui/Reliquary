@@ -1,5 +1,21 @@
 <template>
-  <div class="retrieval-settings">
+  <div class="retrieval-settings" :class="{ 'rq-retrieval-settings': swiss }">
+    <template v-if="swiss">
+      <p class="rq-retrieval-description">{{ t('retrievalSettings.description') }}</p>
+      <p v-if="loadError" role="alert">{{ loadError }} <Button @click="loadConfig">{{ t('common.retry') }}</Button></p>
+      <p v-if="saveError" role="alert">{{ saveError }}</p>
+      <form ref="nativeForm" @submit.prevent>
+      <div v-for="field in fields" :key="field.key" class="rq-retrieval-field">
+        <label :for="`cmdk-retrieval-${field.key}`">{{ field.label }}</label>
+        <div class="rq-retrieval-control">
+          <input :id="`cmdk-retrieval-${field.key}`" v-model.number="localConfig[field.key]" :type="field.range ? 'range' : 'number'" :min="field.min" :max="field.max" :step="field.step" required :disabled="configLoading || !!loadError || saving" :aria-describedby="field.hint ? `cmdk-retrieval-${field.key}-hint` : undefined" @change="handleNativeChange" />
+          <output v-if="field.range" :for="`cmdk-retrieval-${field.key}`">{{ localConfig[field.key] }}</output>
+        </div>
+        <p v-if="field.hint" :id="`cmdk-retrieval-${field.key}-hint`">{{ field.hint }}</p>
+      </div>
+      </form>
+    </template>
+    <template v-else>
     <div class="section-header">
       <h2>{{ t('retrievalSettings.title') }}</h2>
       <p class="section-description">{{ t('retrievalSettings.description') }}</p>
@@ -100,11 +116,13 @@
         <p class="setting-desc">{{ t('retrievalSettings.similarReportsHint') }}</p>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, onMounted, nextTick } from 'vue'
+import { reactive, computed, onMounted, onBeforeUnmount, nextTick, ref } from 'vue'
+import { Button, toast } from '@/components/ui'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import {
@@ -113,7 +131,20 @@ import {
   type RetrievalConfig,
 } from '@/api/retrieval'
 
+const props = withDefaults(defineProps<{ swiss?: boolean }>(), { swiss: false })
 const { t } = useI18n()
+const configLoading = ref(false), loadError = ref(''), saveError = ref(''), saving = ref(false)
+const nativeForm = ref<HTMLFormElement | null>(null)
+const fields = computed(() => [
+  { key: 'embedding_top_k' as const, label: t('retrievalSettings.embeddingTopKLabel'), min: 1, max: 100, step: 1, range: true },
+  { key: 'vector_threshold' as const, label: t('retrievalSettings.vectorThresholdLabel'), min: 0, max: 1, step: 0.05, range: true },
+  { key: 'keyword_threshold' as const, label: t('retrievalSettings.keywordThresholdLabel'), min: 0, max: 1, step: 0.05, range: true },
+  { key: 'rerank_top_k' as const, label: t('retrievalSettings.rerankTopKLabel'), min: 1, max: 100, step: 1, range: true },
+  { key: 'rerank_threshold' as const, label: t('retrievalSettings.rerankThresholdLabel'), min: -10, max: 10, step: 0.1, range: true },
+  { key: 'rrf_image_weight' as const, label: t('retrievalSettings.imageWeightLabel'), min: 0, max: 1, step: 0.05, hint: t('retrievalSettings.imageWeightHint') },
+  { key: 'similar_reports_threshold' as const, label: t('retrievalSettings.similarReportsThresholdLabel'), min: 0.01, max: 1, step: 0.01 },
+  { key: 'similar_reports_window_days' as const, label: t('retrievalSettings.similarReportsWindowDaysLabel'), min: 1, step: 1, hint: t('retrievalSettings.similarReportsHint') },
+])
 const defaultConfig: RetrievalConfig = {
   embedding_top_k: 50,
   vector_threshold: 0.15,
@@ -130,6 +161,7 @@ let initialConfig: RetrievalConfig = { ...defaultConfig }
 let isInitializing = true
 
 const loadConfig = async () => {
+  configLoading.value = true; loadError.value = ''
   try {
     const response = await getSpaceRetrievalConfig()
     if (response.data) {
@@ -151,8 +183,9 @@ const loadConfig = async () => {
       initialConfig = { ...localConfig }
     }
   } catch (error: any) {
-    console.error('Failed to load retrieval config:', error)
+    loadError.value = t('retrievalSettings.loadFailed')
   } finally {
+    configLoading.value = false
     await nextTick()
     await nextTick()
     setTimeout(() => { isInitializing = false }, 100)
@@ -164,17 +197,24 @@ const hasConfigChanged = (): boolean => {
 }
 
 const saveConfig = async () => {
-  if (!hasConfigChanged()) return
+  if (!hasConfigChanged() || saving.value) return
+  if (props.swiss && nativeForm.value && !nativeForm.value.checkValidity()) return
+  saving.value = true; saveError.value = ''
+  const submitted = { ...localConfig }
   try {
-    const response = await updateSpaceRetrievalConfig({ ...localConfig })
+    const response = await updateSpaceRetrievalConfig(submitted)
     if (response.data) {
-      initialConfig = { ...localConfig }
+      initialConfig = submitted
     }
-    MessagePlugin.success(t('retrievalSettings.toasts.saveSuccess'))
+    const feedback = props.swiss ? toast : MessagePlugin
+    feedback.success(t('retrievalSettings.toasts.saveSuccess'))
   } catch (error: any) {
-    console.error('Failed to save retrieval config:', error)
-    const errorMessage = error?.message || 'Unknown error'
-    MessagePlugin.error(t('retrievalSettings.toasts.saveFailed', { message: errorMessage }))
+    const errorMessage = error?.message || t('common.operationFailed')
+    saveError.value = t('retrievalSettings.toasts.saveFailed', { message: errorMessage })
+    const feedback = props.swiss ? toast : MessagePlugin
+    feedback.error(saveError.value)
+  } finally {
+    saving.value = false
   }
 }
 
@@ -183,11 +223,16 @@ const debouncedSave = () => {
   if (isInitializing) return
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => {
+    saveTimer = null
     saveConfig().catch(() => {})
   }, 500)
 }
 
 const handleParamChange = () => debouncedSave()
+const handleNativeChange = () => { if (nativeForm.value?.reportValidity()) debouncedSave() }
+onBeforeUnmount(() => {
+  if (saveTimer) { clearTimeout(saveTimer); if (!loadError.value && !configLoading.value) void saveConfig() }
+})
 onMounted(async () => {
   isInitializing = true
   await loadConfig()
@@ -274,4 +319,18 @@ onMounted(async () => {
   color: var(--td-brand-color);
   font-family: var(--app-font-family-mono);
 }
+</style>
+
+<style scoped>
+.rq-retrieval-settings { color: var(--text); }
+.rq-retrieval-settings .rq-retrieval-description { margin: 0 0 var(--space-4); color: var(--muted); font-size: var(--text-sm); }
+.rq-retrieval-settings .rq-retrieval-field { padding-block: var(--space-4); border-bottom: 1px solid var(--border); }
+.rq-retrieval-settings .rq-retrieval-field label { font-size: var(--text-sm); font-weight: 700; }
+.rq-retrieval-settings .rq-retrieval-field p { color: var(--muted); font-size: var(--text-xs); }
+.rq-retrieval-settings .rq-retrieval-control { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
+.rq-retrieval-settings .rq-retrieval-control input { min-width: 0; width: 100%; border-radius: 0; accent-color: var(--text); }
+.rq-retrieval-settings .rq-retrieval-control input[type="range"] { flex: 1 1 0; width: 0; min-width: 0; }
+.rq-retrieval-settings .rq-retrieval-control output { flex: 0 0 56px; min-width: 56px; white-space: nowrap; overflow-wrap: normal; word-break: normal; text-align: right; }
+.rq-retrieval-settings .rq-retrieval-control input[type="number"] { padding: var(--space-2); border: 1px solid var(--border); background: var(--surface); color: var(--text); font: var(--text-sm)/1.5 var(--mono); }
+.rq-retrieval-settings output { font-family: var(--mono); }
 </style>

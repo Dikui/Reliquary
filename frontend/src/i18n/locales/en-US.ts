@@ -1609,6 +1609,7 @@ export default {
 
   },
   retrievalSettings: {
+    loadFailed: 'Could not load retrieval settings. Please retry.',
     imageWeightLabel: 'Image retrieval weight',
     imageWeightHint: 'Defaults to 0.2 so images supplement body and material matches. A value of 0 uses the default weight of 0.2. The current model must support images.',
     title: 'Search Settings',
@@ -2833,12 +2834,25 @@ export default {
     requestPreview: 'Search request parameters',
   },
   commandPalette: {
-    placeholder: "Search materials…",
+    title: 'Command palette',
+    scope: 'Scope',
+    allLibraries: 'All libraries',
+    currentLibrary: 'Current library: {name}',
+    chooseLibraries: 'Choose libraries',
+    viewAll: 'View all in search',
+    searchQuery: 'Search for “{query}”',
+    entitySearchFailed: 'Some entities could not be searched. Retry to load them.',
+    toggleTheme: 'Switch light / dark theme',
+    results: 'Results',
+    searching: 'Searching…',
+    placeholder: 'Search materials, entities or commands',
     clearRecent: 'Clear',
     retrieval: 'Retrieval settings',
 
     group: {
-      chunks: 'Search results',
+      chunks: 'Body snippets',
+      entries: 'Materials',
+      entities: 'Entities',
 
       commands: 'Commands',
       recent: 'Recent',
@@ -2851,6 +2865,8 @@ export default {
     quick: {
       knowledge: 'Open materials',
       settings: 'Open settings',
+      search: 'Open search',
+      follows: 'Open follows',
     },
     empty: {
       noResults: 'No matches found',

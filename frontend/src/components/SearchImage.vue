@@ -5,7 +5,7 @@ import ImagePreview from './ImagePreview.vue'
 import { Button, Dialog } from '@/components/ui'
 import { buildProtectedFileRequest } from '@/utils/protectedFileAccess'
 
-const props = withDefaults(defineProps<{ articleId: string; path: string; title: string; compact?: boolean; interactive?: boolean; swiss?: boolean }>(), { compact: false, interactive: false, swiss: false })
+const props = withDefaults(defineProps<{ articleId: string; path: string; title: string; compact?: boolean; interactive?: boolean; swiss?: boolean; previewLayer?: number }>(), { compact: false, interactive: false, swiss: false })
 const { t } = useI18n()
 const imageURL = ref(''), loading = ref(true), failed = ref(false)
 const previewVisible = ref(false)
@@ -48,7 +48,7 @@ onBeforeUnmount(() => { mounted = false; generation++; request?.abort(); release
       <span v-else-if="loading" class="search-image-state" role="status">{{ t('common.loading') }}</span>
     </component>
     <component :is="compact ? 'span' : 'figcaption'" class="search-image-caption">{{ t('knowledgeSearch.imageMatch') }}</component>
-    <Dialog v-if="swiss" :model-value="previewVisible && !!imageURL && !failed" :title="t('knowledgeSearch.previewImage', { title })" @update:model-value="previewVisible = $event" @close-auto-focus="restoreFocus"><img class="search-image-full" :src="imageURL" :alt="t('knowledgeSearch.imageAlt', { title })" /></Dialog>
+    <Dialog v-if="swiss" :layer="previewLayer" :model-value="previewVisible && !!imageURL && !failed" :title="t('knowledgeSearch.previewImage', { title })" @update:model-value="previewVisible = $event" @close-auto-focus="restoreFocus"><img class="search-image-full" :src="imageURL" :alt="t('knowledgeSearch.imageAlt', { title })" /></Dialog>
     <ImagePreview v-else :visible="previewVisible && !!imageURL && !failed" :images="imageURL ? [imageURL] : []" :return-focus="previewTrigger" @close="previewVisible = false" />
   </component>
 </template>

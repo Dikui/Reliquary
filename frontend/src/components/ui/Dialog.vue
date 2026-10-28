@@ -2,12 +2,13 @@
 import { useI18n } from 'vue-i18n'
 import { DialogRoot, DialogTrigger, DialogPortal, DialogOverlay, DialogContent, DialogTitle, DialogDescription, DialogClose } from 'reka-ui'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   modelValue?: boolean
   title: string
   description?: string
   placement?: 'center' | 'right' | 'left'
   contentClass?: string
+  layer?: number
   closeOnOverlayClick?: boolean
   closeOnEscKeydown?: boolean
   closable?: boolean
@@ -18,14 +19,24 @@ const emit = defineEmits<{
   closeAutoFocus: [event: Event]
 }>()
 const { t } = useI18n()
+
+function onEscape(event: KeyboardEvent) {
+  if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return
+  // Keep handled Escape events out of legacy document-level overlay listeners.
+  event.stopPropagation()
+  event.preventDefault()
+  if (props.closeOnEscKeydown) emit('update:modelValue', false)
+}
 </script>
 
 <template>
   <DialogRoot :open="modelValue" @update:open="emit('update:modelValue', $event)">
     <DialogTrigger v-if="$slots.trigger" as-child><slot name="trigger" /></DialogTrigger>
     <DialogPortal>
-      <DialogOverlay class="rq-overlay" />
+      <DialogOverlay class="rq-overlay" :style="layer === undefined ? undefined : { zIndex: layer }" />
       <DialogContent class="rq-dialog" :class="[contentClass, { 'rq-dialog--drawer': placement !== 'center', 'rq-dialog--drawer-left': placement === 'left' }]"
+        :style="layer === undefined ? undefined : { zIndex: layer + 1 }"
+        @keydown.esc="onEscape"
         v-bind="description ? {} : { 'aria-describedby': undefined }"
         @open-auto-focus="emit('openAutoFocus', $event)" @close-auto-focus="emit('closeAutoFocus', $event)"
         @pointer-down-outside="!closeOnOverlayClick && $event.preventDefault()"

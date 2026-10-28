@@ -379,3 +379,30 @@ by success from the existing aggregate API. Clicking a call row or activating it
 with the keyboard opens the shared drawer with metadata and the existing complete
 request/response viewer. A failed page load cannot leave the previous call rows
 under a new page number.
+
+## Swiss command palette
+
+GlobalCommandPalette retains Cmd/Ctrl+K, slash, IME guards, wrapping arrow
+navigation and the visible-row Cmd/Ctrl+1 through 9 bindings. Recent targets and
+queries share four visible slots, followed by quick navigation and the theme
+command. The input exposes the active result through its combobox relationship;
+Tab can focus rows and their existing image or update links. Escape closes only
+the current overlay and restores the opener.
+
+The existing material search supplies separate material and representative body
+snippet groups. Only real snippets receive match labels and source references.
+Body snippets require a nonempty chunk ID, a nonnegative chunk index and a source
+location. Summary candidates remain material results and open without a reference;
+their excerpts and matched image previews remain accessible there.
+The existing per-library entity list endpoint supplies name matches, including
+entities with no returned materials. Scope changes invalidate prior responses;
+partial entity failures retain successful material and entity results with retry.
+Material links open `/platform/entries/:id`, snippet links preserve SourceLocation,
+and entity links open `/platform/entities` with entity and library context. The
+footer and Cmd/Ctrl+Enter preserve query and scope on the full search page.
+
+Recent destinations opened from the palette retain their routes and references
+in the existing user/space-scoped browser storage. Clear removes targets and
+queries together. Retrieval parameters keep the same API and automatic saving;
+the palette's drawer uses native controls and shared feedback. This migration
+adds no backend operations or database migration.

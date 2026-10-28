@@ -1406,7 +1406,18 @@ export default {
     requestPreview: '检索请求参数',
   },
   commandPalette: {
-    placeholder: "搜索资料、资料与AI产出…",
+    title: '命令面板',
+    scope: '范围',
+    allLibraries: '全部库',
+    currentLibrary: '当前库：{name}',
+    chooseLibraries: '选择库',
+    viewAll: '在检索页查看全部',
+    searchQuery: '在检索页搜索“{query}”',
+    entitySearchFailed: '部分实体检索失败，请重试。',
+    toggleTheme: '切换深色 / 浅色',
+    results: '结果',
+    searching: '正在检索…',
+    placeholder: '搜索资料、实体或命令',
     clearRecent: '清除',
     retrieval: '检索参数',
     hotkey: {
@@ -1422,16 +1433,20 @@ export default {
     quick: {
       knowledge: '打开资料',
       settings: '打开设置',
+      search: '打开检索',
+      follows: '打开关注动态',
     },
     match: {
       vector: '向量',
       keyword: '关键字'
     },
     group: {
-      chunks: '检索结果',
+      chunks: '正文片段',
+      entries: '资料',
+      entities: '实体',
 
       commands: '命令',
-      recent: '最近搜索',
+      recent: '最近',
       quickActions: '快捷操作'
     },
 
@@ -2547,6 +2562,7 @@ export default {
     next: '下一步'
   },
   retrievalSettings: {
+    loadFailed: '加载检索参数失败，请重试。',
     imageWeightLabel: '图片检索通道权重',
     imageWeightHint: '默认 0.2，图片作为正文和资料检索的补充。设为 0 时使用默认权重 0.2；当前模型必须支持图片。',
     title: '搜索设置',

@@ -4,6 +4,17 @@ import { h, ref } from 'vue'
 import { doc, mount, send, settle } from './__tests__/dom.ts'
 import { loadUiComponent } from './uiTestLoader.ts'
 
+test('Dialog can place its overlay and content above legacy drawers', async t => {
+  const view = loadUiComponent('Dialog')
+  const mounted = mount({ setup: () => () => h(view, { modelValue: true, title: 'Search', layer: 2400 }) })
+  t.after(() => mounted.unmount())
+  await settle()
+  const dialog = doc.querySelector('[role="dialog"]')!
+  assert.equal(dialog.style.zIndex, 2401)
+  const overlay = doc.querySelectorAll('div').find((node: any) => node.props.class === 'rq-overlay')!
+  assert.equal(overlay.style.zIndex, 2400)
+})
+
 for (const name of ['Dialog', 'Drawer']) test(`${name} traps focus, closes with Escape and restores the opener`, async t => {
   const view = loadUiComponent(name), open = ref(false)
   const mounted = mount({ setup: () => () => h(view, { modelValue: open.value, title: 'Edit library', description: 'Library name', 'onUpdate:modelValue': (value: boolean) => { open.value = value } }, {

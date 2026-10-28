@@ -66,7 +66,7 @@ for (const component of ['palette', 'workbench']) {
   test(`${component}: the actual submit handler behind capture ignores IME Enter and retains ordinary Enter behavior`, () => {
     let time = 100, actions = 0
     const handler = component === 'palette'
-      ? sourceHandler('../components/GlobalCommandPalette.vue', 'onKeyDown', { composing: { value: false }, primaryActionForSelected: () => actions++ })
+      ? sourceHandler('../components/GlobalCommandPalette.vue', 'onKeyDown', { composing: { value: false }, drawerVisible: { value: false }, primaryActionForSelected: () => actions++ })
       : sourceHandler('../views/library/components/EntryWorkbench.vue', 'onEntityEnter', { entityComposing: { value: false }, entitySearchTimer: null, resetEntityList: () => actions++ })
     const root = new EventTarget()
     const remove = installImeEnterGuard(root as unknown as Document, () => time)

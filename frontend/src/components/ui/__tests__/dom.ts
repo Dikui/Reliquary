@@ -11,11 +11,12 @@ class TestEvent {
   currentTarget: any
   defaultPrevented = false
   propagationStopped = false
+  immediatePropagationStopped = false
   bubbles = true
   constructor(type: string, options: Record<string, any> = {}) { this.type = type; Object.assign(this, options) }
   preventDefault() { this.defaultPrevented = true }
   stopPropagation() { this.propagationStopped = true }
-  stopImmediatePropagation() { this.propagationStopped = true }
+  stopImmediatePropagation() { this.propagationStopped = true; this.immediatePropagationStopped = true }
   composedPath() { const path: any[] = []; for (let node = this.target; node; node = node.parentNode) path.push(node); return path }
 }
 
@@ -29,7 +30,10 @@ class EventNode {
   dispatchEvent(event: any): boolean {
     if (!event.target) event.target = this
     event.currentTarget = this
-    for (const listener of this.listeners.get(event.type) ?? []) listener(event)
+    for (const listener of [...(this.listeners.get(event.type) ?? [])]) {
+      listener(event)
+      if (event.immediatePropagationStopped) break
+    }
     if (event.bubbles && !event.propagationStopped) (this as any).parentNode?.dispatchEvent(event)
     return !event.defaultPrevented
   }

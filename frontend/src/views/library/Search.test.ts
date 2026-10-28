@@ -30,7 +30,7 @@ const stub = defineComponent({ setup: (_props, { attrs, slots }) => () => h('div
 function evaluate(code: string, modules: Record<string, unknown>) {
   const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as any }
-  new Function('require', 'module', 'exports', compiled)((name: string) => (name === '@/utils/bodyReference' ? bodyReference : name === '@/utils/libraryScope' ? libraryScopeHelpers : name === '@/utils/search' ? helpers : name === '@/composables/useLibraryScope' ? { useLibraryScope: () => ref([]) } : (name.endsWith('LibraryScopeSelect.vue') ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name])) ?? (name === '@/components/ui' ? { ...entryPresentationTestModules[name] as object, Tabs: loadUiComponent('Tabs'), Checkbox: loadUiComponent('Checkbox'), Dialog: loadUiComponent('Dialog') } : undefined) ?? require(name), module, module.exports)
+  new Function('require', 'module', 'exports', compiled)((name: string) => (name === '@/api/entities' ? { listEntities: async () => ({ success: true, data: [] }) } : name === '@/utils/bodyReference' ? bodyReference : name === '@/utils/libraryScope' ? libraryScopeHelpers : name === '@/utils/search' ? helpers : name === '@/composables/useLibraryScope' ? { useLibraryScope: () => ref([]) } : (name.endsWith('LibraryScopeSelect.vue') ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name])) ?? (name === '@/components/ui' ? { ...entryPresentationTestModules[name] as object, Tabs: loadUiComponent('Tabs'), Checkbox: loadUiComponent('Checkbox'), Dialog: loadUiComponent('Dialog') } : undefined) ?? require(name), module, module.exports)
   return module.exports
 }
 function component(path: string, modules: Record<string, unknown>) {
@@ -122,8 +122,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: actual command palette renders API-loaded Markdown snippets as localized plain text`, async () => {
     const api = ingestSearchAPI({ snippets: [{ ...article.snippets[0], content: markdownExcerpt }] })
     const hook = evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts', import.meta.url), 'utf8'), { '@/utils/search': helpers, '@/api/search': api })
-    const store = { open: ref(true), initialQuery: ref('Launch'), recentQueries: ref([]), closePalette() {}, pushRecent() {} }
+    const store = { open: ref(true), initialQuery: ref('Launch'), recentQueries: ref([]), recentTargets: ref([]), closePalette() {}, pushRecent() {}, pushTarget() {} }
     const palette = component('../../components/GlobalCommandPalette.vue', {
+      '@/components/ui': { ...entryPresentationTestModules['@/components/ui'] as object, Dialog: stub, Drawer: stub },
+      '@/composables/useTheme': { useTheme: () => ({ currentTheme: ref('light'), setTheme() {} }) },
       pinia: { storeToRefs: (value: unknown) => value },
       '@/stores/commandPalette': { useCommandPaletteStore: () => store },
       '@/stores/auth': { useAuthStore: () => ({}) },

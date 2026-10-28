@@ -24,20 +24,20 @@ function layer(path: string, tag: string) {
   visit(parse(descriptor.template!.content))
   assert.ok(nodes.length)
   return nodes.map(node => {
-    const prop = node.props.find((item: any) => item.type === NodeTypes.DIRECTIVE && item.name === 'bind' && ['z-index', 'zIndex'].includes(item.arg?.content))
+    const prop = node.props.find((item: any) => item.type === NodeTypes.DIRECTIVE && item.name === 'bind' && ['z-index', 'zIndex', 'layer'].includes(item.arg?.content))
     assert.ok(prop, `${path}: ${tag} has an explicit teleport layer`)
     const value = Number(prop.exp?.content); assert.ok(Number.isFinite(value)); return value
   })
 }
 test('global search and its image viewer remain above both material drawers and overlays', () => {
   const drawers = layer('./components/DocContent.vue', 't-drawer')
-  const palette = layer('./components/GlobalCommandPalette.vue', 't-dialog')[0]
-  const retrieval = layer('./components/GlobalCommandPalette.vue', 't-drawer')[0]
+  const palette = layer('./components/GlobalCommandPalette.vue', 'Dialog')[0]
+  const retrieval = layer('./components/GlobalCommandPalette.vue', 'Drawer')[0]
   const preview = layer('./components/ImagePreview.vue', 'ImageViewer')[0]
   assert.ok(palette > Math.max(...drawers) + 1, 'The search panel clears drawers and their resize handles')
   assert.ok(retrieval > palette)
   assert.ok(preview > retrieval, 'Thumbnail viewing stays above the search panel')
   const source = readFileSync(new URL('./components/GlobalCommandPalette/ResultItem.vue', import.meta.url), 'utf8')
   assert.match(source, /@click="\$emit\('primary'\)"/)
-  assert.match(source, /@keydown\.enter\.self\.prevent=/)
+  assert.match(source, /@keydown\.enter\.self\.prevent(?:\.stop)?=/)
 })

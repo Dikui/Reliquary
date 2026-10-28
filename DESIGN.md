@@ -297,3 +297,15 @@ calls stack successful and failed requests in text and danger colors. Token
 and cost plots show the available totals without estimating a failure split.
 Tables scroll within their own containers. The call drawer overrides the shared
 content viewer's legacy styles with square neutral surfaces in both themes.
+
+## Swiss command palette
+
+The global palette uses the shared Dialog at layer 2400, its retrieval drawer at
+2450, and its image preview at 2500. The panel is 640px wide, begins at 12vh, and
+fits narrow screens with 16px margins. A two-pixel rule, square corners and the
+floating shadow match the local design reference. Results scroll within the
+panel; the scope row and keyboard footer remain outside that scroll area.
+Only the current result has a yellow background, with every descendant using
+`--on-select`. Library marks and content-type Tags reuse the shared primitives.
+Retrieval sliders flex into the available width while their numeric outputs
+reserve 56px without wrapping, including in the narrow drawer layout.
