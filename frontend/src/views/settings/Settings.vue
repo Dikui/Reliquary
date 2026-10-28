@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink, useRoute, useRouter } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -26,9 +26,6 @@ const capabilities = useDeploymentCapabilitiesStore()
 const librarySettingsView = ref<InstanceType<typeof LibrarySettings>>()
 const spaceInfoView = ref<InstanceType<typeof SpaceInfo>>()
 const content = ref<HTMLElement>()
-let previousThemeScope: string | null = null
-onMounted(() => { previousThemeScope = document.body.getAttribute('data-reliquary-settings'); document.body.setAttribute('data-reliquary-settings', '') })
-onBeforeUnmount(() => { if (previousThemeScope === null) document.body.removeAttribute('data-reliquary-settings'); else document.body.setAttribute('data-reliquary-settings', previousThemeScope) })
 const currentSection = computed(() => normalizeSettingsSection(String(route.query.section || 'general'), typeof route.query.tab === 'string' ? route.query.tab : undefined))
 const subsection = computed(() => typeof route.query.subsection === 'string' ? route.query.subsection : undefined)
 const supported = (key: string) => !isIntegrationSection(key) || capabilities.isSupported(INTEGRATION_TAB_CAPABILITY[integrationTabFromSection(key)])

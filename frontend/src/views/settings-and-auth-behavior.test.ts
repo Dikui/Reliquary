@@ -1,3 +1,4 @@
+import { settingsTestUi } from './settings/settingsTestUi'
 import assert from 'node:assert/strict'
 import { safeTextareaTestModule } from '../components/__tests__/safeTextareaStub'
 import test from 'node:test'
@@ -27,7 +28,7 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
   const template = compileTemplate({ id: 'personal-fix-test', filename, source: descriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: script.bindings } })
   assert.deepEqual(template.errors, [])
   const t = translator(locale)
-  const mocks: Record<string, unknown> = {
+  const mocks: Record<string, unknown> = { '@/components/ui': settingsTestUi(),
     '@/components/SafeTextarea.vue': safeTextareaTestModule,
     '@/components/SearchFilters.vue': { default: stub, __esModule: true },
     '@/utils/search': searchHelpers,
@@ -80,7 +81,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       },
     }, async state => {
       state.openCreate()
-      state.formRef.value = { validate: async () => true }
       state.form.name = 'Personal automation'
       await state.save()
       assert.equal(state.formError.value, '')
@@ -88,7 +88,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(state.editingVisible.value, false)
     })
     assert.deepEqual(requests, [{ payload: { name: 'Personal automation' } }])
-    assert.equal(state.columns.value.at(-1).title, locale === 'zh-CN' ? '操作' : 'Actions')
+    assert.equal(state.columns.value.at(-1).label, locale === 'zh-CN' ? '操作' : 'Actions')
     const t = translator(locale)
     assert.equal(personalError.apiKeyErrorMessage({ message: 'expires_at_unix must be in the future' }, t, 'integrations.api.createApiKeyFailed'), t('integrations.api.apiKeyExpiresAtInvalid'))
     assert.equal(personalError.apiKeyErrorMessage({ message: 'internal backend error' }, t, 'integrations.api.createApiKeyFailed'), t('integrations.api.createApiKeyFailed'))

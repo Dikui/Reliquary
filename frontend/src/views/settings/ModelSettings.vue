@@ -1,23 +1,19 @@
 <template>
-  <div class="model-settings">
+  <div class="model-settings settings-form">
     <div class="section-header">
       <div class="section-header__top">
         <div>
-          <h2>{{ $t('modelSettings.title') }}</h2>
           <p class="section-description">{{ $t('modelSettings.description') }}</p>
         </div>
-        <t-button
-
+        <Button
           type="button"
-          theme="primary"
-          variant="text"
-          size="medium"
+          variant="ghost"
           class="model-test-trigger"
           @click="showDebugDrawer = true"
         >
-          <template #icon><play-circle-icon /></template>
+
           {{ $t('modelSettings.actions.debugModel') }}
-        </t-button>
+        </Button>
       </div>
 
       <div class="builtin-models-hint" role="note">
@@ -28,72 +24,36 @@
         <a class="doc-link" href="http://192.168.1.146:3000/dikui/reliquary/src/branch/main/docs/builtin-models.md" target="_blank"
           rel="noopener noreferrer">
           {{ $t('modelSettings.builtinModels.viewGuide') }}
-          <t-icon name="link" class="link-icon" />
+
         </a>
       </div>
     </div>
 
     <ChatGPTSettings :models="allModels" />
 
-    <t-tabs v-model="activeTypeFilter" class="model-type-tabs">
-      <t-tab-panel value="all" :label="`${$t('common.all')}(${allLegacyModels.length})`" />
-      <t-tab-panel value="chat" :label="`${$t('modelSettings.typeShort.chat')}(${countByType('chat')})`" />
-      <t-tab-panel value="embedding"
-        :label="`${$t('modelSettings.typeShort.embedding')}(${countByType('embedding')})`" />
-      <t-tab-panel value="rerank" :label="`${$t('modelSettings.typeShort.rerank')}(${countByType('rerank')})`" />
-    </t-tabs>
+    <nav class="model-type-tabs" :aria-label="$t('model.editor.typeLabel')">
+      <Button v-for="type in (['all', 'chat', 'embedding', 'rerank'] as const)" :key="type" :aria-pressed="activeTypeFilter === type" :variant="activeTypeFilter === type ? 'primary' : 'default'" @click="activeTypeFilter = type">{{ type === 'all' ? $t('common.all') : typeLabel(type) }} ({{ type === 'all' ? allLegacyModels.length : countByType(type) }})</Button>
+    </nav>
+    <p v-if="loading" role="status">{{ $t('common.loading') }}</p>
 
-    <t-loading :loading="loading" size="small" class="model-list-loading">
+    <div :aria-busy="loading" class="model-list-loading">
       <div v-if="!loading" class="model-grid">
-        <div v-for="model in filteredModels" :key="`${model._modelType}-${model.id}`" class="model-card" :class="[
+        <article v-for="model in filteredModels" :key="`${model._modelType}-${model.id}`" class="model-card" :class="[
           `model-card--${model._modelType}`,
           {
             'model-card--builtin': model.isBuiltin,
-            'model-card--clickable': true,
           },
-        ]" role="button"
-          tabindex="0"
-          @click="onModelCardClick($event, model._modelType, model)"
-          @keydown.enter="onModelCardClick($event, model._modelType, model)">
-          <div class="model-card__badge" :aria-label="typeLabel(model._modelType)">
-            <t-icon :name="typeIcon(model._modelType)" size="18px" />
+        ]">
+          <div class="model-card__badge" :aria-label="typeLabel(model._modelType)">{{ typeLabel(model._modelType) }}
+
           </div>
           <div class="model-card__body">
             <div class="model-card__header">
-              <h3 class="model-card__title">{{ modelDisplayName(model) }}</h3>
-              <span v-if="model.isBuiltin" class="model-card__lock" :title="$t('modelSettings.builtinTag')"
-                :aria-label="$t('modelSettings.builtinTag')">
-                <t-icon name="edit-1" />
-              </span>
+              <h3 class="model-card__title"><button type="button" @click="editModel(model._modelType, model)">{{ modelDisplayName(model) }}</button></h3>
+              <Tag v-if="model.isBuiltin">{{ $t('modelSettings.builtinTag') }}</Tag>
               <div class="model-card__actions" @click.stop>
-                <t-dropdown :options="getModelOptions(model._modelType, model)" placement="bottom-right" attach="body"
-                  trigger="click"
-                  @click="(data: any) => handleMenuAction({ value: data.value }, model._modelType, model)">
-                  <t-button variant="text" shape="square" size="small" class="model-card__action-btn model-card__more">
-                    <t-icon name="ellipsis" />
-                  </t-button>
-                </t-dropdown>
-                <t-popconfirm
-                  v-if="canDeleteModel(model)"
-                  :content="$t('modelSettings.confirmDelete', { name: modelDisplayName(model) })"
-                  :confirm-btn="{ content: $t('common.delete'), theme: 'danger' }"
-                  :cancel-btn="{ content: $t('common.cancel') }"
-                  placement="bottom-right"
-                  @confirm="deleteModel(model._modelType, model.id)"
-                >
-                  <t-tooltip :content="$t('common.delete')" placement="top">
-                    <t-button
-                      theme="danger"
-                      shape="square"
-                      variant="text"
-                      size="small"
-                      class="model-card__action-btn model-card__delete"
-                      @click.stop
-                    >
-                      <template #icon><t-icon name="delete" /></template>
-                    </t-button>
-                  </t-tooltip>
-                </t-popconfirm>
+                <Button v-for="action in getModelOptions(model._modelType, model)" :key="String(action.value)" variant="ghost" @click="handleMenuAction({ value: action.value }, model._modelType, model)">{{ action.content }}</Button>
+                <Button v-if="canDeleteModel(model)" variant="danger" @click="confirmDeleteModel(model)">{{ $t('common.delete') }}</Button>
               </div>
             </div>
             <p class="model-card__subtitle">
@@ -112,36 +72,28 @@
               </template>
               <template v-if="(model._modelType === 'chat' && model.supportsVision) || (model._modelType === 'embedding' && model.supportsImages)">
                 <span class="model-card__sep">·</span>
-                <span class="model-card__vision" :title="$t(model._modelType === 'embedding' ? 'model.editor.supportsImagesLabel' : 'model.editor.supportsVisionLabel')"
+                <Tag class="model-card__vision" :title="$t(model._modelType === 'embedding' ? 'model.editor.supportsImagesLabel' : 'model.editor.supportsVisionLabel')"
                   :aria-label="$t(model._modelType === 'embedding' ? 'model.editor.supportsImagesLabel' : 'model.editor.supportsVisionLabel')">
-                  <t-icon name="image" size="12px" />
-                </span>
+                  {{ $t(model._modelType === 'embedding' ? 'model.editor.supportsImagesLabel' : 'model.editor.supportsVisionLabel') }}</Tag>
               </template>
             </p>
             <a v-if="model.source === 'chatgpt'" class="model-card__usage" href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" @click.stop @keydown.enter.stop>{{ $t('chatgpt.manageUsage') }}</a>
           </div>
-        </div>
+        </article>
         <button
-
           type="button"
           class="model-card model-card--add"
           @click="openAddDialog"
         >
           <span class="model-card--add__icon" aria-hidden="true">
-            <add-icon />
+            ＋
           </span>
           <span class="model-card--add__label">{{ $t('modelSettings.actions.addModel') }}</span>
         </button>
       </div>
-    </t-loading>
+    </div>
 
-    <t-dialog
-      v-model:visible="showUsageDialog"
-      :header="$t('modelSettings.usage.title')"
-      :footer="false"
-      width="680px"
-      destroy-on-close
-    >
+    <Dialog v-model="showUsageDialog" :title="$t('modelSettings.usage.title')">
       <div v-if="usageConflict" class="model-usage-dialog">
         <p class="model-usage-dialog__description">
           {{ $t('modelSettings.usage.description', { name: usageConflictModelName }) }}
@@ -157,24 +109,21 @@
                 <div class="model-usage-resource">
                   <strong>{{ resource.name || resource.id }}</strong>
                   <div class="model-usage-bindings">
-                    <t-tag
+                    <Tag
                       v-for="(binding, index) in resource.bindings"
                       :key="`${binding}-${index}`"
-                      size="small"
-                      variant="light"
+                      variant="plain"
                     >
                       {{ $t(modelUsageBindingI18nKey(binding)) }}
-                    </t-tag>
+                    </Tag>
                   </div>
                 </div>
-                <t-button
-                  theme="primary"
-                  variant="text"
-                  size="small"
+                <Button
+                  variant="ghost"
                   @click="openUsageResource('library', resource.id, resource.bindings)"
                 >
                   {{ $t('modelSettings.usage.openConfiguration') }}
-                </t-button>
+                </Button>
               </li>
             </ul>
             <p
@@ -188,15 +137,13 @@
             </p>
           </section>
 
-
-
         </div>
 
         <div class="model-usage-dialog__actions">
-          <t-button @click="showUsageDialog = false">{{ $t('common.close') }}</t-button>
+          <Button @click="showUsageDialog = false">{{ $t('common.close') }}</Button>
         </div>
       </div>
-    </t-dialog>
+    </Dialog>
 
     <!-- 模型编辑器抽屉 -->
     <ModelEditorDialog v-model:visible="showDialog" :model-type="currentModelType" :model-data="editingModel"
@@ -207,9 +154,9 @@
 </template>
 
 <script setup lang="ts">
+import { Button, Tag, Dialog, toast, useConfirm } from '@/components/ui'
+import '@/styles/settings-form.css'
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, PlayCircleIcon } from 'tdesign-icons-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import ModelEditorDialog from '@/components/ModelEditorDialog.vue'
@@ -238,6 +185,7 @@ import {
   effectiveContextWindow,
 } from '@/utils/contextWindow'
 
+const confirm = useConfirm()
 const { t, te } = useI18n()
 const uiStore = useUIStore()
 const resources = useResourcesStore()
@@ -245,6 +193,9 @@ const router = useRouter()
 type ModelType = 'chat' | 'embedding' | 'rerank'
 type FilterType = 'all' | ModelType
 
+function confirmDeleteModel(model: any) {
+  const dialog = confirm({ header: t('common.delete'), body: t('modelSettings.confirmDelete', { name: modelDisplayName(model) }), confirmBtn: t('common.delete'), theme: 'danger', onConfirm: async () => { await deleteModel(model._modelType, model.id); dialog.destroy() } })
+}
 const showDialog = ref(false)
 const showDebugDrawer = ref(false)
 const showUsageDialog = ref(false)
@@ -328,16 +279,6 @@ const filteredModels = computed(() => {
 
 const countByType = (type: ModelType) => allLegacyModels.value.filter(m => m._modelType === type).length
 
-// 类型徽章图标。沿用 TDesign 自带 icon name，避免再引第三方图标包。
-const typeIcon = (type: ModelType): string => {
-  const map: Record<ModelType, string> = {
-    chat: 'chat',
-    embedding: 'chart-bubble',
-    rerank: 'filter-sort',
-  }
-  return map[type]
-}
-
 const typeLabel = (type: ModelType) => {
   const map: Record<ModelType, string> = {
     chat: t('modelSettings.typeShort.chat'),
@@ -415,7 +356,7 @@ const loadModels = async () => {
     resources.replaceModels(models)
   } catch (error: any) {
     console.error('加载模型列表失败:', error)
-    MessagePlugin.error(error.message)
+    toast.error(error.message)
   } finally {
     loading.value = false
   }
@@ -432,17 +373,6 @@ const openAddDialog = () => {
 const canDeleteModel = (model: any) =>
   !model.isBuiltin
 
-const onModelCardClick = (event: Event, type: ModelType, model: any) => {
-  if (event.type === 'keydown') {
-    const ke = event as KeyboardEvent
-    if (ke.key !== 'Enter' && ke.key !== ' ') return
-    ke.preventDefault()
-  }
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.model-card__actions')) return
-  editModel(type, model)
-}
-
 // 编辑模型
 const editModel = (type: ModelType, model: any) => {
   currentModelType.value = type
@@ -457,37 +387,37 @@ const handleModelSave = async (modelData: any) => {
 
   try {
     if (!modelData.modelName || !modelData.modelName.trim()) {
-      MessagePlugin.warning(t('modelSettings.toasts.nameRequired'))
+      toast.warning(t('modelSettings.toasts.nameRequired'))
       return
     }
 
     if (modelData.modelName.trim().length > 100) {
-      MessagePlugin.warning(t('modelSettings.toasts.nameTooLong'))
+      toast.warning(t('modelSettings.toasts.nameTooLong'))
       return
     }
 
     if (modelData.displayName && modelData.displayName.trim().length > 100) {
-      MessagePlugin.warning(t('modelSettings.toasts.displayNameTooLong'))
+      toast.warning(t('modelSettings.toasts.displayNameTooLong'))
       return
     }
 
     if (modelData.source === 'remote') {
       if (!modelData.baseUrl || !modelData.baseUrl.trim()) {
-        MessagePlugin.warning(t('modelSettings.toasts.baseUrlRequired'))
+        toast.warning(t('modelSettings.toasts.baseUrlRequired'))
         return
       }
 
       try {
         new URL(modelData.baseUrl.trim())
       } catch {
-        MessagePlugin.warning(t('modelSettings.toasts.baseUrlInvalid'))
+        toast.warning(t('modelSettings.toasts.baseUrlInvalid'))
         return
       }
     }
 
     if (saveType === 'embedding') {
       if (!modelData.dimension || modelData.dimension < 128 || modelData.dimension > 4096) {
-        MessagePlugin.warning(t('modelSettings.toasts.dimensionInvalid'))
+        toast.warning(t('modelSettings.toasts.dimensionInvalid'))
         return
       }
     }
@@ -519,7 +449,7 @@ const handleModelSave = async (modelData: any) => {
     }
     if (modelData.source === 'chatgpt') {
       if (saveType !== 'chat' || !modelData.chatgptAccountID) {
-        MessagePlugin.warning(t('chatgpt.accountRequired'))
+        toast.warning(t('chatgpt.accountRequired'))
         return
       }
       extraConfig.chatgpt_account_id = modelData.chatgptAccountID
@@ -570,17 +500,17 @@ const handleModelSave = async (modelData: any) => {
 
     if (editingModel.value && editingModel.value.id) {
       await updateModelAPI(editingModel.value.id, apiModelData)
-      MessagePlugin.success(t('modelSettings.toasts.updated'))
+      toast.success(t('modelSettings.toasts.updated'))
     } else {
       await createModel(apiModelData)
-      MessagePlugin.success(t('modelSettings.toasts.added'))
+      toast.success(t('modelSettings.toasts.added'))
     }
 
     showDialog.value = false
     await loadModels()
   } catch (error: any) {
     console.error('保存模型失败:', error)
-    MessagePlugin.error(error.message || t('modelSettings.toasts.saveFailed'))
+    toast.error(error.message || t('modelSettings.toasts.saveFailed'))
   }
 }
 
@@ -588,23 +518,23 @@ const handleModelSave = async (modelData: any) => {
 const deleteModel = async (_type: ModelType, modelId: string) => {
   const model = allModels.value.find(m => m.id === modelId)
   if (model?.is_builtin) {
-    MessagePlugin.warning(t('modelSettings.toasts.builtinCannotDelete'))
+    toast.warning(t('modelSettings.toasts.builtinCannotDelete'))
     return
   }
 
   try {
     await deleteModelAPI(modelId)
-    MessagePlugin.success(t('modelSettings.toasts.deleted'))
+    toast.success(t('modelSettings.toasts.deleted'))
     await loadModels()
   } catch (error: any) {
-    console.error('删除模型失败:', error)
     if (error instanceof ModelInUseError) {
       usageConflict.value = error.details
       usageConflictModelName.value = model?.display_name || model?.name || modelId
       showUsageDialog.value = true
       return
     }
-    MessagePlugin.error(error.message || t('modelSettings.toasts.deleteFailed'))
+    console.error('删除模型失败:', error)
+    toast.error(error.message || t('modelSettings.toasts.deleteFailed'))
   }
 }
 
@@ -674,7 +604,7 @@ const copyModel = async (_type: ModelType, modelId: string) => {
     return
   }
   if (source.is_builtin) {
-    MessagePlugin.warning(t('modelSettings.toasts.builtinCannotCopy'))
+    toast.warning(t('modelSettings.toasts.builtinCannotCopy'))
     return
   }
 
@@ -689,11 +619,11 @@ const copyModel = async (_type: ModelType, modelId: string) => {
     }
 
     await createModel(newModel)
-    MessagePlugin.success(t('modelSettings.toasts.copied'))
+    toast.success(t('modelSettings.toasts.copied'))
     await loadModels()
   } catch (error: any) {
     console.error('复制模型失败:', error)
-    MessagePlugin.error(error.message || t('modelSettings.toasts.copyFailed'))
+    toast.error(error.message || t('modelSettings.toasts.copyFailed'))
   }
 }
 
@@ -712,465 +642,22 @@ onMounted(() => {
 })
 </script>
 
-<style lang="less" scoped>
-@import '../../assets/settings-layout.less';
-
-.model-settings {
-  width: 100%;
-}
-
-.section-header {
-  margin-bottom: 28px;
-
-  h2 {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--td-text-color-primary);
-    margin: 0 0 8px 0;
-  }
-
-  .section-description {
-    font-size: 14px;
-    color: var(--td-text-color-secondary);
-    margin: 0;
-    line-height: 1.6;
-  }
-}
-
-.section-header__top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.model-test-trigger {
-  --td-bg-color-container-hover: transparent;
-  flex-shrink: 0;
-  padding-left: 0;
-  padding-right: 0;
-  font-weight: 600;
-
-  &:hover,
-  &:focus,
-  &.t-is-active,
-  &:active {
-    background-color: transparent !important;
-    color: var(--td-brand-color-hover);
-  }
-
-  &:active {
-    color: var(--td-brand-color-active);
-  }
-}
-
-.builtin-models-hint {
-  margin-top: 12px;
-  padding: 10px 12px;
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 6px;
-}
-
-.builtin-hint-label {
-  margin: 0 0 4px 0;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--td-text-color-placeholder);
-  letter-spacing: 0.02em;
-}
-
-.builtin-hint-text {
-  margin: 0 0 6px 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--td-text-color-secondary);
-}
-
-.builtin-models-hint .doc-link {
-  font-size: 13px;
-}
-
-.model-list-loading {
-  min-height: 120px;
-}
-
-.model-type-tabs {
-  margin-bottom: 16px;
-
-  :deep(.t-tabs__nav-item) {
-    font-size: 13px;
-  }
-
-  :deep(.t-tabs__nav-item-wrapper) {
-    padding: 0 12px;
-    margin: 0;
-  }
-
-  :deep(.t-tabs__operations) {
-    display: none;
-  }
-
-  :deep(.t-tabs__nav-scroll) {
-    overflow-x: auto;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
-
-  :deep(.t-tabs__content) {
-    display: none;
-  }
-}
-
-.model-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
-  gap: 12px;
-
-  .model-card--add {
-    width: 100%;
-    height: 100%;
-  }
-}
-
-// 模型卡片 —— 可选类型徽章（仅「全部」Tab）+ 标题 + 一行副标题
-.model-card {
-  position: relative;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 10px;
-  background: var(--td-bg-color-container);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-  min-width: 0;
-
-  &:hover {
-    border-color: var(--td-brand-color-3, var(--td-brand-color));
-    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-  }
-
-  &--add {
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    min-height: 68px;
-    border-style: dashed;
-    background: transparent;
-    color: var(--td-text-color-placeholder);
-    cursor: pointer;
-    font: inherit;
-    text-align: center;
-
-    &:hover,
-    &:focus-visible {
-      color: var(--td-brand-color);
-      border-color: var(--td-brand-color);
-      background: color-mix(in srgb, var(--td-brand-color) 6%, transparent);
-      box-shadow: none;
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--td-brand-color);
-      outline-offset: 2px;
-    }
-
-    &__icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
-      color: var(--td-brand-color);
-      font-size: 18px;
-    }
-
-    &__label {
-      font-size: 13px;
-      font-weight: 500;
-      line-height: 1.4;
-    }
-  }
-
-  &--builtin {
-    background: var(--td-bg-color-secondarycontainer);
-
-    &:hover {
-      box-shadow: none;
-      border-color: var(--td-component-stroke);
-    }
-  }
-
-  &--clickable {
-    cursor: pointer;
-
-    &:hover {
-      border-color: var(--td-brand-color-3, var(--td-brand-color));
-      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--td-brand-color);
-      outline-offset: 2px;
-    }
-  }
-}
-
-.model-card__badge {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 1px;
-  // 默认底色，被 type 修饰覆盖
-  background: rgba(0, 82, 217, 0.1);
-  color: #0052D9;
-}
-
-// 5 种类型的徽章配色 —— 比原 tag 配色饱和度低一档，避免炫光
-.model-card--chat .model-card__badge {
-  background: rgba(0, 82, 217, 0.1);
-  color: #0052D9;
-}
-
-.model-card--embedding .model-card__badge {
-  background: rgba(98, 53, 187, 0.1);
-  color: #6235BB;
-}
-
-.model-card--rerank .model-card__badge {
-  background: rgba(184, 92, 0, 0.1);
-  color: #B85C00;
-}
-
-
-.model-card__body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-}
-
-.model-card__header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.model-card__title {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.4;
-  color: var(--td-text-color-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/*
-  Built-in lock indicator. Most cards in a typical install ARE built-in,
-  so loud styling everywhere becomes noise — instead the lock is muted
-  and small by default, and lights up on hover. The signal that matters
-  to users is "which models did I add" → user-added cards stand out by
-  the absence of the lock.
-*/
-.model-card__lock {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  color: var(--td-text-color-placeholder);
-  opacity: 0.6;
-  transition: color 0.15s ease, opacity 0.15s ease;
-
-  .t-icon {
-    font-size: 13px;
-  }
-}
-
-.model-card:hover .model-card__lock {
-  opacity: 1;
-  color: var(--td-text-color-secondary);
-}
-
-.model-card__subtitle {
-  margin: 2px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--td-text-color-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.model-card__sep {
-  margin: 0 4px;
-  color: var(--td-text-color-placeholder);
-}
-
-.model-card__usage {
-  display: inline-block;
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--td-brand-color);
-}
-
-.model-card__vision {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.model-card__ctx {
-  font-variant-numeric: tabular-nums;
-}
-
-.model-card__ctx--default {
-  color: var(--td-text-color-placeholder);
-}
-
-.model-card__actions {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.model-card__action-btn {
-  flex-shrink: 0;
-  padding: 2px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.model-card__more {
-  color: var(--td-text-color-placeholder);
-
-  &:hover,
-  &:focus-visible {
-    background: var(--td-bg-color-secondarycontainer);
-    color: var(--td-text-color-primary);
-  }
-}
-
-// Hover / 键盘焦点 时显示操作按钮，避免静态卡片上有"杂物"。
-.model-card:hover .model-card__action-btn,
-.model-card:focus-within .model-card__action-btn,
-.model-card__actions:focus-within .model-card__action-btn {
-  opacity: 1;
-}
-
-.empty-state {
-  padding: 64px 0;
-  text-align: center;
-
-  :deep(.t-empty__description) {
-    font-size: 14px;
-    color: var(--td-text-color-placeholder);
-    margin-bottom: 16px;
-  }
-}
-
-.model-usage-dialog__description {
-  margin: 0 0 16px;
-  color: var(--td-text-color-secondary);
-  line-height: 1.6;
-}
-
-.model-usage-dialog__content {
-  max-height: min(58vh, 560px);
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.model-usage-group {
-  & + & {
-    margin-top: 20px;
-  }
-
-  h3 {
-    margin: 0 0 8px;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--td-text-color-primary);
-  }
-
-  ul {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    border: 1px solid var(--td-component-stroke);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-
-  li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 12px;
-
-    & + li {
-      border-top: 1px solid var(--td-component-stroke);
-    }
-  }
-}
-
-.model-usage-truncated {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-  line-height: 1.5;
-}
-
-.model-usage-resource {
-  min-width: 0;
-
-  strong {
-    display: block;
-    margin-bottom: 6px;
-    overflow: hidden;
-    color: var(--td-text-color-primary);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-.model-usage-bindings {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.model-usage-dialog__actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-@container settings-content (max-width: @settings-narrow-width) {
-  .section-header__top { align-items: flex-start; flex-wrap: wrap; }
-  .model-type-tabs :deep(.t-tabs__nav-scroll) {
-    scrollbar-width: auto;
-    &::-webkit-scrollbar { display: block; }
-  }
-}
+<style scoped>
+ .section-header__top, .model-card__header, .model-card__actions, .model-type-tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.builtin-models-hint { padding: var(--space-3) 0; border-top: 2px solid var(--rule); color: var(--muted); font-size: var(--text-sm); }
+.builtin-hint-label { color: var(--text); font-weight: 800; }
+.model-type-tabs { justify-content: flex-start; margin: var(--space-4) 0; }
+.model-grid { display: grid; }
+.model-card { display: flex; gap: var(--space-3); min-width: 0; padding: var(--space-4) 0; border: 0; border-top: 2px solid var(--rule); background: var(--bg); color: var(--text); text-align: left; }
+.model-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.model-card__badge { min-width: 64px; font-size: var(--text-xs); color: var(--muted); }
+.model-card__body { flex: 1; min-width: 0; }
+.model-card__title { overflow-wrap: anywhere; margin: 0; }
+.model-card__title button { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: inherit; text-align: left; text-decoration: underline; cursor: pointer; }
+.model-card__title button:hover { color: var(--accent); }
+.model-card__title button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.model-card__subtitle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--muted); }
+.model-card--add { cursor: pointer; font: inherit; }
+.model-usage-group ul { padding: 0; list-style: none; }
+.model-usage-group li, .model-usage-bindings { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: space-between; margin-bottom: var(--space-3); }
 </style>

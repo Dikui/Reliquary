@@ -2525,6 +2525,9 @@ export default {
     downloadFailed: '下载文件失败，请稍后重试',
   },
   common: {
+    pageSize: '每页条数',
+    show: '显示',
+    hide: '隐藏',
     operation: '操作',
     copyCode: "复制代码",
     add: '添加',

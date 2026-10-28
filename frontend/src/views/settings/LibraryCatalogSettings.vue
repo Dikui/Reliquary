@@ -170,7 +170,7 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
         </section>
         <section class="catalog-section">
           <header><h2>{{ t('modelTiers.title') }}</h2><p>{{ t('ikb18.admissionPolicyHint') }}</p></header>
-          <div class="catalog-controls"><ModelTierEditor v-model="draft.model_tiers" :tiers="modelTiers" :before-navigate="confirmLeave" :disabled="saving || loading" /></div>
+          <div class="catalog-controls"><ModelTierEditor hide-title v-model="draft.model_tiers" :tiers="modelTiers" :before-navigate="confirmLeave" :disabled="saving || loading" /></div>
         </section>
         <section v-if="draft.chunking_config" class="catalog-section">
           <header><h2>{{ t('knowledgeEditor.chunking.title') }}</h2><p>{{ t('settingsPage.chunkHint') }}</p></header>

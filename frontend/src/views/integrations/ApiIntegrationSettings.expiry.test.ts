@@ -1,3 +1,4 @@
+import { settingsTestUi } from '../settings/settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync, appendFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -14,11 +15,6 @@ import * as searchHelpers from '../../utils/search'
 import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../../utils/sfcStyleTestHelpers'
 
 const require = createRequire(import.meta.url)
-const { Alert, DatePicker, Input, Tooltip, ConfigProvider } = require('tdesign-vue-next')
-const localeConfigs = {
-  'zh-CN': require('tdesign-vue-next/cjs/locale/zh_CN').default,
-  'en-US': require('tdesign-vue-next/cjs/locale/en_US').default,
-}
 const source = readFileSync(process.env.RELIQUARY_API_SETTINGS_SOURCE || new URL('./ApiIntegrationSettings.vue', import.meta.url), 'utf8')
 const { descriptor } = parse(source, { filename: 'ApiIntegrationSettings.vue' })
 const script = compileScript(descriptor, { id: 'api-expiry-test' })
@@ -35,12 +31,23 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
   const buttons: Array<{ label: unknown; click: (() => unknown) | undefined }> = []
   const tooltips: string[] = []
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })
+  const ui = settingsTestUi()
+  const realButton = ui.Button, realInput = ui.Input
+  let pickerProps: any
+  ui.Button = defineComponent({ setup(_, { attrs, slots }) {
+    buttons.push({ label: attrs['aria-label'], click: attrs.onClick as (() => unknown) | undefined })
+    return () => h(realButton, attrs, slots)
+  } })
+  ui.Input = defineComponent({ setup(_, { attrs }) {
+    if (attrs.type === 'datetime-local') pickerProps = attrs
+    return () => h(realInput, attrs)
+  } })
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
-    'tdesign-vue-next': { MessagePlugin: { success() {} }, DialogPlugin: {} },
+    '@/components/ui': ui, '@/styles/settings-form.css': {},
     '@/utils/personalServerError': personalServerError,
     '@/utils/api-base': { getApiBaseUrl: () => options.baseUrl ?? 'http://localhost' },
-    '@/utils/clipboard': { copyWithToast(value: string, successKey: string) { copies.push({ value, successKey }) } },
+    '@/utils/clipboard': { copyToClipboard(value: string) { copies.push({ value, successKey: 'common.copySuccess' }); return true } },
     '@/utils/search': searchHelpers,
     '@/api/search': { getSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
     '@/api/space': {
@@ -64,36 +71,19 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
     state = setup(props, context)
     onServerPrefetch(async () => {
       state.openCreate()
-      state.formRef.value = { validate: async () => true }
       await action(state)
     })
     return state
   }
-  let pickerProps: any
-  const picker = defineComponent({ props: DatePicker.props, setup(props, { attrs }) {
-    pickerProps = props
-    return () => h(DatePicker, { ...attrs, ...props })
-  } })
-  const app = createSSRApp({ render: () => h(ConfigProvider, { globalConfig: localeConfigs[locale] }, () => h(component)) })
-  for (const name of ['t-form', 't-form-item', 't-icon', 't-empty', 't-loading', 't-textarea', 't-select']) app.component(name, stub)
-  app.component('t-alert', Alert)
-  app.component('t-button', defineComponent({ setup(_, { attrs, slots }) {
-    buttons.push({ label: attrs['aria-label'], click: attrs.onClick as (() => unknown) | undefined })
-    return () => h('button', attrs, slots.default?.())
-  } }))
-  app.component('t-table', defineComponent({ props: ['data'], setup(props, { slots }) { return () => h('section', { 'data-api-key-table': '' }, props.data?.map((row: unknown) => h('div', Object.values(slots).flatMap(slot => slot?.({ row }) ?? [])))) } }))
-  app.component('t-input', Input)
-  app.component('t-date-picker', picker)
-  app.component('t-tooltip', defineComponent({ props: ['content'], setup(props, { attrs, slots }) {
-    tooltips.push(props.content)
-    return () => h(Tooltip, { ...attrs, ...props }, slots)
-  } }))
+  const app = createSSRApp(component)
+  app.use(i18n)
   const warnings: string[] = []
   const errors: unknown[] = []
   app.config.warnHandler = warning => warnings.push(warning)
   app.config.errorHandler = error => errors.push(error)
   const html = await renderToString(app)
   assert.deepEqual(errors, [])
+  tooltips.push(...[...html.matchAll(/<code title="([^"]+)"/g)].map(match => match[1]!))
   return { state, requests, copies, buttons, tooltips, pickerProps, warnings, html }
 }
 
@@ -118,13 +108,13 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 test('API endpoint address columns reserve a minimum width and truncate long addresses beside the copy control', async () => {
   const rules = await compiledSFCStyleRules(new URL('./ApiIntegrationSettings.vue', import.meta.url))
   const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, 1440, { 'settings-content': 804 })
-  assert.equal(styles('.setting-control')['min-width'], '280px')
-  assert.equal(styles('.setting-control').width, '360px')
+  const shared = readFileSync(new URL('../../styles/settings-form.css', import.meta.url), 'utf8')
+  assert.match(shared, /\.setting-control[^}]*min-width:\s*0/)
   assert.equal(styles('.setting-control code')['min-width'], '0')
   assert.equal(styles('.setting-control code').overflow, 'hidden')
   assert.equal(styles('.setting-control code')['text-overflow'], 'ellipsis')
   assert.equal(styles('.setting-control code')['white-space'], 'nowrap')
-  assert.equal(styles('.setting-control .t-button')['flex-shrink'], '0')
+  assert.equal(styles('.setting-control .rq-button')['flex-shrink'], '0')
 })
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
@@ -154,7 +144,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const expected = locale === 'zh-CN'
       ? '你可以在此页再次查看完整密钥。请妥善保管，避免泄露。'
       : 'You can view the full key again on this page. Keep it safe and do not share it.'
-    assert.ok(result.html.replace(/<[^>]+>/g, '').includes(expected), 'the real TDesign alert displays the new notice as text')
+    assert.ok(result.html.replace(/<[^>]+>/g, '').includes(expected), 'the shared notice displays the new notice as text')
     assert.doesNotMatch(result.html, /完整密钥只显示这一次|full token is shown once/)
     assert.deepEqual(result.requests, [{ payload: { name: 'Collector' } }])
     assert.ok(result.html.includes('<code>token</code>'), 'the reloaded key list still displays the saved key')
@@ -203,7 +193,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const result = await scenario(locale, async () => {})
     assert.deepEqual(result.warnings, [])
     const fieldStart = result.html.indexOf('<div class="api-key-expiry-field">')
-    const pickerStart = result.html.indexOf('t-date-picker', fieldStart)
+    const pickerStart = result.html.indexOf('datetime-local', fieldStart)
     const hint = `<p class="api-key-expiry-hint">${(locale === 'zh-CN' ? zh : en).integrations.api.apiKeyExpiresAtHint}</p>`
     const hintStart = result.html.indexOf(hint, fieldStart)
     assert.ok(fieldStart >= 0, 'the date picker and guidance have a shared layout container')
@@ -212,27 +202,20 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(result.html.slice(hintStart + hint.length).startsWith('</div>'), 'the guidance ends the expiry layout container')
   })
 
-  test(`${locale}: expiry control uses real TDesign date and time picker without Vue prop warnings`, async () => {
+  test(`${locale}: expiry uses the native local date and time control without Vue prop warnings`, async () => {
     const result = await scenario(locale, async state => { state.form.expiresAt = '2035-01-15T08:45' })
     assert.deepEqual(result.warnings, [])
-    assert.ok(result.pickerProps, 'the expiry field renders the date picker')
-    assert.equal(result.pickerProps.enableTimePicker, true)
-    assert.equal(result.pickerProps.clearable, true)
-    assert.equal(result.pickerProps.format, 'YYYY-MM-DD HH:mm')
-    assert.equal(result.pickerProps.valueType, 'YYYY-MM-DD HH:mm')
-    assert.equal(result.pickerProps.timePickerProps.format, 'HH:mm')
-    assert.equal(result.pickerProps.modelValue, '2035-01-15 08:45')
-    assert.equal(result.pickerProps.popupProps.zIndex, 6200)
-    assert.ok(result.html.includes('2035-01-15 08:45'))
+    assert.ok(result.pickerProps)
+    assert.equal(result.pickerProps.type, 'datetime-local')
+    assert.equal(result.pickerProps.modelValue, '2035-01-15T08:45')
+    assert.ok(result.html.includes('2035-01-15T08:45'))
     assert.ok(result.html.includes(locale === 'zh-CN' ? '有效期' : 'Expiry'))
-    assert.ok(result.html.includes(localeConfigs[locale].datePicker.placeholder.date))
-    assert.doesNotMatch(source, /type=["']datetime-local["']/)
   })
 
   test(`${locale}: selecting local minute expiry submits the same Unix value as before`, async () => {
     const result = await scenario(locale, async state => {
       state.form.name = ' Automation '
-      state.expiryPickerValue.value = '2035-07-15 08:45'
+      state.form.expiresAt = '2035-07-15T08:45'
       assert.equal(state.form.expiresAt, '2035-07-15T08:45')
       await state.save()
     })
@@ -245,10 +228,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const result = await scenario(locale, async state => {
       state.openEdit({ id: 17, name: 'Existing', expires_at: expiresAt })
       assert.equal(state.form.expiresAt, expected)
-      assert.equal(state.expiryPickerValue.value, expected.replace('T', ' '))
       await state.save()
       state.openEdit({ id: 17, name: 'Existing', expires_at: expiresAt })
-      state.expiryPickerValue.value = ''
+      state.form.expiresAt = ''
       assert.equal(state.form.expiresAt, '')
       await state.save()
     })
@@ -361,3 +343,18 @@ test('migration replacement Key page save creates only the requested name',async
  assert.deepEqual(requests,[{payload:{name:'Replacement collector'}}])
  if(process.env.RELIQUARY_RECOVERY_REQUESTS)appendFileSync(process.env.RELIQUARY_RECOVERY_REQUESTS,JSON.stringify({kind:'new_api_key',method:'POST',body:requests[0].payload})+'\n')
 })
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: API key pagination preserves page size choices and clamps the page`, async () => {
+    const keys = Array.from({ length: 17 }, (_, index) => ({ id: index + 1, name: `Key ${index + 1}`, api_key: `key-${index + 1}`, created_at: '2026-10-12' }))
+    const result = await scenario(locale, async state => {
+      await state.load()
+      state.onPageChange({ current: 2, pageSize: 5 })
+      assert.deepEqual(state.pagedKeys.value.map((key: any) => key.id), [6, 7, 8, 9, 10])
+      state.onPageChange({ current: 9, pageSize: 50 })
+      assert.equal(state.pagination.current, 1)
+      assert.equal(state.pagedKeys.value.length, 17)
+    }, { keys })
+    assert.ok(result.html.includes((locale === 'zh-CN' ? zh : en).common.pageSize))
+  })
+}

@@ -1,3 +1,4 @@
+import { settingsTestUi } from '../settings/settingsTestUi'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import test from 'node:test'
@@ -15,6 +16,7 @@ const actions: Record<string, string[]> = {
 }
 async function mount(locale: 'zh-CN' | 'en-US', state: string, unavailable = false, blocked = false) {
   const calls: string[] = []
+  let confirmation: any
   const uiState = state === 'dispatched' ? 'pending' : state
   const job = { id: 'pg-operation', type: 'manual:process', queue: 'default', state: uiState, entry_id: 'entry', retried: 1, max_retry: 3, allowed_actions: blocked ? [] : actions[state], cancellation_unavailable_reason: blocked ? 'completed' : undefined }
   const api = {
@@ -31,7 +33,7 @@ async function mount(locale: 'zh-CN' | 'en-US', state: string, unavailable = fal
     './QueueConnectionNotice.vue': moduleOf(loadComponent(new URL('./QueueConnectionNotice.vue', import.meta.url), { '@/api/system': api })),
     '@/api/system': api, '@/api/chatgpt': { getChatGPTAccounts: async () => ({ accounts: [] }), getChatGPTPolicy: async () => ({ paused: false }) },
     '@/components/ChatGPTUsageStatus.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/components/settings/SettingDrawer.vue': moduleOf(drawer),
-    '@/i18n/countCopy': require('../../i18n/countCopy'), './runtimeTaskPagination': require('./runtimeTaskPagination'), 'tdesign-vue-next': { MessagePlugin: {} },
+    '@/i18n/countCopy': require('../../i18n/countCopy'), './runtimeTaskPagination': require('./runtimeTaskPagination'), '@/components/ui': settingsTestUi({ confirm: (options: unknown) => { confirmation = options; return { destroy() {} } } }), '@/styles/settings-form.css': {},
   })
   const app = renderer.createApp(component)
   app.use(createI18n({ legacy: false, locale, messages })); registerPrimitives(app)
@@ -40,7 +42,7 @@ async function mount(locale: 'zh-CN' | 'en-US', state: string, unavailable = fal
   const root = element('root'), errors: unknown[] = []
   app.config.errorHandler = error => errors.push(error)
   app.mount(root); await settle()
-  return { app, root, calls, errors, uiState }
+  return { app, root, calls, errors, uiState, confirmation: () => confirmation }
 }
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: Redis outage keeps PostgreSQL overview pools and details visible`, async () => {
@@ -69,9 +71,14 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         for (const [action, label] of Object.entries({ cancel: runtime.tasks.cancel, run_now: runtime.tasks.runNow, delete: runtime.tasks.deleteRecord })) {
           const button = descendants(dialog).find(node => node.tag === 'button' && node.props['aria-label'] === label)
           assert.equal(Boolean(button), actions[state].includes(action), action)
+          if (button) {
+            const expectedText = action === 'run_now' ? runtime.tasks.runNow : messages[locale].common[action === 'cancel' ? 'cancel' : 'delete']
+            assert.equal(visibleText(button).trim(), expectedText, `${action} has a visible action label`)
+            if (action !== 'run_now') assert.ok(hasClass(button, 'rq-button--danger'), `${action} uses the danger variant`)
+          }
           if (button && action === 'delete') {
-            await click(button.parent!)
-            assert.ok(visibleText(dialog).includes(state === 'cancelled' ? runtime.tasks.deleteCancelledConfirm : runtime.tasks.deleteConfirm))
+            await click(button)
+            assert.equal(view.confirmation().body, state === 'cancelled' ? runtime.tasks.deleteCancelledConfirm : runtime.tasks.deleteConfirm)
           }
         }
         assert.deepEqual(view.errors, [])

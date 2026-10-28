@@ -3,8 +3,8 @@ import test from 'node:test'
 import { doc, mount, send, settle } from './__tests__/dom.ts'
 import { loadUiComponent } from './uiTestLoader.ts'
 import { createRequire } from 'node:module'
-import { h, nextTick, ref } from 'vue'
-const { confirm, toast } = createRequire(import.meta.url)('./feedback.ts') as typeof import('./feedback.ts')
+import { effectScope, h, nextTick, ref } from 'vue'
+const { confirm, toast, useConfirm } = createRequire(import.meta.url)('./feedback.ts') as typeof import('./feedback.ts')
 
 test('toast service renders live feedback, deduplicates, supports close and expires', async t => {
   const mounted = mount(loadUiComponent('FeedbackHost'))
@@ -194,4 +194,15 @@ test('closing one queued confirmation does not steal focus from the next dialog'
   await send(doc.querySelector('[data-cancel]')!, 'click')
   assert.equal(await second.result, false)
   assert.equal(doc.activeElement === trigger, true)
+})
+
+
+test('disposing the calling view closes its pending confirmation without running the action', async () => {
+  const scope = effectScope()
+  const confirmations = scope.run(() => useConfirm())!
+  let calls = 0
+  const pending = confirmations({ header: 'Delete model', onConfirm: () => { calls++ } })
+  scope.stop()
+  assert.equal(await pending.result, false)
+  assert.equal(calls, 0)
 })

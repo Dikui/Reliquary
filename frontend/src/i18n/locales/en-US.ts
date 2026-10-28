@@ -1676,6 +1676,9 @@ export default {
     }
   },
   common: {
+    pageSize: 'Rows per page',
+    show: 'Show',
+    hide: 'Hide',
     operation: 'Actions',
     copyCode: "Copy code",
     add: 'Add',

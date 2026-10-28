@@ -1,10 +1,10 @@
 <template>
-  <section class="chatgpt-settings">
+  <section class="chatgpt-settings settings-form">
     <header class="chatgpt-settings__header">
       <div><h3>{{ t('chatgpt.title') }}</h3><p>{{ t('chatgpt.description') }}</p></div>
-      <t-button variant="text" size="small" :loading="loading" :disabled="loading" @click="load">{{ t('common.refresh') }}</t-button>
+      <Button variant="ghost" :loading="loading" :disabled="loading" @click="load">{{ t('common.refresh') }}</Button>
     </header>
-    <t-loading :loading="loading" size="small">
+    <div :aria-busy="loading">
       <p v-if="error" class="chatgpt-settings__error" role="alert">{{ error }}</p>
       <p v-if="loaded && !encryptionReady" class="chatgpt-settings__error" role="alert">{{ t('chatgpt.encryptionRequired') }}</p>
       <p class="chatgpt-settings__hint">{{ t('chatgpt.browserHint') }}</p>
@@ -19,9 +19,9 @@
           <div class="chatgpt-account__info"><strong>{{ chatGPTAccountLabel(account) }}</strong><span>{{ accountStatus(account) }}</span><p v-if="account.last_error" class="chatgpt-settings__error">{{ accountError(account.last_error) }}</p></div>
           <div class="chatgpt-account__actions">
             <button class="chatgpt-signin" type="button" :disabled="!encryptionReady || signingIn" @click="signIn(account.id)"><img :src="chatGPTLogo" alt="" width="20" height="20" />Continue with ChatGPT</button>
-            <t-popconfirm :content="t('chatgpt.logoutConfirm', { account: chatGPTAccountLabel(account) })" :confirm-btn="{ content: t('chatgpt.logout'), theme: 'danger' }" :cancel-btn="{ content: t('common.cancel') }" @confirm="signOut(account.id)">
-              <t-button theme="danger" variant="text" size="small" :loading="logoutID === account.id" :disabled="Boolean(logoutID)">{{ t('chatgpt.logout') }}</t-button>
-            </t-popconfirm>
+
+              <Button variant="danger" @click="confirmSignOut(account)" :loading="logoutID === account.id" :disabled="Boolean(logoutID)">{{ t('chatgpt.logout') }}</Button>
+
           </div>
         </li>
       </ul>
@@ -30,35 +30,37 @@
       <div v-if="policy" class="chatgpt-policy">
         <div class="chatgpt-policy__row">
           <label for="chatgpt-daily-limit">{{ t('chatgpt.dailyLimit') }}</label>
-          <div><t-input-number id="chatgpt-daily-limit" class="chatgpt-daily-limit" v-model="dailyLimit" :min="1" :decimal-places="0" :placeholder="t('chatgpt.unlimited')" :aria-label="t('chatgpt.dailyLimit')" /><p class="chatgpt-settings__hint">{{ t('chatgpt.dailyLimitHint') }}</p></div>
+          <div><Input type="number" class="chatgpt-daily-limit" id="chatgpt-daily-limit" :model-value="dailyLimit ?? ''" @update:model-value="dailyLimit = $event === '' ? undefined : Number($event)" :min="1" :placeholder="t('chatgpt.unlimited')" :aria-label="t('chatgpt.dailyLimit')" /><p class="chatgpt-settings__hint">{{ t('chatgpt.dailyLimitHint') }}</p></div>
         </div>
         <div class="chatgpt-policy__row">
           <label for="chatgpt-fallback-model">{{ t('chatgpt.fallbackModel') }}</label>
-          <div><t-select id="chatgpt-fallback-model" v-model="fallbackID" clearable :placeholder="t('chatgpt.noFallback')" :aria-label="t('chatgpt.fallbackModel')">
-            <t-option v-for="model in fallbackModels" :key="model.id" :value="model.id" :label="model.display_name || model.name" />
-          </t-select><p class="chatgpt-settings__hint">{{ t('chatgpt.fallbackHint') }}</p></div>
+          <div><Select id="chatgpt-fallback-model" v-model="fallbackID" :placeholder="t('chatgpt.noFallback')" :aria-label="t('chatgpt.fallbackModel')">
+            <option value="">{{ t('chatgpt.noFallback') }}</option><option v-for="model in fallbackModels" :key="model.id" :value="model.id" >{{ model.display_name || model.name }}</option>
+          </Select><p class="chatgpt-settings__hint">{{ t('chatgpt.fallbackHint') }}</p></div>
         </div>
         <p v-if="saveError" class="chatgpt-settings__error" role="alert">{{ saveError }}</p>
-        <t-button :loading="saving" :disabled="saving" @click="save">{{ t('chatgpt.savePolicy') }}</t-button>
+        <Button :loading="saving" :disabled="saving" @click="save">{{ t('chatgpt.savePolicy') }}</Button>
       </div>
-    </t-loading>
-    <t-dialog :visible="Boolean(welcomeAccount)" :header="t('chatgpt.welcomeTitle')" :confirm-btn="{ content: t('chatgpt.gotIt'), loading: acknowledging }" :cancel-btn="null" :close-btn="false" :close-on-overlay-click="false" :close-on-esc-keydown="false" @confirm="acknowledgeWelcome">
+    </div>
+    <Dialog :model-value="Boolean(welcomeAccount)" :title="t('chatgpt.welcomeTitle')" :closable="false" :close-on-overlay-click="false" :close-on-esc-keydown="false">
       <img :src="chatGPTLogo" alt="" width="40" height="40" class="chatgpt-welcome-logo" />
       <p>{{ t('chatgpt.welcomeDescription') }}</p>
       <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">{{ t('chatgpt.manageUsage') }}</a>
       <p v-if="welcomeError" class="chatgpt-settings__error" role="alert">{{ welcomeError }}</p>
-    </t-dialog>
+    <template #footer><Button variant="primary" :loading="acknowledging" @click="acknowledgeWelcome">{{ t('chatgpt.gotIt') }}</Button></template></Dialog>
   </section>
 </template>
 <script setup lang="ts">
+import { Button, Input, Select, Dialog, toast, useConfirm } from '@/components/ui'
+import '@/styles/settings-form.css'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessagePlugin } from 'tdesign-vue-next'
 import { getChatGPTAccounts, getChatGPTPolicy, loginChatGPT, logoutChatGPT, saveChatGPTPolicy, resumeChatGPT, acknowledgeChatGPTWelcome, chatGPTAccountLabel, type ChatGPTAccount, type ChatGPTPolicy } from '@/api/chatgpt'
 import { type ModelConfig } from '@/api/model'
 import ChatGPTUsageStatus from '@/components/ChatGPTUsageStatus.vue'
 import chatGPTLogo from '@/assets/img/chatgpt-logo-white.svg'
 const props = withDefaults(defineProps<{ models?: ModelConfig[] }>(), { models: () => [] })
+const confirm = useConfirm()
 const { t } = useI18n()
 const accounts = ref<ChatGPTAccount[]>([]), policy = ref<ChatGPTPolicy | null>(null)
 const loading = ref(false), loaded = ref(false), encryptionReady = ref(false), error = ref('')
@@ -125,6 +127,9 @@ async function pollLogin(expires: number) {
   finally { pollingAccounts = false }
 }
 function stopLoginPoll() { if (loginPoll) clearInterval(loginPoll); loginPoll = null; loginPending.value = false; authorizationURL.value = '' }
+function confirmSignOut(account: ChatGPTAccount) {
+  const dialog = confirm({ header: t('chatgpt.logout'), body: t('chatgpt.logoutConfirm', { account: chatGPTAccountLabel(account) }), confirmBtn: t('chatgpt.logout'), theme: 'danger', onConfirm: async () => { await signOut(account.id); dialog.destroy() } })
+}
 async function signOut(accountID: string) {
   if (logoutID.value) return
   logoutID.value = accountID; error.value = ''; revocationWarning.value = false
@@ -143,7 +148,7 @@ async function save() {
   saving.value = true; saveError.value = ''
   try {
     policy.value = await saveChatGPTPolicy({ daily_limit: value == null ? null : value, fallback_model_id: fallbackID.value || '' })
-    MessagePlugin.success(t('chatgpt.policySaved'))
+    toast.success(t('chatgpt.policySaved'))
   } catch (err: any) { saveError.value = err?.message || t('chatgpt.saveFailed') }
   finally { saving.value = false }
 }
@@ -164,27 +169,22 @@ async function acknowledgeWelcome() {
 onMounted(load)
 onUnmounted(() => { disposed = true; requestVersion++; stopLoginPoll() })
 </script>
-<style scoped lang="less">
-.chatgpt-settings { margin: 20px 0; padding: 20px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-default); }
-.chatgpt-settings__header { display: flex; align-items: start; gap: 12px; justify-content: space-between; }
-.chatgpt-settings h3 { margin: 0; font-size: 16px; }
-.chatgpt-settings p { line-height: 1.6; font-size: 13px; }
-.chatgpt-settings__header p { color: var(--td-text-color-secondary); }
-.chatgpt-settings__hint { margin: 6px 0; color: var(--td-text-color-secondary); overflow-wrap: anywhere; }
-.chatgpt-settings__error { color: var(--td-error-color); overflow-wrap: anywhere; }
-.chatgpt-signin { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 40px; padding: 8px 16px; border: 1px solid #000; border-radius: 8px; background: #000; color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; }
-.chatgpt-welcome-logo { background: #000; border-radius: 8px; padding: 6px; }
-.chatgpt-signin:hover:not(:disabled) { background: #222; }
-.chatgpt-signin:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 3px; }
-.chatgpt-signin:disabled { cursor: not-allowed; opacity: .5; }
+
+<style scoped>
+ .chatgpt-settings { padding-top: var(--space-4); border-top: 2px solid var(--rule); margin: var(--space-4) 0; }
+.chatgpt-settings__header, .chatgpt-account__actions { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: space-between; }
+.chatgpt-settings__hint, .chatgpt-settings__header p { color: var(--muted); font-size: var(--text-sm); }
+.chatgpt-settings__error { color: var(--danger); overflow-wrap: anywhere; }
+.chatgpt-signin { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 40px; padding: 8px 16px; border: 1px solid #000; border-radius: 0; background: #000; color: #fff; font: inherit; cursor: pointer; }
+.chatgpt-signin:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chatgpt-signin:disabled { opacity: .5; cursor: not-allowed; }
+.chatgpt-welcome-logo { background: #000; padding: 6px; }
 .chatgpt-accounts { list-style: none; padding: 0; }
-.chatgpt-accounts li { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; padding: 12px 0; border-top: 1px solid var(--td-component-stroke); }
-.chatgpt-account__info { display: flex; flex-direction: column; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
-.chatgpt-account__info span { font-size: 13px; color: var(--td-text-color-secondary); }
-.chatgpt-account__actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.chatgpt-policy { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; }
-.chatgpt-policy__row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr); gap: 16px; align-items: start; }
-.chatgpt-policy__row label { font-size: 13px; padding-top: 6px; }
+.chatgpt-accounts li { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: space-between; border-top: 1px solid var(--border); padding: var(--space-3) 0; }
+.chatgpt-account__info { display: grid; gap: var(--space-1); min-width: 0; overflow-wrap: anywhere; }
+.chatgpt-policy { display: grid; gap: var(--space-4); }
+.chatgpt-policy__row { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: var(--space-6); border-top: 2px solid var(--rule); padding-top: var(--space-4); }
 .chatgpt-daily-limit { width: 200px; max-width: 100%; }
-@container settings-content (max-width: 720px) { .chatgpt-policy__row { grid-template-columns: minmax(0, 1fr); gap: 6px; } }
+@container settings-content (max-width: 720px) { .chatgpt-policy__row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }
+@media (max-width: 640px) { .chatgpt-policy__row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }
 </style>

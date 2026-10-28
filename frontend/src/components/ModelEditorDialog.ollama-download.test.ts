@@ -1,3 +1,4 @@
+import { settingsTestUi } from '../views/settings/settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -33,8 +34,8 @@ async function mountEditor(locale: 'zh-CN' | 'en-US', models: typeof installed[]
     : name === '@/i18n' ? { __esModule: true, default: i18n } : require(name), module, module.exports)
   const wrapper = defineComponent({ props: ['visible'], setup: (props, { slots }) => () => props.visible ? h('section', slots.default?.()) : null })
   const component = loadComponent(new URL('./ModelEditorDialog.vue', import.meta.url), {
-    '@/api/initialization': module.exports, '@/api/model': {}, '@/api/chatgpt': {},
-    'tdesign-vue-next': { MessagePlugin: { warning() {}, error() {} }, DialogPlugin: {} },
+    '@/styles/settings-form.css': {}, '@/api/initialization': module.exports, '@/api/model': {}, '@/api/chatgpt': {},
+    '@/components/ui': settingsTestUi(),
     '@/stores/ui': { useUIStore: () => ({}) },
     '@/utils/contextWindow': { DEFAULT_MODEL_CONTEXT_WINDOW },
     '@/utils/thinkingControl': { defaultThinkingControl, resolveThinkingControl },
@@ -65,12 +66,13 @@ async function mountEditor(locale: 'zh-CN' | 'en-US', models: typeof installed[]
   const localSource = descendants(root).find(node => node.props.role === 'radio' && visibleText(node).includes(messages[locale].model.editor.sourceLocal))
   assert.ok(localSource)
   await click(localSource); await settle()
-  const select = () => descendants(root).find(node => node.tag === 'select' && node.props.placeholder === messages[locale].model.searchPlaceholder)!
-  assert.ok(select())
-  await select().props.onFocus(); await settle()
-  return { app, root, calls, errors, warnings, select,
-    input: async (value: string) => { select().props.onInput({ target: { value } }); await settle() },
-    options: () => descendants(select()).filter(node => node.tag === 'option').map(node => node.props.value),
+  const select = () => descendants(root).find(node => node.tag === 'select' && node.props['aria-label'] === messages[locale].model.modelName)!
+  const input = () => descendants(root).find(node => node.tag === 'input' && node.props.placeholder === messages[locale].model.searchPlaceholder)!
+  assert.ok(select()); assert.ok(input())
+  await input().props.onFocus(); await settle()
+  return { app, root, calls, errors, warnings, select, clear: async () => { input().props.onInput({ target: { value: '' } }); await settle() },
+    input: async (value: string) => { input().props.onInput({ target: { value } }); await settle() },
+    options: () => descendants(select()).filter(node => node.tag === 'option' && node.props.value).map(node => node.props.value),
   }
 }
 
@@ -101,7 +103,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.deepEqual(editor.options(), ['qwen3:8b', '__download__qwen3'])
       await editor.input('gemma3:4b')
       assert.deepEqual(editor.options(), ['__download__gemma3:4b'])
-      await editor.select().props.onVisibleChange(false); await settle()
+      await editor.clear()
       assert.deepEqual(editor.options(), ['qwen3:8b'])
       assert.deepEqual(editor.errors, []); assert.deepEqual(editor.warnings, [])
     } finally { editor.app.unmount() }

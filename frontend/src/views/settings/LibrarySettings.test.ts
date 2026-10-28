@@ -1,3 +1,4 @@
+import { settingsTestUi } from './settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -27,7 +28,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests
   const stub = defineComponent({ setup(_, { slots }) { return () => h('div', slots.default?.()) } })
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
-    '@/components/ui': { Button: stub, toast: { success() {} }, confirm() {} },
+    '@/components/ui': settingsTestUi(),
     '@/utils/settingsPatch': { changedSettings },
     '@/utils/modelTiers': { copyModelTiers },
     '@/stores/ui': { useUIStore: () => ({ settingsInitialSubSection: null }) },
@@ -44,7 +45,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests
   function evaluate(code: string) {
     const module = { exports: {} as any }
     const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-    new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? (name.endsWith('.vue') ? { __esModule: true, default: stub } : require(name)), module, module.exports)
+    new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? (name === '@/styles/settings-form.css' ? {} : name.endsWith('.vue') ? { __esModule: true, default: stub } : require(name)), module, module.exports)
     return module.exports
   }
   const { descriptor: rebuildDescriptor } = parse(readFileSync(new URL('../../components/EmbeddingRebuild.vue', import.meta.url), 'utf8'), { filename: 'EmbeddingRebuild.vue' })

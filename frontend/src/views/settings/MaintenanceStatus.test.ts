@@ -1,3 +1,4 @@
+import { settingsTestUi } from './settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -29,11 +30,11 @@ const status: MaintenanceStatus = {
 
 async function scenario(locale: keyof typeof messages, getMaintenanceStatus: () => Promise<unknown>, action: (state: any) => Promise<void>) {
   const i18n = createI18n({ legacy: false, locale, messages })
-  const modules: Record<string, unknown> = { 'vue-i18n': { useI18n: () => i18n.global }, '@/api/maintenance': { getMaintenanceStatus } }
+  const modules: Record<string, unknown> = { '@/components/ui': settingsTestUi(), 'vue-i18n': { useI18n: () => i18n.global }, '@/api/maintenance': { getMaintenanceStatus } }
   function evaluate(code: string) {
     const module = { exports: {} as any }
     const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-    new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? require(name), module, module.exports)
+    new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? (name === '@/styles/settings-form.css' ? {} : require(name)), module, module.exports)
     return module.exports
   }
   const component = evaluate(script.content).default

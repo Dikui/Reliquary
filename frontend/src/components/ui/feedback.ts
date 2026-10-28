@@ -1,4 +1,4 @@
-import { nextTick, reactive, readonly } from 'vue'
+import { nextTick, onScopeDispose, reactive, readonly } from 'vue'
 
 export type ToastTone = 'success' | 'info' | 'warning' | 'error'
 export interface ToastOptions { content: string; duration?: number; theme?: ToastTone }
@@ -121,3 +121,15 @@ export function confirm(options: ConfirmOptions): ConfirmHandle {
 
 /** Mount one FeedbackHost under the app's locale provider. */
 export function useFeedback() { return { toasts: readonly(toasts), confirmations: readonly(confirmations) } }
+
+/** Pending confirmations belong to the view that opened them. */
+export function useConfirm(): typeof confirm {
+  const pending = new Set<ConfirmHandle>()
+  onScopeDispose(() => { for (const dialog of pending) dialog.destroy(); pending.clear() })
+  return options => {
+    const dialog = confirm(options)
+    pending.add(dialog)
+    void dialog.result.then(() => pending.delete(dialog))
+    return dialog
+  }
+}

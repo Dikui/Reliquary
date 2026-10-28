@@ -159,7 +159,6 @@ export function deleteModel(id: string): Promise<void> {
         }
       })
       .catch((error: any) => {
-        console.error('Failed to delete model:', error);
         if (error instanceof ModelInUseError) {
           reject(error)
           return
@@ -169,6 +168,7 @@ export function deleteModel(id: string): Promise<void> {
           reject(conflict)
           return
         }
+        console.error('Failed to delete model:', error);
         reject(error);
       });
   });

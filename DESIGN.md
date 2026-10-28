@@ -309,3 +309,15 @@ Only the current result has a yellow background, with every descendant using
 `--on-select`. Library marks and content-type Tags reuse the shared primitives.
 Retrieval sliders flex into the available width while their numeric outputs
 reserve 56px without wrapping, including in the narrow drawer layout.
+
+## Swiss settings groups
+
+Settings share `frontend/src/styles/settings-form.css`: a 224px description
+column, a flexible control column, two-pixel section rules, and one column
+below a 720px content width. Each group inherits the page heading. Model and
+API editors use the shared Dialog or Drawer; pending confirmations close when
+their owning view is disposed. Tables scroll within the shared DataTable.
+Native select and local date/time inputs keep platform popup behavior. API key
+expiry preserves the existing local-time conversion. Textareas retain the
+approved vertical resize behavior. Shared tokens remain the color and type
+source of truth; these groups no longer use TDesign theme adapters.

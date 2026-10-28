@@ -1,3 +1,4 @@
+import { settingsTestUi } from './settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -22,12 +23,11 @@ async function scenario(locale: keyof typeof messages, stored: object, action: (
   const modules: Record<string, unknown> = {
     '@/components/ui': { Button: loadUiComponent('Button'), toast: { success() {}, error() {} } },
     '@/api/retrieval': { getSpaceRetrievalConfig: async () => ({ data: stored }), updateSpaceRetrievalConfig: async (payload: object) => { requests.push(payload); return { data: payload } } },
-    'tdesign-vue-next': { MessagePlugin: { success() {} } },
   }
   function evaluate(code: string) {
     const module = { exports: {} as any }
     const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-    new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports)
+    new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? (name === '@/styles/settings-form.css' ? {} : require(name)), module, module.exports)
     return module.exports
   }
   const component = evaluate(script.content).default
