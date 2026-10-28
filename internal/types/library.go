@@ -20,6 +20,7 @@ const (
 
 // Library represents a library entity
 type Library struct {
+	Color              int                   `json:"color" gorm:"not null;default:1"`
 	SystemRole         string                `json:"system_role"`
 	Template           string                `json:"template" gorm:"default:standard"`
 	Directory          string                `json:"directory"`
@@ -66,6 +67,7 @@ type Library struct {
 
 // LibraryConfig represents the library configuration
 type LibraryConfig struct {
+	Color      *int             `json:"color,omitempty"`
 	ModelTiers *ModelTierConfig `json:"model_tiers,omitempty"`
 	// Chunking configuration
 	ChunkingConfig *ChunkingConfig `yaml:"chunking_config"         json:"chunking_config,omitempty"`

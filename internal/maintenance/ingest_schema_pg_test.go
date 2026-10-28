@@ -2,6 +2,7 @@ package maintenance
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -44,6 +45,8 @@ func TestIngestContractMigrationUpDownUpAndPreservation(t *testing.T) {
 		actual := preservedBeforeVectorDefaults(t, table, rows, after.Tables[table])
 		if table == "libraries" {
 			for _, row := range actual {
+				require.Equal(t, json.Number("1"), row["color"])
+				delete(row, "color")
 				require.Equal(t, "standard", row["template"])
 				row["template"] = "own" // Migration 34 replaces this fixture's old marker.
 			}

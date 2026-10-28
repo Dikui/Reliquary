@@ -27,7 +27,25 @@ func NewLibraryRepository(db *gorm.DB) interfaces.LibraryRepository {
 
 // CreateLibrary creates a new library
 func (r *libraryRepository) CreateLibrary(ctx context.Context, library *types.Library) error {
-	return r.db.WithContext(ctx).Create(library).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Serialize the count and insert even when the space has no libraries yet.
+		key := fmt.Sprintf("reliquary:library-color:%d", library.SpaceID)
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", key).Error; err != nil {
+			return err
+		}
+		if library.Color == 0 {
+			var count int64
+			if err := tx.Model(&types.Library{}).
+				Where("space_id = ?", library.SpaceID).Count(&count).Error; err != nil {
+				return err
+			}
+			library.Color = int(count%8) + 1
+		}
+		if err := types.ValidateLibraryColor(library.Color); err != nil {
+			return err
+		}
+		return tx.Create(library).Error
+	})
 }
 
 // GetLibraryByID gets a library by id within the personal space

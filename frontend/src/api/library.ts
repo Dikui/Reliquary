@@ -16,9 +16,11 @@ export function updateEntryContent(id: string, data: { content: string; base_bod
 }
 
 export type LibraryTemplate = 'standard';
+export type LibraryColor = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export interface LibraryContentType { name: string; position: number; enabled: boolean; extract_graph: boolean }
 export interface LibraryRelationType { name: string; position: number; enabled: boolean }
 export interface LibraryCatalogItem {
+  color: LibraryColor;
   id: string; directory: string; name: string; display_name: string; system_role: string;
   entry_count?: number; template: LibraryTemplate; description: string; review_criteria: string;
   default_review_criteria: string; model_tiers: ModelTierConfig; summary_model_id?: string;
@@ -31,9 +33,10 @@ export interface LibraryCatalogItem {
 }
 export function listLibraries() { return get<{ success: boolean; data: LibraryCatalogItem[]; message?: string }>('/api/v1/libraries'); }
 export const getCatalogLibrary = (id: string) => get<{ success: boolean; data: LibraryCatalogItem; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
-export interface CreateLibraryRequest { template?: LibraryTemplate; directory: string; name: string; description: string }
+export interface CreateLibraryRequest { template?: LibraryTemplate; directory: string; name: string; description: string; color?: LibraryColor }
+export type LibraryPatch = Partial<Pick<LibraryCatalogItem, 'name' | 'description' | 'color' | 'model_tiers' | 'chunking_config' | 'feed_enabled' | 'content_types' | 'relation_types'>>;
 export const createCatalogLibrary = (data: CreateLibraryRequest) => post<{ success: boolean; data: LibraryCatalogItem; message?: string }>('/api/v1/libraries', data)
-export const saveCatalogLibrary = (id: string, data: Record<string, unknown>) => put<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`, data)
+export const saveCatalogLibrary = (id: string, data: LibraryPatch) => put<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`, data)
 export const deleteCatalogLibrary = (id: string) => del<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
 export type LibraryRebuildScope = 'failed' | 'all'
 export const rebuildCatalogLibrary = (id: string, scope: LibraryRebuildScope = 'failed') => post<{ success: boolean; data: { task_id: string; total: number }; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}/rebuild`, { scope })
@@ -45,7 +48,7 @@ export function getLibrary() {
   return get('/api/v1/library');
 }
 
-export function updateLibrary(data: { name: string; description?: string; config?: Record<string, unknown> }) {
+export function updateLibrary(data: { name: string; description?: string; color?: LibraryColor; config?: Record<string, unknown> }) {
   return put('/api/v1/library', data);
 }
 
