@@ -47,23 +47,8 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
   const html = await renderToString(app); assert.deepEqual(errors, [], 'the real workbench template renders without exceptions'); return { html, requests, state }
 }
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: the library header entry is named Entities`, async () => {
-    const page = readFileSync(new URL('../Library.vue', import.meta.url), 'utf8')
-    const entry = page.match(/<button\b[^>]*@click="activeLibraryTab = 'entities'"[^>]*>[\s\S]*?<\/button>/)?.[0]
-    assert.ok(entry, 'expected the real entity entry button in the library header')
-    const compiled = compileTemplate({ id: 'entity-header-entry', filename: 'Library.vue', source: entry, ssr: true, ssrCssVars: [] })
-    assert.deepEqual(compiled.errors, [])
-    const module = { exports: {} as { ssrRender?: (...args: any[]) => any } }
-    const code = ts.transpileModule(compiled.code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-    new Function('require', 'module', 'exports', code)(require, module, module.exports)
-    const app = createSSRApp({ data: () => ({ activeLibraryTab: 'entities' }), ssrRender: module.exports.ssrRender })
-    app.use(createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } }))
-    const html = await renderToString(app)
-    assert.equal(html.match(/>([^<]*)<\/button>/)?.[1], locale === 'zh-CN' ? '实体' : 'Entities')
-    assert.doesNotMatch(html, /知识工作台|Entry workbench/i)
-  })
   test(`${locale}: the workbench only renders entities and merge suggestions navigation`, async () => {
-    const { html, state } = await renderWorkbench({ locale }); assert.deepEqual(state.sections, ['entities', 'merges'])
+    const { html, state } = await renderWorkbench({ locale }); assert.deepEqual(state.sections, ['entities', 'merges']); assert.match(html, /<details class="name-embedding-rebuild">/)
     const nav = html.match(/<nav[\s\S]*?<\/nav>/)?.[0] || ''; assert.equal((nav.match(/<button /g) || []).length, 2)
     assert.ok(nav.includes(locale === 'zh-CN' ? '实体' : 'Entities')); assert.ok(nav.includes(locale === 'zh-CN' ? '待合并建议' : 'Merge suggestions'))
     assert.match(html, locale === 'zh-CN' ? /<h2>实体<\/h2>/ : /<h2>Entities<\/h2>/)

@@ -1,7 +1,7 @@
 <template>
   <aside class="aside_box" :class="{ 'aside_box--collapsed': sidebarCollapsed }">
     <div class="logo_row">
-      <button v-if="!sidebarCollapsed" type="button" class="logo_box" :aria-label="t('menu.library')" @click="navigate('entries')">
+      <button v-if="!sidebarCollapsed" type="button" class="logo_box" :aria-label="t('menu.library')" @click="navigate('libraries')">
         <img class="logo" src="@/assets/img/reliquary.svg" alt="Reliquary">
       </button>
       <t-tooltip :content="t(sidebarCollapsed ? 'menu.expandSidebar' : 'menu.collapseSidebar')" placement="right">
@@ -11,15 +11,16 @@
       </t-tooltip>
     </div>
     <nav class="menu_top" :aria-label="t('menu.library')">
-      <section v-for="group in menuGroups" :key="group.key" class="menu-group" :aria-label="group.title"><h2 v-if="!sidebarCollapsed" class="menu-group-title">{{ group.title }}</h2>
+      <section v-for="group in menuGroups" :key="group.key" class="menu-group" :aria-label="group.title"><h2 v-if="!sidebarCollapsed && group.items.length > 1" class="menu-group-title">{{ group.title }}</h2>
       <t-tooltip v-for="item in group.items" :key="item.key" :content="item.title" placement="right" :disabled="!sidebarCollapsed">
         <button type="button" :class="['menu_item', { menu_item_active: active(item.path, item.tab) }]" :aria-label="item.key === 'follows' && follows.newCount > 0 ? t('follows.navCount', { count: follows.newCount }) : item.title" :aria-current="active(item.path, item.tab) ? 'page' : undefined" @click="navigate(item.path, item.tab)">
           <t-icon :name="item.icon" size="20px" /><span v-if="!sidebarCollapsed" class="menu_title">{{ item.title }}</span><span v-if="item.key === 'follows' && (follows.newCount > 0 || follows.stateError)" class="follow-badge" :title="follows.stateError ? t('follows.countFailed') : t('follows.navCount', { count: follows.newCount })" aria-hidden="true">{{ follows.stateError ? '!' : follows.newCount }}</span>
+          <PendingCountBadge v-if="item.key === 'pending'" />
         </button>
       </t-tooltip>
       </section>
     </nav>
-    <div class="menu_bottom"><UserMenu :collapsed="sidebarCollapsed" /></div>
+    <div class="menu_bottom"><UserMenu :collapsed="sidebarCollapsed" @open="props.mobileOverlay && emit('close')" /></div>
   </aside>
 </template>
 <script setup lang="ts">
@@ -31,6 +32,7 @@ import { useMenuStore } from '@/stores/menu'
 import { useUIStore } from '@/stores/ui'
 import { useFollowStore } from '@/stores/follows'
 import UserMenu from '@/components/UserMenu.vue'
+import PendingCountBadge from '@/components/PendingCountBadge.vue'
 const props = defineProps<{ mobileOverlay?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
@@ -44,12 +46,13 @@ onMounted(() => { refreshFollowCount(); followTimer = setInterval(refreshFollowC
 onUnmounted(() => { clearInterval(followTimer); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', refreshFollowCount) })
 const { menuGroups } = storeToRefs(useMenuStore())
 const sidebarCollapsed = computed(() => !props.mobileOverlay && uiStore.sidebarCollapsed)
-const active = (path: string, tab?: string) => path === 'entries'
-  ? route.name === 'entries' && (tab ? route.query.tab === tab : !['entities', 'reviews'].includes(String(route.query.tab)))
-  : route.path === `/platform/${path}`
+const active = (path: string, tab?: string) => path === 'libraries'
+  ? route.path === '/platform/libraries' || (route.name === 'entries' && !['entities', 'reviews'].includes(String(route.query.tab)))
+  : path === 'entries'
+    ? route.name === 'entries' && route.query.tab === tab
+    : route.path === `/platform/${path}`
 function toggleNavigation() { if (props.mobileOverlay) emit('close'); else uiStore.toggleSidebar() }
 function navigate(path: string, tab?: string) {
-  if (path === 'settings') uiStore.openSettings()
   void router.push({ path: `/platform/${path}`, query: tab ? { tab } : {} })
   if (props.mobileOverlay) emit('close')
 }
@@ -69,6 +72,8 @@ function navigate(path: string, tab?: string) {
 .menu_item { display: flex; align-items: center; gap: 12px; position: relative; width: 100%; min-height: 44px; margin-bottom: 8px; padding: 10px 12px; text-align: left; }
 .menu_title { min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
 .follow-badge { margin-left: auto; min-width: 18px; padding: 1px 5px; border-radius: var(--td-radius-round); background: var(--td-brand-color-light); color: var(--td-brand-color); font-size: 11px; text-align: center; }
+.menu_item :deep(.pending-count) { margin-left: auto; }
+.aside_box--collapsed :deep(.pending-count) { position: absolute; top: 0; right: 0; padding-inline: 3px; font-size: 10px; }
 .aside_box--collapsed .follow-badge { position: absolute; top: 0; right: 0; min-width: 12px; padding-inline: 3px; font-size: 10px; }
 .menu_item:hover, .header-icon-btn:hover { background: var(--td-bg-color-container-hover); }
 .menu_item_active { color: var(--td-brand-color); background: var(--td-brand-color-light); }

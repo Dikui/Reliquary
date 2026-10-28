@@ -284,12 +284,13 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     env.modules['@/stores/menu'] = menuStore
     env.modules['@/stores/ui'] = { useUIStore: () => reactive({ sidebarCollapsed: false, toggleSidebar() {}, openSettings() {} }) }
     env.modules['@/components/UserMenu.vue'] = empty
+    env.modules['@/components/PendingCountBadge.vue'] = empty
     env.modules['@/assets/img/reliquary.svg'] = moduleOf('/reliquary.svg')
     const mounted = env.mount(env.component('../../components/SideMenu.vue'))
     try {
       await settle()
       const navigation = descendants(mounted.root).filter(node => node.tag === 'button' && hasClass(node, 'menu_item'))
-      assert.deepEqual(navigation.map(visibleText), [messages[locale].menu.library, messages[locale].menu.search, messages[locale].knowledgeWorkbench.title, messages[locale].topicManagement.title, `${messages[locale].follows.title}2`, messages[locale].ingestDiagnostics.pending, messages[locale].ingestDiagnostics.diagnostics, messages[locale].contentCheck.title, messages[locale].ikb19.evaluationTitle, messages[locale].ikb19.callsTitle, messages[locale].menu.settings])
+      assert.deepEqual(navigation.map(visibleText), [messages[locale].menu.library, messages[locale].menu.search, messages[locale].knowledgeWorkbench.title, messages[locale].topicManagement.title, `${messages[locale].follows.title}2`, messages[locale].ingestDiagnostics.pending, messages[locale].ingestDiagnostics.diagnostics, messages[locale].contentCheck.title, messages[locale].ikb19.evaluationTitle, messages[locale].ikb19.callsTitle])
       assert.ok(env.calls.some(call => call.url === '/api/v1/follows/state'))
       assert.equal(descendants(mounted.root).find(node => hasClass(node, 'follow-badge'))!.text, '2')
       await env.store.markViewed(openedAt); await settle()

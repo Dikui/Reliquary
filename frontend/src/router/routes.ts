@@ -3,6 +3,7 @@ import { normalizeSettingsSection } from '../config/settingsRoute'
 import { removedPlatformRoutes, removedRootRoutes } from './routeFallbacks'
 
 const libraryPage = () => import('../views/library/Library.vue')
+const libraryList = () => import('../views/library/LibraryList.vue')
 const entryLocation = (path: string, to: { query: Record<string, any>; hash: string }) => ({ path, query: { ...to.query }, hash: to.hash })
 const notFound = () => import('../views/NotFound.vue')
 
@@ -11,17 +12,17 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
   return [
     {
       path: "/",
-      redirect: "/platform/entries",
+      redirect: "/platform/libraries",
     },
     {
       // 登录已移除，旧书签回到资料页。
       path: "/login",
-      redirect: "/platform/entries",
+      redirect: "/platform/libraries",
     },
     {
       path: "/platform",
       name: "Platform",
-      redirect: "/platform/entries",
+      redirect: "/platform/libraries",
       component: () => import("../views/platform/index.vue"),
       meta: { requiresInit: true, requiresAuth: true },
       children: [
@@ -33,17 +34,18 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         {
           path: "settings",
           name: "settings",
-          component: libraryPage,
+          component: libraryList,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "libraries",
-          redirect: "/platform/entries",
+          name: "libraries",
+          component: libraryList,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "libraries/:legacyLibraryId/:pathMatch(.*)*",
-          redirect: to => entryLocation('/platform/entries', to),
+          redirect: to => ({ ...entryLocation('/platform/entries', to), query: { ...to.query, libraries: String(to.params.legacyLibraryId) } }),
           meta: { requiresInit: true, requiresAuth: true }
         },
         {

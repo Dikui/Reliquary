@@ -1,5 +1,6 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  libraryNavigation: { hint: '选择一个库，查看库内资料。', empty: '还没有库', emptyHint: '请通过左下角设置中的资料库设置新建库。', count: '{count} 份资料', loadFailed: '无法加载库，请重试。' },
   entryStatus: {
     title: '入库与后台处理状态', saved: '已入库', indexPending: '索引待处理', indexing: '正在建立正文索引', indexFailed: '正文索引失败',
     pending: '后台待处理', processing: '后台处理中', completed: '后台处理完成', failed: '后台处理失败',
@@ -751,7 +752,7 @@ export default {
 },
   menu: {
     batchManage: '批量管理',
-  "library": "资料",
+  "library": "库",
   "settings": "设置",
   "logout": "退出登录",
   "search": "知识检索",

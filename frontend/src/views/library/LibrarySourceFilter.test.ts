@@ -155,6 +155,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
   const router = vueRouter.createRouter({ history: vueRouter.createMemoryHistory(), routes: [
     { path: '/platform/library', component: library },
     { path: '/platform/search', component: empty.default },
+    { path: '/platform/libraries', component: empty.default },
   ] })
   await router.push({ path: '/platform/library', query: { preserved: 'value', ...initialQuery } })
   const app = renderer.createApp(defineComponent({ setup: () => () => h(vueRouter.RouterView) }))
@@ -470,6 +471,17 @@ test('library-defined content types and Markdown aliases survive a shared URL an
     const channels = env.control('library.channelLabel').props['data-options'] as Array<{ value: string }>
     assert.ok(!channels.some(item => ['manual', 'url'].includes(item.value)))
     assert.ok(env.control('library.materialCategory'))
+    env.scope.value = ['reports']; await new Promise(resolve => setImmediate(resolve)); await settle()
+    assert.equal(env.route.query.libraries, 'reports')
+    assert.equal(env.requests.at(-1)!.get('libraries'), 'reports')
+    await env.navigate({ libraries: 'library-source', entity_ids: 'entity-1', topic_ids: 'topic-1' })
+    assert.deepEqual(env.scope.value, ['library-source'])
+    assert.equal(env.requests.at(-1)!.get('libraries'), 'library-source')
+    assert.equal(env.route.query.entity_ids, 'entity-1')
+    assert.equal(env.route.query.topic_ids, 'topic-1')
+    env.scope.value = []; await new Promise(resolve => setImmediate(resolve)); await settle()
+    assert.equal(env.route.query.libraries, undefined)
+    assert.equal(env.requests.at(-1)!.has('libraries'), false)
   } finally { env.cleanup() }
 })
 

@@ -72,7 +72,7 @@ test('settings deep links and system shortcuts mount one settings instance', asy
   const routes = createApplicationRoutes()
   const platform = routes.find(route => route.name === 'Platform')!
   const settings = platform.children!.find(route => route.name === 'settings')!
-  const list = platform.children!.find(route => route.name === 'entries')!
+  const list = platform.children!.find(route => route.name === 'libraries')!
   assert.equal('component' in settings && settings.component, 'component' in list && list.component)
 
   const source = readFileSync(new URL('../views/platform/index.vue', import.meta.url), 'utf8')
@@ -98,11 +98,11 @@ test('settings deep links and system shortcuts mount one settings instance', asy
   }
 })
 
-test('root, platform and old login links return to entries and removed conversation pages show not found', async () => {
+test('root, platform and old login links return to libraries and removed conversation pages show not found', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  for (const path of ['/', '/platform', '/login']) {
+  for (const path of ['/', '/platform', '/login', '/platform/libraries']) {
     await router.push(path)
-    assert.equal(router.currentRoute.value.name, 'entries')
+    assert.equal(router.currentRoute.value.name, 'libraries')
   }
   for (const path of ['/platform/chat/old-id', '/platform/creatChat', '/platform/agents', '/platform/entries/obsolete']) {
     await router.push(path)
@@ -110,13 +110,13 @@ test('root, platform and old login links return to entries and removed conversat
   }
 })
 
-test('old knowledge list and ID routes redirect to the single article page', async () => {
+test('old library ID routes keep their library scope and entry reference', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  for (const old of ['/platform/libraries', '/platform/libraries/library-a', '/platform/libraries/library-a/documents']) {
+  for (const old of ['/platform/libraries/library-a', '/platform/libraries/library-a/documents']) {
     await router.push(old + '?entry_id=article-a')
     assert.equal(router.currentRoute.value.path, '/platform/entries')
     assert.equal(router.currentRoute.value.query.entry_id, 'article-a')
-    assert.deepEqual(router.currentRoute.value.params, {})
+    assert.equal(router.currentRoute.value.query.libraries, 'library-a')
   }
 })
 

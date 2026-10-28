@@ -9,13 +9,8 @@ import DocContent from "@/components/DocContent.vue";
 import useLibrary from '@/composables/useLibrary';
 import { useRoute, useRouter } from 'vue-router';
 import EmptyEntry from '@/components/EmptyEntry.vue';
-import LibraryInfoPopover from '@/components/LibraryInfoPopover.vue';
-import { useUIStore } from '@/stores/ui';
-import { useCommandPaletteStore } from '@/stores/commandPalette';
 import { useResourcesStore } from '@/stores/resources';
 import { useEditorResourcesStore } from '@/stores/editorResources';
-const uiStore = useUIStore();
-const commandPalette = useCommandPaletteStore();
 const resources = useResourcesStore();
 const editorResources = useEditorResourcesStore();
 const router = useRouter();
@@ -37,7 +32,6 @@ import { listTopics, type Topic } from '@/api/topics';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import EntryWorkbench from './components/EntryWorkbench.vue';
 import PendingReviews from './components/PendingReviews.vue';
-import PendingCountBadge from '@/components/PendingCountBadge.vue';
 import { usePendingCountsStore } from '@/stores/pendingCounts';
 import type { LibraryContentType } from '@/api/library';
 import { SEARCH_SOURCES } from '@/types/search';
@@ -62,8 +56,16 @@ const pendingCounts = usePendingCountsStore();
 const libraryId = computed(() => resources.library?.id || '');
 const libraryInfo = ref<any>(null);
 const libraryScope = useLibraryScope();
-if (typeof route.query.libraries === 'string') libraryScope.value = route.query.libraries.split(',').filter(Boolean);
+watch(() => route.query.libraries, value => {
+  const ids = typeof value === 'string' ? value.split(',').filter(Boolean) : [];
+  if (ids.join(',') !== libraryScope.value.join(',')) libraryScope.value = ids;
+}, { immediate: true });
 const libraryCatalog = ref<import('@/api/library').LibraryCatalogItem[]>([]);
+const currentLibraryLabel = computed(() => {
+  const selected = libraryCatalog.value.find(item => item.id === libraryScope.value[0]);
+  return libraryScope.value.length === 1 && selected
+    ? selected.display_name || selected.name : t('knowledgeEditor.document.title');
+});
 const referencedEntryId = ref(typeof route.query.entry_id === 'string' ? route.query.entry_id : '');
 const activeReference = ref<SourceLocation | undefined>(parseReference(route.query.reference));
 const libraryLoading = ref(false);
@@ -255,6 +257,8 @@ const documentFilters = computed<DocumentListFilters>(() => ({
   entityIds: selectedEntityIds.value, topicIds: selectedTopicIds.value, publishedFrom: publishedRange.value?.[0] || '', publishedTo: publishedRange.value?.[1] || '',
 }));
 // Disable any date after today so users cannot filter into the future.
+const hasAdvancedFilters = computed(() => !!(selectedStarred.value || selectedSourceKind.value || selectedSource.value || selectedFileType.value || selectedEntityIds.value || selectedTopicIds.value || publishedRange.value.length || updatedTimeRange.value.length));
+
 const disableFutureDate = { after: new Date(new Date().setHours(23, 59, 59, 999)) };
 
 const filterParams = computed(() => {
@@ -369,7 +373,19 @@ watch(() => libraryId.value, (newLibraryId, oldLibraryId) => {
   loadLibraryInfo(newLibraryId);
 }, { immediate: true });
 
-watch(libraryScope, () => { selectedEntityIds.value = ''; selectedTopicIds.value = ''; selectedIds.value.clear(); resetPage(); void loadEntryFiles(libraryId.value); }, { deep: true });
+watch(libraryScope, ids => {
+  const value = ids.join(',');
+  if (value !== String(route.query.libraries || '')) {
+    const query = { ...route.query };
+    if (value) query.libraries = value;
+    else delete query.libraries;
+    selectedEntityIds.value = ''; selectedTopicIds.value = '';
+    delete query.entity_ids; delete query.topic_ids;
+    void router.replace({ query });
+  }
+  selectedIds.value.clear();
+  resetPage(); void loadEntryFiles(libraryId.value);
+}, { deep: true });
 
 // Restore all filters together before requesting the list after history navigation.
 let documentFiltersRestoredFromRoute = false;
@@ -398,6 +414,8 @@ watch(documentFilters, (filters, previous) => {
   const restoredFromRoute = documentFiltersRestoredFromRoute;
   documentFiltersRestoredFromRoute = false;
   const query = documentListFiltersToQuery(route.query, filters);
+  if (libraryScope.value.length) query.libraries = libraryScope.value.join(',');
+  else delete query.libraries;
   if (!documentListFilterQueriesEqual(route.query, query)) void router.replace({ query });
   if (docSearchDebounce !== null) {
     window.clearTimeout(docSearchDebounce);
@@ -649,7 +667,6 @@ const onReparseMenuClick = (index: number, item: EntryCard) => {
   }
 };
 
-const handleOpenLibrarySettings = () => uiStore.openSettings('library');
 const reparseConfirmStore = useReparseConfirmStore();
 
 const batchResultId = ref('');
@@ -965,32 +982,12 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 
 <template>
   <div class="entry-layout">
-      <div class="document-header">
-        <div class="document-header-title">
-          <div class="document-title-row">
-            <h2 class="document-breadcrumb">
-              <span>{{ $t('library.title') }}</span>
-              <t-icon name="chevron-right" class="breadcrumb-separator" />
-                <button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'documents' }]" :aria-pressed="activeLibraryTab === 'documents'"
-                  @click="activeLibraryTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</button>
-                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'reviews' }]" :aria-pressed="activeLibraryTab === 'reviews'" @click="activeLibraryTab = 'reviews'">{{ $t('knowledgeReview.title') }} <PendingCountBadge /></button>
-                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeLibraryTab === 'entities' }]" :aria-pressed="activeLibraryTab === 'entities'"
-                    @click="activeLibraryTab = 'entities'">{{ $t('knowledgeWorkbench.tabLabel') }}</button>
-            </h2>
-            <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
-            <div class="library-title-actions">
-
-              <LibraryInfoPopover v-if="libraryInfo" :library-info="libraryInfo"
-                />
-              <t-tooltip :content="$t('library.settings')" placement="top">
-                <button type="button" class="library-settings-button" @click="handleOpenLibrarySettings">
-                  <t-icon name="setting" size="16px" />
-                </button>
-              </t-tooltip>
-            </div>
-          </div>
-          <p v-if="activeLibraryTab === 'documents'" class="document-subtitle">{{ $t('knowledgeEditor.document.subtitle') }}</p>
-        </div>
+      <div v-if="activeLibraryTab === 'documents'" class="document-header">
+        <h2 class="document-breadcrumb">
+          <router-link class="breadcrumb-link" to="/platform/libraries">{{ t('menu.library') }}</router-link>
+          <t-icon name="chevron-right" class="breadcrumb-separator" />
+          <span class="breadcrumb-current">{{ currentLibraryLabel }}</span>
+        </h2>
       </div>
 
       <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area">
@@ -1029,6 +1026,9 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 <div class="doc-filter-field">
                   <t-select v-model="selectedContentType" :options="contentTypeOptions" clearable :placeholder="$t('library.contentTypeFilter')" :aria-label="$t('library.contentTypeFilter')" class="doc-type-select doc-filter-field__control" />
                 </div>
+                <details class="doc-more-filters" :open="hasAdvancedFilters">
+                  <summary>{{ t('ikb18.moreFilters') }}</summary>
+                  <div class="doc-filter-bar__filters">
                 <div class="doc-filter-field">
                   <t-select v-model="selectedStarred" :options="starredOptions" :aria-label="$t('articleJudgments.starLabel')" class="doc-type-select doc-filter-field__control" />
                 </div>
@@ -1075,12 +1075,11 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                     </template>
                   </t-date-range-picker>
                 </div>
+                  </div>
+                </details>
                 </div>
                 <div class="doc-filter-bar__trailing">
                   <t-button theme="primary" size="small" @click="openBatch">{{ t('entryBatch.title') }}</t-button>
-                  <t-button  variant="text" size="small" @click="commandPalette.openPalette(docSearchKeyword.trim())">
-                    {{ $t('library.searchMessageContent') }}
-                  </t-button>
                   <div class="doc-view-toggle" role="group" :aria-label="$t('library.viewModeToggle')">
                     <t-tooltip :content="$t('library.viewModeGrid')" placement="top">
                       <button type="button" class="doc-view-toggle-btn" :class="{ active: viewMode === 'grid' }"
@@ -1194,53 +1193,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
   min-width: 0;
   padding: 24px 32px 0px;
   box-sizing: border-box;
-}
-
-// Breadcrumb tab switch
-.breadcrumb-tab {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font: inherit;
-  cursor: pointer;
-  color: var(--td-text-color-placeholder);
-  font-weight: 400;
-  transition: color 0.15s;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-
-  &:hover {
-    color: var(--td-text-color-primary);
-  }
-
-  &.active {
-    color: var(--td-brand-color);
-    font-weight: 600;
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--td-brand-color);
-    outline-offset: 2px;
-  }
-
-  &.indexing {
-    color: var(--td-brand-color);
-  }
-}
-
-.breadcrumb-tab-indicator {
-  display: inline-flex;
-  align-items: center;
-  color: var(--td-brand-color);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.breadcrumb-tab-sep {
-  margin: 0 6px;
-  color: var(--td-text-color-disabled);
-  font-weight: 400;
 }
 
 // 与列表页一致：浅灰底圆角区，左侧筛选为白底卡片
@@ -1518,27 +1470,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
   gap: 12px;
   flex-shrink: 0;
 
-  .document-header-title {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .document-title-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .library-title-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    margin-left: 4px;
-  }
-
   .document-breadcrumb {
     display: flex;
     align-items: center;
@@ -1608,15 +1539,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
     line-height: 32px;
   }
 
-  .document-subtitle {
-    margin: 0;
-    color: var(--td-text-color-placeholder);
-    font-family: var(--app-font-family);
-    font-size: 14px;
-    font-weight: 400;
-    line-height: 20px;
-  }
-
   .entry-header-hint__action {
     padding: 0;
     border: 0;
@@ -1660,36 +1582,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       margin-left: 2px;
       white-space: nowrap;
     }
-  }
-}
-
-.library-settings-button {
-  width: 30px;
-  height: 30px;
-  border: none;
-  border-radius: 50%;
-  background: var(--td-bg-color-secondarycontainer);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  padding: 0;
-
-  &:hover:not(:disabled) {
-    background: var(--td-success-color-light);
-    color: var(--td-brand-color);
-    box-shadow: none;
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.4;
-  }
-
-  :deep(.t-icon) {
-    font-size: 18px;
   }
 }
 
@@ -2333,4 +2225,13 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
   .doc-filter-bar__filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .doc-filter-bar__filters > .library-scope { grid-column: span 2; }
 }
+</style>
+
+<style scoped>
+.doc-more-filters { grid-column: 1 / -1; min-width: 0; }
+.doc-more-filters > summary { width: fit-content; cursor: pointer; color: var(--td-text-color-secondary); padding: 4px 0; }
+.doc-more-filters > summary:hover { color: var(--td-brand-color); }
+.doc-more-filters > summary:focus-visible, .breadcrumb-link:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+.doc-more-filters[open] > .doc-filter-bar__filters { margin-top: 10px; }
+.breadcrumb-link { text-decoration: none; }
 </style>

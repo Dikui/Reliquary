@@ -5,9 +5,10 @@
       <t-button variant="outline" :loading="loading" @click="refreshAll"><template #icon><t-icon name="refresh" /></template>{{ t('knowledgeWorkbench.refresh') }}</t-button>
     </header>
     <LibraryScopeSelect v-model="libraryScope" single :disabled="merging" />
-    <section class="name-embedding-rebuild" :aria-label="t('knowledgeWorkbench.nameEmbeddings.title')">
+    <details class="name-embedding-rebuild">
+      <summary>{{ t('knowledgeWorkbench.nameEmbeddings.title') }}</summary>
       <div class="name-embedding-rebuild__summary">
-        <div><h3>{{ t('knowledgeWorkbench.nameEmbeddings.title') }}</h3><p role="status">{{ t('knowledgeWorkbench.nameEmbeddings.pending', { count: nameEmbeddingStatus?.pending_count ?? (nameEmbeddingStatusLoading ? t('common.loading') : t('knowledgeWorkbench.nameEmbeddings.unknown')) }, nameEmbeddingStatus?.pending_count ?? 0) }}</p></div>
+        <div><p role="status">{{ t('knowledgeWorkbench.nameEmbeddings.pending', { count: nameEmbeddingStatus?.pending_count ?? (nameEmbeddingStatusLoading ? t('common.loading') : t('knowledgeWorkbench.nameEmbeddings.unknown')) }, nameEmbeddingStatus?.pending_count ?? 0) }}</p></div>
         <div class="name-embedding-rebuild__actions">
           <t-button variant="text" :loading="nameEmbeddingStatusLoading" :disabled="nameEmbeddingRebuilding" @click="loadNameEmbeddingStatus">{{ t('knowledgeWorkbench.refresh') }}</t-button>
           <t-button variant="outline" :loading="nameEmbeddingRebuilding" :disabled="nameEmbeddingStatusLoading || !nameEmbeddingStatus?.pending_count || nameEmbeddingBusy" @click="rebuildNameEmbeddings">{{ t('knowledgeWorkbench.nameEmbeddings.rebuild') }}</t-button>
@@ -17,7 +18,7 @@
       <p v-else-if="nameEmbeddingStatus" class="muted">{{ t('knowledgeWorkbench.nameEmbeddings.noRun') }}</p>
       <p v-if="nameEmbeddingStatus?.latest_run?.error" class="run-error" role="alert">{{ t('knowledgeWorkbench.nameEmbeddings.failure', { reason: nameEmbeddingStatus.latest_run.error }) }}</p>
       <p v-if="nameEmbeddingError" class="run-error" role="alert">{{ nameEmbeddingError }}</p>
-    </section>
+    </details>
 
     <nav class="workbench-nav" :aria-label="t('knowledgeWorkbench.sections')">
       <button v-for="section in sections" :key="section" type="button" :class="['workbench-nav__item', { active: activeSection === section }]" :aria-pressed="activeSection === section" @click="activeSection = section">{{ t(`knowledgeWorkbench.nav.${section}`) }}</button>
@@ -186,7 +187,8 @@ onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; 
 .workbench-header h2 { font-size: 20px; margin: 0 0 8px; }
 .workbench-header p, .panel-heading p, .name-embedding-rebuild p { color: var(--td-text-color-secondary); font-size: 13px; line-height: 1.6; }
 .name-embedding-rebuild { margin: 20px 0; padding: 16px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-medium); }
-.name-embedding-rebuild h3 { margin: 0; font-size: 15px; }
+.name-embedding-rebuild summary { cursor: pointer; font-size: 15px; }
+.name-embedding-rebuild summary:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 .name-embedding-rebuild__actions, .merge-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .name-embedding-rebuild__latest { margin-bottom: 0; }
 .merge-form label { display: flex; flex-direction: column; gap: 8px; min-width: 220px; font-size: 13px; }

@@ -155,7 +155,7 @@ function pageHandlers(bindings: Record<string, unknown>) {
   assert.equal(statements.length, names.length)
   assert.match(descriptor.template!.content, /<PendingReviews\b[^>]*@changed="handlePendingChanged"/)
   assert.match(descriptor.template!.content, /<DocContent\b[^>]*@review-changed="handleReviewChanged"/)
-  assert.match(descriptor.template!.content, /@click="activeLibraryTab = 'reviews'"[^>]*>[^<]*<PendingCountBadge\s*\/>[^<]*<\/button>/)
+  assert.match(source('../components/SideMenu.vue'), /<PendingCountBadge v-if="item.key === 'pending'"/);
   const code = statements.map(statement => statement.getText(ast)).join('\n') + '\nexport { handlePendingChanged, handleReviewChanged }'
   const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const value = { exports: {} as any }

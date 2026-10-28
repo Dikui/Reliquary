@@ -1,5 +1,6 @@
 import { ikb18En } from './ikb18'
 export default {
+  libraryNavigation: { hint: 'Choose a library to view its materials.', empty: 'No libraries yet', emptyHint: 'Create a library in Library settings using Settings at the bottom left.', count: '{count} materials', loadFailed: 'Unable to load libraries. Try again.' },
   entryStatus: {
     title: 'Storage and background processing', saved: 'Saved', indexPending: 'Index queued', indexing: 'Indexing body', indexFailed: 'Body indexing failed',
     pending: 'Background work queued', processing: 'Processing in background', completed: 'Background work completed', failed: 'Background processing failed',
@@ -751,7 +752,7 @@ export default {
 },
   menu: {
     batchManage: 'Batch manage',
-  "library": "Materials",
+  "library": "Libraries",
   "settings": "Settings",
   "logout": "Logout",
   "search": "Knowledge search",
