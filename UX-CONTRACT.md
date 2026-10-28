@@ -138,7 +138,7 @@ Embedding 模型编辑提供支持图片开关和 Jina 请求格式，模型卡�
 
 知识检索页使用 /platform/search。查询框与 TDesign 多选控件提供内容类型、实体、主题和来源筛选，日期控件限制发布时间；相似报道默认折叠，可关闭或逐组展开。每篇文章只展示一条主结果，最多三个命中片段，文章提供原文入口。缺失发布时间的排除数量在结果区说明。全局搜索继续作为快捷入口，API 集成页的 Playground 使用相同参数。筛选与结果沿用现有主题变量，窄屏自然换行。
 
-主题管理使用 /platform/topics，侧栏提供直接入口。主题名称、说明、文章数和历史归入进度在同一记录中显示，失败批次保留可读原因与重试操作。操作日志在 /platform/settings?section=operation-logs，原 /platform/operation-logs 入口重定向到设置并保留筛选参数。日志按时间倒序显示修改前后值，并说明本地时区。两页沿用既有 TDesign 控件、主题变量、自然高度记录和窄屏换行。
+主题管理使用 /platform/topics，侧栏提供直接入口，界面和交互以本文 Swiss topics migration 约定为准。操作日志在 /platform/settings?section=operation-logs，原 /platform/operation-logs 入口重定向到设置并保留筛选参数。日志按时间倒序显示修改前后值，并说明本地时区；继续沿用既有 TDesign 控件、主题变量、自然高度记录和窄屏换行。
 
 文章卡片、列表行与详情共用 EntryStarToggle。详情通过 EntryArticleJudgments 修改内容类型与主题，内容类型仅作筛选标签，修改时保留正文、索引与图片。文章列表、检索与 API Playground 的星标筛选都提供全部、已星标、未星标三个状态。
 
@@ -311,3 +311,32 @@ After a successful manual entity merge, select the retained entity and replace
 the merged ID in the entity page URL. Refresh related lists and follow state
 without leaving the user at an empty profile. Graph queries preserve explicit
 relation-type selections and the selected relationship limit.
+
+
+## Swiss topics migration
+
+`/platform/topics` uses the existing topic APIs and the single-library domain
+rule in CONTEXT.md. All-library browsing combines one list request per catalog
+library; a failed library remains visible as an error with retry while successful
+lists stay readable. Library and explicit topic selection are URL-backed.
+Creation requires one library, and editing cannot change it. Creating under a
+different library filter opens the new topic in its owning library.
+
+Historical assignment polls every two seconds while any visible topic is pending
+or running, refreshes counts, and refreshes selected materials when counts change
+or assignment finishes. Failed batches retain their reasons, sizes and attempts.
+Retry is unavailable while running or cancelled; 404 and conflict responses have
+specific recovery messages. Scope changes and teardown invalidate old responses
+and stop polling. The shared confirmation retains failed deletion for retry;
+success refreshes the list and follow state. Deletion retains the materials,
+as described by the existing topic service contract.
+
+Materials use the existing topic and library filters with server pagination at
+20 rows. They link to `/platform/entries/:id`, and the existing filtered materials
+management link remains available. Association-source filtering is outside the
+page's scope; no unavailable-function explanation or reserved control is shown.
+Built-in content types display their localized names in the shared Tag; custom
+library content types retain their names.
+Forms retain drafts on failure, associate validation with fields, and block
+duplicate submissions. The shared Dialog, confirm and toast owners handle
+modality, feedback and focus; browser verification remains a separate step.

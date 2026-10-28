@@ -248,3 +248,24 @@ The related materials table keeps a 680px minimum width inside its own horizonta
 scroller. It shows eight ID characters with the complete ID in the title; ID,
 type and collected-date cells do not wrap into character columns. Graph relation
 type filters and the 20/50/100 limit share the wrapping toolbar with hop controls.
+
+
+### Swiss topics
+
+The topics route uses the mockup's 304px list beside a detail column capped at
+1024px. Below 900px the list precedes the details. Empty lists occupy one column
+without allocating an unused detail panel. Selected topics invert text and
+background; pointer and keyboard focus use the shared selection foreground.
+The historical assignment bar splits successful and failed work into neutral
+and danger segments, with real processed/total counts and readable batch errors.
+
+Topic forms, follow controls, confirmations and notifications reuse the Swiss
+owners. Materials use a semantic table with a 760px minimum width inside its
+own horizontal scroller. IDs show eight characters with the full ID in the title;
+links retain the full ID. The title column is at least 220px and dates do not wrap.
+Library colors come from the catalog, alongside the library's actual name.
+
+Topic layout sizes use pixels or the shared pixel-based tokens, independent of
+the legacy 14px root font. The progress bar uses the 12px spacing token. Material
+titles have 700 weight and content types use the shared Tag with localized
+built-in names; custom library type names are preserved.

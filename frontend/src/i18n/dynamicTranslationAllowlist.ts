@@ -3,6 +3,11 @@ import type { TranslationCall } from './translationCallAudit.ts'
 /** Reviewed runtime expressions. New expressions must be explicitly reviewed here. */
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
+    file: 'views/library/TopicManagement.vue',
+    expressions: ['`library.contentTypes.${value}`'],
+    reason: 'Built-in content types are guarded by CONTENT_TYPES; custom library type names remain plain text.',
+  },
+  {
     file: 'views/library/SearchResult.vue',
     expressions: ['`library.contentTypes.${props.article.content_type}`', '`knowledgeSearch.sources.${article.source}`'],
     reason: 'Built-in content types are guarded by CONTENT_TYPES; search sources use the existing HTTP enum. Custom content types render as plain text.',
@@ -201,13 +206,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "expressions": [
       "`operationLogs.types.${item.operation_type}`",
       "`operationLogs.types.${value}`"
-    ],
-    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
-  },
-  {
-    "file": "views/library/TopicManagement.vue",
-    "expressions": [
-      "`topicManagement.status.${progress[topic.id]!.status}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
