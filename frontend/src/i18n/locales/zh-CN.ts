@@ -821,6 +821,18 @@ export default {
   }
 },
   menu: {
+    materials: '资料',
+    searchMaterials: '检索',
+    entities: '实体',
+    topics: '主题',
+    followUpdates: '关注动态',
+    libraries: '库',
+    ingestFailures: '接收故障',
+    mainNavigation: '主导航',
+    commandSearch: '搜索资料、实体或命令',
+    itemCount: '{name}，{count}',
+    pending: '待确认',
+    modelCalls: '模型调用',
     batchManage: '批量管理',
   "library": "库",
   "settings": "设置",

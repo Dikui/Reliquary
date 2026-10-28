@@ -79,6 +79,7 @@
 .rq-overlay { position: fixed; inset: 0; z-index: 200; background: var(--overlay); }
 .rq-dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 201; display: flex; flex-direction: column; gap: var(--space-4); width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); background: var(--surface); border: 2px solid var(--rule); box-shadow: var(--shadow-float); padding: var(--space-5); }
 .rq-dialog--drawer { top: 0; bottom: 0; left: auto; right: 0; transform: none; width: min(100%, 480px); max-height: 100dvh; border-block: 0; border-right: 0; }
+.rq-dialog--drawer-left { left: 0; right: auto; border-left: 0; border-right: 2px solid var(--rule); }
 .rq-dialog__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); flex-shrink: 0; }
 .rq-dialog__title { margin: 0; font-size: var(--text-lg); line-height: 1.35; overflow-wrap: anywhere; }
 .rq-dialog__description { margin: 0; color: var(--muted); overflow-wrap: anywhere; }

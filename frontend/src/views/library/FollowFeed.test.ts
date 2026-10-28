@@ -286,17 +286,27 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     env.modules['@/components/UserMenu.vue'] = empty
     env.modules['@/components/PendingCountBadge.vue'] = empty
     env.modules['@/assets/img/reliquary.svg'] = moduleOf('/reliquary.svg')
+    env.modules['@/stores/pendingCounts'] = { usePendingCountsStore: () => ({ total: null, refresh() {} }) }
+    env.modules['@/stores/commandPalette'] = { useCommandPaletteStore: () => ({ openPalette() {} }) }
+    env.modules['@/api/library'] = { listLibraries: async () => ({ success: true, data: [] }) }
+    env.modules['@/api/ingest-diagnostics'] = { listIngestFailures: async () => ({ success: false }) }
+    env.modules['@/components/ui'] = { LibMark: empty.default, Tooltip: defineComponent({ setup: (_, { slots }) => () => slots.default?.() }) }
+    env.modules['tdesign-icons-vue-next'] = new Proxy({}, { get: () => empty.default })
+    env.modules['vue-router'].RouterLink = defineComponent({ props: ['to'], setup: (props, { slots }) => () => h('a', { href: typeof props.to === 'string' ? props.to : props.to.path }, slots.default?.()) })
+    const oldDocument = globalThis.document
+    globalThis.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} } as any
     const mounted = env.mount(env.component('../../components/SideMenu.vue'))
     try {
       await settle()
-      const navigation = descendants(mounted.root).filter(node => node.tag === 'button' && hasClass(node, 'menu_item'))
-      assert.deepEqual(navigation.map(visibleText), [messages[locale].menu.library, messages[locale].menu.search, messages[locale].knowledgeWorkbench.title, messages[locale].topicManagement.title, `${messages[locale].follows.title}2`, messages[locale].ingestDiagnostics.pending, messages[locale].ingestDiagnostics.diagnostics, messages[locale].contentCheck.title, messages[locale].ikb19.evaluationTitle, messages[locale].ikb19.callsTitle])
+      const navigation = descendants(mounted.root).filter(node => node.tag === 'a' && hasClass(node, 'rq-sidenav__link'))
+      assert.deepEqual(navigation.map(visibleText), [`${messages[locale].menu.materials}0`, messages[locale].menu.searchMaterials, messages[locale].menu.entities, messages[locale].menu.topics, `${messages[locale].menu.followUpdates}2`, messages[locale].menu.pending, messages[locale].menu.ingestFailures, messages[locale].contentCheck.title, messages[locale].ikb19.evaluationTitle, messages[locale].menu.modelCalls, messages[locale].menu.settings])
       assert.ok(env.calls.some(call => call.url === '/api/v1/follows/state'))
-      assert.equal(descendants(mounted.root).find(node => hasClass(node, 'follow-badge'))!.text, '2')
+      const followLink = () => descendants(mounted.root).find(node => node.props.href === '/platform/follows')!
+      assert.equal(followLink().props['aria-label'], env.i18n.global.t('menu.itemCount', { name: messages[locale].menu.followUpdates, count: '2' }))
       await env.store.markViewed(openedAt); await settle()
-      assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'follow-badge')).length, 0)
+      assert.equal(visibleText(followLink()), messages[locale].menu.followUpdates)
       assert.deepEqual(env.errors, [])
-    } finally { mounted.close() }
+    } finally { mounted.close(); globalThis.document = oldDocument }
   })
 }
 

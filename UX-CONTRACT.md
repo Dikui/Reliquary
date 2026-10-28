@@ -58,6 +58,24 @@ Model tiers and article processing configuration save in the library settings pa
 
 ## Layout and interaction
 
+The Swiss platform sidebar preserves the existing route destinations during the
+page migration. Materials opens the library catalogue; each library opens the
+entry page with its `libraries` query. Entities and pending confirmation keep the
+existing `tab=entities` and `tab=reviews` routes. Settings still opens the existing
+settings surface. The sidebar alone migrates in this phase; page scroll owners
+and legacy content styling stay unchanged.
+
+Navigation uses native links, persisted collapse state and a 640px mobile
+breakpoint. The shared Reka drawer traps focus, closes on Escape, navigation or
+viewport changes, and restores the trigger. Opening the global command palette
+closes the navigation drawer without moving focus away from the palette.
+Counts come from the library catalogue, follow state, pending intake and merge
+suggestion APIs, and the ingest failure list total. Pending confirmation adds
+intake to all pages of pending merge suggestions in each library. Missing or
+failed data hides the affected count rather than presenting a partial total or
+invented zero. Route changes, visibility and the 30-second navigation refresh
+keep displayed counts current. Source: existing frontend API contracts.
+
 Settings content owns vertical scrolling. Long forms keep their natural height. New controls use TDesign keyboard behavior, visible focus, disabled and busy states, and app-owned dialogs. Native entity selection buttons have visible focus and hover states. Entities and article titles wrap and remain readable in narrow views. Autosizing textareas use SafeTextarea and cancel pending measurements on unmount.
 
 The settings-content container stacks rows at 720px or less. Shared settings-layout.less owns that breakpoint. Existing rules below 640px remain in place.

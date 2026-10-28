@@ -6,7 +6,8 @@ withDefaults(defineProps<{
   modelValue?: boolean
   title: string
   description?: string
-  placement?: 'center' | 'right'
+  placement?: 'center' | 'right' | 'left'
+  contentClass?: string
   closeOnOverlayClick?: boolean
   closeOnEscKeydown?: boolean
   closable?: boolean
@@ -24,7 +25,7 @@ const { t } = useI18n()
     <DialogTrigger v-if="$slots.trigger" as-child><slot name="trigger" /></DialogTrigger>
     <DialogPortal>
       <DialogOverlay class="rq-overlay" />
-      <DialogContent class="rq-dialog" :class="{ 'rq-dialog--drawer': placement === 'right' }"
+      <DialogContent class="rq-dialog" :class="[contentClass, { 'rq-dialog--drawer': placement !== 'center', 'rq-dialog--drawer-left': placement === 'left' }]"
         v-bind="description ? {} : { 'aria-describedby': undefined }"
         @open-auto-focus="emit('openAutoFocus', $event)" @close-auto-focus="emit('closeAutoFocus', $event)"
         @pointer-down-outside="!closeOnOverlayClick && $event.preventDefault()"

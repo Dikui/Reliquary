@@ -116,6 +116,15 @@ height. Dialogs fit the viewport; content scrolls while actions remain reachable
 Tables own horizontal overflow without imposing a page height. Table callers
 own paging and supply the current rows; the foundation does not fetch data.
 
+The platform shell now uses the Swiss sidebar at the 224px `--sidebar` width.
+Its brand, command entry, main routes, library list and diagnostics share the
+mockup rhythm. Active navigation uses a `--text` background with a `--bg`
+foreground in both themes. Library marks use the persisted color through
+`libraryColorVar`. The optional collapsed
+rail is 72px wide. At 640px and below, a top bar opens the shared left drawer.
+Only the shell has migrated: the existing route outlet retains its flex width,
+height chain and page-owned scrolling, and its content keeps the TDesign theme.
+
 ### Elevation & Depth
 
 Static surfaces have no shadow. Dialogs, drawers, menus, tooltips and notifications
@@ -146,6 +155,9 @@ their label geometry and block repeated actions. Field wraps one control; an
 explicit control ID must also be supplied to Field. Inputs preserve IME composition.
 Tabs, dropdowns, tooltips, dialogs and comboboxes delegate keyboard and focus
 behavior to Reka UI 2.11.0. Dialogs and drawers restore focus on close.
+Drawers support left or right placement and a content class for the navigation
+layout. Expanded navigation omits tooltips; the collapsed rail exposes the same
+link names and count labels through keyboard-accessible tooltips and aria labels.
 
 `toast.success/info/warning/error(content, durationMs?)` returns `{ close }`.
 Duration zero persists until closed. Repeated identical active messages deduplicate.

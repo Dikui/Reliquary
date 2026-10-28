@@ -821,6 +821,18 @@ export default {
   }
 },
   menu: {
+    materials: 'Materials',
+    searchMaterials: 'Search',
+    entities: 'Entities',
+    topics: 'Topics',
+    followUpdates: 'Follow updates',
+    libraries: 'Libraries',
+    ingestFailures: 'Ingest failures',
+    mainNavigation: 'Main navigation',
+    commandSearch: 'Search materials, entities or commands',
+    itemCount: '{name}, {count}',
+    pending: 'Pending',
+    modelCalls: 'Model calls',
     batchManage: 'Batch manage',
   "library": "Libraries",
   "settings": "Settings",
