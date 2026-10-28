@@ -18,11 +18,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   { file: 'components/EntryBatchDialog.vue', expressions: ['`entryBatch.actions.${value}`', '`entryBatch.actions.${batch.action}`', '`entryBatch.reasons.${reason.code}`', '`entryBatch.status.${batch.status}`', '`entryBatch.status.${item.status}`'], reason: 'Batch actions, item states and preview reasons use the server batch contract; unknown reasons retain their raw code.' },
   { file: 'components/EntryProcessingStatus.vue', expressions: ['state.label'], reason: 'entryProcessingState returns the fixed admission and processing label keys defined in the locale bundles.' },
   {
-    file: 'views/library/components/EntityRelations.vue',
-    expressions: ['`ikb18.${relation.direction}`'],
-    reason: 'Relation direction has two HTTP enum values covered by ikb18 component tests.',
-  },
-  {
     "file": "api/auth.ts",
     "expressions": [
       "key"
@@ -221,7 +216,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "expressions": [
       "`knowledgeWorkbench.entities.types.${ENTITY_TYPES.includes(value as EntityType) ? value : 'other'}`",
       "`knowledgeWorkbench.nameEmbeddings.status.${status}`",
-      "`knowledgeWorkbench.nav.${section}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },

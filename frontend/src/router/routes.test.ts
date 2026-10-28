@@ -174,3 +174,16 @@ test('old collection page URLs redirect to the article list instead of not found
     assert.equal(router.currentRoute.value.name, 'platformNotFound', path)
   }
 })
+
+test('entities use an independent route while legacy entity bookmarks preserve context', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
+  await router.push('/platform/entities?entity_id=company&libraries=lib-a')
+  assert.equal(router.currentRoute.value.name, 'entities')
+  await router.push('/platform/entries?tab=entities&entity_id=company&libraries=lib-a#profile')
+  assert.equal(router.currentRoute.value.name, 'entities')
+  assert.equal(router.currentRoute.value.query.entity_id, 'company')
+  assert.equal(router.currentRoute.value.query.libraries, 'lib-a')
+  assert.equal(router.currentRoute.value.hash, '#profile')
+  await router.push('/platform/entries?tab=entities&section=merges&libraries=lib-a')
+  assert.equal(router.currentRoute.value.name, 'entries', 'the existing merge review remains reachable until the pending migration')
+})

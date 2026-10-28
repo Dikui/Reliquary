@@ -289,3 +289,25 @@ selected values have named remove buttons. Empty option lists show localized
 explanations. These native selects accept platform-owned popup geometry and
 keyboard typeahead, consistent with the Swiss foundation. Reset restores the
 existing non-library filter defaults and is hidden when those defaults apply.
+
+## Swiss entity migration
+
+`/platform/entities` owns entity browsing, four detail tabs, follow controls and
+explicit same-library merges. Old `entries?tab=entities` bookmarks redirect while
+preserving entity, library and reference query context. The temporary
+`entries?tab=entities&section=merges` destination retains existing merge review
+until the pending page migration. Source links use the independent material
+route and retain evidence locations and body hashes.
+
+Entity details, relations and merge suggestions use the existing entity APIs
+and library identity rules in CONTEXT.md. Unknown list counts are not fabricated.
+Related material types come from the Entry payload. Missing entities have a
+specific empty state; request failures offer retry. Switching entity or library
+invalidates previous detail and relation responses. Deleting a relation uses the
+shared confirmation service and preserves the backend suppression behavior.
+Merging uses the shared dialog; failure retains source and target for retry.
+
+After a successful manual entity merge, select the retained entity and replace
+the merged ID in the entity page URL. Refresh related lists and follow state
+without leaving the user at an empty profile. Graph queries preserve explicit
+relation-type selections and the selected relationship limit.

@@ -229,3 +229,22 @@ Search snippet matches are an approved exception to the single yellow focus
 rule: each matching `mark` uses `--select` with `--on-select` text, as in the
 search mockup. Focused results continue to use the same accessible foreground.
 The runtime source remains `frontend/src/styles/tokens.css`.
+
+### Swiss entities
+
+`/platform/entities` uses a 304px entity list beside the detail area. The current
+entity uses the text/background inversion; pointer or keyboard focus on another
+row uses the selection foreground and background. Below 900px the list precedes
+the details and remains scrollable. Empty lists do not reserve a blank detail pane.
+
+Cytoscape owns graph layout, zoom and pan. Rectangular nodes use neutral library
+independent colors: the center inverts text/background, direct neighbors use the
+page background with a text border, and more distant nodes use muted text. Only
+the selected edge uses yellow, including its label background and `--on-select`
+foreground. The same semantic tokens resolve both themes. Source evidence follows
+the graph; keyboard users can select nodes and edges through a semantic button list.
+
+The related materials table keeps a 680px minimum width inside its own horizontal
+scroller. It shows eight ID characters with the complete ID in the title; ID,
+type and collected-date cells do not wrap into character columns. Graph relation
+type filters and the 20/50/100 limit share the wrapping toolbar with hop controls.

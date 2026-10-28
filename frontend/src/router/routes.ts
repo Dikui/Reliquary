@@ -52,12 +52,22 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
           path: "entries",
           name: "entries",
           beforeEnter: to => {
+            if (to.query.tab === 'entities' && to.query.section !== 'merges') {
+              const { tab, ...query } = to.query
+              return { path: '/platform/entities', query, hash: to.hash, replace: true }
+            }
             if (typeof to.query.entry_id !== 'string' || !to.query.entry_id) return
             const { entry_id: id, ...query } = to.query
             return { name: 'entryDetail', params: { id }, query, hash: to.hash, replace: true }
           },
           component: libraryPage,
           meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: 'entities',
+          name: 'entities',
+          component: () => import('../views/library/EntitiesPage.vue'),
+          meta: { requiresInit: true, requiresAuth: true },
         },
         {
           path: 'entries/:id',

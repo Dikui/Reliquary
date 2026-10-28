@@ -1,5 +1,28 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  entityPage: {
+    "number": "编号",
+    "title": "标题",
+    "type": "类型",
+    "collected": "收录",
+    "unknownType": "未分类",
+    "library": "库",
+    "empty": "还没有实体",
+    "emptyHint": "资料处理完成后，会从正文中提取实体并按库建立档案。",
+    "viewMaterials": "查看资料处理状态",
+    "materials": "资料",
+    "aliasesAndMerge": "别名与合并",
+    "notFound": "未找到该实体",
+    "notFoundHint": "该实体可能已合并或删除，请从列表选择其他实体。",
+    "graphNotFoundHint": "图谱中还没有该实体，请查看关系标签或等待图谱同步。",
+    "syncHint": "图中可能缺少最新关系，完整关系以“关系”标签为准。",
+    "graphHint": "点击边查看来源，点击节点切换实体。",
+    "subject": "主体",
+    "object": "客体",
+    "actions": "操作",
+    "relationDeleted": "已删除关系"
+  },
+
   entryDetail: {
     previewImage: '查看图片',
     "breadcrumb": "位置",

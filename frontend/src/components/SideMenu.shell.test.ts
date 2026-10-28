@@ -70,7 +70,7 @@ test('shell links select only the scoped library and preserve all main and diagn
   assert.equal(f.root.querySelectorAll('[aria-current="page"]').length, 1)
   assert.equal(f.root.querySelector('[aria-current="page"]')?.props.href, '/platform/entries?libraries=b')
   const hrefs = links.map((link: any) => link.props.href)
-  for (const href of ['/platform/libraries', '/platform/search', '/platform/entries?tab=entities', '/platform/topics', '/platform/follows', '/platform/entries?tab=reviews', '/platform/diagnostics', '/platform/content-checks', '/platform/evaluation', '/platform/model-calls', '/platform/settings']) assert.ok(hrefs.includes(href), href)
+  for (const href of ['/platform/libraries', '/platform/search', '/platform/entities', '/platform/topics', '/platform/follows', '/platform/entries?tab=reviews', '/platform/diagnostics', '/platform/content-checks', '/platform/evaluation', '/platform/model-calls', '/platform/settings']) assert.ok(hrefs.includes(href), href)
   assert.match(f.root.querySelector('[aria-label="Libraries"]')!.textContent, /Research1,200/)
   const mark = f.root.querySelector('a[href="/platform/entries?libraries=b"]')!.querySelector('span')!
   assert.equal(mark.style.backgroundColor, 'var(--lib-7)')
@@ -101,7 +101,7 @@ test('entity, pending and multi-library routes select only their matching naviga
   const f = await fixture()
   t.after(() => f.unmount())
   for (const [path, expected] of [
-    ['/platform/entries?libraries=b&tab=entities', '/platform/entries?tab=entities'],
+    ['/platform/entities?libraries=b', '/platform/entities'],
     ['/platform/entries?libraries=b&tab=reviews', '/platform/entries?tab=reviews'],
     ['/platform/entries?libraries=a,b', '/platform/libraries'],
   ]) {

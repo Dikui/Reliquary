@@ -170,7 +170,7 @@ const contentTypeOptions = computed(() => {
 });
 const selectedEntityId = ref('');
 watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
-const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeLibraryTab.value = 'entities'; };
+const openArticleEntity = (id: string) => { void router.push({ path: '/platform/entities', query: { entity_id: id } }); };
 const fileTypeOptions = computed(() => [
   { label: t('library.allFileTypes'), value: '' },
   { label: 'PDF', value: 'pdf' },
@@ -312,7 +312,12 @@ const loadLibraryInfo = async (targetLibraryId: string, force = false) => {
 
 // 唯一库加载后获取文章内容
 // Sync activeLibraryTab to URL query so it survives page refresh
-watch(() => route.query.tab, (tab) => {
+watch(() => [route.query.tab, route.query.section], ([tab]) => {
+  if (tab === 'entities' && route.query.section !== 'merges') {
+    const { tab: _tab, ...query } = route.query
+    void router.replace({ path: '/platform/entities', query, hash: route.hash })
+    return
+  }
   activeLibraryTab.value = tab === 'entities' ? 'entities' : tab === 'reviews' ? 'reviews' : 'documents'
 })
 watch(activeLibraryTab, (tab) => {
@@ -758,7 +763,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 
 <template>
   <div class="entry-layout" :class="{ 'entries-page': activeLibraryTab === 'documents' }">
-    <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area"><EntryWorkbench :library-id="libraryScope[0] || libraryId" :initial-entity-id="selectedEntityId" @open-source="openSourceDoc" /></div>
+    <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area"><EntryWorkbench :library-id="libraryScope[0] || libraryId" :initial-entity-id="selectedEntityId" :initial-section="String(route.query.section || '')" @open-source="openSourceDoc" /></div>
     <PendingReviews v-if="activeLibraryTab === 'reviews' && libraryId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="handlePendingChanged" @refreshed="pendingCounts.refresh()" />
     <template v-if="activeLibraryTab === 'documents'">
       <header class="entries-head">

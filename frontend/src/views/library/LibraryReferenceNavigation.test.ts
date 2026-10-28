@@ -20,31 +20,25 @@ test('legacy material references navigate to the independent detail route', asyn
   assert.equal(pendingEntryId.value, null)
 })
 
-test('sidebar navigation and article tabs remain synchronized without remounting the page', async () => {
-  const start = source.indexOf('watch(() => route.query.tab,')
+test('same-route entity bookmarks redirect while legacy merge review stays reachable', async () => {
+  const start = source.indexOf('watch(() => [route.query.tab, route.query.section],')
   const end = source.indexOf('watch(() => libraryId.value,', start)
-  assert.ok(start >= 0 && end > start)
-  const route = reactive({ query: { entry_id: 'article-a' } as Record<string, string> })
+  const route = reactive({ query: {} as Record<string, string>, hash: '#profile' })
   const activeLibraryTab = ref('documents')
+  const replacements: any[] = []
   new Function('watch', 'route', 'activeLibraryTab', 'router', source.slice(start, end))(
-    watch, route, activeLibraryTab, { replace: ({ query }: { query: Record<string, string> }) => { route.query = query } },
+    watch, route, activeLibraryTab, { replace: (target: any) => { replacements.push(target); if (!target.path) route.query = target.query } },
   )
-  route.query.tab = 'entities'
+  route.query = { tab: 'entities', entity_id: 'company', libraries: 'lib-a' }
+  await nextTick()
+  assert.deepEqual(replacements.at(-1), { path: '/platform/entities', query: { entity_id: 'company', libraries: 'lib-a' }, hash: '#profile' })
+  route.query = { tab: 'entities', section: 'merges', libraries: 'lib-a' }
   await nextTick()
   assert.equal(activeLibraryTab.value, 'entities')
-  delete route.query.tab
+  route.query = { tab: 'reviews' }
   await nextTick()
-  assert.equal(activeLibraryTab.value, 'documents')
-  activeLibraryTab.value = 'entities'
-  await nextTick()
-  assert.deepEqual(route.query, { tab: 'entities', entry_id: 'article-a' })
+  assert.equal(activeLibraryTab.value, 'reviews')
   activeLibraryTab.value = 'documents'
   await nextTick()
-  assert.deepEqual(route.query, { entry_id: 'article-a' })
-  activeLibraryTab.value = 'reviews'
-  await nextTick()
-  assert.deepEqual(route.query, { tab: 'reviews', entry_id: 'article-a' })
-  route.query.tab = 'entities'
-  await nextTick()
-  assert.equal(activeLibraryTab.value, 'entities')
+  assert.deepEqual(route.query, {})
 })

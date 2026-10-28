@@ -6,7 +6,7 @@ export const useMenuStore = defineStore('menuStore', () => {
   const menuArr = computed(() => [
     { key: 'articles', title: i18n.global.t('menu.materials'), icon: 'file', path: 'libraries', tab: undefined },
     { key: 'search', title: i18n.global.t('menu.searchMaterials'), icon: 'search', path: 'search', tab: undefined },
-    { key: 'entities', title: i18n.global.t('menu.entities'), icon: 'usergroup', path: 'entries', tab: 'entities' },
+    { key: 'entities', title: i18n.global.t('menu.entities'), icon: 'usergroup', path: 'entities' },
     { key: 'topics', title: i18n.global.t('menu.topics'), icon: 'folder', path: 'topics', tab: undefined },
     { key: 'follows', title: i18n.global.t('menu.followUpdates'), icon: 'heart', path: 'follows', tab: undefined },
     { key: 'pending', title: i18n.global.t('menu.pending'), icon: 'task', path: 'entries', tab: 'reviews' },

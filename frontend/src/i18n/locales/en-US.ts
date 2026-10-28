@@ -1,5 +1,28 @@
 import { ikb18En } from './ikb18'
 export default {
+  entityPage: {
+    "number": "ID",
+    "title": "Title",
+    "type": "Type",
+    "collected": "Collected",
+    "unknownType": "Unclassified",
+    "library": "Library",
+    "empty": "No entities yet",
+    "emptyHint": "Entities are extracted from processed materials and filed within each library.",
+    "viewMaterials": "View material processing",
+    "materials": "Materials",
+    "aliasesAndMerge": "Aliases and merge",
+    "notFound": "Entity not found",
+    "notFoundHint": "This entity may have been merged or deleted. Choose another entity from the list.",
+    "graphNotFoundHint": "This entity is not in the graph yet. Check the Relations tab or wait for synchronization.",
+    "syncHint": "The graph may omit recent relations. The Relations tab contains the complete records.",
+    "graphHint": "Select an edge for sources or a node to open that entity.",
+    "subject": "Subject",
+    "object": "Object",
+    "actions": "Actions",
+    "relationDeleted": "Relation deleted"
+  },
+
   entryDetail: {
     previewImage: 'View image',
     "breadcrumb": "Location",
