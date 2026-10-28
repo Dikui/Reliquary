@@ -52,7 +52,11 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
           path: "entries",
           name: "entries",
           beforeEnter: to => {
-            if (to.query.tab === 'entities' && to.query.section !== 'merges') {
+            if (to.query.tab === 'reviews' || (to.query.tab === 'entities' && to.query.section === 'merges')) {
+              const { tab, section, ...query } = to.query
+              return { path: '/platform/pending', query: { ...query, tab: tab === 'reviews' ? 'reviews' : 'merges' }, hash: to.hash, replace: true }
+            }
+            if (to.query.tab === 'entities') {
               const { tab, ...query } = to.query
               return { path: '/platform/entities', query, hash: to.hash, replace: true }
             }
@@ -62,6 +66,12 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
           },
           component: libraryPage,
           meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: 'pending',
+          name: 'pending',
+          component: () => import('../views/library/PendingPage.vue'),
+          meta: { requiresInit: true, requiresAuth: true },
         },
         {
           path: 'entities',

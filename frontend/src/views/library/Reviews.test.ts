@@ -74,14 +74,14 @@ function reviewComponent(api: object) {
   return component('../../components/ReviewActions.vue', { '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-review': api, '@/utils/security': security, 'tdesign-vue-next': { MessagePlugin: { success() {} } } })
 }
 function pendingComponent(api: object, child = reviewComponent(api)) {
-  return component('./components/PendingReviews.vue', { '@/api/entry-review': api, '@/utils/security': security, '@/components/ReviewActions.vue': moduleOf(child) })
+  return component('./components/PendingReviews.vue', { '@/api/entry-review': api, '@/utils/security': security, '@/types/entryClassification': { CONTENT_TYPES }, './PendingReviewActions.vue': moduleOf(child) })
 }
 const settle = () => new Promise<void>(resolve => setImmediate(resolve))
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: rejected personal documents show their source and approve without a URL`, async () => {
     const mine = { ...intake, source_kind: 'mine', metadata: { intake: { decision: 'rejected', reason: 'Needs user decision', source_info: {} } } }
     const { api, calls } = createReviewAPI(async call => ({ success: true, data: call.method === 'get' ? [mine] : mine, total: 1 }))
-    const html = await render(pendingComponent(api), {}, locale, async state => { await state.load() })
+    const html = await render(pendingComponent(api), { records: [mine], total: 1, page: 1, loading: false, error: '' }, locale)
     assert.ok(html.includes(messages[locale].library.sourceKinds.mine))
     assert.ok(html.includes(messages[locale].articleJudgments.approveReview))
     assert.ok(!html.includes(messages[locale].knowledgeReview.missingLinkHint))
@@ -113,7 +113,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: intake conflicts show the existing article link and save as new wording from the pending response`, async () => {
     const conflict = { ...intake, id: 'conflict', acquisition: 'model_written', related_entry_id: 'existing/article', metadata: { intake: { reason: 'A conflicting supplement', source_info: { original_url: 'https://example.com/same' } } } }
     const { api, calls } = createReviewAPI(async call => call.method === 'get' ? { success: true, data: [conflict], total: 1 } : { success: true, data: conflict })
-    const html = await render(pendingComponent(api), {}, locale, async state => { await state.load() })
+    const html = await render(pendingComponent(api), { records: [conflict], total: 1, page: 1, loading: false, error: '' }, locale)
     for (const text of [messages[locale].knowledgeReview.conflictReason, messages[locale].knowledgeReview.relatedArticle, '/platform/entries/existing%2Farticle', messages[locale].knowledgeReview.saveAsNew, messages[locale].ingestStatus.modelWritten, messages[locale].ingestStatus.modelWrittenHint, messages[locale].articleJudgments.rejectReview]) assert.ok(html.includes(text.replaceAll("'", '&#39;')), text)
     assert.ok(!html.includes(messages[locale].articleJudgments.approveReview))
     await render(reviewComponent(api), { entry: (await api.listPendingEntry({ kind: 'intake', page: 1, page_size: 20 })).data[0] }, locale, async state => { await state.submit('approve') })
@@ -188,22 +188,15 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 
 
 
-test('pending paging clamps after the last record is resolved and requests the correct kind', async () => {
-  const { api, calls } = createReviewAPI(async call => ({ success: true, data: call.url.includes('page=2&') ? [] : [intake], total: 1 }))
-  await render(pendingComponent(api), {}, 'en-US', async state => { state.page.value = 2; await state.reviewed(); assert.equal(state.page.value, 1) })
-  assert.deepEqual(calls.map(call => call.url), ['/api/v1/entries/pending?page=2&page_size=20&kind=intake', '/api/v1/entries/pending?page=1&page_size=20&kind=intake'])
-})
-
 for (const locale of ['zh-CN', 'en-US'] as const) {
 
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: pending page loads intake only and has no image-completion tab`, async () => {
+  test(`${locale}: pending review list shows its empty state and has no image-completion tab`, async () => {
     const { api, calls } = createReviewAPI(async () => ({ success: true, data: [], total: 0 }))
-    const html = await render(pendingComponent(api), {}, locale, async state => { await state.load() })
-    assert.equal(calls.length, 1)
-    assert.ok(calls[0].url.includes('kind=intake'))
+    const html = await render(pendingComponent(api), { records: [], total: 0, page: 1, loading: false, error: '' }, locale)
+    assert.equal(calls.length, 0)
     assert.ok(html.includes(messages[locale].knowledgeReview.emptyIntake))
     assert.ok(!html.includes('value="incomplete"'))
     assert.ok(!source('./components/PendingReviews.vue').includes('listIncomplete'))

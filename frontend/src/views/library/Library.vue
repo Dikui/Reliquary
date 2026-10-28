@@ -25,7 +25,6 @@ import { listEntities, type Entity } from '@/api/entities';
 import { listTopics, type Topic } from '@/api/topics';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import EntryWorkbench from './components/EntryWorkbench.vue';
-import PendingReviews from './components/PendingReviews.vue';
 import { usePendingCountsStore } from '@/stores/pendingCounts';
 import type { LibraryContentType } from '@/api/library';
 import { SEARCH_SOURCES } from '@/types/search';
@@ -313,7 +312,12 @@ const loadLibraryInfo = async (targetLibraryId: string, force = false) => {
 // 唯一库加载后获取文章内容
 // Sync activeLibraryTab to URL query so it survives page refresh
 watch(() => [route.query.tab, route.query.section], ([tab]) => {
-  if (tab === 'entities' && route.query.section !== 'merges') {
+  if (tab === 'reviews' || (tab === 'entities' && route.query.section === 'merges')) {
+    const { tab: _tab, section: _section, ...query } = route.query
+    void router.replace({ path: '/platform/pending', query: { ...query, tab: tab === 'reviews' ? 'reviews' : 'merges' }, hash: route.hash })
+    return
+  }
+  if (tab === 'entities') {
     const { tab: _tab, ...query } = route.query
     void router.replace({ path: '/platform/entities', query, hash: route.hash })
     return
@@ -608,7 +612,7 @@ function openBatch(action: import('@/api/entry-batches').EntryBatchAction = 'sta
   batchSelectedIds.value = [...selectedIds.value]; batchSelection.value = { filters: JSON.parse(JSON.stringify(filterParams.value)) };
   batchDialogVisible.value = true;
 }
-async function batchChanged() { clearSelection(); resetPage(); await handlePendingChanged(); }
+async function batchChanged() { clearSelection(); resetPage(); await Promise.all([loadEntryFiles(libraryId.value), pendingCounts.refresh()]); }
 
 const handleViewTrace = (_index: number, item: EntryCard) => {
   void router.push({ ...entryDetailLocation(item.id), query: { tab: 'processing' } });
@@ -702,14 +706,10 @@ const openEntryItem = (item: EntryCard) => {
   openCardDetails(item);
 };
 
-const pendingReviewsRef = ref<InstanceType<typeof PendingReviews>>();
-const handlePendingChanged = async () => {
-  await Promise.all([loadEntryFiles(libraryId.value), pendingCounts.refresh()]);
-};
 const handlePersonalDocumentDeleted = async (id: string) => {
   selectedIds.value.delete(id);
   resetPage();
-  await Promise.all([loadEntryFiles(libraryId.value), pendingReviewsRef.value?.refresh(), pendingCounts.refresh()]);
+  await Promise.all([loadEntryFiles(libraryId.value), pendingCounts.refresh()]);
 };
 
 const confirmCancelParseEntry = async (item: EntryCard) => {
@@ -763,8 +763,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 
 <template>
   <div class="entry-layout" :class="{ 'entries-page': activeLibraryTab === 'documents' }">
-    <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area"><EntryWorkbench :library-id="libraryScope[0] || libraryId" :initial-entity-id="selectedEntityId" :initial-section="String(route.query.section || '')" @open-source="openSourceDoc" /></div>
-    <PendingReviews v-if="activeLibraryTab === 'reviews' && libraryId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="handlePendingChanged" @refreshed="pendingCounts.refresh()" />
+    <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area"><EntryWorkbench :library-id="libraryScope[0] || libraryId" :initial-entity-id="selectedEntityId" @open-source="openSourceDoc" /></div>
     <template v-if="activeLibraryTab === 'documents'">
       <header class="entries-head">
         <div class="entries-eyebrow"><LibMark v-if="currentLibrary" :color="currentLibrary.color" /><span>{{ currentLibrary ? t('entries.libraryNumber', { number: libraryNumber }) : t('menu.materials') }}</span><router-link to="/platform/libraries">{{ t('menu.library') }}</router-link></div>

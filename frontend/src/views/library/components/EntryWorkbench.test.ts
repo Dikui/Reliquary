@@ -60,7 +60,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: entity page renders library filters, real pending count and four detail tabs`, async () => {
     const { html, state } = await renderWorkbench({ locale, scenario: async state => { await state.loadCatalog(); await state.loadPendingCount(); await state.selectEntity(entity) } })
     assert.match(html, /Library A/)
-    assert.match(html, /section=merges/)
+    assert.match(html, /\/platform\/pending\?tab=merges/)
     assert.match(html, /class="mono">1</)
     assert.deepEqual(state.detailTabs.value.map((item: any) => item.value), ['graph', 'list', 'entries', 'aliases'])
     assert.deepEqual(state.entityTypeOptions.value.map((item: any) => item.value), ENTITY_TYPES)

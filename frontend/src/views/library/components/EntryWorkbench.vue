@@ -1,9 +1,5 @@
 <template>
-  <section v-if="activeSection === 'merges'" class="entity-pending">
-    <a href="/platform/entities">{{ t('knowledgeWorkbench.entities.title') }}</a>
-    <MergeSuggestions :library-id="selectedLibraryId" @open-source="emit('open-source', $event)" @changed="refreshAfterMerge" />
-  </section>
-  <section v-else class="entry-workbench" :class="{ 'is-empty': !entities.length && !entitiesLoading && !selectedEntity && !entityDetailLoading && !initialEntityId }">
+  <section class="entry-workbench" :class="{ 'is-empty': !entities.length && !entitiesLoading && !selectedEntity && !entityDetailLoading && !initialEntityId }">
     <aside class="entity-list" :aria-label="t('knowledgeWorkbench.entities.title')">
       <div class="entity-list-head">
         <h1>{{ t('knowledgeWorkbench.entities.title') }}</h1>
@@ -71,19 +67,16 @@ import { ENTITY_TYPES, listEntityMergeSuggestions, getEntity, getEntityNameEmbed
 import EntityRelations from './EntityRelations.vue'
 import EntityGraph from './EntityGraph.vue'
 import type { SourceLocation } from '@/types/search'
-import MergeSuggestions from './MergeSuggestions.vue'
 import FollowToggle from '@/components/FollowToggle.vue'
 import { useFollowStore } from '@/stores/follows'
 
-const props = withDefaults(defineProps<{ initialEntityId?: string; libraryId?: string; initialSection?: string }>(), { initialEntityId: '', libraryId: '' })
+const props = withDefaults(defineProps<{ initialEntityId?: string; libraryId?: string }>(), { initialEntityId: '', libraryId: '' })
 const emit = defineEmits<{ 'open-source': [entryId: string, location?: SourceLocation]; 'select-entity': [id: string, libraryId: string] }>()
 const { t, locale } = useI18n()
 const followStore = useFollowStore()
 const libraryScope = ref<string[]>(props.libraryId ? [props.libraryId] : [])
 const selectedLibraryId = computed(() => libraryScope.value[0] || '')
 const pageSize = 50
-const sections = ['entities', 'merges'] as const
-const activeSection = ref<typeof sections[number]>(props.initialSection === 'merges' ? 'merges' : 'entities')
 const relationView = ref('graph')
 const searchInput = ref<InstanceType<typeof Input>>()
 function clearSearch() { entityFilter.value = ''; searchInput.value?.focus() }
@@ -160,7 +153,6 @@ async function rebuildNameEmbeddings() {
 }
 async function selectInitialEntity(id: string, preview?: Entity) {
   if (!id) return
-  activeSection.value = 'entities'
   const current = ++detailRequest
   relationRequest++
   relations.value = []; relationError.value = ''; relationsLoading.value = false
@@ -192,7 +184,7 @@ const detailTabs = computed(() => [
   { value: 'entries', label: t('entityPage.materials') + (entityDetailLoading.value || entityDetailError.value ? '' : ` ${entityEntries.value.length}`) },
   { value: 'aliases', label: t('entityPage.aliasesAndMerge') },
 ])
-const pendingHref = computed(() => `/platform/entries?tab=entities&section=merges&libraries=${encodeURIComponent(selectedLibraryId.value)}`)
+const pendingHref = computed(() => `/platform/pending?tab=merges&libraries=${encodeURIComponent(selectedLibraryId.value)}`)
 let catalogRequest = 0, pendingRequest = 0, relationRequest = 0
 function isMissingEntity(cause: unknown) { return !!cause && typeof cause === 'object' && 'status' in cause && cause.status === 404 && searchErrorCode(cause) === 1003 }
 async function loadCatalog() {
@@ -235,7 +227,6 @@ watch(selectedLibraryId, () => { mergeTargetRequest++; mergeVisible.value = fals
 watch(entityFilter, scheduleEntitySearch)
 watch(entityTypeFilter, resetEntityList)
 watch(() => props.initialEntityId, id => { if (id && id !== selectedEntity.value?.id) void selectInitialEntity(id) }, { immediate: true })
-watch(() => props.initialSection, section => { activeSection.value = section === 'merges' ? 'merges' : 'entities' })
 onMounted(() => { void loadCatalog(); void refreshAll(); void loadPendingCount() })
 onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; nameEmbeddingRequest++; catalogRequest++; pendingRequest++; relationRequest++; clearNameEmbeddingPoll(); if (entitySearchTimer) clearTimeout(entitySearchTimer) })
 </script>
@@ -287,7 +278,6 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .name-embedding-rebuild summary { cursor: pointer; }
 .merge-form { display: grid; gap: var(--space-3); }
 .run-error, .entity-detail :deep(.follow-error) { color: var(--danger); overflow-wrap: anywhere; }
-.entity-pending { padding: var(--space-5); }
 @media (max-width: 900px) {
   .entry-workbench { grid-template-columns: minmax(0, 1fr); }
   .entity-list { border-right: 0; border-bottom: 2px solid var(--rule); }

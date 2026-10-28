@@ -20,7 +20,7 @@ test('legacy material references navigate to the independent detail route', asyn
   assert.equal(pendingEntryId.value, null)
 })
 
-test('same-route entity bookmarks redirect while legacy merge review stays reachable', async () => {
+test('same-route entity and pending bookmarks redirect without losing scope', async () => {
   const start = source.indexOf('watch(() => [route.query.tab, route.query.section],')
   const end = source.indexOf('watch(() => libraryId.value,', start)
   const route = reactive({ query: {} as Record<string, string>, hash: '#profile' })
@@ -34,10 +34,12 @@ test('same-route entity bookmarks redirect while legacy merge review stays reach
   assert.deepEqual(replacements.at(-1), { path: '/platform/entities', query: { entity_id: 'company', libraries: 'lib-a' }, hash: '#profile' })
   route.query = { tab: 'entities', section: 'merges', libraries: 'lib-a' }
   await nextTick()
-  assert.equal(activeLibraryTab.value, 'entities')
+  assert.deepEqual(replacements.at(-1), { path: '/platform/pending', query: { tab: 'merges', libraries: 'lib-a' }, hash: '#profile' })
   route.query = { tab: 'reviews' }
   await nextTick()
-  assert.equal(activeLibraryTab.value, 'reviews')
+  assert.deepEqual(replacements.at(-1), { path: '/platform/pending', query: { tab: 'reviews' }, hash: '#profile' })
+  activeLibraryTab.value = 'entities'
+  await nextTick()
   activeLibraryTab.value = 'documents'
   await nextTick()
   assert.deepEqual(route.query, {})

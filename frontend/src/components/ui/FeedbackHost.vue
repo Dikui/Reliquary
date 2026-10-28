@@ -22,14 +22,14 @@ function focusCancel(event: Event) {
       </div>
     </div>
   </Teleport>
-  <Dialog v-if="active" :key="active.id" :model-value="true" :title="active.options.header" :description="active.options.body"
-    :closable="!active.busy" :close-on-overlay-click="!active.busy && (active.options.closeOnOverlayClick ?? true)"
-    :close-on-esc-keydown="!active.busy && (active.options.closeOnEscKeydown ?? true)"
-    @update:model-value="!$event && active.close()" @open-auto-focus="focusCancel">
-    <p v-if="active.failed" class="rq-field__error" role="alert">{{ t('ui.confirmFailed') }}</p>
+  <Dialog v-for="dialog in active ? [active] : []" :key="dialog.id" :model-value="true" :title="dialog.options.header" :description="dialog.options.body"
+    :closable="!dialog.busy" :close-on-overlay-click="!dialog.busy && (dialog.options.closeOnOverlayClick ?? true)"
+    :close-on-esc-keydown="!dialog.busy && (dialog.options.closeOnEscKeydown ?? true)"
+    @update:model-value="!$event && dialog.close()" @open-auto-focus="focusCancel" @close-auto-focus="dialog.restoreFocus">
+    <p v-if="dialog.failed" class="rq-field__error" role="alert">{{ t('ui.confirmFailed') }}</p>
     <template #footer>
-      <Button data-cancel :disabled="active.busy" @click="active.cancel">{{ active.options.cancelBtn || t('common.cancel') }}</Button>
-      <Button data-confirm :loading="active.busy" :variant="active.options.theme === 'danger' ? 'danger' : 'primary'" @click="active.accept">{{ active.options.confirmBtn || t('common.confirm') }}</Button>
+      <Button data-cancel :disabled="dialog.busy" @click="dialog.cancel">{{ dialog.options.cancelBtn || t('common.cancel') }}</Button>
+      <Button data-confirm :loading="dialog.busy" :variant="dialog.options.theme === 'danger' ? 'danger' : 'primary'" @click="dialog.accept">{{ dialog.options.confirmBtn || t('common.confirm') }}</Button>
     </template>
   </Dialog>
 </template>

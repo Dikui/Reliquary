@@ -185,5 +185,19 @@ test('entities use an independent route while legacy entity bookmarks preserve c
   assert.equal(router.currentRoute.value.query.libraries, 'lib-a')
   assert.equal(router.currentRoute.value.hash, '#profile')
   await router.push('/platform/entries?tab=entities&section=merges&libraries=lib-a')
-  assert.equal(router.currentRoute.value.name, 'entries', 'the existing merge review remains reachable until the pending migration')
+  assert.equal(router.currentRoute.value.name, 'pending')
+  assert.equal(router.currentRoute.value.query.tab, 'merges')
+})
+
+
+test('pending bookmarks redirect with their tab, library scope and reference intact', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
+  for (const [legacy, tab] of [['reviews', 'reviews'], ['entities&section=merges', 'merges']]) {
+    await router.push(`/platform/entries?tab=${legacy}&libraries=a,b&entry_id=entry-a#evidence`)
+    assert.equal(router.currentRoute.value.name, 'pending')
+    assert.deepEqual(router.currentRoute.value.query, { tab, libraries: 'a,b', entry_id: 'entry-a' })
+    assert.equal(router.currentRoute.value.hash, '#evidence')
+  }
+  await router.push('/platform/pending')
+  assert.equal(router.currentRoute.value.name, 'pending')
 })

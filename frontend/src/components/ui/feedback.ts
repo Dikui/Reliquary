@@ -1,4 +1,4 @@
-import { reactive, readonly } from 'vue'
+import { nextTick, reactive, readonly } from 'vue'
 
 export type ToastTone = 'success' | 'info' | 'warning' | 'error'
 export interface ToastOptions { content: string; duration?: number; theme?: ToastTone }
@@ -29,6 +29,7 @@ interface Confirmation {
   accept: () => Promise<void>
   cancel: () => void
   close: () => void
+  restoreFocus: (event: Event) => void
 }
 const toasts = reactive<ToastRecord[]>([])
 const confirmations = reactive<Confirmation[]>([])
@@ -59,6 +60,7 @@ export const toast = Object.assign(showToast, {
 
 export function confirm(options: ConfirmOptions): ConfirmHandle {
   const id = ++sequence
+  const opener = typeof document === 'undefined' ? null : document.activeElement as HTMLElement | null
   let settled = false
   let accepting = false
   let resolve!: (confirmed: boolean) => void
@@ -77,6 +79,16 @@ export function confirm(options: ConfirmOptions): ConfirmHandle {
   }
   const state = reactive<Confirmation>({
     id, options: { ...options }, busy: false, failed: false,
+    restoreFocus(event) {
+      // The service has no DialogTrigger; Reka must not restore its later snapshot.
+      event.preventDefault()
+      // Let result callbacks re-enable controls and the closing focus scope finish.
+      void nextTick(() => setTimeout(() => {
+        if (!confirmations.length && opener?.isConnected && typeof opener.focus === 'function') {
+          opener.focus({ preventScroll: true })
+        }
+      }, 0))
+    },
     async accept() {
       if (state.busy || settled) return
       state.busy = true

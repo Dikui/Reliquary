@@ -107,6 +107,8 @@ test('a confirmation owns Escape above an existing shared dialog', async () => {
   const open = ref(true), Dialog = loadUiComponent('Dialog'), Feedback = loadUiComponent('FeedbackHost')
   const mounted = mount({ setup: () => () => h('div', [h(Dialog, { modelValue: open.value, title: 'Edit material', 'onUpdate:modelValue': (value: boolean) => { open.value = value } }, () => h('input')), h(Feedback)]) })
   await settle()
+  const input = doc.querySelector('input')!
+  input.focus()
   const confirmation = confirm({ header: 'Discard changes', theme: 'danger' })
   await settle()
   assert.equal(doc.querySelectorAll('[role="dialog"]').length, 2)
@@ -114,5 +116,82 @@ test('a confirmation owns Escape above an existing shared dialog', async () => {
   assert.equal(await confirmation.result, false)
   assert.equal(open.value, true)
   assert.equal(doc.querySelectorAll('[role="dialog"]').length, 1)
+  assert.equal(doc.activeElement === input, true)
   await mounted.unmount()
+})
+
+for (const close of ['confirm', 'cancel', 'Escape'] as const) {
+  test(`shared confirmation restores its opening focus after ${close}`, async t => {
+    const mounted = mount(loadUiComponent('FeedbackHost'))
+    const trigger = doc.createElement('button')
+    doc.body.appendChild(trigger)
+    t.after(async () => { trigger.remove(); await mounted.unmount() })
+    trigger.focus()
+    const dialog = confirm({ header: 'Confirm the action' })
+    // The invoking view can lose focus before the portalled dialog mounts.
+    doc.body.focus()
+    await settle()
+    assert.equal(doc.activeElement === trigger, false, 'the dialog takes focus')
+    if (close === 'Escape') await send(doc.activeElement, 'keydown', { key: 'Escape' })
+    else await send(doc.querySelector(close === 'confirm' ? '[data-confirm]' : '[data-cancel]')!, 'click')
+    assert.equal(await dialog.result, close === 'confirm')
+    await settle()
+    assert.equal(doc.activeElement === trigger, true, 'focus returns to the opening element')
+  })
+}
+
+test('closing a confirmation does not focus an opening element removed by its action', async t => {
+  const mounted = mount(loadUiComponent('FeedbackHost'))
+  const trigger = doc.createElement('button')
+  doc.body.appendChild(trigger)
+  t.after(async () => { trigger.remove(); await mounted.unmount() })
+  trigger.focus()
+  const focus = t.mock.method(trigger, 'focus')
+  const dialog = confirm({ header: 'Delete this item', onConfirm: () => { trigger.remove() } })
+  await settle()
+  await send(doc.querySelector('[data-confirm]')!, 'click')
+  assert.equal(await dialog.result, true)
+  await settle()
+  assert.equal(focus.mock.callCount(), 0)
+})
+
+test('confirmation focus waits for the invoking button to be enabled again', async t => {
+  const disabled = ref(false)
+  const Feedback = loadUiComponent('FeedbackHost')
+  let dialog: ReturnType<typeof confirm>
+  const mounted = mount({ setup: () => () => h('div', [
+    h('button', { 'data-opener': '', disabled: disabled.value, onClick: () => {
+      disabled.value = true
+      dialog = confirm({ header: 'Confirm changes' })
+      void dialog.result.finally(() => { disabled.value = false })
+      doc.body.focus()
+    } }, 'Open'),
+    h(Feedback),
+  ]) })
+  t.after(() => mounted.unmount())
+  const trigger = doc.querySelector('[data-opener]')!
+  trigger.focus()
+  await send(trigger, 'click')
+  assert.equal(trigger.disabled, true)
+  await send(doc.querySelector('[data-cancel]')!, 'click')
+  assert.equal(trigger.disabled, false)
+  assert.equal(doc.activeElement === trigger, true)
+})
+
+test('closing one queued confirmation does not steal focus from the next dialog', async t => {
+  const mounted = mount(loadUiComponent('FeedbackHost'))
+  const trigger = doc.createElement('button')
+  doc.body.appendChild(trigger)
+  t.after(async () => { trigger.remove(); await mounted.unmount() })
+  trigger.focus()
+  const first = confirm({ header: 'First action' })
+  const second = confirm({ header: 'Second action' })
+  await settle()
+  await send(doc.querySelector('[data-cancel]')!, 'click')
+  assert.equal(await first.result, false)
+  assert.ok(doc.querySelector('[role="dialog"]')?.textContent.includes('Second action'))
+  assert.equal(doc.activeElement === trigger, false)
+  await send(doc.querySelector('[data-cancel]')!, 'click')
+  assert.equal(await second.result, false)
+  assert.equal(doc.activeElement === trigger, true)
 })
