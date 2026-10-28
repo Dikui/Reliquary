@@ -326,6 +326,20 @@ test('the visible processing status filter finds active materials and restores i
   } finally { env.cleanup() }
 })
 
+test('filters restored from the URL are visible and can be cleared', async () => {
+  const env = await mountLibrary('zh-CN', { source_kind: 'mine', source: 'api', file_type: 'md', start_date: '2026-10-01', end_date: '2026-10-13' })
+  try {
+    assert.equal(env.control('library.materialCategory').props.value, 'mine')
+    assert.equal(env.control('library.channelLabel').props.value, 'api')
+    assert.equal(env.control('library.fileTypeFilter').props.value, 'md')
+    assert.deepEqual(env.control('entryBatch.updatedDates').props.value, ['2026-10-01', '2026-10-13'])
+    for (const [key, query] of [['library.materialCategory', 'source_kind'], ['library.channelLabel', 'source'], ['library.fileTypeFilter', 'file_type']]) {
+      await env.change(env.control(key), '')
+      assert.equal(env.requests.at(-1)!.has(query), false, query)
+    }
+  } finally { env.cleanup() }
+})
+
 for (const locale of ['zh-CN', 'en-US']) {
 
 }

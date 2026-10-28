@@ -1024,9 +1024,6 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                   <p v-if="filterEntitiesError" role="alert">{{ filterEntitiesError }} <t-button size="small" variant="text" @click="loadFilterEntities()">{{ t('common.retry') }}</t-button></p>
                 </div>
 
-
-
-
                 <div class="doc-filter-field">
                   <t-select v-model="selectedStarred" :options="starredOptions" :aria-label="$t('articleJudgments.starLabel')" class="doc-type-select doc-filter-field__control" />
                 </div>
@@ -1034,8 +1031,41 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
                 <div class="doc-filter-field">
                   <t-select v-model="selectedParseStatus" :options="parseStatusOptions" :aria-label="$t('library.parseStatusFilter')" class="doc-type-select doc-filter-field__control" />
                 </div>
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedSourceKind" :options="sourceKindOptions"
+                    :placeholder="$t('library.materialCategory')" :aria-label="$t('library.materialCategory')"
+                    class="doc-type-select doc-filter-field__control" clearable />
+                </div>
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedSource" :options="sourceOptions"
+                    :placeholder="$t('library.channelLabel')" :aria-label="$t('library.channelLabel')" class="doc-type-select doc-filter-field__control"
+                    clearable>
+                    <template #prefixIcon>
+                      <t-icon name="link" size="16px" />
+                    </template>
+                  </t-select>
+                </div>
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedFileType" :options="fileTypeOptions"
+                    :placeholder="$t('library.fileTypeFilter')" :aria-label="$t('library.fileTypeFilter')" class="doc-type-select doc-filter-field__control"
+                    clearable>
+                    <template #prefixIcon>
+                      <t-icon name="file" size="16px" />
+                    </template>
+                  </t-select>
+                </div>
 
                 <div class="doc-filter-field doc-filter-field--wide"><t-date-range-picker v-model="publishedRange" allow-input clearable :placeholder="[t('entryBatch.publishedFrom'), t('entryBatch.publishedTo')]" :aria-label="t('entryBatch.publishedDates')" class="doc-date-range doc-filter-field__control" /><small v-if="publishedRange.length">{{ t('entryBatch.publishedHint') }}</small></div>
+                <div class="doc-filter-field doc-filter-field--wide">
+                  <t-date-range-picker v-model="updatedTimeRange"
+                    :placeholder="[t('entryBatch.updatedFrom'), t('entryBatch.updatedTo')]" :aria-label="t('entryBatch.updatedDates')"
+                    :disable-date="disableFutureDate" class="doc-date-range doc-date-range--updated doc-filter-field__control" clearable
+                    allow-input>
+                    <template #prefixIcon>
+                      <t-icon name="time" size="16px" />
+                    </template>
+                  </t-date-range-picker>
+                </div>
 
                 </div>
                 <div class="doc-filter-bar__trailing">
