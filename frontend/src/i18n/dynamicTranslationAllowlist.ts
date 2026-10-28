@@ -3,6 +3,11 @@ import type { TranslationCall } from './translationCallAudit.ts'
 /** Reviewed runtime expressions. New expressions must be explicitly reviewed here. */
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
+    file: 'views/library/components/FollowFeedItem.vue',
+    expressions: ['`library.contentTypes.${props.article.content_type}`', '`follows.targetTypes.${target.target_type}`'],
+    reason: 'Built-in content types are guarded by CONTENT_TYPES; follow target types use the existing entity/topic enum. Custom content types remain plain text.',
+  },
+  {
     file: 'views/library/TopicManagement.vue',
     expressions: ['`library.contentTypes.${value}`'],
     reason: 'Built-in content types are guarded by CONTENT_TYPES; custom library type names remain plain text.',

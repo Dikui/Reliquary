@@ -1,3 +1,4 @@
+import { loadUiComponent } from '../../components/ui/uiTestLoader'
 import { entryPresentationTestModules } from './entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import * as entrySourceLabels from '../../utils/entrySourceLabels'
@@ -14,13 +15,14 @@ import en from '../../i18n/locales/en-US'
 import { CONTENT_TYPES } from '../../types/entryClassification'
 import { ENTITY_TYPES } from '../../api/entity-types'
 import * as highlight from '../../components/GlobalCommandPalette/useHighlight'
+import * as searchUtils from '../../utils/search'
 import * as markdownPlainText from '../../utils/markdownPlainText'
 import { click as clickNode, descendants, element, hasClass, loadComponent, registerPrimitives, renderer, settle as settleNodes, visibleText, type Element } from './componentTestHarness'
 
 const require = createRequire(import.meta.url), messages = { 'zh-CN': zh, 'en-US': en }
 const moduleOf = (value: unknown) => ({ __esModule: true, default: value })
 async function settle() { await settleNodes(); await new Promise<void>(resolve => setImmediate(resolve)); await settleNodes() }
-async function click(node: Element) { await clickNode(node); await settle() }
+async function click(node: Element) { await clickNode(node); if (node.parent?.props['data-dialog-trigger']) node.parent.props.onClick(); await settle() }
 const empty = moduleOf(defineComponent({ setup: () => () => null }))
 const entity = { library_id: 'fixture-library', id: 'entity-a', canonical_name: 'Aurora', entity_type: 'company', aliases: ['Aurora Labs'], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }
 const topic = { library_id: 'fixture-library', id: 'topic-a', name: 'Space research', description: 'Space missions', entry_count: 2, created_at: '', updated_at: '' }
@@ -38,7 +40,7 @@ function evaluateFile(path: string, modules: Record<string, unknown>) {
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
 
 function environment(locale: keyof typeof messages, initialTargets: any[] = []) {
-  const calls: { method: string; url: string; body?: any }[] = [], warnings: string[] = [], errors: unknown[] = []
+  const calls: { method: string; url: string; body?: any }[] = [], warnings: string[] = [], errors: unknown[] = [], confirmations: any[] = []
   const transport = {
     targets: structuredClone(initialTargets), checkpoint: previous as string | null,
     articles: [article('new', '2026-10-11T10:00:00Z'), article('similar', '2026-10-11T09:00:00Z', [topicFollow]), article('old', '2026-10-09T07:00:00Z', [entityFollow])],
@@ -101,8 +103,38 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const router = { replace: async (value: any) => { urls.push(value); route.query = value.query || {} }, push: async (value: any) => { urls.push(value) } }
   const i18n = createI18n({ legacy: false, locale, messages })
   const modules: Record<string, any> = { ...entryPresentationTestModules, '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
+  modules['@/utils/search'] = searchUtils
+  modules['@/api/relations'] = { listEntityRelations: async () => ({ success: true, data: [] }) }
+  modules['@/components/ui/feedback'] = { toast: { success() {} }, confirm: (options: any) => { confirmations.push(options); return { destroy() {}, update(values: any) { Object.assign(options, values) } } } }
+  modules['@/components/ui'] = {
+    ...modules['@/components/ui'],
+    ...Object.fromEntries(['Switch', 'Field', 'Textarea'].map(name => [name, loadUiComponent(name)])),
+    Tabs: defineComponent({
+      props: ['items', 'modelValue'], emits: ['update:modelValue'],
+      setup: (props, { slots, emit }) => () => h('div', [
+        props.items.map((item: any) => h('button', { onClick: () => emit('update:modelValue', item.value) }, item.label)),
+        slots[props.modelValue]?.(),
+      ]),
+    }),
+    Combobox: defineComponent({
+      props: ['modelValue', 'options'], emits: ['update:modelValue'],
+      setup: (props, { attrs, emit }) => () => h('select', {
+        ...attrs, value: props.modelValue,
+        onChange: (event: any) => emit('update:modelValue', event.target.value),
+      }, props.options.map((item: any) => h('option', { value: item.value }, item.label))),
+    }),
+    Dialog: defineComponent({
+      props: ['modelValue', 'title'], emits: ['update:modelValue'],
+      setup: (props, { slots, emit }) => () => h('div', [
+        h('div', { 'data-dialog-trigger': true, onClick: () => emit('update:modelValue', true) }, slots.trigger?.()),
+        props.modelValue ? h('section', { role: 'dialog' }, [props.title, slots.default?.(), slots.footer?.()]) : null,
+      ]),
+    }),
+  }
+  modules['@/components/EntryUpdateNotice.vue'] = modules['./EntryUpdateNotice.vue'] = moduleOf(loadComponent(new URL('../../components/EntryUpdateNotice.vue', import.meta.url), modules))
+  modules['./components/AddFollowDialog.vue'] = moduleOf(loadComponent(new URL('./components/AddFollowDialog.vue', import.meta.url), modules))
+  modules['./components/FollowFeedItem.vue'] = moduleOf(loadComponent(new URL('./components/FollowFeedItem.vue', import.meta.url), modules))
   modules['@/components/LibraryScopeSelect.vue'] = moduleOf(loadComponent(new URL('../../components/LibraryScopeSelect.vue', import.meta.url), modules))
-  modules['@/components/EntryUpdateNotice.vue'] = modules['./EntryUpdateNotice.vue'] = empty
   modules['./EntityRelations.vue'] = modules['./EntityGraph.vue'] = modules['./BodyReference.vue'] = empty
   modules['@/utils/entrySourceLabels'] = entrySourceLabels
   modules['@/utils/markdownPlainText'] = markdownPlainText
@@ -129,9 +161,228 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const component = (path: string) => loadComponent(new URL(path, import.meta.url), modules)
   const button = (root: Element, text: string) => descendants(root).find(node => node.tag === 'button' && visibleText(node).trim() === text)!
   const followButton = (root: Element, type: 'entity' | 'topic', following = false) => descendants(root).find(node => node.tag === 'button' && node.props['aria-label'] === i18n.global.t(following ? 'follows.unfollowNamed' : 'follows.followNamed', { name: type === 'entity' ? entity.canonical_name : topic.name }))!
-  const change = async (node: Element, value: any) => { node.props['onUpdate:modelValue'](value); node.props.onChange(value); await settle() }
-  return { transport, state, calls, envelope, store, modules, route, urls, component, mount, button, followButton, change, i18n, errors, warnings }
+  const change = async (node: Element, value: any) => {
+    if (node.tag === 'select') node.props.onChange({ target: { value, selectedOptions: (Array.isArray(value) ? value : [value]).map(value => ({ value })) } })
+    else if (node.tag === 'input' && node.props.type === 'checkbox') node.props.onChange({ target: { checked: value } })
+    else { node.props['onUpdate:modelValue'](value); node.props.onChange(value) }
+    await settle()
+  }
+  return { transport, state, calls, envelope, store, modules, route, urls, component, mount, button, followButton, change, i18n, errors, warnings, confirmations }
 }
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: URL-restored target filters stay visible after refresh and support removing and adding one target`, async () => {
+    const env = environment(locale, [entityFollow, topicFollow])
+    env.route.query = { target_ids: `${entity.id},${topic.id}` }
+    const mounted = env.mount(env.component('./FollowFeed.vue'))
+    const selected = () => descendants(mounted.root).filter(node => hasClass(node, 'feed-selected-target'))
+    try {
+      await settle()
+      assert.deepEqual(selected().map(node => node.props['data-target-id']), [entity.id, topic.id])
+      assert.ok(visibleText(selected()[0]!).includes(entity.canonical_name))
+      assert.ok(visibleText(selected()[1]!).includes(topic.name))
+      assert.equal(descendants(mounted.root).some(node => node.tag === 'select' && node.props.multiple), false)
+      await click(env.button(mounted.root, messages[locale].follows.refresh))
+      assert.deepEqual(selected().map(node => node.props['data-target-id']), [entity.id, topic.id])
+      await click(descendants(selected()[0]!).find(node => node.tag === 'button')!)
+      assert.deepEqual(env.calls.filter(call => call.url.endsWith('/feed')).at(-1)?.body.target_ids, [topic.id])
+      assert.deepEqual(selected().map(node => node.props['data-target-id']), [topic.id])
+      const picker = descendants(mounted.root).find(node => node.tag === 'select' && node.props['aria-label'] === messages[locale].follows.filterTarget)!
+      const event = { target: { value: entity.id } }
+      picker.props.onChange(event)
+      await settle()
+      assert.equal(event.target.value, '')
+      assert.deepEqual(env.route.query.target_ids, `${topic.id},${entity.id}`)
+      assert.deepEqual(selected().map(node => node.props['data-target-id']), [topic.id, entity.id])
+      assert.deepEqual(env.errors, [])
+    } finally { mounted.close() }
+  })
+}
+
+test('feed groups actual arrival dates and shows every matched follow above the material title', async () => {
+  const env = environment('en-US', [entityFollow, topicFollow])
+  const mounted = env.mount(env.component('./FollowFeed.vue'))
+  try {
+    await settle()
+    const groups = descendants(mounted.root).filter(node => node.props['data-feed-date'])
+    assert.equal(groups.length, 2)
+    const first = descendants(groups[0]!).find(node => node.props['data-article-id'] === 'new')!
+    assert.ok(first)
+    const reason = descendants(first).find(node => hasClass(node, 'feed-reasons'))!
+    assert.match(visibleText(reason), /Aurora/)
+    assert.match(visibleText(reason), /Space research/)
+    const link = descendants(first).find(node => node.tag === 'a' && visibleText(node) === 'Article new')!
+    assert.equal(link.props.href, '/platform/entries/new')
+    await click(link)
+    assert.deepEqual(env.urls.at(-1), { path: '/platform/entries/new', query: {} })
+    assert.deepEqual(env.errors, [])
+  } finally { mounted.close() }
+})
+
+test('a topic-triggered feed card links every associated entity to its own profile', async () => {
+  const env = environment('en-US', [topicFollow])
+  env.transport.articles = [article('topic-only', openedAt, [topicFollow])]
+  Object.assign(env.transport.articles[0]!, { library_id: 'fixture-library' })
+  env.transport.articles[0]!.entities = [
+    { ...entity, id: 'nontrigger-a', canonical_name: 'Atlas Labs' },
+    { ...entity, id: 'nontrigger-b', canonical_name: 'Galaxy Lab' },
+  ]
+  const mounted = env.mount(env.component('./FollowFeed.vue'))
+  try {
+    await settle()
+    const card = descendants(mounted.root).find(node => node.props['data-article-id'] === 'topic-only')!
+    const links = descendants(card).filter(node => node.tag === 'a' && node.props.href?.startsWith('/platform/entities?'))
+    assert.deepEqual(links.map(visibleText), ['Atlas Labs', 'Galaxy Lab'])
+    assert.equal(links[0]!.props.href, '/platform/entities?entity_id=nontrigger-a&libraries=fixture-library')
+    await click(links[0]!)
+    assert.deepEqual(env.urls.at(-1), { path: '/platform/entities', query: { entity_id: 'nontrigger-a', libraries: 'fixture-library' } })
+    assert.deepEqual(env.calls.filter(call => call.url.endsWith('/feed')).at(-1)?.body.target_ids, undefined)
+    assert.deepEqual(env.errors, [])
+  } finally { mounted.close() }
+})
+
+test('feed puts reading actions beside the title and keeps low-frequency filters collapsed', async () => {
+  const env = environment('en-US', [entityFollow, topicFollow])
+  env.route.query = { target_ids: entity.id }
+  const mounted = env.mount(env.component('./FollowFeed.vue'))
+  try {
+    await settle()
+    const header = descendants(mounted.root).find(node => hasClass(node, 'feed-heading'))!
+    assert.ok(descendants(header).some(node => node.props['data-feed-filter'] === 'unread'))
+    assert.ok(descendants(header).includes(env.button(mounted.root, en.follows.markAllViewed)))
+    const advanced = descendants(mounted.root).find(node => node.tag === 'details' && hasClass(node, 'feed-more-filters'))!
+    assert.ok(advanced)
+    assert.ok(!advanced.props.open)
+    for (const label of [en.follows.limit, en.follows.filterTarget, en.knowledgeSearch.collapseSimilar]) {
+      assert.ok(descendants(advanced).some(node => node.props['aria-label'] === label), label)
+    }
+    assert.equal(descendants(advanced).some(node => hasClass(node, 'feed-selected-target')), false)
+    assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-selected-target')).length, 1)
+    assert.deepEqual(env.errors, [])
+  } finally { mounted.close() }
+})
+
+test('unread filter keeps an unread folded report when its representative is already read', async () => {
+  const env = environment('en-US', [entityFollow, topicFollow])
+  env.transport.articles[0]!.entered_at = previous
+  const mounted = env.mount(env.component('./FollowFeed.vue'))
+  try {
+    await settle()
+    const unread = descendants(mounted.root).find(node => node.tag === 'button' && node.props['data-feed-filter'] === 'unread')!
+    assert.ok(unread)
+    await click(unread)
+    assert.match(visibleText(mounted.root), /Article similar/)
+    assert.doesNotMatch(visibleText(mounted.root), /Article old|Article new/)
+    assert.equal(env.route.query.read, 'unread')
+    assert.equal(env.calls.filter(call => call.url.endsWith('/follows/view')).length, 1)
+    await click(env.button(mounted.root, en.follows.markAllViewed))
+    assert.equal(descendants(mounted.root).filter(node => node.props['data-article-id']).length, 0)
+    assert.equal(env.store.newCount, 0)
+  } finally { mounted.close() }
+})
+
+test('unread date groups stay newest first after promoting a folded report', async () => {
+  const env = environment('en-US', [entityFollow, topicFollow])
+  env.route.query = { read: 'unread' }
+  env.transport.checkpoint = '2026-10-01T00:00:00Z'
+  env.transport.articles[0]!.entered_at = '2026-09-30T12:00:00Z'
+  env.transport.articles[1]!.entered_at = '2026-10-09T12:00:00Z'
+  env.transport.articles[2]!.entered_at = '2026-10-10T12:00:00Z'
+  const mounted = env.mount(env.component('./FollowFeed.vue'))
+  try {
+    await settle()
+    assert.deepEqual(descendants(mounted.root).filter(node => node.props['data-article-id']).map(node => node.props['data-article-id']), ['old', 'similar'])
+  } finally { mounted.close() }
+})
+
+test('add follow selects an existing library-scoped object and updates the shared target list', async () => {
+  const env = environment('en-US')
+  const mounted = env.mount(env.component('./FollowFeed.vue'))
+  try {
+    await settle()
+    await click(env.button(mounted.root, 'Add follow'))
+    const dialog = descendants(mounted.root).find(node => node.props.role === 'dialog')!
+    assert.ok(dialog)
+    const select = descendants(dialog).find(node => node.tag === 'select' && node.props['aria-label'] === 'Name')!
+    select.props.onChange({ target: { value: entity.id } })
+    await settle()
+    await click(env.button(dialog, en.follows.follow))
+    assert.equal(env.store.isFollowing('entity', entity.id), true, JSON.stringify({ calls: env.calls, errors: env.errors, text: visibleText(mounted.root) }))
+    assert.ok(env.calls.some(call => call.url.startsWith('/api/v1/entities?library_id=fixture-library')))
+    assert.ok(env.calls.some(call => call.method === 'put' && call.url === `/api/v1/follows/entity/${entity.id}`))
+    assert.equal(descendants(mounted.root).some(node => node.props.role === 'dialog'), false)
+    assert.ok(descendants(mounted.root).some(node => hasClass(node, 'feed-target') && visibleText(node).includes('Aurora')))
+    assert.deepEqual(env.errors, [])
+  } finally { mounted.close() }
+})
+
+test('right-hand targets filter the feed and the all target resets the multi-selection', async () => {
+  const env = environment('en-US', [entityFollow, topicFollow])
+  const mounted = env.mount(env.component('./FollowFeed.vue'))
+  try {
+    await settle()
+    const targets = () => descendants(mounted.root).filter(node => hasClass(node, 'feed-target'))
+    await click(targets().find(node => visibleText(node).startsWith(topic.name))!)
+    assert.deepEqual(env.calls.filter(call => call.url.endsWith('/feed')).at(-1)?.body.target_ids, [topic.id])
+    assert.doesNotMatch(visibleText(mounted.root), /Article old/)
+    assert.equal(targets().find(node => visibleText(node).startsWith(topic.name))!.props['aria-current'], 'true')
+    await click(targets()[0]!)
+    assert.equal(env.calls.filter(call => call.url.endsWith('/feed')).at(-1)?.body.target_ids, undefined)
+    assert.match(visibleText(mounted.root), /Article old/)
+  } finally { mounted.close() }
+})
+
+test('add follow rejects late candidate searches after a library change', async () => {
+  const env = environment('en-US')
+  const old = deferred<any>()
+  env.transport.intercept = (_method, url) => {
+    if (url === '/api/v1/libraries') return Promise.resolve(env.envelope([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }]))
+    if (url.startsWith('/api/v1/entities?library_id=a')) return old.promise
+    if (url.startsWith('/api/v1/entities?library_id=b')) return Promise.resolve(env.envelope([{ ...entity, id: 'entity-b', canonical_name: 'Current candidate' }]))
+    return undefined
+  }
+  const mounted = env.mount(env.component('./FollowFeed.vue'))
+  try {
+    await settle(); await click(env.button(mounted.root, en.follows.add))
+    const dialog = () => descendants(mounted.root).find(node => node.props.role === 'dialog')!
+    await env.change(descendants(dialog()).find(node => node.tag === 'select' && node.props['aria-label'] === en.follows.library)!, 'b')
+    old.resolve(env.envelope([{ ...entity, canonical_name: 'Stale candidate' }]))
+    await settle()
+    assert.match(visibleText(dialog()), /Current candidate/)
+    assert.doesNotMatch(visibleText(dialog()), /Stale candidate/)
+    await env.change(descendants(dialog()).find(node => node.tag === 'select' && node.props['aria-label'] === en.follows.targetType)!, 'topic')
+    assert.ok(env.calls.some(call => call.url === '/api/v1/topics?library_id=b'))
+    assert.match(visibleText(dialog()), /Space research/)
+    assert.doesNotMatch(visibleText(dialog()), /Current candidate/)
+  } finally { mounted.close() }
+})
+
+test('missing follow candidates show a clear error, block duplicate saves and can be searched again', async () => {
+  const env = environment('en-US')
+  const pending = deferred<any>()
+  env.transport.intercept = (method, url) => method === 'put' && url.includes('/follows/') ? pending.promise : undefined
+  const mounted = env.mount(env.component('./FollowFeed.vue'))
+  try {
+    await settle(); await click(env.button(mounted.root, en.follows.add))
+    const dialog = () => descendants(mounted.root).find(node => node.props.role === 'dialog')!
+    await env.change(descendants(dialog()).find(node => node.tag === 'select' && node.props['aria-label'] === en.follows.name)!, entity.id)
+    await click(env.button(dialog(), en.follows.follow))
+    await click(env.button(dialog(), en.follows.follow))
+    assert.equal(env.calls.filter(call => call.method === 'put').length, 1)
+    // Reject using the same status shape exposed by the request boundary.
+    pending.resolve(Promise.reject({ status: 404 }))
+    await settle()
+    assert.match(visibleText(dialog()), /The object was deleted or merged/)
+    assert.equal(env.store.isFollowing('entity', entity.id), false)
+    env.transport.intercept = () => undefined
+    descendants(dialog()).find(node => node.tag === 'form')!.props.onSubmit({ preventDefault() {} })
+    await settle()
+    await env.change(descendants(dialog()).find(node => node.tag === 'select' && node.props['aria-label'] === en.follows.name)!, entity.id)
+    await click(env.button(dialog(), en.follows.follow))
+    assert.equal(env.store.isFollowing('entity', entity.id), true)
+    assert.deepEqual(env.errors, [])
+  } finally { mounted.close() }
+})
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: actual follow feed API loading renders summaries and snippets as localized plain text`, async () => {
@@ -149,7 +400,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(visibleText(result).includes(`Overview ${image}`))
       assert.ok(visibleText(result).includes('Point'))
       assert.ok(visibleText(result).includes('Term'))
-      const snippet = descendants(result).find(node => node.tag === 'span' && node.props.innerHTML)?.props.innerHTML
+      const snippet = visibleText(descendants(result).find(node => hasClass(node, 'feed-snippet'))!)
       assert.ok(snippet.includes(`code ${image} ${image} HTML`))
       assert.match(snippet, /Feed heading/)
       assert.match(snippet, /bold read/)
@@ -198,7 +449,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const workbench = env.mount(env.component('./components/EntryWorkbench.vue'))
     try {
       await settle()
-      await click(descendants(workbench.root).find(node => node.tag === 'button' && hasClass(node, 'entity-list__item'))!)
+      await click(descendants(workbench.root).find(node => node.tag === 'button' && visibleText(node).startsWith('Aurora'))!)
       const followButton = env.followButton(workbench.root, 'entity')
       assert.ok(followButton)
       await click(followButton)
@@ -263,10 +514,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       await click(env.button(mounted.root, messages[locale].follows.refresh))
       await click(descendants(mounted.root).find(node => node.tag === 'button' && hasClass(node, 'similar-toggle'))!)
       assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-new')).length, 2)
-      await env.change(descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === messages[locale].follows.filterTarget)!, [topic.id])
+      await env.change(descendants(mounted.root).find(node => node.tag === 'select' && node.props['aria-label'] === messages[locale].follows.filterTarget)!, topic.id)
       assert.ok(visibleText(mounted.root).includes('Article new'))
       assert.ok(!visibleText(mounted.root).includes('Article old'))
-      await env.change(descendants(mounted.root).find(node => node.tag === 't-switch')!, false)
+      await env.change(descendants(mounted.root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!, false)
       assert.ok(visibleText(mounted.root).includes('Article similar'))
       assert.equal(descendants(mounted.root).filter(node => hasClass(node, 'feed-new')).length, 2)
       const feedCalls = env.calls.filter(call => call.url.endsWith('/follows/feed'))
@@ -322,8 +573,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     try {
       await settle()
       const expected = env.i18n.global.t('follows.targetLabel', { name: entity.canonical_name, type: messages[locale].follows.targetTypes.entity, count: 0 })
-      const selector = descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === messages[locale].follows.filterTarget)!
-      assert.ok(selector.props.options.some((option: any) => option.label === expected))
+      const selector = descendants(mounted.root).find(node => node.tag === 'select' && node.props['aria-label'] === messages[locale].follows.filterTarget)!
+      assert.ok(selector.children.some(option => visibleText(option) === expected))
       assert.ok(visibleText(mounted.root).includes(expected))
       assert.deepEqual(env.errors, [])
     } finally { mounted.close() }
@@ -420,8 +671,8 @@ test('bounded feed lists report the current page and offer supported limits', as
   try {
     await settle()
     assert.ok(visibleText(mounted.root).includes('Showing 20 items on this page out of 105.'))
-    const limitControl = descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === messages['en-US'].follows.limit)!
-    assert.deepEqual(limitControl.props.options.map((option: any) => option.value), [20, 50, 100])
+    const limitControl = descendants(mounted.root).find(node => node.tag === 'select' && node.props['aria-label'] === messages['en-US'].follows.limit)!
+    assert.deepEqual(limitControl.children.filter(option => option.tag === 'option').map(option => option.props.value), [20, 50, 100])
     await env.change(limitControl, 100)
     assert.ok(visibleText(mounted.root).includes('Showing 100 items on this page out of 105.'))
     assert.equal(env.calls.filter(call => call.url.endsWith('/follows/view')).length, 1)
@@ -452,7 +703,7 @@ test('feed pagination passes cursors, returns through history, disables the last
     assert.deepEqual(env.calls.filter(call => call.url.endsWith('/follows/feed')).at(-1)?.body.cursor, 'cursor:20')
     assert.equal(pageButton(en.follows.previousPage).props.disabled, true)
     assert.equal(pageButton(en.follows.nextPage).props.disabled, true)
-    assert.equal(pageButton(en.follows.nextPage).props['data-loading'], true)
+    assert.equal(pageButton(en.follows.nextPage).props['aria-busy'], true)
     secondPage.resolve(env.envelope({ ...env.state(), results: structuredClone(env.transport.articles.slice(20, 40)), total: 45, viewed_at: openedAt, next_cursor: 'cursor:40' }))
     await settle()
     assert.ok(visibleText(mounted.root).includes('Article page-20'))
@@ -472,7 +723,7 @@ test('feed pagination passes cursors, returns through history, disables the last
     assert.equal(pageButton(en.follows.nextPage).props.disabled, true)
     assert.ok(visibleText(mounted.root).includes('Page 3'))
 
-    const limitControl = descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === en.follows.limit)!
+    const limitControl = descendants(mounted.root).find(node => node.tag === 'select' && node.props['aria-label'] === en.follows.limit)!
     await env.change(limitControl, 50)
     assert.equal(env.calls.filter(call => call.url.endsWith('/follows/feed')).at(-1)?.body.cursor, undefined)
     assert.equal(env.calls.filter(call => call.url.endsWith('/follows/feed')).at(-1)?.body.limit, 50)
@@ -504,9 +755,8 @@ test('topic deletion refreshes shared follows and unread count immediately', asy
     await settle(); await env.store.refreshState()
     assert.equal(env.store.newCount, 2)
     await click(env.button(mounted.root, messages['en-US'].common.delete))
-    const confirmation = descendants(mounted.root).find(node => typeof node.props.onConfirm === 'function')!
-    assert.ok(confirmation)
-    confirmation.props.onConfirm(); await settle()
+    assert.equal(env.confirmations.length, 1)
+    await env.confirmations[0].onConfirm(); await settle()
     assert.equal(env.store.isFollowing('topic', topic.id), false)
     assert.equal(env.store.isFollowing('entity', entity.id), true)
     assert.equal(env.store.newCount, 1)
@@ -519,9 +769,9 @@ test('entity merge refreshes the shared target list with the retained entity', a
   const env = environment('en-US', [entityFollow, topicFollow]), mounted = env.mount(env.component('./components/EntryWorkbench.vue'))
   try {
     await settle()
-    await click(descendants(mounted.root).find(node => node.tag === 'button' && hasClass(node, 'entity-list__item'))!)
+    await click(descendants(mounted.root).find(node => node.tag === 'button' && visibleText(node).startsWith('Aurora'))!)
     await click(env.button(mounted.root, messages['en-US'].knowledgeWorkbench.entities.merge))
-    const targetControl = descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === messages['en-US'].knowledgeWorkbench.entities.mergeTarget)!
+    const targetControl = descendants(mounted.root).find(node => node.tag === 'select' && node.props.id === 'entity-merge-target')!
     await env.change(targetControl, 'entity-retained')
     await click(descendants(mounted.root).filter(node => node.tag === 'button' && visibleText(node).trim() === messages['en-US'].knowledgeWorkbench.entities.merge).at(-1)!)
     assert.equal(env.store.isFollowing('entity', entity.id), false)
@@ -564,20 +814,18 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     try {
       await settle()
       const toolbar = descendants(mounted.root).find(node => hasClass(node, 'feed-toolbar'))!
-      const fields = toolbar.children.filter(node => hasClass(node, 'feed-filter-field'))
-      assert.equal(fields.length, 4)
-      const labels = [messages[locale].follows.library, messages[locale].follows.filterTarget, messages[locale].follows.limit, messages[locale].knowledgeSearch.collapseSimilar]
-      const tags = ['t-select', 't-select', 't-select', 't-switch']
-      fields.forEach((field, index) => {
-        assert.equal(field.tag, 'label')
-        assert.equal(field.parent, toolbar)
-        assert.equal(field.children[0].tag, 'span')
-        assert.equal(visibleText(field.children[0]), labels[index])
-        const controls = descendants(field).filter(node => ['t-select', 't-switch'].includes(node.tag))
-        assert.equal(controls.length, 1)
-        assert.equal(controls[0].tag, tags[index])
-        assert.equal(controls[0].props['aria-label'], labels[index])
-        assert.equal(controls[0].parent, field)
+      const labels = [messages[locale].follows.library, messages[locale].follows.searchTargets, messages[locale].follows.filterTarget, messages[locale].follows.limit, messages[locale].knowledgeSearch.collapseSimilar]
+      const tags = ['select', 'input', 'select', 'select', 'input']
+      labels.forEach((label, index) => {
+        const controls = descendants(toolbar).filter(node => node.tag === tags[index] && node.props['aria-label'] === label)
+        assert.equal(controls.length, 1, label)
+        const control = controls[0]!
+        if (control.props.id) {
+          assert.ok(descendants(toolbar).some(node => node.tag === 'label' && node.props.for === control.props.id && visibleText(node) === label))
+        } else {
+          assert.equal(control.parent?.tag, 'label')
+          assert.ok(visibleText(control.parent!).includes(label))
+        }
       })
       const refresh = toolbar.children.find(node => hasClass(node, 'feed-refresh'))!
       assert.equal(refresh.parent, toolbar)
@@ -588,10 +836,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
 }
 
-test('feed toolbar compiled styles use the search grid layout and stack fields on narrow screens', async () => {
+test('feed toolbar stays compact, wraps controls and aligns them at the center', async () => {
   const filename = new URL('./FollowFeed.vue', import.meta.url).pathname
   const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename })
-  const compiled = await compileStyleAsync({ filename, id: 'data-v-feed-toolbar', source: descriptor.styles[0].content, scoped: true, preprocessLang: 'less' })
+  const compiled = await compileStyleAsync({ filename, id: 'data-v-feed-toolbar', source: descriptor.styles[0].content, scoped: true, preprocessLang: undefined })
   assert.deepEqual(compiled.errors, [])
   const css = require('postcss').parse(compiled.code)
   const declarations = (selector: string, media?: string) => {
@@ -604,17 +852,19 @@ test('feed toolbar compiled styles use the search grid layout and stack fields o
     return values
   }
   const toolbar = declarations('.feed-toolbar[data-v-feed-toolbar]')
-  assert.equal(toolbar.display, 'grid')
-  assert.equal(toolbar['grid-template-columns'], 'repeat(2, minmax(0, 1fr))')
-  assert.equal(toolbar.gap, '14px 16px')
+  assert.equal(toolbar.display, 'flex')
+  assert.equal(toolbar['flex-wrap'], 'wrap')
+  assert.equal(toolbar['align-items'], 'center')
+  assert.equal(toolbar.gap, 'var(--space-2)')
+  assert.equal(toolbar['padding-block'], 'var(--space-2)')
   const field = declarations('.feed-filter-field[data-v-feed-toolbar]')
   assert.equal(field.display, 'flex')
   assert.equal(field['flex-direction'], 'column')
   assert.equal(field['min-width'], '0')
   assert.equal(field['overflow-wrap'], 'anywhere')
-  assert.equal(declarations('.feed-filter-field[data-v-feed-toolbar] .t-select__wrap').width, '100%')
+  assert.equal(declarations('.feed-target-select[data-v-feed-toolbar]')['font-size'], 'var(--text-sm)')
   assert.equal(declarations('.fold-control[data-v-feed-toolbar]')['align-items'], 'flex-start')
-  assert.equal(declarations('.feed-toolbar[data-v-feed-toolbar]', '(max-width: 560px)')['grid-template-columns'], 'minmax(0, 1fr)')
+  assert.equal(declarations('.feed-library-field[data-v-feed-toolbar]', '(max-width: 560px)').flex, '1 1 180px')
 })
 
 test('library feed selectors show per-library counts and acknowledge only the selected library', async () => {
@@ -644,8 +894,8 @@ test('library feed selectors show per-library counts and acknowledge only the se
     assert.ok(visibleText(mounted.root).includes('Article library-one'))
     assert.ok(!visibleText(mounted.root).includes('Article library-two'))
     assert.deepEqual(env.calls.filter(call => call.url.endsWith('/follows/view')).at(-1)?.body, { viewed_at: openedAt, libraries: ['one'] })
-    const selector = () => descendants(mounted.root).find(node => node.tag === 't-select' && node.props['aria-label'] === '库')!
-    assert.ok(selector().props.options.some((option: any) => option.label === '人物观点 (2)'))
+    const selector = () => descendants(mounted.root).find(node => node.tag === 'select' && node.props['aria-label'] === '库')!
+    assert.ok(selector().children.some(option => visibleText(option) === '人物观点 (2)'))
     await env.change(selector(), 'two')
     assert.ok(visibleText(mounted.root).includes('Article library-two'))
     assert.deepEqual(env.calls.filter(call => call.url.endsWith('/follows/view')).at(-1)?.body, { viewed_at: openedAt, libraries: ['two'] })
@@ -657,7 +907,7 @@ test('library feed selectors show per-library counts and acknowledge only the se
   } finally { mounted.close() }
 })
 
-test('entity related material is grouped by library with group counts', async () => {
+test('entity related materials remain reachable through the materials tab', async () => {
   const env = environment('zh-CN')
   env.transport.intercept = (_method, url) => url === `/api/v1/entities/${entity.id}` ? Promise.resolve(env.envelope({ entity, entries: [
     { id: 'one-a', library_id: 'one', library_name: '机构发布', title: 'First', created_at: openedAt },
@@ -667,12 +917,13 @@ test('entity related material is grouped by library with group counts', async ()
   const mounted = env.mount(env.component('./components/EntryWorkbench.vue'))
   try {
     await settle()
-    await click(descendants(mounted.root).find(node => node.tag === 'button' && hasClass(node, 'entity-list__item'))!)
-    const groups = descendants(mounted.root).filter(node => hasClass(node, 'entity-library-group'))
-    assert.equal(groups.length, 2)
-    assert.ok(visibleText(groups[0]!).includes('机构发布 (2)'))
-    assert.ok(visibleText(groups[0]!).includes('Third'))
-    assert.ok(visibleText(groups[1]!).includes('人物观点 (1)'))
+    await click(descendants(mounted.root).find(node => node.tag === 'button' && visibleText(node).startsWith('Aurora'))!)
+    await click(env.button(mounted.root, `${zh.entityPage.materials} 3`))
+    const rows = descendants(mounted.root).filter(node => node.tag === 'tr')
+    assert.equal(rows.length, 4)
+    assert.match(visibleText(mounted.root), /First/)
+    assert.match(visibleText(mounted.root), /Second/)
+    assert.match(visibleText(mounted.root), /Third/)
     assert.deepEqual(env.errors, [])
   } finally { mounted.close() }
 })
