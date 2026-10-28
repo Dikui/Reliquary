@@ -1,3 +1,7 @@
+import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
+import { loadUiComponent } from './ui/uiTestLoader'
+import * as libraryColor from '../utils/libraryColor'
+import { CONTENT_TYPES } from '../types/entryClassification'
 import * as bodyReference from '../utils/bodyReference'
 import * as libraryScopeHelpers from '../utils/libraryScope'
 import assert from 'node:assert/strict'
@@ -29,7 +33,7 @@ function loadSearchAPI(post: (url: string, body: any) => Promise<unknown>) {
   new Function('require', 'module', 'exports', code)((name: string) => name === '@/utils/request' ? {
     post, get: async (url: string) => {
       if (url === '/api/v1/libraries') return { success: true, data: [{ id: 'images' }] }
-      assert.equal(url, '/api/v1/search/options')
+      assert.ok(url.startsWith('/api/v1/search/options'))
       return { success: true, data: { entities: [], topics: [] } }
     },
   } : name === '@/utils/libraryScope' ? libraryScopeHelpers : require(name), value, value.exports)
@@ -37,7 +41,7 @@ function loadSearchAPI(post: (url: string, body: any) => Promise<unknown>) {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: API-loaded search image opens the existing viewer with the authenticated blob and closes safely`, async () => {
+  test(`${locale}: API-loaded search image opens the shared dialog with the authenticated blob and closes safely`, async () => {
     const requests: { url: string; options: RequestInit }[] = []
     const searches: any[] = [], revoked: string[] = [], navigations: unknown[] = []
     const previous = new Map<string, PropertyDescriptor | undefined>()
@@ -53,22 +57,26 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       Object.defineProperty(globalThis, key, { configurable: true, value })
     }
     URL.revokeObjectURL = url => { revoked.push(url); originalRevoke(url) }
-    const viewer = defineComponent({
-      props: { visible: Boolean, images: Array, closeOnOverlay: Boolean, closeOnEscKeydown: Boolean }, emits: ['close'],
-      setup: (props, { emit }) => () => props.visible ? h('section', {
-        role: 'dialog', 'data-preview-images': props.images,
-        'data-overlay-close': props.closeOnOverlay, 'data-escape-close': props.closeOnEscKeydown,
-      }, [h('button', { 'data-close-preview': true, onClick: () => emit('close') }, 'Close')]) : null,
+    const sharedDialog = defineComponent({
+      props: { modelValue: Boolean }, emits: ['update:modelValue', 'closeAutoFocus'],
+      setup: (props, { emit, slots }) => () => props.modelValue ? h('section', { role: 'dialog' }, [
+        slots.default?.(), h('button', { 'data-close-preview': true, onClick: () => emit('update:modelValue', false) }, 'Close'),
+      ]) : null,
     })
+    const viewer = defineComponent({ setup: () => () => null })
     const preview = loadComponent(new URL('./ImagePreview.vue', import.meta.url), {
       'tdesign-vue-next': { ImageViewer: viewer },
     })
     const image = loadComponent(new URL('./SearchImage.vue', import.meta.url), {
+      '@/components/ui': { ...entryPresentationTestModules['@/components/ui'] as object, Dialog: sharedDialog },
       '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
     })
-    const article = loadComponent(new URL('./SearchEntry.vue', import.meta.url), {
-      './EntryUpdateNotice.vue': empty, './SearchImage.vue': moduleOf(image), './EntryClassification.vue': empty,
-      './GlobalCommandPalette/useHighlight': highlight,
+    const article = loadComponent(new URL('../views/library/SearchResult.vue', import.meta.url), {
+      '@/components/ui': entryPresentationTestModules['@/components/ui'],
+      '@/utils/bodyReference': bodyReference, '@/types/entryClassification': { CONTENT_TYPES },
+      '@/utils/security': { isValidURL: () => true },
+      '@/components/EntryUpdateNotice.vue': empty, '@/components/SearchImage.vue': moduleOf(image),
+      '@/components/GlobalCommandPalette/useHighlight': highlight,
       '@/utils/markdownPlainText': markdownPlainText,
     })
     const route = reactive({ query: { q: 'a blue circle' } })
@@ -87,10 +95,14 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       // URL state supplies the query; this renderer has no native DOM input.
       vue: { ...vue, vModelText: {} },
       '@/api/search': api, '@/utils/search': searchHelpers,
+      '@/utils/libraryColor': libraryColor, '@/utils/libraryScope': libraryScopeHelpers,
+      '@/api/library': { listLibraries: async () => ({ success: true, data: [{ id: 'images', name: 'Images', color: 2 }] }) },
+      '@/components/ui': { ...entryPresentationTestModules['@/components/ui'] as object, Tabs: defineComponent({ props: ['modelValue', 'label', 'items'], setup: (props, { slots, attrs }) => () => h('div', attrs, slots[props.modelValue]?.()) }) },
+      './GraphSearchPanel.vue': empty,
     '@/utils/bodyReference': bodyReference,
     '@/composables/useLibraryScope': { useLibraryScope: () => vue.ref([]) },
     '@/components/LibraryScopeSelect.vue': empty,
-      '@/components/SearchEntry.vue': moduleOf(article), '@/components/SearchFilters.vue': empty,
+      './SearchResult.vue': moduleOf(article), '@/components/SearchFilters.vue': empty,
       'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async () => {}, push: async (path: unknown) => { navigations.push(path) } }) },
     })
     const app = renderer.createApp(page)
@@ -113,9 +125,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       await click(thumbnail)
       const dialog = descendants(root).find(node => node.props.role === 'dialog')!
       assert.ok(dialog)
-      assert.deepEqual(dialog.props['data-preview-images'], [source])
-      assert.equal(dialog.props['data-overlay-close'], true)
-      assert.equal(dialog.props['data-escape-close'], true)
+      assert.equal(descendants(dialog).find(node => node.tag === 'img')!.props.src, source)
       assert.equal(requests.length, 1, 'preview reuses the authorized blob instead of fetching an unprotected URL')
       assert.equal(navigations.length, 0)
       const attachment = new URL(requests[0].url, 'http://localhost')

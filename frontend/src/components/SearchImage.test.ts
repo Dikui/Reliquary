@@ -1,3 +1,5 @@
+import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
+import { loadUiComponent } from './ui/uiTestLoader'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { defineComponent } from 'vue'
@@ -24,6 +26,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
     })
     const component = loadComponent(new URL('./SearchImage.vue', import.meta.url), {
+      '@/components/ui': { ...entryPresentationTestModules['@/components/ui'] as object, Dialog: loadUiComponent('Dialog') },
       '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': { __esModule: true, default: preview },
     })
     const app = renderer.createApp(component, { articleId: 'search-image-1', path: relative, title: 'Image evidence' })

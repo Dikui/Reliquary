@@ -216,3 +216,16 @@ Native content-type selection, shared confirmation/toast services, and the
 shared Dialog for body-image previews keep interaction ownership consistent.
 Hidden Tabs panels never participate in layout, even when a page defines flex
 layout for its active panel.
+
+### Swiss search
+
+The search measure follows the local mockup at 64rem. Library color buttons and
+quick filters share one wrapping row. Advanced entity and topic filters use
+compact native selects with a placeholder and removable selected values; empty
+option lists use a short explanation instead of an empty list box. Reset appears
+only when the non-library filters differ from their defaults.
+
+Search snippet matches are an approved exception to the single yellow focus
+rule: each matching `mark` uses `--select` with `--on-select` text, as in the
+search mockup. Focused results continue to use the same accessible foreground.
+The runtime source remains `frontend/src/styles/tokens.css`.

@@ -1,3 +1,6 @@
+import { entryPresentationTestModules } from './entryPresentationTestModules'
+import { loadUiComponent } from '../../components/ui/uiTestLoader'
+import * as libraryColor from '../../utils/libraryColor'
 import * as bodyReference from '../../utils/bodyReference'
 import * as libraryScopeHelpers from '../../utils/libraryScope'
 import assert from 'node:assert/strict'
@@ -27,7 +30,7 @@ const stub = defineComponent({ setup: (_props, { attrs, slots }) => () => h('div
 function evaluate(code: string, modules: Record<string, unknown>) {
   const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as any }
-  new Function('require', 'module', 'exports', compiled)((name: string) => (name === '@/utils/bodyReference' ? bodyReference : name === '@/utils/libraryScope' ? libraryScopeHelpers : name === '@/composables/useLibraryScope' ? { useLibraryScope: () => ref([]) } : (name.endsWith('LibraryScopeSelect.vue') ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name])) ?? require(name), module, module.exports)
+  new Function('require', 'module', 'exports', compiled)((name: string) => (name === '@/utils/bodyReference' ? bodyReference : name === '@/utils/libraryScope' ? libraryScopeHelpers : name === '@/utils/search' ? helpers : name === '@/composables/useLibraryScope' ? { useLibraryScope: () => ref([]) } : (name.endsWith('LibraryScopeSelect.vue') ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name])) ?? (name === '@/components/ui' ? { ...entryPresentationTestModules[name] as object, Tabs: loadUiComponent('Tabs'), Checkbox: loadUiComponent('Checkbox'), Dialog: loadUiComponent('Dialog') } : undefined) ?? require(name), module, module.exports)
   return module.exports
 }
 function component(path: string, modules: Record<string, unknown>) {
@@ -62,14 +65,21 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   return html
 }
 const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
-function articleComponent() {
+function articleComponent(swiss = false) {
   const preview = component('../../components/ImagePreview.vue', {
     'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
   })
-  return component('../../components/SearchEntry.vue', {
+  return component(swiss ? './SearchResult.vue' : '../../components/SearchEntry.vue', {
+    '@/types/entryClassification': { CONTENT_TYPES },
+    '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) },
+    '@/components/GlobalCommandPalette/useHighlight': highlight,
+    '@/components/EntryUpdateNotice.vue': moduleOf(component('../../components/EntryUpdateNotice.vue', {})),
     './EntryUpdateNotice.vue': moduleOf(component('../../components/EntryUpdateNotice.vue', {})),
     './EntryClassification.vue': moduleOf(component('../../components/EntryClassification.vue', classificationModules)),
     './SearchImage.vue': moduleOf(component('../../components/SearchImage.vue', {
+      '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
+    })),
+    '@/components/SearchImage.vue': moduleOf(component('../../components/SearchImage.vue', {
       '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
     })),
     './GlobalCommandPalette/useHighlight': highlight,
@@ -247,9 +257,12 @@ async function pageScenario(action: (state: any, calls: SearchRequest[], pushes:
   const page = component('./SearchView.vue', {
     'vue-router': { useRoute: () => ({ query: {} }), useRouter: () => ({ replace: (value: unknown) => Promise.resolve(pushes.push(value)), push: (value: unknown) => Promise.resolve(pushes.push(value)) }) },
     '@/api/search': { searchEntries: (request: SearchRequest) => { calls.push(request); return search ? search(request) : Promise.resolve({ success: true, data: { results: [article], excluded_missing_published_at: 2 } }) }, getSearchOptions: async () => ({ success: true, data: { entities: article.entities, topics: article.topics } }) },
-    '@/components/SearchFilters.vue': moduleOf(stub), '@/components/SearchEntry.vue': moduleOf(articleComponent()), '@/utils/search': helpers,
+    '@/api/library': { listLibraries: async () => ({ success: true, data: [{ id: 'lib-a', display_name: 'Research', color: 2 }] }) },
+    '@/utils/libraryColor': libraryColor,
+    './GraphSearchPanel.vue': moduleOf(stub),
+    '@/components/SearchFilters.vue': moduleOf(stub), './SearchResult.vue': moduleOf(articleComponent(true)), '@/utils/search': helpers,
   })
-  const html = await render(page, {}, locale, state => action(state, calls, pushes))
+  const html = await render(page, {}, locale, async state => { await state.loadLibraries(); await action(state, calls, pushes) })
   return { calls, pushes, html }
 }
 test('search page submits all filters, renders exclusion count and opens the article detail', async () => {
@@ -282,6 +295,32 @@ test('search page rejects invalid date order and ignores an older response after
     assert.equal(state.results.value[0].entry_id, 'a'); assert.equal(state.excludedMissingPublishedAt.value, 0)
     state.clearQuery(); assert.equal(state.results.value.length, 0); assert.equal(state.hasSearched.value, false)
   }, request => request.query === 'old' ? old : Promise.resolve({ success: true, data: { results: [article], excluded_missing_published_at: 0 } }))
+})
+
+for (const locale of ['zh-CN', 'en-US'] as const) test(`${locale}: automatic keyword fallback is visible and search titles retain the first paragraph reference`, async () => {
+  const location = { heading_path: ['Heading'], paragraph: 9, start: 10, end: 20, body_hash: 'v2', mapping: 'exact' }
+  const hit = { ...article, snippets: [{ ...article.snippets[0]!, locations: [location] }] }
+  const result = await pageScenario(async (state, calls, pushes) => {
+    state.query.value = 'Launch'
+    await state.runSearch()
+    assert.deepEqual(calls[0]!.libraries, ['lib-a'])
+    assert.equal('keyword_only' in calls[0]!, false)
+    state.openArticle(hit)
+    assert.deepEqual(pushes.at(-1), bodyReference.entryDetailLocation('a', location))
+  }, async () => ({ success: true, data: { results: [hit], vector_unavailable: true } }), locale)
+  assert.ok(result.html.includes(messages[locale].searchPage.vectorFallback))
+  assert.ok(result.html.includes('¶9'))
+  assert.doesNotMatch(result.html, /class="t-/)
+})
+
+test('deselecting the last library cannot silently broaden search to all libraries', async () => {
+  await pageScenario(async (state, calls) => {
+    state.query.value = 'Launch'
+    state.toggleLibrary('lib-a')
+    await state.runSearch()
+    assert.equal(calls.length, 0)
+    assert.equal(state.error.value, zh.searchPage.chooseLibraries)
+  })
 })
 
 for (const locale of ['zh-CN', 'en-US'] as const) {

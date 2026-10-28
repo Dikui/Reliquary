@@ -274,3 +274,18 @@ and scroll horizontally inside DataTable. Focused list and table rows use the
 shared selection foreground for every descendant, including status labels,
 muted text, tags and hovered links; checked rows without focus keep their usual
 soft surface and foreground.
+
+## Swiss search recovery and filters
+
+The graph endpoint's HTTP 404 with code 1003 means the entity was not found,
+per [the search API contract](docs/search-api.md). Present an empty state with
+the selected library name and advice to check the name or change libraries.
+Other failures remain errors with retry; editing the entity or library clears
+the previous result state.
+
+Entity and topic filters retain arrays of selected IDs. The compact native
+select adds one ID at a time, returns to its placeholder after selection, and
+selected values have named remove buttons. Empty option lists show localized
+explanations. These native selects accept platform-owned popup geometry and
+keyboard typeahead, consistent with the Swiss foundation. Reset restores the
+existing non-library filter defaults and is hidden when those defaults apply.

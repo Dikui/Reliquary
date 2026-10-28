@@ -3,6 +3,11 @@ import type { TranslationCall } from './translationCallAudit.ts'
 /** Reviewed runtime expressions. New expressions must be explicitly reviewed here. */
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
+    file: 'views/library/SearchResult.vue',
+    expressions: ['`library.contentTypes.${props.article.content_type}`', '`knowledgeSearch.sources.${article.source}`'],
+    reason: 'Built-in content types are guarded by CONTENT_TYPES; search sources use the existing HTTP enum. Custom content types render as plain text.',
+  },
+  {
     file: 'views/library/EntryDetail.vue',
     expressions: ['processing.label', '`knowledgeWorkbench.entities.types.${entity.entity_type}`'],
     reason: 'Shared processing status keys and the fixed entity type vocabulary.',
