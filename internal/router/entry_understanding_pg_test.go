@@ -53,6 +53,7 @@ func TestEntryUnderstandingAllLibrariesValidateChoices(t *testing.T) {
 		require.Less(t, r.Code, 300, r.Body.String())
 		return r.Body.Bytes()
 	}
+	seedTestDomains(t, f.db)
 	var domains struct{ Data []types.Domain }
 	require.NoError(t, json.Unmarshal(call(http.MethodGet, "/api/v1/domains", ""), &domains))
 	var entity struct{ Data types.Entity }
@@ -130,6 +131,7 @@ func TestEntryUnderstandingPreservesManualFieldsAcrossReprocessingAndRevision(t 
 	model := &understandingChat{}
 	f := newMCPFixture(t, mcpProcessingFixture{chat: model})
 	f.seedProcessingModels(t)
+	seedTestDomains(t, f.db)
 	var domains struct{ Data []types.Domain }
 	options := personalRequest(t, f.router, http.MethodGet, "/api/v1/domains", "", f.key, true)
 	require.Equal(t, 200, options.Code)
@@ -350,6 +352,7 @@ func TestEntryUnderstandingLongMaterialMergesAllSegments(t *testing.T) {
 	model := &understandingChat{}
 	f := newMCPFixture(t, mcpProcessingFixture{chat: model, maxBodyChars: 400})
 	f.seedProcessingModels(t)
+	seedTestDomains(t, f.db)
 	var domains struct{ Data []types.Domain }
 	response := personalRequest(t, f.router, http.MethodGet, "/api/v1/domains", "", f.key, true)
 	require.Equal(t, 200, response.Code)

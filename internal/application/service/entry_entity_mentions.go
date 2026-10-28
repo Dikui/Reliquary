@@ -3,11 +3,13 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"reliquary/internal/types"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // Names and literal quotes keep entity selection grounded in the submitted material.
@@ -19,44 +21,57 @@ type understandingEntityMention struct {
 	Quote       string `json:"quote"`
 }
 
-var modelSeriesPatterns = []struct {
-	name    string
-	pattern *regexp.Regexp
-}{
-	{"GPT", regexp.MustCompile(`^gpt(?:[- ]?[0-9]+(?:\.[0-9]+)*|[- ](?:live|rosalind))(?:$|[- ])`)},
-	{"Claude", regexp.MustCompile(`^claude[- ]?(?:(?:opus|sonnet|haiku)[- ]?)?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)},
-	{"DeepSeek", regexp.MustCompile(`^deepseek[- ]?(?:[vr][0-9]+(?:\.[0-9]+)*|chat|reasoner|ocr|math)(?:$|[- (0-9])`)},
-	{"Grok", regexp.MustCompile(`^grok(?:[- ]?[0-9]+(?:\.[0-9]+)*|[- ]code[- ]fast(?:[- ][0-9]+)?)(?:$|[- ])`)},
-	{"Grok", regexp.MustCompile(`^(?:grok[- ]imagine|imagine[- ](?:image|video))(?:$|[- ])`)},
-	{"Grok", regexp.MustCompile(`^grok[- ](?:voice|speech[- ]to[- ]text|text[- ]to[- ]speech)(?:$|[- (])`)},
-}
-
-var claudeVariantPattern = regexp.MustCompile(`^(?:opus|sonnet|haiku)[- ]?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)
-var entityVersionSuffix = regexp.MustCompile(`^[- ]?v?[0-9]+(?:\.[0-9]+)*(?:$|[- ])`)
-
 func entitySeriesText(value string) string {
+	value = norm.NFKC.String(value)
 	return strings.NewReplacer("‐", "-", "‑", "-", "–", "-", "—", "-", "−", "-").Replace(strings.ToLower(strings.Join(strings.Fields(value), " ")))
 }
 
-// Models share a brand across versions and modalities; applications keep their identity.
-func canonicalEntityMentionName(name, surface string) string {
-	key := entitySeriesText(surface)
-	for _, series := range modelSeriesPatterns {
-		if series.pattern.MatchString(key) || key == entitySeriesText(series.name) {
-			return series.name
+// A version-like tail starts outside a word and carries a number, as in
+// "Name 2", "Name-4.5" or "Name Pro 3"; "Namesake 2" and "Name Build" do not.
+func entityVersionTail(rest string) bool {
+	first, _ := utf8.DecodeRuneInString(rest)
+	return rest != "" && !unicode.IsLetter(first) && strings.ContainsFunc(rest, unicode.IsDigit)
+}
+
+// catalogEntityMatch resolves an original name against the closed catalogue.
+// An exact canonical name or alias wins; otherwise the longest catalogue name
+// that prefixes it with a version-like tail is used. Ties match nothing.
+func catalogEntityMatch(surface string, options []understandingEntityOption) *understandingEntityOption {
+	text := entitySeriesText(surface)
+	if text == "" {
+		return nil
+	}
+	compact := strings.ReplaceAll(text, " ", "")
+	exact, prefix, longest := map[int]bool{}, map[int]bool{}, 0
+	for i, option := range options {
+		for _, name := range append([]string{option.CanonicalName}, option.Aliases...) {
+			candidate := entitySeriesText(name)
+			if candidate == "" {
+				continue
+			}
+			if strings.ReplaceAll(candidate, " ", "") == compact {
+				exact[i] = true
+				continue
+			}
+			rest, ok := strings.CutPrefix(text, candidate)
+			if !ok || !entityVersionTail(rest) || len(candidate) < longest {
+				continue
+			}
+			if len(candidate) > longest {
+				longest, prefix = len(candidate), map[int]bool{}
+			}
+			prefix[i] = true
 		}
 	}
-	if entitySeriesText(name) == "claude" && claudeVariantPattern.MatchString(key) {
-		return "Claude"
-	}
-	// An unfamiliar series is accepted only when its literal prefix is followed by a version.
-	prefix := entitySeriesText(name)
-	if prefix != "" && strings.HasPrefix(key, prefix) {
-		if entityVersionSuffix.MatchString(strings.TrimPrefix(key, prefix)) {
-			return name
+	for _, matches := range []map[int]bool{exact, prefix} {
+		if len(matches) > 1 {
+			return nil
+		}
+		for i := range matches {
+			return &options[i]
 		}
 	}
-	return surface
+	return nil
 }
 
 func understandingEntityMentions(raw json.RawMessage) []understandingEntityMention {
@@ -73,6 +88,8 @@ func understandingEntityMentions(raw json.RawMessage) []understandingEntityMenti
 }
 
 // Invalid entity evidence is discarded without failing the rest of the material.
+// The three-entity cap applies after catalogue matching, so unmatched names
+// cannot crowd out catalogue entities.
 func qualifyUnderstandingEntityMentions(result *articleProcessingResult, body string) {
 	accepted := []understandingEntityMention{}
 	seen := map[string]bool{}
@@ -101,20 +118,12 @@ func qualifyUnderstandingEntityMentions(result *articleProcessingResult, body st
 			!strings.Contains(types.NormalizeEntityKey(mention.Quote), key) {
 			continue
 		}
-		mention.Name = canonicalEntityMentionName(mention.Name, surface)
 		mention.SurfaceName = surface
-		key = types.NormalizeEntityKey(mention.Name)
-		if utf8.RuneCountInString(mention.Name) > 512 || utf8.RuneCountInString(key) > 512 || strings.ContainsAny(mention.Name, "\r\n\x00") {
-			continue
-		}
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
 		accepted = append(accepted, mention)
-		if len(accepted) == 3 {
-			break
-		}
 	}
 	result.EntityMentions = accepted
 }

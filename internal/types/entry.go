@@ -76,10 +76,10 @@ const (
 	SummaryStatusFailed = "failed"
 )
 
-// Entry quality status constants. Quality is scored by two independent model
-// calls; the sum of both scores decides whether the material is kept for
-// understanding. Low-quality material stays in the library but is hidden from
-// the default list and never produces entities or facts.
+// Entry quality status constants. Libraries that enable quality scoring score
+// new material with two independent model calls; the sum decides whether it is
+// understood. Low-quality material is deleted and its source remembered as
+// discarded. Rows marked low by earlier versions stay hidden from lists.
 const (
 	// QualityStatusPassed marks material that cleared the score threshold.
 	QualityStatusPassed = "passed"
@@ -115,9 +115,8 @@ type EntryListFilter struct {
 	// ParseStatus filters by parse_status when non-empty. Failed also includes
 	// completed body indexes whose background processing failed.
 	ParseStatus string
-	// Quality filters by quality_status. Empty hides low-quality entries while
-	// keeping unscored material visible; "low" selects only low-quality
-	// entries; "all" disables the quality filter.
+	// Quality "all" includes rows marked low by earlier versions, for batch
+	// selection; empty hides them.
 	Quality string
 	// Source filters by ingestion channel when non-empty (web, api, rss).
 	// The special values "manual" and "url" are routed to the `type` column to match

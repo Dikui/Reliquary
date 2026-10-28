@@ -28,7 +28,10 @@ export default {
     articleProcessing: 'Material understanding',
     articleProcessingHint: 'Generate Chinese titles, overviews, domains and associated entities.',
     qualityScoring: 'Quality scoring',
-    qualityScoringHint: 'Score each material twice independently on a 0–100 attention scale; scores below the threshold are hidden by default.',
+    qualityScoringHint: 'Libraries with scoring enabled score each new material twice on a 0–100 attention scale; material whose two scores sum below the threshold is deleted and its source is not collected again.',
+    qualityScoringEnabled: 'Enable quality scoring for this library',
+    qualityScoringEnabledHint: 'Off by default. Scoring applies only to new material; rebuilds and reprocessing reuse the stored result.',
+    qualityScoringSwitchFailed: 'Failed to save the quality scoring switch',
     summaryMerge: 'Long material consolidation',
     summaryMergeHint: 'Combine segment results into an understanding of the complete material.',
     factGrouping: 'Fact grouping',
@@ -209,7 +212,6 @@ export default {
   "action": "Action",
   "actions": {
     "reclassify_domains": 'Reclassify domains for existing materials',
-    "score_quality": "Score quality",
     "delete": "Delete",
     "reprocess": "Reprocess",
     "review": "Historical review",
@@ -222,7 +224,6 @@ export default {
 
 
   "deleteHint": "Deletes materials, indexes and exclusively owned attachments. This cannot be undone. Rejected intake also retains a blocked-source record.",
-  "scoreQualityHint": "Score each matched material twice; materials below the threshold stay hidden and skip understanding on later processing. Only quality fields change.",
   "reprocessHint": "Reprocess all material types, including AI output, with the current library settings. Keep the body, images and manual decisions, rebuild the index and run background processing. Model costs may apply.",
   "preview": "Preview impact",
   "previewCounts": "Matched {matched} · Eligible {eligible} · Skipped {skipped} · Blocked {blocked}",
@@ -268,7 +269,6 @@ export default {
     "body_unavailable": "Original text unavailable",
     "requires_completed_article": "Only completed materials are supported",
     "unsupported_material": "Material does not support this action",
-    "quality_not_applicable": "Quality scoring does not apply to this library",
   }
 },
 
@@ -1064,10 +1064,6 @@ export default {
     allFileTypes: 'All file formats',
     parseStatusFilter: 'Status',
     allParseStatuses: 'All Statuses',
-    qualityFilter: 'Quality',
-    qualityDefault: 'Default (hide low scores)',
-    qualityLow: 'Low scores only',
-    qualityAll: 'All quality',
     parseStatusPending: 'Pending',
     parseStatusProcessing: 'Processing',
     parseStatusCompleted: 'Completed',

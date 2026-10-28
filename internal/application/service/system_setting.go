@@ -616,7 +616,7 @@ func (s *systemSettingService) virtualSetting(key string, spec settingSpec) *typ
 }
 
 func (s *systemSettingService) fallbackJSONForSpec(key string, spec settingSpec) types.JSON {
-	if strings.HasPrefix(key, promptSettingPrefix) {
+	if strings.HasPrefix(key, promptSettingPrefix) && spec.Type == "string" {
 		value, _ := json.Marshal(config.PromptDefaults()[promptIDFromSettingKey(key)])
 		return types.JSON(value)
 	}
@@ -945,7 +945,8 @@ func encodeForType(declared string, rawValue any) (types.JSON, error) {
 //   - keep error messages user-facing (the handler surfaces them as the
 //     400 body verbatim).
 func validateRegistryEntry(key string, rawValue any) error {
-	if strings.HasPrefix(key, promptSettingPrefix) {
+	// The quality scoring switch shares the prompt prefix but is a boolean.
+	if strings.HasPrefix(key, promptSettingPrefix) && !strings.HasSuffix(key, "."+qualityScoringSwitchID) {
 		content, ok := rawValue.(string)
 		if !ok || strings.TrimSpace(content) == "" {
 			return errors.New("prompt content must not be empty")

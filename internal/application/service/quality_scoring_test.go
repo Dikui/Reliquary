@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 
 	"reliquary/internal/config"
@@ -39,30 +40,33 @@ func TestQualityScoringBodyLimit(t *testing.T) {
 	}
 }
 
-func TestQualityScoringApplies(t *testing.T) {
-	timely := &types.Library{Template: types.TemplateExternalTimely}
-	durable := &types.Library{Template: types.TemplateExternalDurable}
-	own := &types.Library{Template: types.TemplateOwn}
-	article := &types.Entry{SourceKind: "article"}
-	report := &types.Entry{SourceKind: "report"}
-
-	if !qualityScoringApplies(timely, article) || !qualityScoringApplies(durable, article) {
-		t.Fatal("external libraries should be scored")
-	}
-	if qualityScoringApplies(own, article) {
-		t.Fatal("own library should not be scored")
-	}
-	if qualityScoringApplies(timely, report) {
-		t.Fatal("reports should not be scored")
-	}
-	if qualityScoringApplies(nil, article) || qualityScoringApplies(timely, nil) {
-		t.Fatal("nil inputs should not be scored")
+func TestQualityGateScoresOnlyOnce(t *testing.T) {
+	s := &entryService{}
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name   string
+		ctx    context.Context
+		status string
+		want   bool
+	}{
+		{"stored pass is reused", ctx, types.QualityStatusPassed, true},
+		{"stored low is not rescored", ctx, types.QualityStatusLow, false},
+		{"rebuild never scores", context.WithValue(ctx, libraryRebuildContextKey{}, true), "", true},
+		{"no switch means no scoring", ctx, "", true},
+	} {
+		kept, err := s.applyQualityGate(tc.ctx, &types.Library{ID: "library"}, &types.Entry{QualityStatus: tc.status}, "body")
+		if err != nil || kept != tc.want {
+			t.Fatalf("%s: kept=%v err=%v", tc.name, kept, err)
+		}
 	}
 }
 
 func TestParseQualityScoringResult(t *testing.T) {
 	if score, err := parseQualityScoringResult(`{"attentionScore": 72}`); err != nil || score != 72 {
 		t.Fatalf("score=%d err=%v", score, err)
+	}
+	if score, err := parseQualityScoringResult(`{"attentionScore": 72.6}`); err != nil || score != 73 {
+		t.Fatalf("fractional score=%d err=%v", score, err)
 	}
 	if _, err := parseQualityScoringResult(`{"attentionScore": 120}`); err == nil {
 		t.Fatal("out-of-range score should fail")
@@ -72,12 +76,12 @@ func TestParseQualityScoringResult(t *testing.T) {
 	}
 }
 
-func TestValidateBatchRequestAllowsQualityScoring(t *testing.T) {
+func TestValidateBatchRequestRejectsRetiredQualityScoring(t *testing.T) {
 	err := validateBatchRequest(types.EntryBatchRequest{
 		Action:    "score_quality",
 		Selection: types.EntryBatchSelection{Filters: &types.EntryBatchFilters{}},
 	})
-	if err != nil {
-		t.Fatalf("score_quality rejected: %v", err)
+	if err == nil {
+		t.Fatal("score_quality must no longer be accepted")
 	}
 }

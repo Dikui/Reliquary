@@ -10,6 +10,7 @@ import (
 	"reliquary/internal/types"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -50,32 +51,38 @@ func TestArticleEvidenceRejectsUnqualifiedObjectsAndKeepsOriginalMarkdown(t *tes
 	require.NotEmpty(t, blocks)
 }
 
-func TestEntityMentionsRejectUnsupportedBindingsAndKeepNewNames(t *testing.T) {
-	result, err := parseArticleProcessingResult(`{"title":"DeepSeek 文档","summary":{"overview":"介绍文档解析。"},"entity_ids":["anthropic"],"entity_mentions":[
-{"name":"DeepSeek","type":"organization","entity_id":"anthropic","quote":"DeepSeek 发布文档解析模型。"},
-{"name":"Anthropic","type":"organization","entity_id":"anthropic","quote":"DeepSeek 发布文档解析模型。"},
+func TestEntityMentionsBindOnlyUniqueCatalogueEntries(t *testing.T) {
+	result, err := parseArticleProcessingResult(`{"title":"Nimbus 文档","summary":{"overview":"介绍文档解析。"},"entity_ids":["acme"],"entity_mentions":[
+{"name":"Nimbus","entity_id":"acme","quote":"Nimbus 发布文档解析模型。"},
+{"name":"Acme","entity_id":"acme","quote":"Nimbus 发布文档解析模型。"},
 {"name":"虚构机构","quote":"虚构机构发布模型。"},
-{"name":"Claude Code","quote":"Claude Code handles local work."}]}`)
+{"name":"Corvid Code","quote":"Corvid Code handles local work."}]}`)
 	require.NoError(t, err)
-	qualifyUnderstandingEntityMentions(result, "DeepSeek 发布文档解析模型。Claude Code handles local work.")
-	options := articleProcessingInput{EntityOptions: []understandingEntityOption{
-		{ID: "anthropic", CanonicalName: "Anthropic"},
-		{ID: "first-name", CanonicalName: "DeepSeek"},
-		{ID: "second-name", CanonicalName: "DeepSeek"},
-	}}
-	qualifyUnderstandingChoices(result, options)
-	require.Empty(t, result.EntityIDs, "an unrelated but valid ID cannot force a binding")
-	require.Len(t, result.EntityMentions, 2)
-	require.Equal(t, "DeepSeek", result.EntityMentions[0].Name)
-	require.Empty(t, result.EntityMentions[0].EntityID)
-
-	merged := &articleProcessingResult{EntityMentions: append(append([]understandingEntityMention{}, result.EntityMentions...), understandingEntityMention{Name: "Anthropic", Quote: "invented"})}
-	qualifyMergedEntityMentions(merged, []*articleProcessingResult{result})
-	require.Equal(t, result.EntityMentions, merged.EntityMentions, "long-document merge keeps only verified segment evidence")
+	qualifyUnderstandingEntityMentions(result, "Nimbus 发布文档解析模型。Corvid Code handles local work.")
+	require.Len(t, result.EntityMentions, 2, "a quote must contain the name it supports")
+	qualifyUnderstandingChoices(result, articleProcessingInput{EntityOptions: []understandingEntityOption{
+		{ID: "acme", CanonicalName: "Acme"},
+		{ID: "first-name", CanonicalName: "Nimbus"},
+		{ID: "second-name", CanonicalName: "Nimbus"},
+	}})
+	require.Empty(t, result.EntityIDs, "an unrelated ID or an ambiguous name cannot force a binding")
+	require.Empty(t, result.EntityMentions, "names outside the catalogue are not kept")
 }
 
-func TestEntityReferencesPreserveSourceAndNormalizeModelSeries(t *testing.T) {
-	body := "# Models\n\nGPT‑5.6 Sol and GPT-6 are available.\n\nClaude Code runs tools.\n\nOpus 5.5 is the model used in this example.\n\n[Model Context Protocol (MCP)](https://example.org/mcp) connects agents.\n\nEngram uses conditional\n    memory and lookup.\n"
+func TestEntityCapAppliesAfterCatalogueMatching(t *testing.T) {
+	body := "Alpha, Beta and Gamma use Nimbus."
+	result := &articleProcessingResult{}
+	for _, name := range []string{"Alpha", "Beta", "Gamma", "Nimbus"} {
+		result.EntityMentions = append(result.EntityMentions, understandingEntityMention{Name: name, Quote: body})
+	}
+	qualifyUnderstandingEntityMentions(result, body)
+	qualifyUnderstandingChoices(result, articleProcessingInput{EntityOptions: []understandingEntityOption{{ID: "nimbus", CanonicalName: "Nimbus"}}})
+	require.Equal(t, []string{"nimbus"}, result.EntityIDs, "unmatched names must not use up the three slots")
+	require.Len(t, result.EntityMentions, 1)
+}
+
+func TestEntityReferencesPreserveSourceAndMatchCatalogueSeries(t *testing.T) {
+	body := "# Models\n\nNimbus‑5.6 Sol and Nimbus-6 are available.\n\nCorvid Code runs tools.\n\nOpus 5.5 is the model used in this example.\n\n[Model Context Protocol (MCP)](https://example.org/mcp) connects agents.\n\nEngram uses conditional\n    memory and lookup.\n"
 	_, blocks := articleEvidenceBody(body)
 	paragraph := func(text string) string {
 		for i, block := range blocks {
@@ -86,20 +93,29 @@ func TestEntityReferencesPreserveSourceAndNormalizeModelSeries(t *testing.T) {
 		t.Fatalf("missing evidence paragraph: %s", text)
 		return ""
 	}
+	catalogue := articleProcessingInput{EntityOptions: []understandingEntityOption{
+		{ID: "nimbus", CanonicalName: "Nimbus"},
+		{ID: "corvid", CanonicalName: "Corvid", Aliases: []string{"Opus"}},
+		{ID: "corvid-code", CanonicalName: "Corvid Code"},
+		{ID: "mcp", CanonicalName: "MCP", Aliases: []string{"Model Context Protocol"}},
+		{ID: "engram", CanonicalName: "Engram"},
+	}}
 	first := &articleProcessingResult{EntityMentions: []understandingEntityMention{
-		{Name: "GPT‑5.6 Sol", SourceID: paragraph("GPT‑5.6")},
-		{Name: "GPT-6", SourceID: paragraph("GPT‑5.6")},
-		{Name: "Claude", SurfaceName: "Opus 5.5", SourceID: paragraph("Opus 5.5")},
-		{Name: "Claude", SurfaceName: "Claude Code", SourceID: paragraph("runs tools")},
+		{Name: "Nimbus", SurfaceName: "Nimbus‑5.6 Sol", SourceID: paragraph("Nimbus‑5.6")},
+		{Name: "Nimbus", SurfaceName: "Nimbus-6", SourceID: paragraph("Nimbus‑5.6")},
+		{Name: "Corvid", SurfaceName: "Opus 5.5", SourceID: paragraph("Opus 5.5")},
+		{Name: "Corvid", SurfaceName: "Corvid Code", SourceID: paragraph("runs tools")},
 	}}
 	qualifyUnderstandingEntityMentions(first, body)
-	require.Equal(t, []string{"GPT", "Claude", "Claude Code"}, []string{first.EntityMentions[0].Name, first.EntityMentions[1].Name, first.EntityMentions[2].Name})
-	require.Equal(t, "GPT‑5.6 Sol", first.EntityMentions[0].SurfaceName)
+	qualifyUnderstandingChoices(first, catalogue)
+	require.Equal(t, []string{"Nimbus", "Corvid", "Corvid Code"}, []string{first.EntityMentions[0].Name, first.EntityMentions[1].Name, first.EntityMentions[2].Name})
+	require.Equal(t, "Nimbus‑5.6 Sol", first.EntityMentions[0].SurfaceName)
 	second := &articleProcessingResult{EntityMentions: []understandingEntityMention{
 		{Name: "MCP", SourceID: paragraph("Model Context Protocol")},
 		{Name: "Engram", SourceID: paragraph("Engram"), Quote: "Engram uses conditional memory and lookup."},
 	}}
 	qualifyUnderstandingEntityMentions(second, body)
+	qualifyUnderstandingChoices(second, catalogue)
 	require.Equal(t, "[Model Context Protocol (MCP)](https://example.org/mcp) connects agents.", second.EntityMentions[0].Quote)
 	require.Equal(t, "Engram uses conditional\n    memory and lookup.", second.EntityMentions[1].Quote)
 	merged := &articleProcessingResult{EntityMentions: []understandingEntityMention{
@@ -109,48 +125,44 @@ func TestEntityReferencesPreserveSourceAndNormalizeModelSeries(t *testing.T) {
 	require.Equal(t, []understandingEntityMention{second.EntityMentions[0], first.EntityMentions[0], first.EntityMentions[2]}, merged.EntityMentions)
 }
 
-func TestEntityModelVariantsResolveToExistingBrand(t *testing.T) {
-	for _, sample := range []struct {
-		name     string
-		surfaces []string
-	}{
-		{"GPT", []string{"GPT‑Rosalind", "GPT‑Live"}},
-		{"DeepSeek", []string{"deepseek-chat", "DeepSeek-OCR", "DeepSeek-OCR-2", "DeepSeekMath-V2"}},
-		{"Grok", []string{"grok-code-fast-1", "Grok Imagine", "Grok Imagine Video 1.5", "Imagine Video 1.5", "Grok Voice", "Grok Speech to Text (STT)", "Grok Text to Speech (TTS)"}},
-		{"Claude Code", []string{"Claude Code"}},
-		{"Grok Build", []string{"Grok Build"}},
-		{"DeepSeek Sparse Attention (DSA)", []string{"DeepSeek Sparse Attention (DSA)"}},
+func TestCatalogueEntityMatchUsesLongestPrefixWithVersionTail(t *testing.T) {
+	options := []understandingEntityOption{
+		{ID: "nimbus", CanonicalName: "Nimbus", Aliases: []string{"Nimbus-Live"}},
+		{ID: "corvid", CanonicalName: "Corvid", Aliases: []string{"Opus"}},
+		{ID: "corvid-code", CanonicalName: "Corvid Code"},
+		{ID: "metal", CanonicalName: "Metal"},
+		{ID: "twin-a", CanonicalName: "Twin"},
+		{ID: "twin-b", CanonicalName: "Other", Aliases: []string{"twin"}},
+	}
+	for surface, want := range map[string]string{
+		"Nimbus":          "nimbus",
+		"nimbus-6":        "nimbus",
+		"Nimbus 4.5 Pro":  "nimbus",
+		"Nimbus‑Live":     "nimbus",
+		"Opus 5.5":        "corvid",
+		"Corvid Opus 4":   "corvid",
+		"Corvid Code":     "corvid-code",
+		"Corvid Code 2.0": "corvid-code",
+		"Corvid Build":    "",
+		"Metal 3":         "metal",
+		"Metalwork 3":     "",
+		"Twin 2":          "",
+		"Unknown 1":       "",
 	} {
-		t.Run(sample.name, func(t *testing.T) {
-			body := strings.Join(sample.surfaces, ", ") + " are discussed here."
-			result := &articleProcessingResult{}
-			for _, surface := range sample.surfaces {
-				result.EntityMentions = append(result.EntityMentions, understandingEntityMention{
-					Name: surface, SourceID: "P1",
-				})
-			}
-			qualifyUnderstandingEntityMentions(result, body)
-			qualifyUnderstandingChoices(result, articleProcessingInput{EntityOptions: []understandingEntityOption{
-				{ID: "brand", CanonicalName: sample.name},
-				{ID: "old-imagine", CanonicalName: "Grok Imagine"},
-				{ID: "old-voice", CanonicalName: "Grok Voice"},
-				{ID: "old-ocr", CanonicalName: "DeepSeek-OCR"},
-			}})
-			require.Len(t, result.EntityMentions, 1, "model variants share one entity slot")
-			require.Equal(t, sample.name, result.EntityMentions[0].Name)
-			require.Equal(t, sample.surfaces[0], result.EntityMentions[0].SurfaceName)
-			require.Equal(t, body, result.EntityMentions[0].Quote)
-			require.Equal(t, []string{"brand"}, result.EntityIDs)
-		})
+		got := ""
+		if option := catalogEntityMatch(surface, options); option != nil {
+			got = option.ID
+		}
+		require.Equal(t, want, got, surface)
 	}
 }
 
 func TestEntityReferencesRejectMissingSourceAndInventedNames(t *testing.T) {
-	body := "# Source\n\nClaude Code runs tools.\n"
+	body := "# Source\n\nCorvid Code runs tools.\n"
 	result := &articleProcessingResult{EntityMentions: []understandingEntityMention{
-		{Name: "Claude Code", SourceID: "P99"},
+		{Name: "Corvid Code", SourceID: "P99"},
 		{Name: "Invented product", SourceID: "P2"},
-		{Name: "Claude Code", Quote: "Claude Code has invented capabilities."},
+		{Name: "Corvid Code", Quote: "Corvid Code has invented capabilities."},
 	}}
 	qualifyUnderstandingEntityMentions(result, body)
 	require.Empty(t, result.EntityMentions)
@@ -162,24 +174,26 @@ func TestEntityReferencesRejectMissingSourceAndInventedNames(t *testing.T) {
 func TestArticleProcessingKeepsValidEntitiesWhenAnotherReferenceIsInvalid(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	k := segmentedEntry(t, h)
+	now := time.Now()
+	require.NoError(t, h.db.Create(&types.Entity{ID: "corvid-code", SpaceID: k.SpaceID, CanonicalName: "Corvid Code", NormalizedName: types.NormalizeEntityKey("Corvid Code"), CreatedAt: now, UpdatedAt: now}).Error)
 	output, err := parseArticleProcessingResult(validProcessingFixture())
 	require.NoError(t, err)
 	output.EntityMentions = []understandingEntityMention{
-		{Name: "Claude Code", SourceID: "P99"},
+		{Name: "Corvid Code", SourceID: "P99"},
 		{Name: "Invented product", SourceID: "P2"},
-		{Name: "Claude Code", SourceID: "P2"},
+		{Name: "Corvid Code", SourceID: "P2"},
 	}
 	raw, err := json.Marshal(output)
 	require.NoError(t, err)
 	h.processor.output = string(raw)
-	result, err := h.service.callArticleProcessing(h.ctx, h.library, k, "# Tool\n\nClaude Code runs tools.\n", nil)
+	result, err := h.service.callArticleProcessing(h.ctx, h.library, k, "# Tool\n\nCorvid Code runs tools.\n", nil)
 	require.NoError(t, err)
 	require.Len(t, h.processor.requests, 1, "invalid entity references must not trigger whole-article correction")
 	require.Equal(t, output.Title, result.Title)
 	require.Equal(t, output.Summary, result.Summary)
 	require.Len(t, result.EntityMentions, 1)
-	require.Equal(t, "Claude Code", result.EntityMentions[0].Name)
-	require.Equal(t, "Claude Code runs tools.", result.EntityMentions[0].Quote)
+	require.Equal(t, "Corvid Code", result.EntityMentions[0].Name)
+	require.Equal(t, "Corvid Code runs tools.", result.EntityMentions[0].Quote)
 }
 
 func (m *jointProcessingChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {

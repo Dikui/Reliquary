@@ -132,17 +132,26 @@ func qualifyUnderstandingChoices(result *articleProcessingResult, input articleP
 		domains[option.ID] = true
 	}
 	result.DomainIDs = acceptedUnderstandingIDs(result.DomainIDs, domains)
+	// The catalogue is closed: names outside it are dropped before the cap.
 	result.EntityIDs = []string{}
-	for i := range result.EntityMentions {
-		mention := &result.EntityMentions[i]
-		mention.EntityID = ""
-		if id := resolveFactEntity(mention.Name, "", input.EntityOptions); id != nil {
-			mention.EntityID = *id
-			if !slices.Contains(result.EntityIDs, *id) {
-				result.EntityIDs = append(result.EntityIDs, *id)
-			}
+	accepted := []understandingEntityMention{}
+	for _, mention := range result.EntityMentions {
+		surface := mention.SurfaceName
+		if surface == "" {
+			surface = mention.Name
+		}
+		option := catalogEntityMatch(surface, input.EntityOptions)
+		if option == nil || slices.Contains(result.EntityIDs, option.ID) {
+			continue
+		}
+		mention.EntityID, mention.Name = option.ID, option.CanonicalName
+		accepted = append(accepted, mention)
+		result.EntityIDs = append(result.EntityIDs, option.ID)
+		if len(accepted) == 3 {
+			break
 		}
 	}
+	result.EntityMentions = accepted
 	qualifyFactEntityIDs(result.Fact, input.EntityOptions)
 }
 

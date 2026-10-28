@@ -5,16 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
+	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
+	"reliquary/internal/logger"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
 )
 
 const (
-	qualityScoringMaxTokens = 128
+	qualityScoringMaxTokens = 512
 	// Two independent calls only reduce variance when sampling is not greedy.
 	// Reasoning-model adapters may force temperature to zero; the calls still
 	// act as an independent gate in that case.
@@ -30,13 +33,18 @@ type qualityScoringInput struct {
 	Body        string `json:"body"`
 }
 
-// qualityScoringApplies reports whether the library's materials are filtered
-// by quality. Own, generated and report material keeps its existing behavior.
-func qualityScoringApplies(library *types.Library, k *types.Entry) bool {
-	if library == nil || k == nil || k.SourceKind == "report" {
-		return false
+// qualityScoringEnabled reports whether the library opted in to quality
+// filtering. Libraries are off by default; generated reports are never scored.
+func (s *entryService) qualityScoringEnabled(ctx context.Context, library *types.Library, k *types.Entry) (bool, error) {
+	if library == nil || k == nil || k.SourceKind == "report" || s.db == nil {
+		return false, nil
 	}
-	return library.Template == types.TemplateExternalTimely || library.Template == types.TemplateExternalDurable
+	row, err := repository.NewSystemSettingRepository(s.db).Get(ctx, QualityScoringSettingKey(library.ID))
+	if err != nil || row == nil {
+		return false, err
+	}
+	var enabled bool
+	return json.Unmarshal(row.Value, &enabled) == nil && enabled, nil
 }
 
 func parseQualityScoringResult(raw string) (int, error) {
@@ -44,10 +52,11 @@ func parseQualityScoringResult(raw string) (int, error) {
 	if err := utils.ParseLLMJsonResponse(raw, &fields); err != nil {
 		return 0, fmt.Errorf("quality scoring output is not valid JSON: %w", err)
 	}
-	var score int
-	if err := json.Unmarshal(fields["attentionScore"], &score); err != nil {
+	var value float64
+	if err := json.Unmarshal(fields["attentionScore"], &value); err != nil {
 		return 0, errors.New("quality scoring output is missing attentionScore")
 	}
+	score := int(math.Round(value))
 	if score < 0 || score > 100 {
 		return 0, fmt.Errorf("quality scoring output %d is outside 0-100", score)
 	}
@@ -82,6 +91,8 @@ func (s *entryService) callQualityScore(ctx context.Context, llm chat.Chat, prom
 		return 0, err
 	}
 	ctx = types.WithLLMCallMetadata(ctx, string(types.CallPurposeQualityScoring), "")
+	// A one-number answer needs no reasoning; thinking would spend the token budget.
+	thinking := false
 	response, err := llm.Chat(ctx, []chat.Message{
 		{Role: "system", Content: prompt},
 		{Role: "user", Content: string(encoded)},
@@ -89,6 +100,7 @@ func (s *entryService) callQualityScore(ctx context.Context, llm chat.Chat, prom
 		Temperature:         qualityScoringTemperature,
 		MaxTokens:           qualityScoringMaxTokens,
 		MaxCompletionTokens: qualityScoringMaxTokens,
+		Thinking:            &thinking,
 	})
 	if err != nil {
 		return 0, err
@@ -141,12 +153,21 @@ func (s *entryService) writeQualityScores(k *types.Entry, first, second int) {
 	k.QualityStatus = types.QualityStatusLow
 }
 
-// applyQualityGate scores the material before understanding. It reports
-// whether understanding should continue; low-quality material is marked and
-// skipped without producing entities or facts.
+// applyQualityGate scores new material before understanding. It reports
+// whether understanding should continue. Material is scored once: a library
+// rebuild never scores, and reprocessing reuses the stored result, because a
+// fresh sample could delete material that already passed. Low-quality material
+// is deleted and its source remembered as discarded, so it is not collected again.
 func (s *entryService) applyQualityGate(ctx context.Context, library *types.Library, k *types.Entry, body string) (bool, error) {
-	if !qualityScoringApplies(library, k) {
+	if k.QualityStatus != "" {
+		return k.QualityStatus == types.QualityStatusPassed, nil
+	}
+	if ctx.Value(libraryRebuildContextKey{}) == true {
 		return true, nil
+	}
+	enabled, err := s.qualityScoringEnabled(ctx, library, k)
+	if err != nil || !enabled {
+		return err == nil, err
 	}
 	first, second, err := s.scoreQuality(ctx, library, k, body)
 	if err != nil {
@@ -156,30 +177,8 @@ func (s *entryService) applyQualityGate(ctx context.Context, library *types.Libr
 	if k.QualityStatus == types.QualityStatusPassed {
 		return true, s.repo.UpdateEntry(ctx, k)
 	}
-	now := time.Now().UTC()
-	k.SummaryStatus = types.SummaryStatusSkipped
-	k.ProcessedAt = &now
-	k.ErrorMessage = ""
-	return false, s.repo.UpdateEntry(ctx, k)
-}
-
-// scoreEntryQuality scores an already stored material for the batch action.
-// It never changes the summary status: old material may already be understood.
-func (s *entryService) scoreEntryQuality(ctx context.Context, library *types.Library, k *types.Entry) error {
-	if !qualityScoringApplies(library, k) {
-		return nil
-	}
-	body, available, err := s.reprocessStoredBody(ctx, k)
-	if err != nil {
-		return err
-	}
-	if !available {
-		return errors.New("资料正文不可用")
-	}
-	first, second, err := s.scoreQuality(ctx, library, k, body)
-	if err != nil {
-		return err
-	}
-	s.writeQualityScores(k, first, second)
-	return s.repo.UpdateEntry(ctx, k)
+	reason := fmt.Sprintf("质量评分过低：%d+%d，低于 2×%d", first, second, s.qualityThreshold())
+	logger.Infof(ctx, "Discarding low-quality entry %s: %s", k.ID, reason)
+	ctx = context.WithValue(ctx, types.SpaceIDContextKey, k.SpaceID)
+	return false, s.deleteEntry(context.WithValue(ctx, ingestDiscardReasonKey{}, reason), k.ID)
 }

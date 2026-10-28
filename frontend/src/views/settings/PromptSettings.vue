@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watchPostEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
-import { listPromptSettings, updatePromptSetting, resetPromptSetting, type SystemSettingItem } from '@/api/system'
+import { listPromptSettings, updatePromptSetting, resetPromptSetting, getSystemSetting, updateSystemSetting, type SystemSettingItem } from '@/api/system'
 import { listLibraries, type LibraryCatalogItem } from '@/api/library'
 import SafeTextarea from '@/components/SafeTextarea.vue'
 
@@ -18,6 +18,8 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const invalid = ref(false)
+const qualityEnabled = ref(false)
+const qualitySaving = ref(false)
 const editor = ref<InstanceType<typeof SafeTextarea>>()
 const scopeSelector = ref<{ $el?: HTMLElement }>()
 let generation = 0
@@ -51,6 +53,8 @@ const templates = computed(() => definitions.value.flatMap(definition => {
   return row && typeof row.value === 'string' ? [{ ...definition, row }] : []
 }))
 const selected = computed(() => templates.value.find(item => item.key === selectedKey.value))
+// The per-library quality scoring switch is stored beside the library's prompts.
+const qualitySwitchKey = computed(() => libraryId.value ? `prompt.library.${libraryId.value}.quality_scoring_enabled` : '')
 const dirty = computed(() => !!selected.value && draft.value !== selected.value.row.value)
 // TDesign places fallthrough ARIA attributes on its wrapper instead of the input.
 watchPostEffect(() => {
@@ -74,9 +78,13 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const result = await listPromptSettings(libraryId.value || undefined)
+    const [result, quality] = await Promise.all([
+      listPromptSettings(libraryId.value || undefined),
+      qualitySwitchKey.value ? getSystemSetting(qualitySwitchKey.value) : Promise.resolve(undefined),
+    ])
     if (request !== generation) return
     rows.value = result
+    qualityEnabled.value = quality?.value === true
     if (!templates.value.some(item => item.key === selectedKey.value)) selectedKey.value = templates.value[0]?.key ?? ''
     reset()
   } catch (cause: any) {
@@ -175,6 +183,22 @@ async function save() {
   }
 }
 
+async function setQualityEnabled(value: boolean) {
+  const key = qualitySwitchKey.value
+  if (!key || qualitySaving.value) return
+  const previous = qualityEnabled.value
+  qualityEnabled.value = value
+  qualitySaving.value = true
+  try {
+    await updateSystemSetting(key, value)
+  } catch (cause: any) {
+    if (qualitySwitchKey.value === key) qualityEnabled.value = previous
+    MessagePlugin.error(cause?.message || t('promptSettings.qualityScoringSwitchFailed'))
+  } finally {
+    qualitySaving.value = false
+  }
+}
+
 function restoreDefault() {
   if (!selected.value?.row.id || loading.value || saving.value || dismissReset) return
   const key = selectedKey.value
@@ -253,6 +277,12 @@ onBeforeUnmount(() => { disposed = true; generation++; dismissLeave?.(); dismiss
           <t-tag variant="light" size="small">{{ selected.row.id ? t('promptSettings.customized') : t('promptSettings.default') }}</t-tag>
         </div>
         <p class="prompt-description">{{ selected.description }}</p>
+        <div v-if="libraryId && selected.key === 'prompt.quality_scoring'" class="prompt-switch">
+          <label>{{ t('promptSettings.qualityScoringEnabled') }}<t-switch :value="qualityEnabled" :loading="qualitySaving"
+            :disabled="saving || loading" :aria-label="t('promptSettings.qualityScoringEnabled')"
+            @change="setQualityEnabled($event as boolean)" /></label>
+          <p class="prompt-hint">{{ t('promptSettings.qualityScoringEnabledHint') }}</p>
+        </div>
         <label class="prompt-field">
           <span>{{ t('promptSettings.content') }}</span>
           <SafeTextarea ref="editor" v-model="draft" name="prompt-content" :disabled="saving"
@@ -292,6 +322,9 @@ onBeforeUnmount(() => { disposed = true; generation++; dismissLeave?.(); dismiss
 .prompt-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .prompt-heading h3 { margin: 0; font-size: 16px; }
 .prompt-description { margin: 8px 0 20px; }
+.prompt-switch { margin: -8px 0 20px; }
+.prompt-switch label { display: inline-flex; align-items: center; gap: 12px; font-weight: 500; }
+.prompt-switch .prompt-hint { margin-top: 4px; }
 .prompt-field { display: block; }
 .prompt-field > span { display: block; margin-bottom: 8px; font-weight: 500; }
 .prompt-field :deep(textarea) { font-family: var(--app-font-family-mono); line-height: 1.6; resize: none; }

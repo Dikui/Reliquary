@@ -66,6 +66,7 @@ func TestStoryFiltersIntersectEndpointEntitiesAndSourceDomainsAtStoryLevelHTTP(t
 
 func storyFilterDomains(t *testing.T, f *candidateFixture) []domainResponse {
 	t.Helper()
+	seedTestDomains(t, f.db)
 	var out struct{ Data []domainResponse }
 	require.NoError(t, json.Unmarshal(f.request(t, http.MethodGet, "/api/v1/domains", nil, 200), &out))
 	return out.Data

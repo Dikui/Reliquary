@@ -7,6 +7,14 @@ import (
 	"reliquary/internal/config"
 )
 
+const qualityScoringSwitchID = "quality_scoring_enabled"
+
+// QualityScoringSettingKey stores a library's quality scoring switch beside
+// its prompts. Libraries without the row are not scored.
+func QualityScoringSettingKey(libraryID string) string {
+	return "prompt.library." + libraryID + "." + qualityScoringSwitchID
+}
+
 func promptIDFromSettingKey(key string) string {
 	parts := strings.Split(key, ".")
 	return parts[len(parts)-1]
@@ -22,6 +30,9 @@ func settingSpecForKey(key string) (settingSpec, bool) {
 	}
 	if _, err := uuid.Parse(parts[2]); err != nil {
 		return settingSpec{}, false
+	}
+	if parts[3] == qualityScoringSwitchID {
+		return settingSpec{Type: "bool", Category: "prompts", Default: false}, true
 	}
 	for _, id := range config.PromptScopeIDs(true) {
 		if id == parts[3] {

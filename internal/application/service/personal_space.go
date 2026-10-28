@@ -24,10 +24,7 @@ func EnsurePersonalSpace(ctx context.Context, db *gorm.DB) error {
 			return err
 		}
 		if len(spaces) == 1 && spaces[0].ID == types.SingleSpaceID {
-			if err := ensurePresetEntities(tx, types.SingleSpaceID); err != nil {
-				return err
-			}
-			return ensurePresetDomains(tx, types.SingleSpaceID)
+			return nil
 		}
 		if len(spaces) != 0 {
 			return fmt.Errorf("expected only personal workspace %d, found %d workspaces", types.SingleSpaceID, len(spaces))
@@ -36,13 +33,7 @@ func EnsurePersonalSpace(ctx context.Context, db *gorm.DB) error {
 		_, err = svc.CreateSpace(ctx, &types.Space{
 			ID: types.SingleSpaceID, EmbeddingModelID: "builtin-qwen3-embedding-06b", Name: "Personal workspace", Description: "Personal entry", Status: "active",
 		})
-		if err != nil {
-			return err
-		}
-		if err := ensurePresetEntities(tx, types.SingleSpaceID); err != nil {
-			return err
-		}
-		return ensurePresetDomains(tx, types.SingleSpaceID)
+		return err
 	})
 	if err != nil {
 		return err

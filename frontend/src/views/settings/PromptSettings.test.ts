@@ -22,13 +22,14 @@ async function scenario(locale: 'zh-CN' | 'en-US', failSave: boolean, action: (s
   const requests: any[] = []
   let confirmation: any
   const stored = new Map<string, { key: string; id: number; value: string }>()
+  const switches = new Map<string, unknown>()
   let listGate: Promise<void> | undefined
   const controls = { delayNextList() {
     let release!: () => void
     listGate = new Promise<void>(resolve => { release = resolve })
     return release
   } }
-  const libraryTemplates = ['article_processing', 'summary_merge', 'fact_grouping', 'story_consolidation', 'output_correction', 'evaluation_questions']
+  const libraryTemplates = ['article_processing', 'quality_scoring', 'summary_merge', 'fact_grouping', 'story_consolidation', 'output_correction', 'evaluation_questions']
   const globalTemplates = ['evaluation_questions_multi_library', 'model_connection_test', 'model_maintenance_probe']
   function row(id: string, scope?: string) {
     return stored.get(`${scope || 'global'}:${id}`) || { key: `prompt.${id}`, id: 0, value: id === 'article_processing' ? 'Original prompt' : `${scope || 'global'} ${id}` }
@@ -40,7 +41,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', failSave: boolean, action: (s
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
     'tdesign-vue-next': {
-      MessagePlugin: { success(message: string) { requests.push({ toast: message }) } },
+      MessagePlugin: { success(message: string) { requests.push({ toast: message }) }, error(message: string) { requests.push({ toastError: message }) } },
       DialogPlugin: { confirm(options: any) { confirmation = options; return { destroy() {} } } },
     },
     '@/components/SafeTextarea.vue': { __esModule: true, default: defineComponent({ props: ['modelValue'], setup(props) { return () => h('textarea', props.modelValue) } }) },
@@ -69,6 +70,13 @@ async function scenario(locale: 'zh-CN' | 'en-US', failSave: boolean, action: (s
         requests.push({ reset: id, scope })
         stored.delete(`${scope || 'global'}:${id}`)
       },
+      getSystemSetting: async (key: string) => ({ key, value: switches.get(key) ?? false, value_type: 'bool' }),
+      updateSystemSetting: async (key: string, value: unknown) => {
+        requests.push({ setting: key, value })
+        if (failSave) throw new Error('Switch unavailable')
+        switches.set(key, value)
+        return { key, value, value_type: 'bool' }
+      },
     },
   }
   function evaluate(code: string) {
@@ -87,7 +95,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', failSave: boolean, action: (s
   }
   const app = createSSRApp(component)
   app.use(i18n)
-  for (const name of ['t-button', 't-loading', 't-empty', 't-tag', 't-select']) app.component(name, stub)
+  for (const name of ['t-button', 't-loading', 't-empty', 't-tag', 't-select', 't-switch']) app.component(name, stub)
   try { return { html: await renderToString(app), requests } }
   finally { globalThis.window = originalWindow }
 }
@@ -96,7 +104,7 @@ test('prompt settings save and restore defaults within the selected library', as
   assert.equal(normalizeSettingsSection('prompts'), 'prompts')
   const { html, requests } = await scenario('zh-CN', false, async (state, calls, dialog) => {
     assert.equal(state.libraryId.value, 'library-1')
-    assert.deepEqual(state.templates.value.map((item: { key: string }) => item.key), ['prompt.article_processing', 'prompt.summary_merge', 'prompt.fact_grouping', 'prompt.story_consolidation', 'prompt.output_correction', 'prompt.evaluation_questions'])
+    assert.deepEqual(state.templates.value.map((item: { key: string }) => item.key), ['prompt.article_processing', 'prompt.quality_scoring', 'prompt.summary_merge', 'prompt.fact_grouping', 'prompt.story_consolidation', 'prompt.output_correction', 'prompt.evaluation_questions'])
     state.draft.value = 'Updated prompt\n保留换行'
     await state.save()
     assert.equal(state.dirty.value, false)
@@ -176,5 +184,27 @@ test('global prompts remain editable when there are no libraries', async () => {
   }, true)
   assert.deepEqual(requests.find(call => call.key), {
     key: 'evaluation_questions_multi_library', value: 'Global evaluation prompt', scope: undefined,
+  })
+})
+
+test('quality scoring switch is per library and rolls back on failure', async () => {
+  const { html, requests } = await scenario('zh-CN', false, async state => {
+    assert.equal(state.qualityEnabled.value, false)
+    await state.selectTemplate('prompt.quality_scoring')
+    await state.setQualityEnabled(true)
+    assert.equal(state.qualityEnabled.value, true)
+    await state.selectScope('library-2')
+    assert.equal(state.qualityEnabled.value, false, 'another library keeps its own switch')
+    await state.selectScope('library-1')
+    assert.equal(state.qualityEnabled.value, true)
+    await state.selectTemplate('prompt.quality_scoring')
+  })
+  assert.match(html, /本库启用质量评分/)
+  assert.deepEqual(requests.find(call => call.setting), { setting: 'prompt.library.library-1.quality_scoring_enabled', value: true })
+
+  await scenario('en-US', true, async state => {
+    await state.selectTemplate('prompt.quality_scoring')
+    await state.setQualityEnabled(true)
+    assert.equal(state.qualityEnabled.value, false)
   })
 })

@@ -28,7 +28,10 @@ export default {
     articleProcessing: '资料理解',
     articleProcessingHint: '生成资料的中文标题、概述、领域和涉及的实体。',
     qualityScoring: '质量评分',
-    qualityScoringHint: '对每篇资料独立评分两次，输出 0–100 的关注度分数；两次之和低于门槛的资料默认隐藏。',
+    qualityScoringHint: '开启评分的库对每篇新资料独立评分两次，输出 0–100 的关注度分数；两次之和低于门槛的资料会被删除，来源不再收录。',
+    qualityScoringEnabled: '本库启用质量评分',
+    qualityScoringEnabledHint: '默认关闭。只对新资料评分，重建和重新处理沿用已有结果。',
+    qualityScoringSwitchFailed: '保存质量评分开关失败',
     summaryMerge: '长文理解合并',
     summaryMergeHint: '将长文各段的理解结果合并为整篇资料的结果。',
     factGrouping: '事实归组',
@@ -209,7 +212,6 @@ export default {
   "action": "操作",
   "actions": {
     "reclassify_domains": '对已有资料重新判定领域',
-    "score_quality": "质量评分",
     "delete": "删除",
     "reprocess": "重新处理",
     "review": "历史审核",
@@ -222,7 +224,6 @@ export default {
 
 
   "deleteHint": "删除会移除资料、索引及独占附件，无法撤销。待审资料会同时保留拒绝收录的来源记录。",
-  "scoreQualityHint": "对匹配资料各评分两次；低于门槛的资料会被隐藏，并在之后处理时跳过内容理解。只改写质量字段，不改处理状态。",
   "reprocessHint": "使用当前库配置重新处理所有类型的资料，包括 AI 产出。保留正文、图片及人工判断，重新建立索引并运行后台内容处理；可能产生模型费用。",
   "preview": "预览影响",
   "previewCounts": "匹配 {matched} · 可执行 {eligible} · 跳过 {skipped} · 阻止 {blocked}",
@@ -268,7 +269,6 @@ export default {
     "body_unavailable": "原文不可用",
     "requires_completed_article": "仅支持已完成资料",
     "unsupported_material": "此资料不支持该操作",
-    "quality_not_applicable": "该库不参与质量评分",
   }
 },
 
@@ -2523,10 +2523,6 @@ export default {
     allFileTypes: '全部文件格式',
     parseStatusFilter: '处理状态',
     allParseStatuses: '全部状态',
-    qualityFilter: '资料质量',
-    qualityDefault: '默认（隐藏低分）',
-    qualityLow: '仅低分',
-    qualityAll: '全部质量',
     parseStatusPending: '等待中',
     parseStatusProcessing: '处理中',
     parseStatusCompleted: '已完成',

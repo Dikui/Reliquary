@@ -197,14 +197,8 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 	default:
 		query = query.Where("parse_status = ?", filter.ParseStatus)
 	}
-	switch filter.Quality {
-	case types.QualityStatusLow:
-		query = query.Where("quality_status = ?", types.QualityStatusLow)
-	case types.QualityStatusPassed:
-		query = query.Where("quality_status = ?", types.QualityStatusPassed)
-	case "":
-		// Low-quality material stays in the library but is hidden from the
-		// default list so junk never competes with kept material.
+	if filter.Quality != "all" {
+		// Rows marked low by earlier versions stay hidden until they are deleted.
 		query = query.Where("quality_status <> ?", types.QualityStatusLow)
 	}
 	if !filter.UpdatedFrom.IsZero() {

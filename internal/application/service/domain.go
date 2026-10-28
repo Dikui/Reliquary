@@ -111,34 +111,3 @@ func (s *DomainService) DeleteDomain(ctx context.Context, id string) error {
 		return nil
 	})
 }
-
-func ensurePresetDomains(tx *gorm.DB, spaceID uint64) error {
-	if err := lockDomainSpace(tx, spaceID); err != nil {
-		return err
-	}
-	var count int64
-	if err := tx.Table("domain_seed_imports").Where("space_id=?", spaceID).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	for _, preset := range []types.DomainInput{
-		{Name: "Agent", Definition: "能够围绕目标自主规划、调用工具并执行任务的 AI 系统及其构建方法"},
-		{Name: "LLM", Definition: "大模型本身：架构、训练与后训练、推理能力、模型发布与评测；基于模型构建的应用不算"},
-	} {
-		item := types.Domain{
-			ID:             uuid.NewString(),
-			SpaceID:        spaceID,
-			Name:           preset.Name,
-			NormalizedName: types.NormalizeEntityKey(preset.Name),
-			Definition:     preset.Definition,
-			CreatedAt:      time.Now(),
-			UpdatedAt:      time.Now(),
-		}
-		if err := tx.Create(&item).Error; err != nil {
-			return err
-		}
-	}
-	return tx.Exec("INSERT INTO domain_seed_imports(space_id,imported_at) VALUES (?,?)", spaceID, time.Now()).Error
-}

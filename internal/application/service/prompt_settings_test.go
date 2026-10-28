@@ -132,3 +132,30 @@ func TestPromptSettingsPersistAndApplyWithoutRestart(t *testing.T) {
 	_, err = svc.Get(ctx, "prompt.library_media")
 	require.ErrorContains(t, err, "unknown setting key")
 }
+
+func TestQualityScoringSwitchSavesAsLibraryBoolean(t *testing.T) {
+	t.Cleanup(func() { config.SetPromptOverrides(nil) })
+	ctx := context.WithValue(context.Background(), types.UserIDContextKey, "personal-user")
+	repo := &promptSettingsRepository{}
+	svc := NewSystemSettingService(repo, &config.Config{})
+	key := QualityScoringSettingKey("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+
+	row, err := svc.Get(ctx, key)
+	require.NoError(t, err)
+	require.JSONEq(t, `false`, string(row.Value), "libraries are off until enabled")
+	_, err = svc.Update(ctx, key, true)
+	require.NoError(t, err)
+	row, err = svc.Get(ctx, key)
+	require.NoError(t, err)
+	require.JSONEq(t, `true`, string(row.Value))
+	_, err = svc.Update(ctx, key, "true")
+	require.Error(t, err, "the switch only accepts booleans")
+	_, err = svc.Update(ctx, QualityScoringSettingKey("not-a-library-id"), true)
+	require.Error(t, err)
+
+	rows, err := svc.List(ctx)
+	require.NoError(t, err)
+	for _, listed := range rows {
+		require.NotEqual(t, key, listed.Key, "library switches stay off the general settings list")
+	}
+}

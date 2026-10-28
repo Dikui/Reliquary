@@ -14,7 +14,7 @@ Status: accepted
 - **删除待确认实体。** 移除 `entity_candidates`、`entity_candidate_occurrences`、`entity_candidate_entries` 三张表，以及候选列表、详情、通过、并为别名、忽略接口与前端审核页。迁移 `000052_drop_entity_candidates` 执行删除；历史待确认数据（约 150 条）不迁移、不备份到新表。
 - **删除实体图谱。** 移除 `GET /entities/:entity_id/graph`、图谱聚合服务与前端图谱面板。实体页只保留事实时间线（可按发生时间与分页）和涉及该实体的资料。
 - **事实端点保持不变。** 事实仍可带可空的主体、对象实体 ID；ID 必须来自目录。事实端点文字按规范化 key 精确匹配目录，未匹配留空。在实体页新增别名后，仍对未挂接的历史端点精确回填一次。
-- **品牌归并保持不变。** 模型品牌、Agent 或软件产品、具名技术的抽取与归并规则继续由 `article_processing` 提示词定义；本次只把“目录外保留待确认”改成“目录外不输出”。
+- **品牌归并保持不变。** 抽取与归并规则继续由 `article_processing` 提示词定义；本次只把“目录外保留待确认”改成“目录外不输出”。2026-10-27 修订：代码中的品牌规则已删除，见 [0019](0019-library-rules-stay-local.md)。
 
 ## 后果
 
@@ -25,5 +25,5 @@ Status: accepted
 
 ## 相关
 
-- 质量评分（两次独立打分、低分隐藏）见 `config/prompt_templates/processing.yaml` 的 `quality_scoring` 模板与 `quality_scoring.go`。
+- 质量评分改为库级开关与低分删除，品牌归并改为目录驱动，见 [0019](0019-library-rules-stay-local.md)。
 - 归组与事件层仍依据 ADR 0016。

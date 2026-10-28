@@ -163,7 +163,7 @@ func TestEntityMaintenanceLinksMergeDeleteAndFilter(t *testing.T) {
 	require.Len(t, logs.Data.Items, 1)
 }
 
-func TestEntityMaintenanceValidationAndPresets(t *testing.T) {
+func TestEntityMaintenanceValidationWithoutPresets(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	for _, body := range []string{
 		`{"canonical_name":" "}`,
@@ -172,18 +172,15 @@ func TestEntityMaintenanceValidationAndPresets(t *testing.T) {
 		r := personalRequest(t, f.router, http.MethodPost, "/api/v1/entities", body, f.key, true)
 		require.Equal(t, 400, r.Code, r.Body.String())
 	}
-	// Seed deletion remains effective after a second startup.
+	// The repository ships no entity presets, including after a second startup.
 	read := func() []types.Entity {
-		r := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities?entity=OpenAI", "", f.key, true)
+		r := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities", "", f.key, true)
 		require.Equal(t, 200, r.Code)
 		var result struct{ Data []types.Entity }
 		require.NoError(t, json.Unmarshal(r.Body.Bytes(), &result))
 		return result.Data
 	}
-	seeded := read()
-	require.Len(t, seeded, 1)
-	r := personalRequest(t, f.router, http.MethodDelete, "/api/v1/entities/"+seeded[0].ID, "", f.key, true)
-	require.Equal(t, 200, r.Code)
+	require.Empty(t, read())
 	require.NoError(t, service.EnsurePersonalSpace(context.Background(), f.db))
 	require.Empty(t, read())
 }

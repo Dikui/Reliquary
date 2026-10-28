@@ -9,7 +9,6 @@ export interface DocumentListFilters {
   fileType: string
   starred: '' | 'true' | 'false'
   parseStatus: string
-  quality: '' | 'low' | 'all'
   source: string
   sourceKind: SearchSource | ''
   startDate: string
@@ -20,12 +19,11 @@ export interface DocumentListFilters {
 
 const queryFields = {
   domainIds: 'domain_ids', entityIds: 'entity_ids', keyword: 'keyword', fileType: 'file_type', starred: 'starred',
-  parseStatus: 'parse_status', quality: 'quality', source: 'source', sourceKind: 'source_kind',
+  parseStatus: 'parse_status', source: 'source', sourceKind: 'source_kind',
   startDate: 'start_date', endDate: 'end_date', publishedFrom: 'published_from', publishedTo: 'published_to',
 } as const
 const fileTypes = ['pdf', 'docx', 'doc', 'pptx', 'ppt', 'epub', 'txt', 'md', 'markdown', 'url', 'manual', 'mp3', 'wav', 'm4a', 'flac', 'ogg']
 const parseStatuses = ['pending', 'processing', 'completed', 'failed', 'cancelled', 'finalizing', 'draft', 'rejected']
-const qualities = ['low', 'all']
 const sources = ['web', 'rss', 'api', 'browser_extension']
 
 const queryString = (value: unknown): string => typeof value === 'string' ? value : ''
@@ -50,7 +48,6 @@ export function documentListFiltersFromQuery(query: LocationQuery): DocumentList
     fileType: normalizeEntryFileType(choice(query.file_type, fileTypes)),
     starred: choice(query.starred, ['true', 'false']) as DocumentListFilters['starred'],
     parseStatus: choice(query.parse_status, parseStatuses),
-    quality: choice(query.quality, qualities) as DocumentListFilters['quality'],
     source: choice(query.source, sources),
     sourceKind: choice(query.source_kind, SEARCH_SOURCES) as DocumentListFilters['sourceKind'],
     startDate: date(query.start_date),

@@ -10,9 +10,23 @@ import (
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
+
+// The repository ships no domains; tests that need choices seed two.
+func seedTestDomains(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	now := time.Now()
+	for _, name := range []string{"Alpha", "Beta"} {
+		require.NoError(t, db.Create(&types.Domain{
+			ID: "domain-" + name, SpaceID: types.SingleSpaceID, Name: name, NormalizedName: types.NormalizeEntityKey(name),
+			Definition: name + " fixture direction.", CreatedAt: now, UpdatedAt: now,
+		}).Error)
+	}
+}
 
 type domainResponse struct {
 	ID         string `json:"id"`
@@ -28,6 +42,7 @@ func TestDomainMaintenanceMaterialChoicesAndMixedFilters(t *testing.T) {
 		require.Equal(t, status, r.Code, r.Body.String())
 		return r.Body.Bytes()
 	}
+	seedTestDomains(t, f.db)
 	var domains struct{ Data []domainResponse }
 	require.NoError(t, json.Unmarshal(call(http.MethodGet, "/api/v1/domains", "", 200), &domains))
 	agent, llm := domains.Data[0], domains.Data[1]
@@ -120,7 +135,7 @@ func TestDomainMaintenanceMaterialChoicesAndMixedFilters(t *testing.T) {
 	call(http.MethodPut, "/api/v1/entries/missing/domains", `{"domain_ids":[]}`, 404)
 }
 
-func TestDomainMaintenancePresetsAndCRUD(t *testing.T) {
+func TestDomainMaintenanceCRUD(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	call := func(method, path, body string, status int) []byte {
 		t.Helper()
@@ -134,11 +149,8 @@ func TestDomainMaintenancePresetsAndCRUD(t *testing.T) {
 		require.NoError(t, json.Unmarshal(call(http.MethodGet, "/api/v1/domains", "", 200), &response))
 		return response.Data
 	}
-	presets := list()
-	require.Len(t, presets, 2)
-	require.Equal(t, "Agent", presets[0].Name)
-	require.Equal(t, "LLM", presets[1].Name)
-	require.Equal(t, "大模型本身：架构、训练与后训练、推理能力、模型发布与评测；基于模型构建的应用不算", presets[1].Definition)
+	// The repository ships no domain presets; the catalogue starts empty.
+	require.Empty(t, list())
 	for _, body := range []string{`{}`, `{"name":" ","definition":"x"}`, `{"name":"Robotics","definition":" "}`} {
 		call(http.MethodPost, "/api/v1/domains", body, 400)
 	}
@@ -164,14 +176,11 @@ func TestDomainMaintenancePresetsAndCRUD(t *testing.T) {
 		200,
 	)
 	items := list()
-	require.Len(t, items, 3)
-	require.Equal(t, "Learning to act in the physical world.", items[1].Definition)
-	call(http.MethodDelete, "/api/v1/domains/"+created.Data.ID, "", 200)
-	call(http.MethodDelete, "/api/v1/domains/"+presets[0].ID, "", 200)
-	require.NoError(t, service.EnsurePersonalSpace(context.Background(), f.db))
-	items = list()
 	require.Len(t, items, 1)
-	require.Equal(t, "LLM", items[0].Name)
+	require.Equal(t, "Learning to act in the physical world.", items[0].Definition)
+	call(http.MethodDelete, "/api/v1/domains/"+created.Data.ID, "", 200)
+	require.NoError(t, service.EnsurePersonalSpace(context.Background(), f.db))
+	require.Empty(t, list())
 	call(http.MethodPatch, "/api/v1/domains/missing", `{"name":"Unknown","definition":"Unknown direction."}`, 404)
 	call(http.MethodDelete, "/api/v1/domains/missing", "", 404)
 }
@@ -187,6 +196,7 @@ func TestDomainMaintenanceManualChoiceSurvivesProcessingAndRevision(t *testing.T
 		require.Equal(t, 200, response.Code, response.Body.String())
 		return response.Body.Bytes()
 	}
+	seedTestDomains(t, f.db)
 	var domains struct{ Data []domainResponse }
 	require.NoError(t, json.Unmarshal(call(http.MethodGet, "/api/v1/domains", ""), &domains))
 	result := ingestRevisionHTTP(t, f, map[string]any{
