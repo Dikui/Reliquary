@@ -101,7 +101,7 @@ func (r *EmbeddingRebuilder) indexEntryVectors(ctx context.Context, spaceID uint
 			return write(tx)
 		})
 	}
-	if entry.SourceKind != "report" && entry.StructuredSummary != nil {
+	if entry.StructuredSummary != nil {
 		if err := persist(r.prepareItem(ctx, run, types.EmbeddingRebuildItem{Kind: "article", SourceID: entry.ID}, profile)); err != nil {
 			return err
 		}

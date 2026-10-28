@@ -11,11 +11,6 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     reason: 'Relation direction has two HTTP enum values covered by ikb18 component tests.',
   },
   {
-    file: 'views/settings/LibraryCatalogSettings.vue',
-    expressions: ['`ikb18.${draft.template}`', '`ikb18.${draft.template}Hint`', '`ikb18.${value}`', '`ikb18.${value}Hint`', '`ikb18.${newLibrary.template}Hint`'],
-    reason: 'Four immutable library template enums and their descriptions are tested in both locales.',
-  },
-  {
     "file": "api/auth.ts",
     "expressions": [
       "key"

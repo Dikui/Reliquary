@@ -72,9 +72,7 @@ func (s *entryService) Ingest(ctx context.Context, request *types.IngestRequest)
 	}
 	now := time.Now()
 	kind := "article"
-	if library.Template == types.TemplateOwn {
-		kind = "mine"
-	} else if library.Template == types.TemplateGenerated {
+	if request.Acquisition == "model_written" {
 		kind = "report"
 	}
 	title := strings.TrimSpace(request.Title)

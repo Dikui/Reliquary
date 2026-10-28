@@ -38,16 +38,7 @@ func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	catalog, _ := json.Marshal(l.ContentTypes)
 	prompt := articleProcessingPrompt() + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + `
 先从 content_types 的 enabled=true 项选择 content_type，拿不准或清单外选其他。有其他时使用“其他”，否则使用 other。`
-	switch {
-	case l.SystemRole == "media":
-		prompt += "\n" + config.Prompt("library_media")
-	case l.Template == types.TemplateExternalDurable:
-		prompt += "\n" + config.Prompt("library_reference")
-	case l.Template == types.TemplateOwn:
-		prompt += "\n" + config.Prompt("library_own")
-	default:
-		prompt += "\n" + config.Prompt("library_institutional")
-	}
+	prompt += "\n" + config.Prompt("library_summary")
 	if k.ContentTypeCorrected {
 		name, _ := json.Marshal(k.ContentType)
 		prompt += "\n用户已经修正 content_type=" + string(name) + "，必须使用该类型，不再重新分类。"
@@ -241,14 +232,13 @@ func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types
 				continue
 			}
 			rel.Evidence = []types.RelationEvidence{{Locations: global}}
-			if l.SystemRole == "media" {
-				source, _ := entrySourceInfo(k)
-				speaker := processingRelationSpeaker(source.Author, rel.Speaker, body, global)
-				if speaker == nil {
-					continue
-				}
-				rel.Evidence[0].Speaker = speaker
+			source, _ := entrySourceInfo(k)
+			speaker := processingRelationSpeaker(source.Author, rel.Speaker, body, global)
+			if speaker == nil && strings.TrimSpace(rel.Speaker) != "" {
+				continue
 			}
+			rel.Evidence[0].Speaker = speaker
+
 			valid = append(valid, rel)
 		}
 	}
@@ -396,19 +386,18 @@ func (s *entryService) saveProcessingOutput(ctx context.Context, l *types.Librar
 			continue
 		}
 		evidence := r.Evidence
-		if l.SystemRole == "media" {
-			for i := range evidence {
-				name := r.Speaker
-				if evidence[i].Speaker != nil {
-					name = evidence[i].Speaker.Name
-				}
-				speaker := processingRelationSpeaker(source.Author, name, body, evidence[i].Locations)
-				if speaker == nil {
-					return errors.New("opinion relation has no identifiable speaker")
-				}
-				evidence[i].Speaker = speaker
+		for i := range evidence {
+			speakerName := r.Speaker
+			if evidence[i].Speaker != nil {
+				speakerName = evidence[i].Speaker.Name
 			}
+			speaker := processingRelationSpeaker(source.Author, speakerName, body, evidence[i].Locations)
+			if speaker == nil && strings.TrimSpace(speakerName) != "" {
+				return errors.New("relation has no identifiable speaker")
+			}
+			evidence[i].Speaker = speaker
 		}
+
 		key := a + "\x00" + name + "\x00" + b
 		if i, ok := index[key]; ok {
 			out.Relations[i].Evidence = append(out.Relations[i].Evidence, evidence...)

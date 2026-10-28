@@ -14,7 +14,6 @@ import (
 	"reliquary/internal/application/repository"
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
-	werrors "reliquary/internal/errors"
 	"reliquary/internal/maintenanceops"
 	"reliquary/internal/queue"
 	"reliquary/internal/types"
@@ -86,9 +85,7 @@ func (s *VaultDocumentService) createReportInput(ctx context.Context, library *t
 	if err != nil {
 		return nil, err
 	}
-	if library.Template != types.TemplateGenerated {
-		return nil, werrors.NewBadRequestError("generated material requires a generated library")
-	}
+
 	var entry *types.Entry
 	var createdID string
 	var jobID string

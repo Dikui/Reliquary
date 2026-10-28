@@ -7,6 +7,8 @@ import (
 )
 
 const (
+	TemplateStandard = "standard"
+	// Legacy values are retained for historical snapshot readers and internal constructors.
 	TemplateExternalTimely  = "external_timely"
 	TemplateExternalDurable = "external_durable"
 	TemplateOwn             = "own"
@@ -37,8 +39,8 @@ type TemplateRules struct {
 
 func RulesForTemplate(template string) (TemplateRules, bool) {
 	switch template {
-	case TemplateExternalTimely, TemplateExternalDurable, TemplateOwn, TemplateGenerated:
-		return TemplateRules{Deduplication: "仅在本库按来源标识或规范化链接定位；保存内容相同返回原 ID，变化覆盖旧文；无来源标识时新建。", SourceEvidence: "来源可选，保留已有依据，不因缺少来源进入待审。", Process: true, CollapseSimilar: template == TemplateExternalTimely, FactSource: template != TemplateGenerated, Identity: IdentityRules{URL: true, Identifier: true, SourceRef: true}}, true
+	case TemplateStandard, TemplateExternalTimely, TemplateExternalDurable, TemplateOwn, TemplateGenerated:
+		return TemplateRules{Deduplication: "仅在本库按来源标识或规范化链接定位；保存内容相同返回原 ID，变化覆盖旧文；无来源标识时新建。", SourceEvidence: "来源可选，保留已有依据，不因缺少来源进入待审。", Process: true, CollapseSimilar: true, FactSource: true, Identity: IdentityRules{URL: true, Identifier: true, SourceRef: true}}, true
 	default:
 		return TemplateRules{}, false
 	}
@@ -161,7 +163,7 @@ type CreateLibraryRequest struct {
 var libraryDirectoryPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 func ValidateLibrary(l *Library) error {
-	if _, ok := RulesForTemplate(l.Template); !ok {
+	if l.Template != TemplateStandard {
 		return fmt.Errorf("invalid library template")
 	}
 	if len(l.Directory) > 100 || !libraryDirectoryPattern.MatchString(l.Directory) {
@@ -170,13 +172,7 @@ func ValidateLibrary(l *Library) error {
 	if strings.TrimSpace(l.Name) == "" || len([]rune(l.Name)) > 255 {
 		return fmt.Errorf("library name is required and must fit 255 characters")
 	}
-	if l.Template == TemplateExternalTimely {
-		if l.SourceEvidenceRule != "link_required" && l.SourceEvidenceRule != "link_or_publisher_date" {
-			return fmt.Errorf("invalid source evidence rule")
-		}
-	} else if l.SourceEvidenceRule != "" {
-		return fmt.Errorf("source evidence rule is only configurable for external_timely")
-	}
+
 	for _, names := range [][]string{contentTypeNames(l.ContentTypes), relationTypeNames(l.RelationTypes)} {
 		seen := map[string]bool{}
 		for _, name := range names {
@@ -216,8 +212,8 @@ func SystemRoleForSource(kind string) string {
 
 func SystemLibraryDefaults() []*Library {
 	official := []string{"投资", "收购", "合作", "竞争", "任职", "发布", "供应", "客户", "监管", "隶属"}
-	makeLibrary := func(role, name, template, description, criteria, evidence string, feed bool, names []string, graphCount int, relations []string) *Library {
-		l := &Library{SystemRole: role, Directory: role, Name: name, Template: template, Description: description, SourceEvidenceRule: evidence, FeedEnabled: feed, ContentTypes: []LibraryContentType{}, RelationTypes: []LibraryRelationType{}}
+	makeLibrary := func(role, name, description, criteria string, feed bool, names []string, graphCount int, relations []string) *Library {
+		l := &Library{SystemRole: role, Directory: role, Name: name, Template: TemplateStandard, Description: description, FeedEnabled: feed, ContentTypes: []LibraryContentType{}, RelationTypes: []LibraryRelationType{}}
 		l.ReviewCriteria = l.DefaultReviewCriteria()
 		for i, n := range names {
 			l.ContentTypes = append(l.ContentTypes, LibraryContentType{Name: n, Position: i, Enabled: true, ExtractGraph: i < graphCount})
@@ -229,11 +225,11 @@ func SystemLibraryDefaults() []*Library {
 		return l
 	}
 	return []*Library{
-		makeLibrary("official", "官方信息", TemplateExternalTimely, "官方、公司、媒体、研究机构发布的新闻、公告、财报、研报、政策。有时效的机构研报收在这里。", OfficialReviewCriteria, "link_or_publisher_date", true, []string{"新闻", "公告", "财报", "研究报告", "政策法规", "其他"}, 5, official),
-		makeLibrary("media", "媒体信息", TemplateExternalTimely, "外部媒体、机构账号或个人的报道、观点、分析与实践经验；不要求个人署名。", MediaReviewCriteria, "link_required", true, []string{"评论", "分析", "预测", "访谈", "其他"}, 4, append([]string{"看好", "看空", "评价", "预测", "批评", "推荐"}, official...)),
-		makeLibrary("references", "参考文档", TemplateExternalDurable, "长期引用的论文、书籍、标准、官方文档、教程。作为定义和方法长期引用的白皮书收在这里。", ReferenceReviewCriteria, "", false, []string{"论文", "书籍", "标准", "官方文档", "教程", "其他"}, 0, []string{"提出", "引用", "属于", "依赖", "对比"}),
-		makeLibrary("personal", "个人产出", TemplateOwn, "本人的工作资料、经验、SOP、笔记。", PersonalReviewCriteria, "", false, []string{"方案", "纪要", "报告", "SOP", "经验", "笔记", "其他"}, 0, []string{"负责", "参与", "合作", "客户", "供应", "依赖", "属于", "决定"}),
-		makeLibrary("ai-output", "AI产出", TemplateGenerated, "外部 AI 按要求写回的报告；不能当作事实。", GeneratedReviewCriteria, "", false, nil, 0, nil),
+		makeLibrary("official", "官方信息", "官方、公司、媒体、研究机构发布的新闻、公告、财报、研报、政策。有时效的机构研报收在这里。", OfficialReviewCriteria, true, []string{"新闻", "公告", "财报", "研究报告", "政策法规", "其他"}, 5, official),
+		makeLibrary("media", "媒体信息", "外部媒体、机构账号或个人的报道、观点、分析与实践经验；不要求个人署名。", MediaReviewCriteria, true, []string{"评论", "分析", "预测", "访谈", "其他"}, 4, append([]string{"看好", "看空", "评价", "预测", "批评", "推荐"}, official...)),
+		makeLibrary("references", "参考文档", "长期引用的论文、书籍、标准、官方文档、教程。作为定义和方法长期引用的白皮书收在这里。", ReferenceReviewCriteria, false, []string{"论文", "书籍", "标准", "官方文档", "教程", "其他"}, 0, []string{"提出", "引用", "属于", "依赖", "对比"}),
+		makeLibrary("personal", "个人产出", "本人的工作资料、经验、SOP、笔记。", PersonalReviewCriteria, false, []string{"方案", "纪要", "报告", "SOP", "经验", "笔记", "其他"}, 0, []string{"负责", "参与", "合作", "客户", "供应", "依赖", "属于", "决定"}),
+		makeLibrary("ai-output", "AI产出", "外部 AI 按要求写回的报告；不能当作事实。", GeneratedReviewCriteria, false, nil, 0, nil),
 	}
 }
 

@@ -26,7 +26,6 @@ import EntryClassification from '@/components/EntryClassification.vue';
 import EntryProcessingStatus from '@/components/EntryProcessingStatus.vue';
 import { entryProcessingState } from '@/utils/entryProcessingStatus';
 import ReportAssociations from '@/components/ReportAssociations.vue';
-import EntryStarToggle from '@/components/EntryStarToggle.vue';
 import BodyReference from './BodyReference.vue';
 import type { SourceLocation } from '@/types/search';
 import ReviewActions from '@/components/ReviewActions.vue';
@@ -40,13 +39,13 @@ import { entryFileFormatLabel, entryChannelLabel, getExternalToolName } from '@/
 const { t } = useI18n();
 const EntryContentEditor = defineAsyncComponent(() => import('./EntryContentEditor.vue'));
 const contentEditor = ref();
-const editingEntry = ref<{ id: string; title: string; indexOnly: boolean } | null>(null);
+const editingEntry = ref<{ id: string; title: string } | null>(null);
 const savedBody = ref<{ id: string; content: string } | null>(null);
 const editTrigger = ref();
 let restoringEditedEntry = false;
 function startContentEdit() {
   if (isProcessing.value || reprocessing.value || articleJudgmentsBusy.value || personalDocumentDeleteBusy.value || props.details.parse_status === 'deleting') return;
-  editingEntry.value = { id: props.details.id, title: getDisplayTitle(), indexOnly: isIndexOnly.value };
+  editingEntry.value = { id: props.details.id, title: getDisplayTitle() };
   timelineDrawerVisible.value = false;
   releasePreviewResources();
 }
@@ -172,7 +171,6 @@ const saveMetadata = async () => {
 const reprocessing = ref(false);
 const articleJudgmentsBusy = ref(false);
 const canReprocess = computed(() => Boolean(props.details?.id));
-const isIndexOnly = computed(() => props.details?.source_kind === 'report' || props.details?.library_template === 'generated');
 const reprocess = async () => {
   if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value) return;
   reprocessing.value = true;
@@ -1174,7 +1172,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 
       <div ref="docMarkdownRoot" class="doc-markdown-root doc-drawer-body setting-drawer__body">
         <EntryContentEditor v-if="editingEntry" ref="contentEditor" :key="editingEntry.id" :entry-id="editingEntry.id"
-          :title="editingEntry.title" :index-only="editingEntry.indexOnly" @cancel="finishContentEdit" @saved="contentSaved" @preview="runMarkdownPostRenderPipeline">
+          :title="editingEntry.title" :index-only="false" @cancel="finishContentEdit" @saved="contentSaved" @preview="runMarkdownPostRenderPipeline">
           <template #preview="{ content }"><div class="md-content" v-html="processMarkdown(content)" /></template>
         </EntryContentEditor>
         <template v-else>
@@ -1336,10 +1334,9 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               <p>{{ image.description }}</p>
             </div>
           </details>
-          <EntryClassification :entry="details" followable :hide-relations="details.source_kind === 'report'" @open-entity="emit('openEntity', $event)" />
+          <EntryClassification :entry="details" followable @open-entity="emit('openEntity', $event)" />
         <EntryUpdateNotice :has-update="details.has_update" :latest-entry-id="details.latest_entry_id" />
-          <EntryStarToggle v-if="isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" />
-          <EntryArticleJudgments v-if="!isIndexOnly && !isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
+          <EntryArticleJudgments v-if="!isIntakeRejected" :entry="details" :disabled="isProcessing || reprocessing" @updated="applyEntryJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
         </section>
 
         <section class="setting-drawer__section doc-content-section">

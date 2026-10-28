@@ -107,17 +107,11 @@ func (s *VaultDocumentService) Start(ctx context.Context) error {
 		return err
 	}
 
-	var libraries []types.Library
-	if err := s.db.WithContext(ctx).Where("template=?", types.TemplateGenerated).Find(&libraries).Error; err != nil {
+	if err := s.watchTree(watcher, s.root); err != nil {
 		_ = watcher.Close()
 		return err
 	}
-	for _, library := range libraries {
-		if err := s.watchTree(watcher, filepath.Join(s.root, library.Directory)); err != nil {
-			_ = watcher.Close()
-			return err
-		}
-	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	s.cancel, s.watcher, s.done = cancel, watcher, make(chan struct{})
 	go s.watch(ctx, watcher, s.done)
@@ -257,12 +251,11 @@ func (s *VaultDocumentService) Scan(ctx context.Context, force bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	ctx, library, err := s.scope(ctx)
-	if err != nil {
-		s.recordReportWatchError(ctx, err)
-		return err
+	spaceID, ok := types.SpaceIDFromContext(ctx)
+	if !ok || spaceID == 0 {
+		spaceID = types.SingleSpaceID
 	}
-	return s.scanReports(ctx, library, force)
+	return s.scanReports(ctx, &types.Library{SpaceID: spaceID}, force)
 }
 
 func (s *VaultDocumentService) scanReports(ctx context.Context, library *types.Library, force bool, skipped ...*[]VaultRebuildSkippedFile) error {
@@ -551,9 +544,7 @@ func (s *VaultDocumentService) Status(ctx context.Context) (VaultStatus, error) 
 	s.statusMu.RUnlock()
 	for _, library := range libraries {
 		status := VaultLibraryStatus{LibraryID: library.ID, Name: library.DisplayName(types.LanguageFromContextOrDefault(ctx)), SystemRole: library.SystemRole, Directory: library.Directory, ArchivedEntries: archived[library.ID]}
-		if library.SystemRole == "ai-output" {
-			status.LastScanAt, status.LastError = report.LastScanAt, report.LastError
-		}
+		status.LastScanAt, status.LastError = report.LastScanAt, report.LastError
 		result.Libraries = append(result.Libraries, status)
 	}
 	return result, nil

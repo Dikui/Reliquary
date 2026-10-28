@@ -51,6 +51,7 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 	if err := projectCatalogSnapshot(original, current.schemaVersion); err != nil {
 		return err
 	}
+	projectLibraryTemplateSnapshot(original, current.schemaVersion)
 	if db.Migrator().HasColumn("entries", "source_ref") {
 		projectIngestSnapshot(original)
 	}

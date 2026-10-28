@@ -188,7 +188,7 @@ test('declining to discard a body draft never sends a close event to the library
   const closes: boolean[] = []
   let retained = false
   await renderDetails([], 'zh-CN', { onCloseDoc: value => closes.push(value), async scenario(state) {
-    state.editingEntry.value = { id: 'message-a', title: 'Original source', indexOnly: false }
+    state.editingEntry.value = { id: 'message-a', title: 'Original source' }
     state.contentEditor.value = { confirmLeave: async () => false }
     await state.handleClose()
     retained = state.editingEntry.value?.id === 'message-a'
@@ -320,15 +320,19 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
 
   for (const source_kind of ['mine', 'report']) {
-    test(`${locale}: ${source_kind} detail submits shared processing`, async () => {
+    test(`${locale}: ${source_kind} detail exposes shared processing, graph and classification controls`, async () => {
       const calls: string[] = []
       const html = await renderDetails([], locale, {
         details: { source_kind, vault_path: `${source_kind}/note.md`, parse_status: 'failed' },
         reprocessRequests: calls,
+        classification: { __esModule: true, default: defineComponent({ props: { hideRelations: Boolean }, setup: props => () => h('span', { 'data-graph-visible': String(!props.hideRelations) }) }) },
+        articleJudgments: { __esModule: true, default: defineComponent({ setup: () => () => h('span', { 'data-classification-controls': 'true' }) }) },
         scenario: state => state.reprocess(),
       })
       assert.deepEqual(calls, ['message-a'])
       assert.ok(html.includes(messages[locale].library.reprocess))
+      assert.ok(html.includes('data-graph-visible="true"'))
+      assert.ok(html.includes('data-classification-controls="true"'))
     })
   }
 

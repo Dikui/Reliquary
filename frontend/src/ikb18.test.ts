@@ -15,7 +15,7 @@ import * as references from './utils/bodyReference'
 import { copyModelTiers } from './utils/modelTiers'
 const require = createRequire(import.meta.url)
 const empty = { __esModule: true, default: defineComponent({ setup: () => () => null }) }
-const library = (id = 'mine', extra = {}) => ({ id, name: '我的资料', display_name: '我的资料', directory: id === 'mine' ? 'personal' : id, template: 'own', system_role: id === 'mine' ? 'personal' : '', description: '', review_criteria: '完整', default_review_criteria: '建议规则', processing_model_tiers: ['light', 'generation'], chunking_config: { chunk_size: 512, chunk_overlap: 50, separators: ['\n\n'], enable_parent_child: false, parent_chunk_size: 4096, child_chunk_size: 384 }, content_types: [{ name: '笔记', enabled: true, position: 0, extract_graph: false }], relation_types: [{ name: '合作', enabled: true, position: 0 }, { name: '依赖', enabled: true, position: 1 }], feed_enabled: false, entry_count: 0, ...extra })
+const library = (id = 'mine', extra = {}) => ({ id, name: '我的资料', display_name: '我的资料', directory: id === 'mine' ? 'personal' : id, template: 'standard', system_role: id === 'mine' ? 'personal' : '', description: '', review_criteria: '完整', default_review_criteria: '建议规则', processing_model_tiers: ['light', 'generation'], chunking_config: { chunk_size: 512, chunk_overlap: 50, separators: ['\n\n'], enable_parent_child: false, parent_chunk_size: 4096, child_chunk_size: 384 }, content_types: [{ name: '笔记', enabled: true, position: 0, extract_graph: false }], relation_types: [{ name: '合作', enabled: true, position: 0 }, { name: '依赖', enabled: true, position: 1 }], feed_enabled: false, entry_count: 0, ...extra })
 async function scenario(path: string, props: Record<string, unknown>, modules: Record<string, any>, action: (state: any) => Promise<void>, locale = 'zh-CN') {
   const filename = new URL(path, import.meta.url).pathname
   const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename })
@@ -61,7 +61,7 @@ for (const locale of ['zh-CN', 'en-US']) {
       await state.load(); assert.equal(state.dirty.value, false)
       state.draft.value.name = '  Notes  '
       state.draft.value.model_tiers.generation = 'notes-model'
-      state.updateChunking({ ...state.chunkingConfig.value, chunkSize: 256 })
+      state.updateChunking({ ...state.chunkingConfig.value, chunkSize: 256, enableParentChild: true })
       state.draft.value.content_types.push({ name: 'SOP', enabled: false, extract_graph: true, position: 4 })
       state.moveType(state.draft.value.content_types, 1, -1)
       state.draft.value.relation_types.splice(1, 1)
@@ -70,26 +70,27 @@ for (const locale of ['zh-CN', 'en-US']) {
       const body = calls[0].body
       assert.equal(body.model_tiers.generation, 'notes-model')
       assert.equal(body.chunking_config.chunk_size, 256)
+      assert.equal(body.chunking_config.enable_parent_child, true)
       assert.equal(body.name, 'Notes'); assert.deepEqual(body.content_types[0], { name: 'SOP', enabled: false, extract_graph: true, position: 0 })
       assert.equal(body.relation_types.length, 1)
       for (const field of ['directory', 'template', 'system_role', 'review_criteria', 'source_evidence_rule']) assert.equal(field in body, false)
     }, locale)
     assert.match(html, /personal\//); assert.match(html, /Delete library|删除库/)
-    assert.doesNotMatch(html, /抽取图谱|Extract graph/)
+    assert.doesNotMatch(html, /抽取图谱|Extract graph|从模板新建库|Create library from template|父子分块由模板|External timely|外部时效型/)
     assert.ok(html.includes((locale === 'zh-CN' ? zh : en).ikb18.admissionPolicyHint))
   })
   test(`${locale}: new library validates directory and enters created library settings`, async () => {
     const calls: any[] = []
     await scenario('./views/settings/LibraryCatalogSettings.vue', {}, catalogModules(calls), async state => {
-      state.creating.value = true; state.newLibrary.value = { template: 'own', directory: 'Bad--Name', name: 'New', description: 'Notes' }
+      state.creating.value = true; state.newLibrary.value = { directory: 'Bad--Name', name: 'New', description: 'Notes' }
       await state.create(); assert.equal(calls.length, 0); assert.ok(state.error.value)
       state.newLibrary.value.directory = 'new-notes'; await state.create()
-      assert.equal(calls[0].create.template, 'own'); assert.equal(state.draft.value.id, 'new-notes'); assert.equal(state.creating.value, false)
+      assert.deepEqual(calls[0].create, { directory: 'new-notes', name: 'New', description: 'Notes' }); assert.equal(state.draft.value.id, 'new-notes'); assert.equal(state.creating.value, false)
     }, locale)
   })
 }
-test('generated libraries expose content and relation types under the shared admission policy', async () => {
-  const original = library('reports', { template: 'generated', review_criteria: '旧审核规则', source_evidence_rule: 'link_required', processing_model_tiers: ['generation', 'entity_resolution'] })
+test('standard libraries expose content and relation types under the shared admission policy', async () => {
+  const original = library('reports', { template: 'standard', review_criteria: '旧审核规则', source_evidence_rule: 'link_required', processing_model_tiers: ['generation', 'entity_resolution'] })
   const calls: any[] = [], modules = catalogModules(calls)
   modules['@/api/library'].listLibraries = async () => ({ success: true, data: [original] })
   modules['@/api/library'].getCatalogLibrary = async () => ({ success: true, data: structuredClone(original) })
@@ -139,8 +140,7 @@ test('library validation preserves failed drafts, rejects duplicate and empty ty
     await state.load(); state.draft.value.name = 'Draft'; state.draft.value.model_tiers.generation = 'pending-model'; await state.save(); assert.equal(state.draft.value.name, 'Draft'); assert.equal(state.draft.value.model_tiers.generation, 'pending-model'); assert.equal(state.error.value, 'offline'); assert.equal(state.dirty.value, true)
   })
 })
-test('four templates have descriptions and directory validation matches backend boundaries', () => {
-  for (const template of form.LIBRARY_TEMPLATES) { assert.ok(zh.ikb18[`${template}Hint`]); assert.ok(en.ikb18[`${template}Hint`]) }
+test('directory validation matches backend boundaries', () => {
   for (const directory of ['a', 'mine-2', 'a'.repeat(100)]) assert.equal(form.validDirectory(directory), true)
   for (const directory of ['', 'A', '-a', 'a-', 'a--b', 'a/b', '../mine', 'a'.repeat(101)]) assert.equal(form.validDirectory(directory), false)
   assert.equal(form.validLibraryName('😀'.repeat(255)), true); assert.equal(form.validLibraryName('😀'.repeat(256)), false)
@@ -268,7 +268,7 @@ test('English newline separator labels display literal escapes', async () => {
 
 for (const locale of ['zh-CN','en-US'] as const) test(`${locale}: historical default description uses current copy without an implicit save`, async()=>{
  const legacy='外部个人的观点：专家、分析师、KOL 的评论与文章。'
- const original=library('media',{system_role:'media',template:'external_timely',description:legacy})
+ const original=library('media',{system_role:'media',template:'standard',description:legacy})
  const calls:any[]=[]
  const modules=catalogModules(calls)
  modules['@/api/library'].listLibraries=async()=>({success:true,data:[original]})

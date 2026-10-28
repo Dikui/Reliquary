@@ -42,6 +42,12 @@ func TestIngestContractMigrationUpDownUpAndPreservation(t *testing.T) {
 			continue
 		}
 		actual := preservedBeforeVectorDefaults(t, table, rows, after.Tables[table])
+		if table == "libraries" {
+			for _, row := range actual {
+				require.Equal(t, "standard", row["template"])
+				row["template"] = "own" // Migration 34 replaces this fixture's old marker.
+			}
+		}
 		if table == "entries" {
 			for _, row := range actual {
 				require.Equal(t, "", row["source_ref"])

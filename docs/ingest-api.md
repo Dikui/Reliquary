@@ -11,9 +11,9 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `library` | 每项必填，库 ID 或英文目录名。不能用中文名称。缺少或不存在时提示调用 `list_libraries` |
 | `content` | 非空可读 Markdown，可为草稿、片段或摘要；纯链接与仅图片不接收。正文与串文、引用合计上限 5,000,000 Unicode 码点 |
 | `acquisition` | 可选，缺省表示未知；提供时为 `verbatim` 逐字原文、`extracted` 提取、`model_written` 模型整理 |
-| `source_ref` | 所有模板接受。可选字符串，去首尾空白，最多 2048 Unicode 码点。同库内用于唯一定位来源 |
-| `identifier` | 所有模板接受。可选 `scheme:value`，最多 2048 Unicode 码点。scheme 小写、DOI value 小写；其他 value 保留大小写 |
-| `graph` | 可选布尔值；所有模板默认抽取有依据的关系，false 显式关闭关系抽取 |
+| `source_ref` | 所有库接受。可选字符串，去首尾空白，最多 2048 Unicode 码点。同库内用于唯一定位来源 |
+| `identifier` | 所有库接受。可选 `scheme:value`，最多 2048 Unicode 码点。scheme 小写、DOI value 小写；其他 value 保留大小写 |
+| `graph` | 可选布尔值；所有库默认抽取有依据的关系，false 显式关闭关系抽取 |
 | `recovery_failure_id` | 可选接收故障编号，用于关联修复请求与结果；不参与正文、来源身份或去重 |
 | `url` | 可选，缺来源不阻止保存。提供时必须为 HTTP/HTTPS，最多 2048 字节 |
 | `title` | 可选，最多 255 个码点；缺失不阻止保存，后台可补标题 |
@@ -24,13 +24,13 @@ Reliquary 接受外部工具转换好的 Markdown 正文和图片，不抓取链
 | `collect_reason` | 收藏理由 |
 | `agent_summary`、`agent_tags`、`source_name` | 调用方注释，保存数据库，不进入正文或处理提示词 |
 
-`kind`、`document_id`、`file`、`entry_id`、`missing` 和未知字段被拒绝。所有模板均接受可选 source_ref 和 identifier。
+`kind`、`document_id`、`file`、`entry_id`、`missing` 和未知字段被拒绝。所有库均接受可选 source_ref 和 identifier。
 
 技术故障的逐项结果可附带 `diagnostics: {failure_id, package_status, recorded}`；明确拒绝不保留故障包。`recorded=false` 表示未成功落盘。使用[接收故障查询接口](external-integration.md#接收故障与短期故障包)读取原始输入和图片，再通过本接口修正提交。`outcome=unknown` 时先核对现有资料与任务；`accepted` 表示正文、图片与后台任务已保存，不表示索引或模型处理已完成。
 
 调用方应保留原文明确署名：`author` 填个人作者，`publisher` 填发布机构、媒体或平台账号，不用机构或转发账号替代文章作者，也不推测缺失的署名。正文保留作者观点和理解所需的回复、引用上下文。`verbatim` 不得删改主体；经过压缩、重述的材料应如实声明获取方式。提交原帖时保存原帖 URL，相关文章链接不能冒充原帖来源。客观机构新闻与外部个人观点按目标库用途分别收录。
 
-所有模板共用入库、审核和处理规则。系统库目录仅为示例，实际可用库由 `list_libraries` 返回。source_ref、identifier、graph 不再按模板限制。
+所有库共用入库、审核和处理规则。系统库目录仅为示例，实际可用库由 `list_libraries` 返回。source_ref、identifier、graph 不再按模板限制。
 
 ## 五个系统库示例
 
@@ -93,11 +93,11 @@ curl -X PUT "$RELIQUARY_URL/api/v1/entries/$ENTRY_ID/body" \
   --data '{"content":"# 项目计划\n\n更新后的完整正文。\n\n![图表](images/chart.png)","acquisition":"verbatim","images":[{"source_url":"images/chart.png","asset_id":"上传返回的 asset_id"}]}'
 ```
 
-`content` 必填，不能只传链接或增量片段，最多 5,000,000 Unicode 码点；HTTP JSON 上限 64 MiB。`acquisition` 可选，省略时保留原值，所有模板均适用。MCP 参数为 `{"entry_id":"资料 ID","content":"完整 Markdown","acquisition":"verbatim"}`。
+`content` 必填，不能只传链接或增量片段，最多 5,000,000 Unicode 码点；HTTP JSON 上限 64 MiB。`acquisition` 可选，省略时保留原值，所有库均适用。MCP 参数为 `{"entry_id":"资料 ID","content":"完整 Markdown","acquisition":"verbatim"}`。
 
 `images` 可选，最多 100 项。每项使用 `asset_id` 或 `data` 之一，并提供 `source_url`。该值必须与正文中的图片引用完全一致，可以是 HTTP/HTTPS 地址、`images/chart.png` 这类相对路径或本资料原有附件引用。同一引用只能提供一份图片；未被正文引用的图片会被拒绝。服务端将引用替换为本资料的本地附件路径，不抓取图片链接。内联图片每张最多 10 MiB、总计最多 20 MiB；上传附件沿用上传接口的大小限制。
 
-正文、图片字节和获取方式均未变时返回 `exists`，不重复保存附件或处理。图片地址不变但字节变化也更新。成功返回原 `entry_id` 和 `accepted`；所有模板均后台重建正文索引及模型派生数据。通过 HTTP `GET /api/v1/entries/:id` 或 MCP `get_entry` 查询状态。保存失败时正文、JSON 与新增附件一起回滚；后台模型失败则保留已保存的新正文及已建索引。此接口不保留旧正文版本。
+正文、图片字节和获取方式均未变时返回 `exists`，不重复保存附件或处理。图片地址不变但字节变化也更新。成功返回原 `entry_id` 和 `accepted`；所有库均后台重建正文索引及模型派生数据。通过 HTTP `GET /api/v1/entries/:id` 或 MCP `get_entry` 查询状态。保存失败时正文、JSON 与新增附件一起回滚；后台模型失败则保留已保存的新正文及已建索引。此接口不保留旧正文版本。
 
 未归档、正在处理或删除、所属库有未完成任务时返回 HTTP 409，等待完成或取消任务后重试。数据库写入或任务提交失败时，数据库、Markdown 文件和本次新增附件一起回滚，用户上传的源附件仍可重试使用。此接口不保留旧正文版本，也不通过删除再收录实现更新，不产生丢弃指纹。
 
@@ -118,7 +118,7 @@ source_ref、identifier 和规范化 URL 用于同库精确定位，具体见上
 | 正文缺失或超长、标识格式无效 | 对应项 `invalid`，或流式读取时立即拒绝超长请求；给出具体字段与上限 |
 | JSON 语法、批量包络或字节上限错误 | HTTP 400，应用错误码 `1000`；MCP 返回工具错误，流式读取超限为带具体原因的 HTTP 400 |
 
-`POST /api/v1/ingest/check` 接收 `{"library":"official","urls":["https://example.org/release"]}`，每次 1 至 100 个 URL。所有模板均只在指定库查询。返回 in_library、历史 pending_review、not_found、discarded 或 invalid。该接口只查来源存在性；不能据此跳过同来源内容更新，仍应提交 ingest 比较正文和图片。
+`POST /api/v1/ingest/check` 接收 `{"library":"official","urls":["https://example.org/release"]}`，每次 1 至 100 个 URL。所有库均只在指定库查询。返回 in_library、历史 pending_review、not_found、discarded 或 invalid。该接口只查来源存在性；不能据此跳过同来源内容更新，仍应提交 ingest 比较正文和图片。
 
 ## 图片提交
 
@@ -153,7 +153,7 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ingest","arguments":{"items":[{"library":"personal","source_ref":"notes/mcp.md","content":"# 笔记\n\n通过 MCP 收录的正文。","acquisition":"verbatim","graph":false}]}}}
 ```
 
-先 `initialize`，随后请求 `/mcp`，使用 Bearer API Key、`Accept: application/json, text/event-stream` 和协商的 `MCP-Protocol-Version`。`list_libraries` 返回库用途、模板、审核和来源说明、去重说明及 `accepted_fields`。`check_urls` 参数与 HTTP 相同。图片上传走 HTTP，已有资料的正文和图片更新使用 `update_entry_content`。
+先 `initialize`，随后请求 `/mcp`，使用 Bearer API Key、`Accept: application/json, text/event-stream` 和协商的 `MCP-Protocol-Version`。`list_libraries` 返回库用途、通用模板、审核和来源说明、去重说明及 `accepted_fields`。`check_urls` 参数与 HTTP 相同。图片上传走 HTTP，已有资料的正文和图片更新使用 `update_entry_content`。
 
 ## AI产出收录
 
@@ -177,10 +177,13 @@ MCP 将同一对象作为 `ingest` 的 `arguments`。字段和错误按上文通
 
 ## 联合处理的图片输入
 
-所有模板均选择所属库内容类型、补全缺失标题、生成摘要与主题，并抽取有依据的实体、短介绍和关系。默认运行图谱，`graph:false` 显式关闭关系抽取；内容类型不再关闭图谱。内容类型修正仍只能选择所属库启用的类型。
+所有库均选择所属库内容类型、补全缺失标题、生成摘要与主题，并抽取有依据的实体、短介绍和关系。默认运行图谱，`graph:false` 显式关闭关系抽取；内容类型不再关闭图谱。内容类型修正仍只能选择所属库启用的类型。
 
 支持视觉的处理模型读取由已保存原图生成的模型输入副本，将重要视觉信息纳入理解和摘要。默认处理不再要求、校验或保存逐图说明，也不生成新的 `image_description` 检索块；模型额外返回的 `image_descriptions` 不参与处理结果。每段最多读取 `article_processing.max_images` 张图片，超过时增加分段。图片不可读或模型不支持视觉时保存跳过原因。
 
 资料详情沿用 `image_descriptions` 字段返回图片引用和读取状态，包括 `url`、`ordinal` 和 `locations`，有历史说明或跳过原因时附带 `description`、`skip_reason`。新处理结果不返回 `description`。`ordinal` 按正文引用顺序编号，同一图片出现多次时分别记录。图片引用和位置保留，历史说明仍可读取，不批量清理。历史说明命中仍可返回 `chunk_type: "image_description"`；位置使用保存后的 Markdown 正文坐标。关系及来源通过实体详情和 [关系接口](relations-api.md) 读取。
 
 原图仍可建立图片向量，需要支持图片输入的 embedding 配置。图片命中后，`qwen3-vl-rerank` 可通过多模态接口读取窗口内每条候选最高匹配图片的模型输入副本和文章文本，取该条文本与图像得分的最大值排序。不支持图像重排、附件读取失败或模型失败时保留融合顺序；文本候选继续使用文本重排。多模态重排按融合顺序截取最多 40 个文档项作为单次窗口：每条资料占一个文本项，命中图片再占一个原图项，因此窗口至少容纳前 20 条资料（候选不足时全部纳入）。仅窗口内排序，其余候选保留原位置和顺序，不跨请求比较分数。此行为不新增配置，也不批量回填历史资料。
+
+
+所有库统一使用 `standard` 模板。创建库只需名称、目录和可选说明，`template` 可以省略；显式传入时只接受 `standard`。内容类型独立于模板，模型从本库已启用的类别中选择。历史库模板在结构版本 34 统一转换，原文和库归属不变。

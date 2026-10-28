@@ -216,13 +216,7 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 		if reason == "" {
 			switch req.Action {
 			case "review", "reprocess":
-				library, e := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
-				if e != nil {
-					return nil, nil, e
-				}
-				if req.Action == "review" && library.Template == types.TemplateGenerated {
-					reason = "generated_library"
-				} else if req.Action == "review" && !libraryReviewEligible(entry, "all") {
+				if req.Action == "review" && !libraryReviewEligible(entry, "all") {
 					reason = "review_ineligible"
 				} else if req.Action == "reprocess" {
 					eligible, e := libraryRebuildEligible(entry, "all")
@@ -240,14 +234,6 @@ func (s *entryService) prepareEntryBatch(ctx context.Context, req types.EntryBat
 					}
 				}
 			case "content_type":
-				library, err := s.libraryService.GetLibraryByID(ctx, entry.LibraryID)
-				if err != nil {
-					return nil, nil, err
-				}
-				if library.Template == types.TemplateGenerated {
-					reason = "generated_library"
-					break
-				}
 				if !isIngestArticle(entry) || entry.ParseStatus != types.ParseStatusCompleted {
 					reason = "requires_completed_article"
 				} else {
@@ -596,17 +582,7 @@ func (s *entryService) executeBatchItem(ctx context.Context, p types.EntryBatchP
 			return nil
 		}
 	}
-	if req.Action == "content_type" {
-		library, err := s.libraryService.GetLibraryByID(ctx, current.LibraryID)
-		if err != nil {
-			return err
-		}
-		if library.Template == types.TemplateGenerated {
-			item.Status = "skipped"
-			item.Message = "generated_library"
-			return nil
-		}
-	}
+
 	if req.Action == "topics" && (current.ParseStatus == types.ParseStatusPending || current.ParseStatus == types.ParseStatusProcessing || current.ParseStatus == types.ParseStatusFinalizing) {
 		item.Status = "skipped"
 		item.Message = "processing"

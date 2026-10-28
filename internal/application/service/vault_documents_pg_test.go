@@ -107,7 +107,7 @@ func (h *vaultDocumentHarness) assertSearch(t *testing.T, id, term string) {
 	require.NotEmpty(t, hits)
 }
 
-func TestVaultMineFileChangesAreNeverObserved(t *testing.T) {
+func TestVaultPersonalFileChangesDoNotOverwriteStoredBody(t *testing.T) {
 	h := newVaultDocumentHarness(t, 20*time.Millisecond)
 	var own types.Library
 	require.NoError(t, h.db.Where("system_role=?", "personal").First(&own).Error)
@@ -139,12 +139,10 @@ func TestVaultMineFileChangesAreNeverObserved(t *testing.T) {
 	require.NoError(t, os.Remove(path))
 	require.NoError(t, h.documents.Scan(h.ctx, true))
 	require.Equal(t, body, h.byPath(t, document.VaultPath).VaultBody)
-	for _, watched := range h.documents.watcher.WatchList() {
-		require.False(t, strings.HasPrefix(watched, filepath.Join(h.root, "personal")))
-	}
+	require.Contains(t, h.documents.watcher.WatchList(), filepath.Join(h.root, "personal"))
 	status, err := h.documents.Status(h.ctx)
 	require.NoError(t, err)
-	require.Nil(t, vaultStatusLibrary(t, status, "personal").LastScanAt)
+	require.NotNil(t, vaultStatusLibrary(t, status, "personal").LastScanAt)
 	require.EqualValues(t, 1, vaultStatusLibrary(t, status, "personal").ArchivedEntries)
 }
 
@@ -250,11 +248,11 @@ func TestVaultCancelledReportScanPreservesLastCompletedStatus(t *testing.T) {
 
 func TestVaultReportImmediatelyIndexesReadOnlyBodyAndValidatesRelations(t *testing.T) {
 	h := newVaultDocumentHarness(t, 10*time.Minute)
-	report, err := h.documents.CreateReport(h.ctx, "整理:结果/中文", "# 整理结果\n\nreportfixture compares three releases", nil)
+	report, err := h.documents.createReport(h.ctx, h.library, "整理:结果/中文", "# 整理结果\n\nreportfixture compares three releases", nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, "report", report.SourceKind)
 	require.Equal(t, "整理:结果/中文", report.Title)
-	require.Regexp(t, `^ai-output/整理结果中文-[0-9a-f]{8}\.md$`, report.VaultPath)
+	require.Regexp(t, `^official/整理结果中文-[0-9a-f]{8}\.md$`, report.VaultPath)
 	h.assertSearch(t, report.ID, "reportfixture")
 	require.NoFileExists(t, filepath.Join(h.root, report.VaultPath))
 	require.NoError(t, (&VaultService{db: h.db, root: h.root}).RefreshHeader(h.ctx, report.ID))

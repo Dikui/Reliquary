@@ -312,7 +312,7 @@ func (s *searchService) Options(ctx context.Context, libraries []string) (*types
 func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint64, results []*types.EntrySearchResult, config *types.RetrievalConfig, sets ...searchVectorSet) ([]*types.EntrySearchResult, error) {
 	ids := []string{}
 	for _, result := range results {
-		if (result.Source == "article" || result.Source == "mine") && result.PublishedAt != nil {
+		if result.PublishedAt != nil {
 			ids = append(ids, result.EntryID)
 		}
 	}
@@ -321,7 +321,6 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 	}
 	type vectorRow struct {
 		LibraryID string
-		Template  string
 		EntryID   string
 		ModelID   string
 		Dimension int
@@ -339,7 +338,7 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 			modelID = sets[0].ModelID
 		}
 	}
-	if err := s.db.WithContext(ctx).Table(vectorRelation(selector, "article", "ae")).Select("ae.*, l.template").
+	if err := s.db.WithContext(ctx).Table(vectorRelation(selector, "article", "ae")).Select("ae.*").
 		Joins("JOIN libraries l ON l.space_id=ae.space_id AND l.id=ae.library_id").
 		Joins("JOIN entries e ON e.space_id=ae.space_id AND e.library_id=ae.library_id AND e.id=ae.entry_id").
 		Where("ae.space_id=? AND ae.entry_id IN ? AND ae.model_id=?", spaceID, ids, modelID).Scan(&rows).Error; err != nil {
@@ -347,14 +346,12 @@ func (s *searchService) collapseArticleReports(ctx context.Context, spaceID uint
 	}
 	vectors := map[string]vectorRow{}
 	for _, row := range rows {
-		if rules, ok := types.RulesForTemplate(row.Template); ok && rules.CollapseSimilar {
-			vectors[row.EntryID] = row
-		}
+		vectors[row.EntryID] = row
 	}
 	window := time.Duration(config.GetEffectiveSimilarReportsWindowDays()) * 24 * time.Hour
 	threshold := config.GetEffectiveSimilarReportsThreshold()
 	similar := func(a, b *types.EntrySearchResult) bool {
-		if a.Source == "report" || b.Source == "report" || a.PublishedAt == nil || b.PublishedAt == nil {
+		if a.PublishedAt == nil || b.PublishedAt == nil {
 			return false
 		}
 		delta := a.PublishedAt.Sub(*b.PublishedAt)

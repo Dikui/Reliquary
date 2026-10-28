@@ -126,10 +126,10 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 			if err := indexArticleImages(ctx, s.db, s.models, library, vault, entry); err != nil {
 				return fmt.Errorf("index rebuilt article images %s: %w", rel, err)
 			}
-			switch library.Template {
-			case types.TemplateOwn:
+			switch entry.SourceKind {
+			case "mine":
 				result.Mine++
-			case types.TemplateGenerated:
+			case "report":
 				result.Reports++
 			default:
 				result.Articles++
@@ -182,13 +182,14 @@ func validateVaultRebuildHeader(header VaultArticleHeader, body []byte) error {
 
 func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library *types.Library, path string, header VaultArticleHeader, body []byte) (*types.Entry, error) {
 	collected, _ := time.Parse(time.RFC3339Nano, header.CollectedAt)
-	kind := "article"
-	switch library.Template {
-	case types.TemplateOwn:
-		kind = "mine"
-	case types.TemplateGenerated:
+	kind := header.SourceKind
+	if kind == "" {
+		kind = "article"
+	}
+	if header.CannotBeFact || header.Acquisition == "model_written" {
 		kind = "report"
 	}
+
 	now := time.Now().UTC()
 	entry := &types.Entry{ID: header.ID, SpaceID: library.SpaceID, LibraryID: library.ID,
 		Type: types.EntryTypeManual, SourceKind: kind, VaultPath: path, VaultBody: string(body),

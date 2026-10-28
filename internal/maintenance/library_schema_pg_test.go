@@ -14,6 +14,54 @@ import (
 	"reliquary/internal/types"
 )
 
+func TestSingleTemplateMigrationPreservesLibraryData(t *testing.T) {
+	db := pgtest.Open(t)
+	ctx := context.Background()
+	directory, err := filepath.Abs("../../migrations/versioned")
+	require.NoError(t, err)
+	migration, err := migrate.New("file://"+directory, db.Dialector.(*postgres.Dialector).DSN)
+	require.NoError(t, err)
+	t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
+	require.NoError(t, migration.Migrate(33))
+	require.NoError(t, db.Exec(`
+INSERT INTO spaces(id,name,business) VALUES(1,'Single template','personal');
+INSERT INTO libraries(id,space_id,name,directory,template,source_evidence_rule,chunking_config,embedding_model_id,summary_model_id)
+VALUES('timely',1,'Custom news','news','external_timely','link_required','{"chunk_size":777,"enable_parent_child":false}','',''),
+('durable',1,'Custom reference','reference','external_durable','','{"chunk_size":888,"enable_parent_child":true}','','');
+INSERT INTO entries(id,space_id,library_id,type,title,source,source_kind,vault_body)
+VALUES('one',1,'timely','manual','Retained title','','article','Retained original Markdown');
+INSERT INTO library_content_types(library_id,name,position,enabled,extract_graph)
+VALUES('timely','User category',0,true,true);
+INSERT INTO topics(id,space_id,library_id,name,description) VALUES('topic',1,'timely','User topic','Retained explanation');
+INSERT INTO entry_topics(space_id,entry_id,topic_id,source) VALUES(1,'one','topic','user');
+`).Error)
+	root, restoreRoot := t.TempDir(), t.TempDir()
+	snapshot, err := Capture(ctx, db)
+	require.NoError(t, err)
+	require.NoError(t, WriteSnapshot(root, "", snapshot))
+	require.NoError(t, WriteSnapshot(restoreRoot, "", snapshot))
+	before, err := BuildManifest(ctx, db, root, "")
+	require.NoError(t, err)
+	require.NoError(t, migration.Migrate(34))
+	current, err := Capture(ctx, db)
+	require.NoError(t, err)
+	require.NoError(t, WriteSnapshot(root, "", current))
+	after, err := BuildManifest(ctx, db, root, "")
+	require.NoError(t, err)
+	require.Empty(t, CompareManifest(before, after))
+	for _, row := range current.Tables["libraries"] {
+		require.Equal(t, types.TemplateStandard, row["template"])
+		require.Equal(t, "", row["source_evidence_rule"])
+	}
+	var parentChild bool
+	require.NoError(t, db.Raw(`SELECT (chunking_config->>'enable_parent_child')::boolean FROM libraries WHERE id='durable'`).Scan(&parentChild).Error)
+	require.True(t, parentChild, "migration preserves explicit chunking choices")
+	restored := pgtest.Open(t)
+	_, err = Import(ctx, restored, restoreRoot, "", nil)
+	require.NoError(t, err)
+	require.NoError(t, VerifyImportedReplica(ctx, restored, restoreRoot))
+}
+
 func TestAdmissionPolicyMigrationPreservesCustomCriteria(t *testing.T) {
 	db := pgtest.Open(t)
 	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Review policy"}).Error)

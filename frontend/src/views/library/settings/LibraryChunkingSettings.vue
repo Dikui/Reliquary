@@ -112,7 +112,6 @@
         <div class="setting-control">
           <t-switch
             v-model="localEnableParentChild"
-            :disabled="parentChildLocked"
             @change="handleParentChildChange"
           />
         </div>
@@ -249,12 +248,10 @@ interface ChunkingConfig {
 interface Props {
   config: ChunkingConfig
   embedded?: boolean
-  parentChildLocked?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   embedded: false,
-  parentChildLocked: false,
 })
 
 const selectStyle = computed(() => (props.embedded ? { width: '100%' } : { width: '280px' }))

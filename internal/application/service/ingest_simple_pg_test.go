@@ -41,10 +41,15 @@ func TestSimpleIngestKeepsBodySearchableWhenProcessingModelMissing(t *testing.T)
 }
 
 func TestSimpleIngestExactRetryReplacementAndBadImageRollback(t *testing.T) {
-	h, _ := newIngestHarness(t)
+	h, vault := newIngestHarness(t)
 	request := &types.IngestRequest{Library: h.library.ID, SourceRef: "calibration/log", Content: "Calibration result: 42 pascals.", Title: "Calibration", Acquisition: "model_written"}
 	first, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)
+	saved := h.article(t, first.EntryID)
+	require.Equal(t, "report", saved.SourceKind)
+	header, err := vault.articleHeader(h.ctx, saved)
+	require.NoError(t, err)
+	require.True(t, header.CannotBeFact)
 	request.Acquisition = ""
 	duplicate, err := h.service.Ingest(h.ctx, request)
 	require.NoError(t, err)

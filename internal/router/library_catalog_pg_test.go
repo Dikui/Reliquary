@@ -29,7 +29,8 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 		single := personalRequest(t, f.router, http.MethodGet, "/api/v1/libraries/"+library["id"].(string), "", f.key, true)
 		require.Equal(t, http.StatusOK, single.Code, single.Body.String())
 	}
-	require.Len(t, rules, 4)
+	require.Len(t, rules, 1)
+	require.Contains(t, rules, types.TemplateStandard)
 	texts := map[string]bool{}
 	for _, rule := range rules {
 		texts[rule] = true
@@ -46,13 +47,16 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 			require.Equal(t, body.Data[i][field], library[field], field)
 		}
 	}
-	created := personalRequest(t, f.router, http.MethodPost, "/api/v1/libraries", `{"template":"own","directory":"custom-docs","name":"Notes"}`, f.key, true)
+	created := personalRequest(t, f.router, http.MethodPost, "/api/v1/libraries", `{"directory":"custom-docs","name":"Notes"}`, f.key, true)
 	require.Equal(t, http.StatusCreated, created.Code, created.Body.String())
 	var custom struct {
 		Data types.Library `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &custom))
+	require.Equal(t, types.TemplateStandard, custom.Data.Template)
 	require.Equal(t, custom.Data.DefaultReviewCriteria(), custom.Data.ReviewCriteria)
+	retired := personalRequest(t, f.router, http.MethodPost, "/api/v1/libraries", `{"template":"external_timely","directory":"retired-template","name":"Retired"}`, f.key, true)
+	require.Equal(t, http.StatusBadRequest, retired.Code, retired.Body.String())
 	model := &types.Model{ID: "catalog-review", SpaceID: 1, Name: "Catalog review", Type: types.ModelTypeGeneration, Status: types.ModelStatusActive}
 	require.NoError(t, f.db.Create(model).Error)
 	settings, err := json.Marshal(types.LibraryPatch{ModelTiers: &types.ModelTierConfig{Generation: model.ID, Embedding: custom.Data.ModelTiers.Embedding}, ChunkingConfig: &types.ChunkingConfig{ChunkSize: 256, ChunkOverlap: 20}})

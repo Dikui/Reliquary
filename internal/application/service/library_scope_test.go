@@ -64,12 +64,17 @@ func TestSystemLibrariesInitializationAndCatalog(t *testing.T) {
 	require.False(t, got.FeedEnabled)
 	require.Empty(t, got.ContentTypes)
 	require.Equal(t, name, got.DisplayName("en"))
-	for _, template := range []string{types.TemplateExternalTimely, types.TemplateExternalDurable, types.TemplateOwn, types.TemplateGenerated} {
-		created, err := svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: template, Directory: "custom-" + map[string]string{types.TemplateExternalTimely: "timely", types.TemplateExternalDurable: "durable", types.TemplateOwn: "own", types.TemplateGenerated: "generated"}[template], Name: template})
+	for _, template := range []string{"", types.TemplateStandard} {
+		directory := "custom-default"
+		if template != "" {
+			directory = "custom-standard"
+		}
+		created, err := svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: template, Directory: directory, Name: "Custom"})
 		require.NoError(t, err)
+		require.Equal(t, types.TemplateStandard, created.Template)
 		require.Empty(t, created.ContentTypes)
 		require.Empty(t, created.RelationTypes)
-		_, err = svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: template, Directory: created.Directory, Name: "duplicate"})
+		_, err = svc.CreateLibrary(ctx, types.CreateLibraryRequest{Directory: created.Directory, Name: "duplicate"})
 		require.Error(t, err)
 		for _, patch := range []types.LibraryPatch{{Template: &template}, {Directory: &created.Directory}, {SystemRole: &name}} {
 			_, err = svc.ConfigureLibrary(ctx, created.ID, patch)
@@ -77,13 +82,18 @@ func TestSystemLibrariesInitializationAndCatalog(t *testing.T) {
 		}
 		require.NoError(t, svc.DeleteLibrary(ctx, created.ID))
 	}
+	for _, legacy := range []string{types.TemplateExternalTimely, types.TemplateExternalDurable, types.TemplateOwn, types.TemplateGenerated} {
+		_, err := svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: legacy, Directory: "legacy", Name: "Legacy"})
+		require.ErrorContains(t, err, "template must be standard")
+	}
+
 	for _, directory := range []string{"", "../mine", "Upper", "with space", "x/y"} {
-		_, err = svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: types.TemplateOwn, Directory: directory, Name: "bad"})
+		_, err = svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: types.TemplateStandard, Directory: directory, Name: "bad"})
 		require.Error(t, err)
 	}
 	_, err = svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: "invalid", Directory: "valid", Name: "bad"})
 	require.Error(t, err)
-	custom, err := svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: types.TemplateOwn, Directory: "occupied", Name: "occupied"})
+	custom, err := svc.CreateLibrary(ctx, types.CreateLibraryRequest{Template: types.TemplateStandard, Directory: "occupied", Name: "occupied"})
 	require.NoError(t, err)
 	entry := &types.Entry{ID: "immutable", SpaceID: 1, LibraryID: custom.ID, Type: "manual", SourceKind: "article", Title: "Existing"}
 	require.NoError(t, db.Create(entry).Error)

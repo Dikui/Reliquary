@@ -29,7 +29,7 @@ func TestNoSpaceSingletonLibraryAccess(t *testing.T) {
 			}
 			for _, line := range strings.Split(source, "\n") {
 				if strings.Contains(line, ".First(&library)") || strings.Contains(line, ".First(library)") {
-					if strings.Contains(line, `Where("space_id`) && !strings.Contains(line, "system_role") {
+					if strings.Contains(line, `Where("space_id`) && !strings.Contains(line, "system_role") && !strings.Contains(line, "AND id=?") {
 						t.Errorf("%s contains first-library query: %s", path, line)
 					}
 				}

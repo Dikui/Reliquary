@@ -55,12 +55,8 @@ func intakeReviewPrompt(libraries ...*types.Library) string {
 	return prompt
 }
 
-// Legacy in-memory fixtures may omit a template. Persisted libraries always carry one.
-func intakeTemplateRules(library *types.Library) types.TemplateRules {
-	rules, ok := types.RulesForTemplate(library.Template)
-	if !ok {
-		rules, _ = types.RulesForTemplate(types.TemplateExternalTimely)
-	}
+func intakeTemplateRules(_ *types.Library) types.TemplateRules {
+	rules, _ := types.RulesForTemplate(types.TemplateStandard)
 	return rules
 }
 

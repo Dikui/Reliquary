@@ -2,8 +2,8 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin } from 'tdesign-vue-next'
-import { listLibraries, getCatalogLibrary, createCatalogLibrary, saveCatalogLibrary, deleteCatalogLibrary, mergeLibraryRelationTypes, type LibraryCatalogItem, type LibraryTemplate } from '@/api/library'
-import { LIBRARY_TEMPLATES, validDirectory, validLibraryName, validTypes, librarySettingsPayload, moveType, catalogDescription } from '@/utils/libraryCatalogForm'
+import { listLibraries, getCatalogLibrary, createCatalogLibrary, saveCatalogLibrary, deleteCatalogLibrary, mergeLibraryRelationTypes, type LibraryCatalogItem } from '@/api/library'
+import { validDirectory, validLibraryName, validTypes, librarySettingsPayload, moveType, catalogDescription } from '@/utils/libraryCatalogForm'
 import SafeTextarea from '@/components/SafeTextarea.vue'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
 import { copyModelTiers } from '@/utils/modelTiers'
@@ -12,7 +12,7 @@ import LibraryChunkingSettings from '@/views/library/settings/LibraryChunkingSet
 const { t, locale } = useI18n()
 const emit = defineEmits<{ changed: [] }>()
 const libraries = ref<LibraryCatalogItem[]>([]), draft = ref<LibraryCatalogItem | null>(null), saved = ref(''), error = ref(''), loading = ref(false), saving = ref(false)
-const creating = ref(false), newLibrary = ref({ template: 'external_timely' as LibraryTemplate, directory: '', name: '', description: '' })
+const creating = ref(false), newLibrary = ref({ directory: '', name: '', description: '' })
 const fromType = ref(''), toType = ref('')
 let sequence = 0
 const dirty = computed(() => !!draft.value && JSON.stringify(draft.value) !== saved.value)
@@ -111,15 +111,14 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
     <t-loading :loading="loading" show-overlay>
       <form v-if="draft" class="catalog-form" novalidate @submit.prevent="save">
         <fieldset :disabled="saving || loading">
-          <dl class="readonly-fields"><dt>{{ t('ikb18.template') }}</dt><dd>{{ t(`ikb18.${draft.template}`) }}</dd><dt>{{ t('ikb18.directory') }}</dt><dd><code>{{ draft.directory }}/</code></dd><dt>{{ t('ikb18.systemRole') }}</dt><dd>{{ systemRoleName }}</dd></dl>
-          <p>{{ t(`ikb18.${draft.template}Hint`) }}</p>
+          <dl class="readonly-fields"><dt>{{ t('ikb18.directory') }}</dt><dd><code>{{ draft.directory }}/</code></dd><dt>{{ t('ikb18.systemRole') }}</dt><dd>{{ systemRoleName }}</dd></dl>
           <label>{{ t('ikb18.name') }}<t-input :disabled="saving || loading" v-model="draft.name" :maxlength="255" :aria-label="t('ikb18.name')" /></label>
           <label>{{ t('ikb18.description') }}<SafeTextarea :disabled="saving || loading" v-model="draft.description" :autosize="{ minRows: 2, maxRows: 8 }" /></label>
           <h3>{{ t('ikb18.admissionPolicyTitle') }}</h3>
           <p>{{ t('ikb18.admissionPolicyHint') }}</p>
           <p>{{ t('ikb18.processingPolicy') }}</p>
           <ModelTierEditor v-model="draft.model_tiers" :tiers="modelTiers" :before-navigate="confirmLeave" :disabled="saving || loading" />
-          <div v-if="chunkingConfig" :key="draft.id" :inert="saving || loading"><p>{{ t('ikb18.parentChildFixed') }}</p><LibraryChunkingSettings :config="chunkingConfig" embedded parent-child-locked @update:config="updateChunking" /></div>
+          <div v-if="chunkingConfig" :key="draft.id" :inert="saving || loading"><LibraryChunkingSettings :config="chunkingConfig" embedded @update:config="updateChunking" /></div>
           <label class="toggle-label">{{ t('ikb18.feed') }}<t-switch :disabled="saving || loading" v-model="draft.feed_enabled" :aria-label="t('ikb18.feed')" /></label>
           <section v-for="kind in typeSections" :key="kind">
             <h3>{{ t(kind === 'content_types' ? 'ikb18.contentTypes' : 'ikb18.relationTypes') }}</h3>
@@ -138,8 +137,6 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
     </t-loading>
     <t-dialog v-model:visible="creating" :header="t('ikb18.create')" :footer="false" :close-btn="!saving" :close-on-esc-keydown="!saving" :close-on-overlay-click="false" width="min(560px, 95vw)">
       <form class="catalog-form" novalidate @submit.prevent="create"><fieldset :disabled="saving">
-        <label>{{ t('ikb18.template') }}<t-select :disabled="saving || loading" v-model="newLibrary.template" :options="LIBRARY_TEMPLATES.map(value => ({ value, label: t(`ikb18.${value}`) }))" /></label><p>{{ t(`ikb18.${newLibrary.template}Hint`) }}</p>
-        <dl class="readonly-fields"><template v-for="value in LIBRARY_TEMPLATES" :key="value"><dt>{{ t(`ikb18.${value}`) }}</dt><dd>{{ t(`ikb18.${value}Hint`) }}</dd></template></dl>
         <label>{{ t('ikb18.directory') }}<t-input :disabled="saving || loading" v-model="newLibrary.directory" :maxlength="100" /></label><p>{{ t('ikb18.invalidDirectory') }}</p>
         <label>{{ t('ikb18.name') }}<t-input :disabled="saving || loading" v-model="newLibrary.name" :maxlength="255" /></label>
         <label>{{ t('ikb18.description') }}<SafeTextarea :disabled="saving || loading" v-model="newLibrary.description" :autosize="{ minRows: 2, maxRows: 6 }" /></label>

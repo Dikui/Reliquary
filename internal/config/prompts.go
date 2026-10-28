@@ -18,7 +18,7 @@ var promptFiles = []struct {
 	name string
 	ids  []string
 }{
-	{"processing.yaml", []string{"article_processing", "article_entities", "library_media", "library_reference", "library_own", "library_institutional", "article_relations", "content_type_hint", "summary_merge", "topic_backfill"}},
+	{"processing.yaml", []string{"article_processing", "article_entities", "library_summary", "article_relations", "content_type_hint", "summary_merge", "topic_backfill"}},
 	{"verification.yaml", []string{"graph_verification"}},
 	{"entity_resolution.yaml", []string{"entity_resolution"}},
 	{"content_check.yaml", []string{"content_check"}},

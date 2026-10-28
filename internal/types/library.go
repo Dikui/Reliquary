@@ -21,7 +21,7 @@ const (
 // Library represents a library entity
 type Library struct {
 	SystemRole         string                `json:"system_role"`
-	Template           string                `json:"template" gorm:"default:own"`
+	Template           string                `json:"template" gorm:"default:standard"`
 	Directory          string                `json:"directory"`
 	ReviewCriteria     string                `json:"review_criteria"`
 	SourceEvidenceRule string                `json:"source_evidence_rule"`
@@ -170,6 +170,10 @@ func (library *Library) EnsureDefaults() {
 		return
 	}
 	library.Type = LibraryTypeDocument
+	if _, known := RulesForTemplate(library.Template); library.Template == "" || known {
+		library.Template = TemplateStandard
+		library.SourceEvidenceRule = ""
+	}
 	if library.ChunkingConfig.ChunkSize <= 0 {
 		library.ChunkingConfig.ChunkSize = 512
 	}
@@ -178,10 +182,6 @@ func (library *Library) EnsureDefaults() {
 	}
 	if len(library.ChunkingConfig.Separators) == 0 {
 		library.ChunkingConfig.Separators = []string{"\n\n", "\n", "。"}
-	}
-	// Long references match on small child chunks but need the parent's context; fixed by template.
-	if library.Template == TemplateExternalDurable {
-		library.ChunkingConfig.EnableParentChild = true
 	}
 
 	// Ensure IndexingStrategy has defaults.
@@ -263,8 +263,10 @@ func (library *Library) BeforeCreate(_ *gorm.DB) error {
 	if library.ID == "" {
 		library.ID = uuid.NewString()
 	}
-	if library.Template == "" {
-		library.Template = TemplateOwn
+	// Internal and historical constructors may still carry a legacy template.
+	if _, known := RulesForTemplate(library.Template); library.Template == "" || known {
+		library.Template = TemplateStandard
+		library.SourceEvidenceRule = ""
 	}
 	if library.Directory == "" {
 		library.Directory = fmt.Sprintf("custom-%x", md5.Sum([]byte(library.ID)))

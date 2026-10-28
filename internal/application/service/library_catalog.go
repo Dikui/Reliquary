@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,10 +20,12 @@ func (s *libraryService) ListLibraries(ctx context.Context) ([]*types.Library, e
 }
 
 func (s *libraryService) CreateLibrary(ctx context.Context, request types.CreateLibraryRequest) (*types.Library, error) {
-	library := &types.Library{ID: uuid.NewString(), SpaceID: types.MustSpaceIDFromContext(ctx), Name: request.Name, Description: request.Description, Template: request.Template, Directory: request.Directory, CreatedAt: time.Now(), UpdatedAt: time.Now(), ContentTypes: []types.LibraryContentType{}, RelationTypes: []types.LibraryRelationType{}}
-	if library.Template == types.TemplateExternalTimely {
-		library.SourceEvidenceRule = "link_required"
+	request.Template = strings.TrimSpace(request.Template)
+	if request.Template != "" && request.Template != types.TemplateStandard {
+		return nil, apperrors.NewBadRequestError("template must be standard")
 	}
+	library := &types.Library{ID: uuid.NewString(), SpaceID: types.MustSpaceIDFromContext(ctx), Name: request.Name, Description: request.Description, Template: request.Template, Directory: request.Directory, CreatedAt: time.Now(), UpdatedAt: time.Now(), ContentTypes: []types.LibraryContentType{}, RelationTypes: []types.LibraryRelationType{}}
+
 	library.EnsureDefaults()
 	library.ReviewCriteria = library.DefaultReviewCriteria()
 	if err := types.ValidateLibrary(library); err != nil {

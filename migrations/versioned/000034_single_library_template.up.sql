@@ -1,0 +1,10 @@
+BEGIN;
+ALTER TABLE libraries DROP CONSTRAINT libraries_template_check;
+ALTER TABLE libraries DROP CONSTRAINT libraries_source_evidence_check;
+ALTER TABLE libraries DISABLE TRIGGER protect_library_identity;
+UPDATE libraries SET template='standard',source_evidence_rule='';
+ALTER TABLE libraries ENABLE TRIGGER protect_library_identity;
+ALTER TABLE libraries ALTER COLUMN template SET DEFAULT 'standard';
+ALTER TABLE libraries ADD CONSTRAINT libraries_template_check CHECK(template='standard');
+ALTER TABLE libraries ADD CONSTRAINT libraries_source_evidence_check CHECK(source_evidence_rule='');
+COMMIT;

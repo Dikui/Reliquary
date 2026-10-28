@@ -15,7 +15,7 @@ export function updateEntryContent(id: string, data: { content: string; base_bod
   return put<{ success: boolean; message?: string; data: { entry_id: string; status: string } }>(`/api/v1/entries/${encodeURIComponent(id)}/body`, data);
 }
 
-export type LibraryTemplate = 'external_timely' | 'external_durable' | 'own' | 'generated';
+export type LibraryTemplate = 'standard';
 export interface LibraryContentType { name: string; position: number; enabled: boolean; extract_graph: boolean }
 export interface LibraryRelationType { name: string; position: number; enabled: boolean }
 export interface LibraryCatalogItem {
@@ -31,7 +31,8 @@ export interface LibraryCatalogItem {
 }
 export function listLibraries() { return get<{ success: boolean; data: LibraryCatalogItem[]; message?: string }>('/api/v1/libraries'); }
 export const getCatalogLibrary = (id: string) => get<{ success: boolean; data: LibraryCatalogItem; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
-export const createCatalogLibrary = (data: { template: LibraryTemplate; directory: string; name: string; description: string }) => post<{ success: boolean; data: LibraryCatalogItem; message?: string }>('/api/v1/libraries', data)
+export interface CreateLibraryRequest { template?: LibraryTemplate; directory: string; name: string; description: string }
+export const createCatalogLibrary = (data: CreateLibraryRequest) => post<{ success: boolean; data: LibraryCatalogItem; message?: string }>('/api/v1/libraries', data)
 export const saveCatalogLibrary = (id: string, data: Record<string, unknown>) => put<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`, data)
 export const deleteCatalogLibrary = (id: string) => del<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
 export type LibraryRebuildScope = 'failed' | 'all'
