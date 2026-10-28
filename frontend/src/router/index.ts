@@ -12,6 +12,15 @@ const router = createRouter({
   routes: createApplicationRoutes(import.meta.env.DEV),
 });
 
+// This branch and its lazy import are removed from production bundles.
+if (import.meta.env.DEV) {
+  router.addRoute({
+    path: '/platform/dev/ui',
+    name: 'uiPreview',
+    component: () => import('../views/dev/UiPreview.vue'),
+  })
+}
+
 // 路由守卫：载入唯一用户与部署能力
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()

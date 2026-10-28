@@ -1,0 +1,54 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import test from 'node:test'
+
+const tokens = readFileSync(new URL('../../styles/tokens.css', import.meta.url), 'utf8')
+const styles = readFileSync(new URL('./ui.css', import.meta.url), 'utf8')
+const preview = readFileSync(new URL('../../views/dev/UiPreview.vue', import.meta.url), 'utf8')
+
+function declarations(source: string, selector: string) {
+  const rules = [...source.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  const rule = rules.find(match => match[1]!.trim() === selector)
+  assert.ok(rule, `Missing selector: ${selector}`)
+  const body = rule[2]!
+  return Object.fromEntries(body.split(';').map(value => value.trim()).filter(Boolean).map(value => {
+    const colon = value.indexOf(':')
+    return [value.slice(0, colon).trim(), value.slice(colon + 1).trim()]
+  }))
+}
+
+test('Swiss dimensions preserve the 16px design baseline under the legacy 14px root', () => {
+  const light = declarations(tokens, ':root')
+  assert.deepEqual(Object.fromEntries(Object.keys(light).filter(key => key.startsWith('--text-')).map(key => [key, light[key]])), {
+    '--text-xs': '12px', '--text-sm': '14px', '--text-md': '16px', '--text-lg': '20px',
+    '--text-xl': '28px', '--text-2xl': '36px', '--text-3xl': '44px',
+  })
+  assert.deepEqual(Array.from({ length: 7 }, (_, index) => light[`--space-${index + 1}`]),
+    ['4px', '8px', '12px', '16px', '24px', '32px', '48px'])
+  assert.equal(light['--control'], '40px')
+  assert.equal(light['--content'], '1216px')
+  assert.equal(light['--sidebar'], '224px')
+  assert.equal(light['--switcher-height'], '48px')
+  assert.equal(declarations(styles, '.rq-control')['min-height'], 'var(--control)')
+  assert.equal(declarations(styles, '.rq-control').padding, 'var(--space-2) var(--space-3)')
+  assert.equal(declarations(styles, '.rq-button')['min-height'], 'var(--control)')
+  assert.equal(declarations(styles, '.rq-textarea')['min-height'], '96px')
+  assert.equal(declarations(styles, '.rq-checkbox, .rq-radio').width, '17.6px')
+  assert.equal(declarations(styles, '.rq-checkbox, .rq-radio').height, '17.6px')
+  for (const source of [tokens, styles, preview]) assert.doesNotMatch(source, /\b\d*\.?\d+rem\b/, 'new dimensions must not depend on the legacy root size')
+})
+
+test('body and button text use the normal scale while field controls match the design weight', () => {
+  const base = styles.match(/font:\s*([^;]+);/)![1]
+  assert.equal(base, 'var(--text-md)/var(--leading) var(--font)')
+  assert.equal(declarations(styles, ':where(.rq-field, .rq-chip, .rq-table-wrap)')['font-size'], 'var(--text-sm)')
+  assert.equal(declarations(styles, '.rq-field .rq-control')['font-size'], 'var(--text-sm)')
+  assert.equal(declarations(styles, '.rq-field .rq-control')['font-weight'], '600')
+  assert.equal(declarations(styles, '.rq-field__label')['font-weight'], '600')
+})
+
+test('checked checkboxes and radios use the accent palette in both themes', () => {
+  assert.equal(declarations(styles, '.rq-checkbox, .rq-radio')['accent-color'], 'var(--accent)')
+  assert.equal(declarations(tokens, ':root')['--accent'], '#e2231a')
+  assert.equal(declarations(tokens, ':root[theme-mode="dark"]')['--accent'], '#ff3b30')
+})

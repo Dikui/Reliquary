@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ReparseConfirmHost from '@/components/ReparseConfirmHost.vue'
 import ServiceAvailabilityNotice from '@/components/ServiceAvailabilityNotice.vue'
+import FeedbackHost from '@/components/ui/FeedbackHost.vue'
 
 // TDesign locale configs
 import enUSConfig from 'tdesign-vue-next/esm/locale/en_US'
@@ -24,6 +25,7 @@ const tdGlobalConfig = computed(() => tdLocaleMap[locale.value] || enUSConfig)
       <ServiceAvailabilityNotice />
       <RouterView />
       <ReparseConfirmHost />
+      <FeedbackHost />
     </div>
   </t-config-provider>
 </template>

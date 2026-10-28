@@ -152,3 +152,28 @@ The entry API's parse_status describes body indexing, and summary_status describ
 ## Weekly content checks
 
 Source: .scratch/weekly-self-check/spec.md (local only). ContentChecksPage under Diagnostics reuses TDesign selects, input, switch, buttons, loading and pagination, the shared theme and the existing entry reference route. Settings are explicitly saved; no model or schedule is enabled by default. List page and selected run live in URL state. Inline failures remain visible with existing results; only explicit recheck starts another run. Details expose source excerpts as escaped text and navigate through the existing reference/hash validation.
+
+
+## Swiss UI foundation
+
+Source: the approved Swiss redesign and foundation task (local tracker), with
+domain behavior still owned by CONTEXT.md and existing API contracts. This
+section applies to newly migrated Swiss pages and the development component
+preview. Existing pages keep their canonical TDesign owners above until migrated.
+
+- `frontend/src/components/ui` owns the new reusable controls, table presentation,
+  accessible Reka overlays and feedback services. See DESIGN.md for visual rules.
+- Field associates one native control with its label, hint and validation error.
+  Select uses the native platform popup; Combobox provides authored filtering.
+- DataTable receives the current page of rows and controlled checked/focused keys.
+  Its select-all action applies to those rows only. Server batch membership,
+  pagination and URL filters remain with the owning page and existing APIs.
+- Toasts and confirmations share one FeedbackHost under the existing app locale
+  provider. Existing MessagePlugin and DialogPlugin call sites remain unchanged.
+- Confirmation initially focuses Cancel, prevents duplicate async actions and
+  retains a failed action for retry. Dialog and Drawer trap focus and restore
+  the opener on close; keyboard behavior belongs to Reka UI.
+- New CSS uses rq-prefixed classes; token declarations add no global element
+  reset. Global scrollbar rules remain owned by the existing theme.
+- Component tests run with a DOM adapter, without starting a browser. Visual
+  acceptance remains a separate browser task on `/platform/dev/ui`.

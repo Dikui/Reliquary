@@ -80,3 +80,90 @@ TDesign owns buttons, inputs, date pickers, loading, empty states and pagination
 
 
 EntryProcessingStatus uses the existing success outline tag for confirmed storage and a separate neutral, active or error tag for background work. Cards, rows and details share these labels and the TDesign retry button. Labels wrap in narrow containers; the saved state does not change to an error color when enrichment fails. No new theme tokens are introduced.
+
+## Swiss UI foundation
+
+The approved Swiss redesign is introduced in stages. Existing TDesign pages keep
+the preceding contract until their own migration. New shared primitives in
+`frontend/src/components/ui` use the foundation below. The development preview
+is `/platform/dev/ui`; it is excluded from production. Local mockups in
+`design/` supply the visual reference. This foundation performs no business
+data migration and does not migrate existing TDesign call sites.
+
+### Colors
+
+[tokens.css](frontend/src/styles/tokens.css) is the runtime source of truth.
+It preserves the local mockup palette. This document describes the mapping and
+does not generate another copy of the tokens. `useTheme` resolves light, dark
+and system preferences into the root `theme-mode` attribute.
+
+`--bg`, `--surface`, `--surface-soft`, `--text`, `--muted` and `--border` describe
+surfaces and content. `--accent` is emphasis; `--danger`, `--success` and
+`--warning` describe status. `--lib-1` through `--lib-8` identify libraries,
+without semantic status. `--select` marks one current focus; checked rows use
+`--surface-soft`. Status controls always have a text label.
+
+### Typography
+
+`--font` is the Helvetica and CJK fallback stack. `--mono` is for identifiers
+and numbers. Components use the token type scale and line height. Existing page
+font preferences and TDesign variables are independent during the migration.
+
+### Layout
+
+The spacing scale runs from 0.25rem to 3rem. Controls have a 2.5rem minimum
+height. Dialogs fit the viewport; content scrolls while actions remain reachable.
+Tables own horizontal overflow without imposing a page height. Table callers
+own paging and supply the current rows; the foundation does not fetch data.
+
+### Elevation & Depth
+
+Static surfaces have no shadow. Dialogs, drawers, menus, tooltips and notifications
+use `--shadow-float`. Portals attach overlays to the body. Layer order is overlay
+200, dialog 201, menu 210, tooltip 220 and toast 230.
+
+### Shapes
+
+Corners are square. Rules and borders provide hierarchy. Native select, checkbox
+and radio interaction remains owned by the operating system; CSS supplies color
+and sizing. Native textarea resizing remains vertical, as in the approved mockup.
+
+### Components
+
+Import reusable components from `frontend/src/components/ui`. Its index includes
+the shared stylesheet. Each component accepts standard HTML attributes where
+applicable. New styles are scoped by `rq-` classes; tokens add no element resets.
+
+| Capability | Canonical owner | Source of truth | Allowed variants | Verification |
+| --- | --- | --- | --- | --- |
+| Table Selection | DataTable.vue | controlled selected and focused keys | current page rows | DataTable.test.ts |
+| Select/Listbox | Select.vue, Combobox.vue | native select or Reka combobox | native, filtered | controls.test.ts, overlays.test.ts |
+| Form | Field.vue and native controls | Field context associates label, hint and error | text, textarea, select, checkbox, switch, radio | controls.test.ts |
+| Toast | feedback.ts and FeedbackHost.vue | one app host | success, info, warning, error | feedback.test.ts |
+
+Buttons expose primary, default, ghost and danger variants. Busy buttons preserve
+their label geometry and block repeated actions. Field wraps one control; an
+explicit control ID must also be supplied to Field. Inputs preserve IME composition.
+Tabs, dropdowns, tooltips, dialogs and comboboxes delegate keyboard and focus
+behavior to Reka UI 2.11.0. Dialogs and drawers restore focus on close.
+
+`toast.success/info/warning/error(content, durationMs?)` returns `{ close }`.
+Duration zero persists until closed. Repeated identical active messages deduplicate.
+`confirm({ header, body, confirmBtn, cancelBtn, onConfirm, onCancel, onClose })`
+returns `{ destroy, update, result }`. `result` resolves to a boolean. Async
+confirmation blocks duplicate actions, keeps a failed dialog open for retry,
+and initially focuses Cancel. `destroy()` is idempotent. Existing TDesign call
+sites are not migrated by this foundation.
+
+Skeleton pulse and busy rotation respect reduced motion. All new visible text
+and accessible action labels come from the application locale or caller props.
+Use slots for page-specific table cells and recovery actions.
+
+### Do's and Don'ts
+
+- Use one yellow current item and independent gray checked rows.
+- Use library colors only to distinguish libraries, with names alongside them.
+- Keep links underlined and dark; use red on hover.
+- Do not use mockup sample numbers as application data.
+- Do not introduce element-wide resets while old pages remain in use.
+- Verify the development-only `/platform/dev/ui` route manually before a visual release.
