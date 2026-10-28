@@ -3,7 +3,7 @@ import test from 'node:test'
 import { doc, mount, send, settle } from './__tests__/dom.ts'
 import { loadUiComponent } from './uiTestLoader.ts'
 import { createRequire } from 'node:module'
-import { nextTick } from 'vue'
+import { h, nextTick, ref } from 'vue'
 const { confirm, toast } = createRequire(import.meta.url)('./feedback.ts') as typeof import('./feedback.ts')
 
 test('toast service renders live feedback, deduplicates, supports close and expires', async t => {
@@ -70,5 +70,49 @@ test('confirm cancel, Escape and destroy settle once without calling the action'
   assert.equal(actions, 0)
   assert.equal(cancelled, 1)
   assert.equal(closed, 1)
+  await mounted.unmount()
+})
+
+test('a stable danger confirmation closes with Escape from the confirm button', async () => {
+  const mounted = mount(loadUiComponent('FeedbackHost'))
+  const dialog = confirm({ header: 'Delete material', theme: 'danger', confirmBtn: 'Delete' })
+  await settle()
+  await settle()
+  const button = doc.querySelector('[data-confirm]')!
+  button.focus()
+  await send(button, 'keydown', { key: 'Escape' })
+  assert.equal(doc.querySelector('[role="dialog"]'), null)
+  assert.equal(await dialog.result, false)
+  await mounted.unmount()
+})
+
+test('Escape is blocked during submission and closes the same confirmation after a failure', async () => {
+  const mounted = mount(loadUiComponent('FeedbackHost'))
+  let reject!: (error: Error) => void
+  const dialog = confirm({ header: 'Delete material', theme: 'danger', onConfirm: () => new Promise((_resolve, fail) => { reject = fail }) })
+  await settle()
+  await send(doc.querySelector('[data-confirm]')!, 'click')
+  await send(doc.activeElement, 'keydown', { key: 'Escape' })
+  assert.ok(doc.querySelector('[role="dialog"]'))
+  reject(new Error('Failed'))
+  await settle()
+  assert.ok(doc.querySelector('[role="alert"]'))
+  await send(doc.querySelector('[data-confirm]')!, 'keydown', { key: 'Escape' })
+  assert.equal(doc.querySelector('[role="dialog"]'), null)
+  assert.equal(await dialog.result, false)
+  await mounted.unmount()
+})
+
+test('a confirmation owns Escape above an existing shared dialog', async () => {
+  const open = ref(true), Dialog = loadUiComponent('Dialog'), Feedback = loadUiComponent('FeedbackHost')
+  const mounted = mount({ setup: () => () => h('div', [h(Dialog, { modelValue: open.value, title: 'Edit material', 'onUpdate:modelValue': (value: boolean) => { open.value = value } }, () => h('input')), h(Feedback)]) })
+  await settle()
+  const confirmation = confirm({ header: 'Discard changes', theme: 'danger' })
+  await settle()
+  assert.equal(doc.querySelectorAll('[role="dialog"]').length, 2)
+  await send(doc.querySelector('[data-confirm]')!, 'keydown', { key: 'Escape' })
+  assert.equal(await confirmation.result, false)
+  assert.equal(open.value, true)
+  assert.equal(doc.querySelectorAll('[role="dialog"]').length, 1)
   await mounted.unmount()
 })

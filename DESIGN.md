@@ -186,9 +186,8 @@ Use slots for page-specific table cells and recovery actions.
 The materials route uses a two-column list and preview at widths above 900px.
 The compact list uses one yellow focus row; the table uses DataTable's independent
 focus and checked state. Narrow layouts retain an explicit Open button on every
-list row. The existing detail drawer remains the destination until the detail
-page migration. The page and batch dialog use the shared Swiss controls and
-feedback service. Source labels and trust markers remain visible.
+list row. Full details open the independent material reading route. The page and
+batch dialog use the shared Swiss controls and feedback service. Source labels and trust markers remain visible.
 
 The header identifies the selected library with its persisted LibMark and its
 catalogue position. Counts come from the current server result. Missing per-entry
@@ -203,3 +202,17 @@ have a transparent background; status squares retain their semantic colors.
 The materials page can scroll when its expanded filters exceed the viewport,
 while its material scroller retains at least 240px of height. Table title content
 keeps a 266px minimum width and the shared table container owns horizontal overflow.
+
+### Swiss material details
+
+The detail route `/platform/entries/:id` has a wrapping action bar and a reading
+column beside a 352px information rail. Below 960px the rail follows the body.
+The body uses a 17px sans face with 1.85 line height and a 36em measure. Real
+saved-body paragraph numbers occupy the margin and the referenced paragraph
+alone uses `--select` and `--on-select`. The existing DocContent renderer owns
+Markdown, formulas, diagrams, highlighting and protected attachment access.
+The rail uses shared Tabs for summary, entities, relations and processing.
+Native content-type selection, shared confirmation/toast services, and the
+shared Dialog for body-image previews keep interaction ownership consistent.
+Hidden Tabs panels never participate in layout, even when a page defines flex
+layout for its active panel.

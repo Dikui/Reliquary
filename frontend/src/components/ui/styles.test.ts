@@ -63,3 +63,25 @@ test('focused rows keep status, muted and tag text on the selection palette in b
   assert.equal(light['--on-select'], '#111111')
   assert.equal(dark['--on-select'] || light['--on-select'], '#111111')
 })
+
+test('hidden tab panels cannot be made visible by a page layout display rule', () => {
+  assert.equal(declarations(styles, '.rq-tabs__panel[hidden]').display, 'none !important')
+  const detail = readFileSync(new URL('../../views/library/EntryDetail.vue', import.meta.url), 'utf8')
+  assert.match(detail, /:deep\(\.rq-tabs__panel:not\(\[hidden\]\)\)/)
+})
+
+test('active tabs retain the contrasting palette on hover in both themes', () => {
+  assert.equal(declarations(styles, '.rq-tabs__trigger:not(:disabled):not([data-state="active"]):hover').background, 'var(--surface-soft)')
+  const active = declarations(styles, '.rq-tabs__trigger[data-state="active"]')
+  assert.equal(active.background, 'var(--text)')
+  assert.equal(active.color, 'var(--bg)')
+  for (const [selector, background, foreground] of [
+    [':root', '#111111', '#ffffff'],
+    [':root[theme-mode="dark"]', '#f2f2f2', '#0d0d0d'],
+  ]) {
+    const theme = declarations(tokens, selector!)
+    assert.equal(theme['--text'], background)
+    assert.equal(theme['--bg'], foreground)
+  }
+  assert.doesNotMatch(styles, /\.rq-tabs__trigger:not\(:disabled\):hover\s*\{/)
+})

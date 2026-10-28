@@ -6,7 +6,7 @@ const { t } = useI18n()
 
 <template>
   <span v-if="hasUpdate" class="entry-update-notice">
-    <a v-if="latestEntryId" :href="`/platform/entries?entry_id=${encodeURIComponent(latestEntryId)}`" @click.stop @keydown.enter.stop @keydown.space.stop>{{ t('ikb18.hasUpdate') }}</a>
+    <a v-if="latestEntryId" :href="`/platform/entries/${encodeURIComponent(latestEntryId)}`" @click.stop @keydown.enter.stop @keydown.space.stop>{{ t('ikb18.hasUpdate') }}</a>
     <span v-else>{{ t('ikb18.hasUpdate') }}</span>
   </span>
 </template>

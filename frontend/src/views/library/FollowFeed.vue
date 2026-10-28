@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { entryDetailLocation } from '@/utils/bodyReference'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -116,7 +117,7 @@ async function markAllViewed() {
   } catch { if (!disposed) viewError.value = t('follows.markFailed') }
   finally { if (!disposed) marking.value = false }
 }
-function openArticle(article: FollowFeedEntry) { void router.push({ path: '/platform/entries', query: { entry_id: article.entry_id } }) }
+function openArticle(article: FollowFeedEntry) { void router.push(entryDetailLocation(article.entry_id)) }
 function openEntity(id: string) { void router.push({ path: '/platform/entries', query: { tab: 'entities', entity_id: id } }) }
 function retryViewed() { return viewRetryAction.value === 'all' ? markAllViewed() : recordOpening() }
 watch(() => route.query, () => {
@@ -131,7 +132,7 @@ onUnmounted(() => { disposed = true; sequence++ })
 <template>
   <main class="follow-feed-page">
     <header class="feed-heading"><div><h1>{{ t('follows.title') }}</h1><p>{{ t('follows.description') }}</p></div><t-button variant="outline" :loading="marking" :disabled="loading || marking" @click="markAllViewed">{{ t('follows.markAllViewed') }}</t-button></header>
-    <form class="feed-toolbar" @submit.prevent="changeFilters">
+    <form novalidate class="feed-toolbar" @submit.prevent="changeFilters">
       <label class="feed-filter-field"><span>{{ t('follows.library') }}</span><t-select v-model="libraryId" :options="libraryOptions" :disabled="loading || marking" :aria-label="t('follows.library')" @change="changeLibrary" /></label>
       <label class="feed-filter-field"><span>{{ t('follows.filterTarget') }}</span><t-select v-model="targetIds" :options="options" multiple clearable filterable :loading="store.targetsLoading" :disabled="loading || marking" :placeholder="t('follows.allTargets')" :aria-label="t('follows.filterTarget')" @change="changeFilters" /></label>
       <label class="feed-filter-field feed-limit"><span>{{ t('follows.limit') }}</span><t-select v-model="limit" :options="limitOptions" :disabled="loading || marking" :aria-label="t('follows.limit')" @change="changeFilters" /></label>

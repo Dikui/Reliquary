@@ -8,14 +8,15 @@ import 'katex/dist/katex.min.css';
 import hljs from "highlight.js";
 import "highlight.js/styles/github.css";
 import mermaid from "mermaid";
-import { onMounted, ref, nextTick, onUnmounted, watch, computed, defineAsyncComponent } from "vue";
+import { onMounted, ref, nextTick, onUnmounted, watch, computed, defineAsyncComponent, type PropType } from "vue";
 import {
   getChunkByIdOnly,
   updateEntryMetadata,
   reparseEntry, getEntryDetails,
   ENTRY_CHUNK_PAGE_SIZE,
 } from "@/api/library";
-import { MessagePlugin } from "tdesign-vue-next";
+import { toast } from '@/components/ui/feedback';
+import { numberReadingParagraphs, focusReadingParagraph, bindReadingImages } from '@/utils/readingParagraphs';
 import { sanitizeHTML, safeMarkdownToHTML, createSafeImage, isValidImageURL, hydrateProtectedFileImages, createProtectedFileImageScope, isValidURL } from '@/utils/security';
 import { normalizeSpuriousTablePrefixes } from '@/utils/markdownTableNormalize';
 import { openMermaidFullscreen } from '@/utils/mermaidViewer';
@@ -36,7 +37,7 @@ import { getApiBaseUrl } from '@/utils/api-base';
 import { copyWithToast } from '@/utils/clipboard';
 import { entryFileFormatLabel, entryChannelLabel, getExternalToolName } from '@/utils/entrySourceLabels';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const EntryContentEditor = defineAsyncComponent(() => import('./EntryContentEditor.vue'));
 const contentEditor = ref();
 const editingEntry = ref<{ id: string; title: string } | null>(null);
@@ -160,9 +161,9 @@ const saveMetadata = async () => {
     if (result?.data) {
       applyProcessingState(result.data);
     }
-    MessagePlugin.success(t('common.saveSuccess'));
+    toast.success(t('common.saveSuccess'));
   } catch (error: any) {
-    MessagePlugin.error(error?.message || t('common.saveFailed'));
+    toast.error(error?.message || t('common.saveFailed'));
   } finally {
     metadataSaving.value = false;
   }
@@ -180,9 +181,9 @@ const reprocess = async () => {
     if (props.details.id !== id) return;
     if (!result?.success || !result.data) throw new Error(result?.message || t('entryStatus.retryFailed'));
     applyProcessingState(result.data);
-    MessagePlugin.success(t('library.reprocessQueued'));
+    toast.success(t('library.reprocessQueued'));
   } catch (error: any) {
-    MessagePlugin.error(error?.message || t('common.error'));
+    toast.error(error?.message || t('common.error'));
   } finally { reprocessing.value = false; }
 };
 const processingState = computed(() => entryProcessingState(props.details || {}));
@@ -232,10 +233,22 @@ mermaid.initialize({
     topPadding: 50
   }
 });
-const props = defineProps(["visible", "details", "entryType", "sourceInfo", "parse_status", "libraryId", "reference"]);
+const props = defineProps({
+  visible: { type: Boolean, default: false },
+  reading: { type: Boolean, default: false },
+  details: { type: Object as PropType<Record<string, any>>, required: true },
+  entryType: String,
+  sourceInfo: [String, Object],
+  parse_status: String,
+  libraryId: String,
+  reference: Object as PropType<SourceLocation>,
+});
 const externalToolName = computed(() => getExternalToolName(props.details));
 let previewImages = createProtectedFileImageScope();
+let markdownRenderGeneration = 0;
+let mermaidRenderTask = Promise.resolve();
 function releasePreviewResources() {
+  markdownRenderGeneration++;
   previewImages.dispose();
   previewImages = createProtectedFileImageScope();
 }
@@ -252,7 +265,8 @@ watch(() => props.details?.id, async id => {
   }
 });
 
-const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntry", "openEntity", "openTopic", "reviewChanged"]);
+const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntry", "openEntity", "openTopic", "reviewChanged", "previewImage", "editingChange"]);
+watch(editingEntry, value => { if (props.reading) emit('editingChange', Boolean(value)); });
 const reportRelatedEntryIds = computed(() => Array.isArray(props.details?.metadata?.related_entry_ids)
   ? props.details.metadata.related_entry_ids
   : []);
@@ -339,6 +353,7 @@ const stopProcessingPolling = () => {
   processingPollTimer = null;
 };
 const scheduleProcessingPoll = () => {
+  if (props.reading) return;
   if (processingPollTimer !== null || !props.visible || !props.details?.id || !isProcessing.value) return;
   const id = props.details.id, generation = processingPollGeneration;
   processingPollTimer = setTimeout(async () => {
@@ -569,7 +584,7 @@ const traceEntryTitle = computed(() => {
 // Exposed so the parent's three-dot menu can jump straight into the
 // trace drawer for a card without forcing the user to click the
 // detail drawer header link manually.
-defineExpose({ openTimeline });
+defineExpose({ openTimeline, startContentEdit });
 
 marked.use({
   breaks: true,      // 启用单行换行转 <br>
@@ -700,7 +715,7 @@ watch(() => props.details?.chunkLoading, (val) => {
   if (val === false && pendingChunkPage !== null) {
     if (props.details?.chunkLoadError) {
       chunkPage.value = loadedChunkPage.value;
-      MessagePlugin.warning(props.details.chunkLoadError);
+      toast.warning(props.details.chunkLoadError);
     } else {
       loadedChunkPage.value = pendingChunkPage;
     }
@@ -812,35 +827,46 @@ watch(() => props.details?.id, () => { viewMode.value = 'merged'; });
 
 const runMarkdownPostRenderPipeline = async () => {
   if (!props.visible) return;
+  const generation = ++markdownRenderGeneration;
   const scope = previewImages;
   await nextTick();
-  if (scope.signal.aborted || !props.visible) return;
+  if (generation !== markdownRenderGeneration || scope.signal.aborted || !props.visible) return;
   const renderRoot = getMarkdownRenderRoot();
   if (!renderRoot) {
     return;
+  }
+  const isCurrent = () => generation === markdownRenderGeneration && !scope.signal.aborted
+    && props.visible && renderRoot === getMarkdownRenderRoot();
+  if (props.reading && !editingEntry.value) {
+    const bodyRoot = renderRoot.querySelector('.md-content') as HTMLElement | null;
+    if (bodyRoot) {
+      numberReadingParagraphs(bodyRoot, mergedContent.value);
+      focusReadingParagraph(bodyRoot, props.reference);
+    }
   }
   await hydrateProtectedFileImages(
     renderRoot,
     props.libraryId ? { mode: 'library', libraryId: props.libraryId } : undefined,
     scope,
   );
-  if (scope.signal.aborted) return;
+  if (!isCurrent()) return;
+  if (props.reading) bindReadingImages(renderRoot as HTMLElement, image => emit('previewImage', image), t('entryDetail.previewImage'));
   const images = renderRoot?.querySelectorAll?.('img.markdown-image') as NodeListOf<HTMLImageElement> | undefined;
   if (images) {
     images.forEach(async item => {
       const isValid = await checkImage(item.src);
-      if (!isValid) {
+      if (isCurrent() && !isValid) {
         item.remove();
       }
     })
   }
   // 渲染 Mermaid 图表
-  await renderMermaidDiagrams();
+  await renderMermaidDiagrams(renderRoot, isCurrent);
 };
 
 watch(() => [props.details.md, props.details.source_kind, props.details.vault_path], () => {
-  runMarkdownPostRenderPipeline();
-}, { immediate: true, deep: true, flush: 'post' })
+  if (viewMode.value === 'chunks') void runMarkdownPostRenderPipeline();
+}, { deep: true, flush: 'post' })
 
 watch(() => viewMode.value, (mode) => {
   if ((mode === 'chunks' || mode === 'merged') && props.visible) {
@@ -859,25 +885,30 @@ watch(() => props.visible, (visible) => {
   }
 }, { flush: 'post' });
 
+watch(() => props.reference, () => {
+  if (!props.reading) return;
+  const root = getMarkdownRenderRoot()?.querySelector('.md-content') as HTMLElement | null;
+  if (root) focusReadingParagraph(root, props.reference);
+}, { flush: 'post' });
+
 
 // 渲染 Mermaid 图表的函数
-const renderMermaidDiagrams = async () => {
-  try {
-    const mermaidElements = getMarkdownRenderRoot()?.querySelectorAll('.mermaid');
-    console.log('[Mermaid] Found mermaid elements:', mermaidElements?.length);
-    if (mermaidElements && mermaidElements.length > 0) {
-      await mermaid.run({
-        nodes: mermaidElements
-      });
-      console.log('[Mermaid] Rendering complete');
-      // 渲染完成后绑定点击事件
-      nextTick(() => {
-        bindMermaidClickEvents();
-      });
+const renderMermaidDiagrams = (renderRoot: ParentNode, isCurrent: () => boolean) => {
+  const render = async () => {
+    if (!isCurrent()) return;
+    try {
+      const nodes = Array.from(renderRoot.querySelectorAll('.mermaid'))
+        .filter(node => node.getAttribute('data-processed') !== 'true');
+      if (nodes.length) await mermaid.run({ nodes });
+      if (isCurrent()) bindMermaidClickEvents(renderRoot);
+    } catch (error) {
+      if (isCurrent()) console.error('Mermaid rendering error:', error);
     }
-  } catch (error) {
-    console.error('Mermaid rendering error:', error);
-  }
+  };
+  // Mermaid mutates its nodes asynchronously. Keep renders ordered so an old
+  // invocation cannot interrupt a newer body while it is drawing.
+  mermaidRenderTask = mermaidRenderTask.then(render, render);
+  return mermaidRenderTask;
 };
 
 // Mermaid 点击处理函数 - 必须在 bindMermaidClickEvents 之前定义
@@ -891,22 +922,18 @@ const handleMermaidClick = (e: Event) => {
 };
 
 // 为 Mermaid 容器绑定点击全屏事件（绑定在 div 上，不是 SVG 上）
-const bindMermaidClickEvents = () => {
-  const renderRoot = getMarkdownRenderRoot();
+const bindMermaidClickEvents = (renderRoot = getMarkdownRenderRoot()) => {
   if (!renderRoot) {
-    console.log('[Mermaid] markdown render root is null');
     return;
   }
   // 绑定在 .mermaid div 上，而不是 SVG 上
   const mermaidDivs = renderRoot.querySelectorAll('.mermaid');
-  console.log('[Mermaid] Found mermaid divs:', mermaidDivs.length);
-  mermaidDivs.forEach((div, index) => {
+  mermaidDivs.forEach((div) => {
     const divEl = div as HTMLElement;
     divEl.style.cursor = 'pointer';
     // 移除旧的事件监听器（避免重复绑定）
     divEl.removeEventListener('click', handleMermaidClick);
     divEl.addEventListener('click', handleMermaidClick);
-    console.log(`[Mermaid] Bound click event to div ${index}`);
   });
 };
 
@@ -957,6 +984,22 @@ const processMarkdown = (markdownText) => {
 
   return result;
 };
+// v-html must be stable while status, reference or other metadata changes.
+// Recomputing the renderer on every component render replaces hydrated images
+// and rendered SVG with their original Markdown placeholders.
+let previousRenderKey: unknown[] | undefined;
+let previousRenderedContent = '';
+const renderedMergedContent = computed(() => {
+  const key = [mergedContent.value, props.details.id, props.details.source_kind, props.details.vault_path, locale?.value];
+  if (!previousRenderKey || key.some((value, index) => value !== previousRenderKey[index])) {
+    previousRenderedContent = processMarkdown(mergedContent.value);
+    previousRenderKey = key;
+  }
+  return previousRenderedContent;
+});
+watch([renderedMergedContent, () => props.details.id, () => props.details.source_kind, () => props.details.vault_path, () => props.libraryId], () => {
+  void runMarkdownPostRenderPipeline();
+}, { immediate: true, flush: 'post' });
 const handleClose = async () => {
   if (personalDocumentDeleteBusy.value) return;
   if (editingEntry.value) {
@@ -1071,7 +1114,7 @@ const loadParentContext = async (item: any, index: number) => {
         parentContextCache.value = new Map(parentContextCache.value);
       }
     } catch (err) {
-      MessagePlugin.error(t('library.parentContextLoadFailed'));
+      toast.error(t('library.parentContextLoadFailed'));
       parentContextPopup.value = '';
       return;
     } finally {
@@ -1103,7 +1146,15 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 
 </script>
 <template>
-  <div class="doc_content" ref="mdContentWrap">
+  <div v-if="reading" ref="docMarkdownRoot" class="doc-reading">
+    <EntryContentEditor v-if="editingEntry" ref="contentEditor" :key="editingEntry.id"
+      :entry-id="editingEntry.id" :title="editingEntry.title" :index-only="details.source_kind === 'mine'"
+      @cancel="finishContentEdit" @saved="contentSaved" @preview="runMarkdownPostRenderPipeline">
+      <template #preview="{ content }"><div class="md-content" v-html="processMarkdown(content)" /></template>
+    </EntryContentEditor>
+    <div v-else class="md-content" v-html="renderedMergedContent" />
+  </div>
+  <div v-else class="doc_content" ref="mdContentWrap">
     <teleport to="body">
       <div v-if="visible && !isMainDrawerNarrow" class="doc-drawer-resize-handle" :style="{ right: `${mainDrawerWidth}px` }" role="separator"
         aria-orientation="vertical" @mousedown.prevent="onMainDrawerResizeStart">
@@ -1368,7 +1419,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             </div>
             <template v-else>
               <div v-if="!mergedContent" class="no_content">{{ $t('common.noData') }}</div>
-              <div v-else class="md-content" v-html="processMarkdown(mergedContent)"></div>
+              <div v-else class="md-content" v-html="renderedMergedContent"></div>
             </template>
           </div>
 
@@ -1442,6 +1493,46 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
     </t-drawer>
   </div>
 </template>
+
+<style scoped>
+.doc-reading { min-width: 0; color: var(--text); font-family: var(--font); font-size: 17px; line-height: 1.85; }
+.doc-reading :deep(.md-content) { font: inherit; color: var(--text); overflow-wrap: anywhere; }
+/* Include the Markdown root so these rules outrank the shared legacy renderer. */
+.doc-reading :deep(.md-content p), .doc-reading :deep(.md-content blockquote), .doc-reading :deep(.md-content ul), .doc-reading :deep(.md-content ol), .doc-reading :deep(.md-content dl), .doc-reading :deep(.md-content table), .doc-reading :deep(.md-content summary) { font-family: inherit; font-size: inherit; line-height: inherit; }
+.doc-reading :deep(.md-content p), .doc-reading :deep(.md-content blockquote), .doc-reading :deep(.md-content ul), .doc-reading :deep(.md-content ol), .doc-reading :deep(.md-content dl) { margin: 0 0 16px; }
+.doc-reading :deep(.md-content li > ul), .doc-reading :deep(.md-content li > ol), .doc-reading :deep(.md-content blockquote > :last-child) { margin-bottom: 0; }
+.doc-reading :deep(.md-content h1), .doc-reading :deep(.md-content h2), .doc-reading :deep(.md-content h3), .doc-reading :deep(.md-content h4), .doc-reading :deep(.md-content h5), .doc-reading :deep(.md-content h6) { font-family: var(--font); color: var(--text); font-weight: 800; }
+.doc-reading :deep(.md-content h1) { font-size: var(--text-xl); }
+.doc-reading :deep(.md-content h2) { font-size: var(--text-lg); padding-top: 8px; }
+.doc-reading :deep(.md-content h3) { font-size: 18px; }
+.doc-reading :deep(.md-content h4), .doc-reading :deep(.md-content h5), .doc-reading :deep(.md-content h6) { font-size: inherit; }
+.doc-reading :deep(.md-content > :first-child) { margin-top: 0; }
+.doc-reading :deep([data-paragraph]) { position: relative; scroll-margin-block: 24px; }
+.doc-reading :deep([data-paragraph]::before) { content: '¶' attr(data-paragraph); position: absolute; inset-inline-end: calc(100% + 12px); top: 4px; color: var(--muted); font: var(--text-xs) var(--mono); white-space: nowrap; }
+.doc-reading :deep(.md-content a) { color: inherit; text-decoration: underline; }
+.doc-reading :deep(.md-content a:hover) { color: var(--accent); }
+.doc-reading :deep(.md-content img), .doc-reading :deep(.md-content svg) { max-width: 100%; height: auto; }
+.doc-reading :deep(.md-content .mermaid), .doc-reading :deep(.md-content figure), .doc-reading :deep(.md-content img), .doc-reading :deep(.md-content blockquote), .doc-reading :deep(.md-content .code-block-wrapper), .doc-reading :deep(.md-content pre), .doc-reading :deep(.md-content code), .doc-reading :deep(.md-content table) { border-radius: 0; box-shadow: none; }
+.doc-reading :deep(.md-content blockquote) { border-left: 1px solid var(--rule); background: var(--surface-soft); padding: 16px; }
+.doc-reading :deep(.md-content figure) { background: transparent; }
+.doc-reading :deep(.md-content .code-block-wrapper) { border: 1px solid var(--border); background: var(--surface-soft); overflow: auto; }
+.doc-reading :deep(.md-content .code-block-header), .doc-reading :deep(.md-content pre), .doc-reading :deep(.md-content code) { background: var(--surface-soft); color: var(--text); }
+.doc-reading :deep(.md-content .code-block-header) { border-bottom: 1px solid var(--border); }
+.doc-reading :deep(.md-content code) { font-family: var(--mono); font-size: 0.9em; padding: 2px 4px; }
+.doc-reading :deep(.md-content .code-block-pre) { margin: 0; padding: 16px; overflow: auto; font-family: var(--mono); }
+.doc-reading :deep(.md-content .code-block-pre code) { background: transparent; font-size: inherit; padding: 0; white-space: pre; }
+.doc-reading :deep(.md-content .mermaid), .doc-reading :deep(.md-content .katex-display) { overflow-x: auto; }
+.doc-reading :deep(.md-content .mermaid) { background: var(--surface-soft); }
+.doc-reading :deep(.reading-image) { display: inline-block; max-width: 100%; border: 0; padding: 0; background: transparent; color: inherit; cursor: zoom-in; }
+.doc-reading :deep(.reading-image:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+.doc-reading :deep(.md-content table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.doc-reading :deep(.md-content table tr) { border-top: 1px solid var(--border); }
+.doc-reading :deep(.md-content table thead), .doc-reading :deep(.md-content table tr:nth-child(2n)) { background: var(--surface-soft); }
+.doc-reading :deep(.md-content table th), .doc-reading :deep(.md-content table td) { border: 1px solid var(--border); padding: 8px; }
+.doc-reading :deep(.md-content [data-reference]) { background: var(--select); color: var(--on-select); outline: 6px solid var(--select); }
+.doc-reading :deep(.md-content [data-reference] *) { color: var(--on-select); }
+@media (max-width: 960px) { .doc-reading :deep([data-paragraph]::before) { position: static; display: block; padding-bottom: 4px; } }
+</style>
 <style scoped lang="less">
 @import "./css/markdown.less";
 

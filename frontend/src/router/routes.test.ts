@@ -19,6 +19,17 @@ function testRoutes(): RouteRecordRaw[] {
   return createApplicationRoutes().map(stub)
 }
 
+test('material details have a direct route and legacy bookmarks preserve references', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
+  await router.push('/platform/entries/article-a?reference=paragraph&tab=relations')
+  assert.equal(router.currentRoute.value.name, 'entryDetail')
+  assert.equal(router.currentRoute.value.params.id, 'article-a')
+  await router.push('/platform/entries?entry_id=article-b&reference=paragraph&libraries=lib-a')
+  assert.equal(router.currentRoute.value.name, 'entryDetail')
+  assert.equal(router.currentRoute.value.params.id, 'article-b')
+  assert.deepEqual(router.currentRoute.value.query, { reference: 'paragraph', libraries: 'lib-a' })
+})
+
 test('removed feature routes return to libraries with one notice', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
   let notices = 0
@@ -104,7 +115,7 @@ test('root, platform and old login links return to libraries and removed convers
     await router.push(path)
     assert.equal(router.currentRoute.value.name, 'libraries')
   }
-  for (const path of ['/platform/chat/old-id', '/platform/creatChat', '/platform/agents', '/platform/entries/obsolete']) {
+  for (const path of ['/platform/chat/old-id', '/platform/creatChat', '/platform/agents']) {
     await router.push(path)
     assert.equal(router.currentRoute.value.name, 'platformNotFound', path)
   }
@@ -114,8 +125,8 @@ test('old library ID routes keep their library scope and entry reference', async
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
   for (const old of ['/platform/libraries/library-a', '/platform/libraries/library-a/documents']) {
     await router.push(old + '?entry_id=article-a')
-    assert.equal(router.currentRoute.value.path, '/platform/entries')
-    assert.equal(router.currentRoute.value.query.entry_id, 'article-a')
+    assert.equal(router.currentRoute.value.path, '/platform/entries/article-a')
+    assert.equal(router.currentRoute.value.params.id, 'article-a')
     assert.equal(router.currentRoute.value.query.libraries, 'library-a')
   }
 })

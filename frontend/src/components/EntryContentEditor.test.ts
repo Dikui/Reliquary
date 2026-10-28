@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { defineComponent, h } from 'vue'
 import { routerKey } from 'vue-router'
 import { createI18n } from 'vue-i18n'
+import { loadUiComponent } from './ui/uiTestLoader'
 import zh from '../i18n/locales/zh-CN'
 import { click, descendants, element, loadComponent, registerPrimitives, renderer, settle, visibleText } from '../views/library/componentTestHarness'
 
@@ -16,12 +16,8 @@ async function mountEditor(update: (id: string, data: any) => Promise<any>) {
   const component = loadComponent(new URL('./EntryContentEditor.vue', import.meta.url), {
     'vue-router': { routerKey },
     '@/api/library': { getEntryEditableBody: async () => body, updateEntryContent: update },
-    '@/utils/clipboard': { copyWithToast: async (value: string) => copies.push(value) },
-    'tdesign-vue-next': { DialogPlugin: { confirm: (options: any) => { dialog = options; return { destroy() {} } } }, MessagePlugin: { success: (message: string) => notices.push(message) } },
-    '@/components/SafeTextarea.vue': { __esModule: true, default: defineComponent({
-      props: ['modelValue', 'disabled'], emits: ['update:modelValue'],
-      setup: (props, { emit, attrs, expose }) => { expose({ focus() {} }); return () => h('textarea', { ...attrs, value: props.modelValue, disabled: props.disabled, onInput: (event: any) => emit('update:modelValue', event.target.value) }) },
-    }) },
+    '@/utils/clipboard': { copyToClipboard: async (value: string) => { copies.push(value); return true } },
+    '@/components/ui': { Button: loadUiComponent('Button'), Textarea: loadUiComponent('Textarea'), confirm: (options: any) => { dialog = options; return { destroy() {} } }, toast: { success: (message: string) => notices.push(message) } },
   })
   const root = element('root')
   const app = renderer.createApp(component, { entryId: 'entry', title: 'Original title', indexOnly: false, onSaved: (value: any) => saved.push(value) })

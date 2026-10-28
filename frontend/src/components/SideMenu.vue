@@ -37,7 +37,7 @@ const entryCount = computed(() => {
   return validCount(total) ? total : null
 })
 const selectedLibraries = computed(() => String(route.query.libraries || '').split(',').filter(Boolean))
-const isMaterials = computed(() => route.path === '/platform/entries' && !['entities', 'reviews'].includes(String(route.query.tab)))
+const isMaterials = computed(() => route.name === 'entryDetail' || (route.path === '/platform/entries' && !['entities', 'reviews'].includes(String(route.query.tab))))
 function labelWithCount(label: string, count: unknown) {
   return validCount(count) ? t('menu.itemCount', { name: label, count: n(count) }) : label
 }

@@ -1,5 +1,22 @@
 import { ikb18Zh } from './ikb18'
 export default {
+  entryDetail: {
+    previewImage: '查看图片',
+    "breadcrumb": "位置",
+    "information": "资料信息",
+    "loadFailed": "无法加载资料详情，请重试。",
+    "changeType": "修改内容类型",
+    "exportMarkdown": "导出 Markdown",
+    "bodyLength": "正文",
+    "characters": "{count} 字符",
+    "keyTerms": "关键名词",
+    "relationsFailed": "部分实体或关系未能加载，请重试。",
+    "modelCalls": "查看本条资料的模型调用记录",
+    "backgroundHint": "正文已保存。后台处理完成后，摘要、实体和关系会自动更新。",
+    "reprocessHint": "按当前库配置重新处理这份资料。正文保持不变，摘要、实体和关系将重新生成。",
+    "deleteHint": "删除“{title}”的正文、摘要、索引、实体关联和关系。只由这份资料支撑的实体也会移除，删除后不能恢复。"
+  },
+
   entries: {
     pagination: '结果分页', previous: '上一页', next: '下一页',
     "all": "全部",

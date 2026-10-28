@@ -51,8 +51,19 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         {
           path: "entries",
           name: "entries",
+          beforeEnter: to => {
+            if (typeof to.query.entry_id !== 'string' || !to.query.entry_id) return
+            const { entry_id: id, ...query } = to.query
+            return { name: 'entryDetail', params: { id }, query, hash: to.hash, replace: true }
+          },
           component: libraryPage,
           meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: 'entries/:id',
+          name: 'entryDetail',
+          component: () => import('../views/library/EntryDetail.vue'),
+          meta: { requiresInit: true, requiresAuth: true },
         },
         { path: 'content-checks', name: 'contentChecks', component: () => import('../views/insights/ContentChecksPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
         { path: 'diagnostics', name: 'diagnostics', component: () => import('../views/insights/IngestFailuresPage.vue'), meta: { requiresInit: true, requiresAuth: true } },

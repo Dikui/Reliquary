@@ -135,7 +135,7 @@ import { buildCommands, filterCommands } from './GlobalCommandPalette/commands'
 import ResultGroup from './GlobalCommandPalette/ResultGroup.vue'
 import ResultItem from './GlobalCommandPalette/ResultItem.vue'
 import LibraryScopeSelect from './LibraryScopeSelect.vue'
-import { referenceQuery } from '@/utils/bodyReference'
+import { entryDetailLocation } from '@/utils/bodyReference'
 import SearchImage from './SearchImage.vue'
 import RetrievalSettings from '@/views/settings/RetrievalSettings.vue'
 
@@ -290,23 +290,7 @@ const primaryActionForSelected = (ev?: { cmd: boolean }) => {
 const openChunk = (item: FlatChunkItem) => {
   commandPaletteStore.pushRecent(query.value)
   commandPaletteStore.closePalette()
-  const alreadyViewingEntry = route.name === 'entries'
-  // On the articles page, router.push to the same path+query
-  // is a no-op (vue-router dedupes identical navigations), so the document
-  // auto-open logic never fires. Dispatch a global event that Library.vue
-  // listens for to open the matching article.
-  if (alreadyViewingEntry) {
-    window.dispatchEvent(
-      new CustomEvent('reliquary:open-entry', {
-        detail: { libraryId: item.file.libraryId, entryId: item.file.entryId, location: item.chunk.locations?.[0] },
-      }),
-    )
-    return
-  }
-  router.push({
-    path: '/platform/entries',
-    query: referenceQuery(item.file.entryId, item.chunk.locations?.[0]),
-  })
+  router.push(entryDetailLocation(item.file.entryId, item.chunk.locations?.[0]))
 }
 
 const openFullSearch = () => {

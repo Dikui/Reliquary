@@ -5,15 +5,19 @@ import { nextTick, reactive, ref, watch } from 'vue'
 
 const source = readFileSync(new URL('./Library.vue', import.meta.url), 'utf8')
 
-test('referenced articles fetch details before opening', () => {
-  const fetch = source.indexOf('await getEntryDetails(targetId)')
-  assert.ok(fetch >= 0)
-  assert.ok(source.indexOf('openCardDetails(target)', fetch) > fetch)
-})
-
-test('a newer referenced-document navigation supersedes an older request', () => {
-  assert.match(source, /const request = \+\+autoOpenRequest/)
-  assert.match(source, /if \(request !== autoOpenRequest\) return;/)
+test('legacy material references navigate to the independent detail route', async () => {
+  const start = source.indexOf('const tryAutoOpenDocument =')
+  const end = source.indexOf('// React to later', start)
+  const pendingEntryId = ref<string | null>('article-a')
+  const route = { query: { reference: 'valid' } }
+  const pushes: unknown[] = []
+  const run = new Function('pendingEntryId', 'route', 'router', 'entryDetailLocation', 'parseReference', source.slice(start, end) + '; return tryAutoOpenDocument')(
+    pendingEntryId, route, { replace: (value: unknown) => pushes.push(value) },
+    (id: string, location: unknown) => ({ id, location }), () => ({ paragraph: 3 }),
+  )
+  await run()
+  assert.deepEqual(pushes, [{ id: 'article-a', location: { paragraph: 3 } }])
+  assert.equal(pendingEntryId.value, null)
 })
 
 test('sidebar navigation and article tabs remain synchronized without remounting the page', async () => {

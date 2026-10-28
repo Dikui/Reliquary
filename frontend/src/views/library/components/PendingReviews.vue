@@ -17,7 +17,7 @@ const pageSize = 20
 let generation = 0
 function safeURL(url: string) { return /^https?:\/\//i.test(url) && isValidURL(url) ? url : '' }
 function originalURL(item: ReviewEntry) { return safeURL(item.metadata?.intake?.source_info?.original_url || item.source || '') }
-function articleLink(id: string) { return `/platform/entries?entry_id=${encodeURIComponent(id)}` }
+function articleLink(id: string) { return `/platform/entries/${encodeURIComponent(id)}` }
 async function load() {
   const current = ++generation
   loading.value = true; error.value = ''

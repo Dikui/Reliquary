@@ -64,9 +64,11 @@
 .rq-skeleton { min-height: 16px; background: var(--surface-soft); animation: rq-pulse 1.5s ease-in-out infinite alternate; }
 .rq-tabs__list { display: flex; overflow-x: auto; border-bottom: 2px solid var(--rule); }
 .rq-tabs__trigger { min-height: var(--control); padding: var(--space-3) var(--space-4); border: 0; border-radius: 0; background: transparent; color: var(--text); font: inherit; font-weight: 600; white-space: nowrap; }
-.rq-tabs__trigger:not(:disabled):hover { background: var(--surface-soft); }
+.rq-tabs__trigger:not(:disabled):not([data-state="active"]):hover { background: var(--surface-soft); }
 .rq-tabs__trigger[data-state="active"] { background: var(--text); color: var(--bg); }
 .rq-tabs__panel { padding-block: var(--space-4); }
+/* Visibility is a Tabs invariant, independent of each page's panel layout. */
+.rq-tabs__panel[hidden] { display: none !important; }
 .rq-table-wrap { overflow: auto; max-width: 100%; border-top: 2px solid var(--rule); background: var(--surface); }
 .rq-table { width: 100%; border-collapse: collapse; }
 .rq-table th, .rq-table td { text-align: left; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); }

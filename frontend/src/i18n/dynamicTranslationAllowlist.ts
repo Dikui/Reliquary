@@ -2,6 +2,11 @@ import type { TranslationCall } from './translationCallAudit.ts'
 
 /** Reviewed runtime expressions. New expressions must be explicitly reviewed here. */
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
+  {
+    file: 'views/library/EntryDetail.vue',
+    expressions: ['processing.label', '`knowledgeWorkbench.entities.types.${entity.entity_type}`'],
+    reason: 'Shared processing status keys and the fixed entity type vocabulary.',
+  },
   { file: 'views/library/components/DocumentListView.vue', expressions: ['`entries.columns.${key}`', 'entryProcessingState(item).label', 'entryProcessingState(row).label'], reason: 'The fixed material columns and shared processing state labels exist in both locales.' },
   { file: 'views/library/components/EntryPreview.vue', expressions: ['`knowledgeStages.stage.${node.name}`', '`knowledgeStages.status.${status}`', 'state.label'], reason: 'Preview stage names and statuses are restricted to the existing localized enums; entry state uses the shared resolver.' },
   { file: 'views/insights/ContentChecksPage.vue', expressions: ['`contentCheck.day${value}`', '`contentCheck.${s}`', '`contentCheck.${kind}`'], reason: 'Weekdays, run states and finding kinds use the fixed content-check contract and have labels in both locales.' },

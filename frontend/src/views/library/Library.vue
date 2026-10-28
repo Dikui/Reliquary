@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, reactive, computed, nextTick } from "vue";
+import { ref, onMounted, onUnmounted, watch, reactive, computed } from "vue";
 import { Button, Input, Select, Chip, LibMark, Skeleton, EmptyState, ErrorState, confirm, toast } from '@/components/ui';
 import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue';
 import { useLibraryScope } from '@/composables/useLibraryScope';
-import { parseReference } from '@/utils/bodyReference';
+import { entryDetailLocation, parseReference } from '@/utils/bodyReference';
 import type { SourceLocation } from '@/types/search';
-import DocContent from "@/components/DocContent.vue";
 import useLibrary from '@/composables/useLibrary';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -37,7 +36,6 @@ import {
   documentListFiltersEqual,
   type DocumentListFilters,
 } from './documentListFilters';
-import type { EntryJudgment } from '@/api/entry-judgments';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
 import { useReparseConfirmStore } from '@/stores/reparseConfirm';
 import {
@@ -63,8 +61,6 @@ const currentLibraryLabel = computed(() => {
   return libraryScope.value.length === 1 && selected
     ? selected.display_name || selected.name : t('knowledgeEditor.document.title');
 });
-const referencedEntryId = ref(typeof route.query.entry_id === 'string' ? route.query.entry_id : '');
-const activeReference = ref<SourceLocation | undefined>(parseReference(route.query.reference));
 const libraryLoading = ref(false);
 const libraryError = ref('');
 const docListLoading = ref(true);
@@ -73,9 +69,8 @@ type KbTab = typeof validTabs[number]
 const initTab = validTabs.includes(route.query.tab as any) ? (route.query.tab as KbTab) : 'documents'
 const activeLibraryTab = ref<KbTab>(initTab);
 
-let { cardList, total, listError, details, loadEntries, delEntry, getCardDetails, clearCardDetails, getfDetails } = useLibrary(libraryId.value)
+let { cardList, total, listError, loadEntries, delEntry } = useLibrary(libraryId.value)
 
-let isCardDetails = ref(false);
 let disposed = false;
 let pollGeneration = 0;
 let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -175,7 +170,7 @@ const contentTypeOptions = computed(() => {
 });
 const selectedEntityId = ref('');
 watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
-const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeLibraryTab.value = 'entities'; closeDoc(); };
+const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeLibraryTab.value = 'entities'; };
 const fileTypeOptions = computed(() => [
   { label: t('library.allFileTypes'), value: '' },
   { label: 'PDF', value: 'pdf' },
@@ -412,44 +407,16 @@ watch(documentFilters, (filters, previous) => {
   }
 });
 
-// Auto-open document detail when navigated with ?entry_id=xxx.
-// Note: this runs both when the Library page mounts with a query param AND when a
-// subsequent in-page navigation (e.g. from the global command palette) only
-// changes the query without re-mounting the component; the internal ID is
-// stable and cardList may already be populated, so relying solely on the
-// cardList watcher misses the trigger.
+// Preserve old material links when query parameters change on the list route.
 const pendingEntryId = ref<string | null>(
   (route.query.entry_id as string) || null
 );
 
-let autoOpenRequest = 0;
-
 const tryAutoOpenDocument = async () => {
   if (!pendingEntryId.value) return;
-  activeReference.value = parseReference(route.query.reference);
-  const targetId = pendingEntryId.value;
-  referencedEntryId.value = targetId;
+  const id = pendingEntryId.value;
   pendingEntryId.value = null;
-  const request = ++autoOpenRequest;
-  const card = cardList.value.find((c: EntryCard) => c.id === targetId);
-
-  let target = card || ({ id: targetId } as EntryCard);
-  try {
-    const response: any = await getEntryDetails(targetId);
-    if (request !== autoOpenRequest) return;
-    const detail = response?.data || response;
-    if (detail && typeof detail === 'object') {
-      target = { ...target, ...detail, id: targetId } as EntryCard;
-    }
-  } catch (error) {
-    // Keep the previous ID-only fallback: getCardDetails will surface the
-    // normal detail loading error, while links to root-level files still work.
-    console.error('Failed to load referenced material', error);
-  }
-
-  if (request !== autoOpenRequest) return;
-  await nextTick();
-  openCardDetails(target);
+  await router.replace(entryDetailLocation(id, parseReference(route.query.reference)));
 };
 
 // React to later ?entry_id= changes on the same Library route (no remount).
@@ -462,16 +429,10 @@ watch(
   },
 );
 
-// Dispatched by the global command palette when the user picks a chunk that
-// lives in the Library they are already viewing — vue-router dedupes identical
-// navigations, so we rely on this event instead of a URL change.
+// Compatibility for extensions still dispatching the old material-open event.
 const handleOpenEntryEvent = async (e: Event) => {
-  const detail = (e as CustomEvent<{ libraryId: string; entryId: string; location?: SourceLocation }>).detail;
-  if (!detail || !detail.entryId) return;
-  activeReference.value = detail.location;
-  pendingEntryId.value = detail.entryId;
-  await router.replace({ query: { ...route.query, entry_id: detail.entryId, reference: detail.location ? JSON.stringify(detail.location) : undefined } });
-  tryAutoOpenDocument();
+  const detail = (e as CustomEvent<{ entryId: string; location?: SourceLocation }>).detail;
+  if (detail?.entryId) await router.push(entryDetailLocation(detail.entryId, detail.location));
 };
 
 onMounted(() => {
@@ -596,28 +557,12 @@ const updateStatus = (analyzeList: EntryCard[]) => {
   }, 1500);
 };
 
-// 恢复文档处理状态（用于刷新后恢复）
-
-const closeDoc = () => {
-  isCardDetails.value = false;
-  clearCardDetails();
-};
 const openCardDetails = (item: EntryCard) => {
-  isCardDetails.value = true;
-  getCardDetails(item);
+  void router.push(entryDetailLocation(item.id));
 };
 
-// Open source document preview
 const openSourceDoc = (entryId: string, location?: SourceLocation) => {
-  activeReference.value = location;
-  referencedEntryId.value = entryId;
-  isCardDetails.value = true;
-  getCardDetails({ id: entryId });
-};
-
-const openReportTopic = (topicId: string) => {
-  closeDoc();
-  void router.push({ path: '/platform/topics', query: { topic_id: topicId } });
+  void router.push(entryDetailLocation(entryId, location));
 };
 
 const confirmDeleteEntry = async (index: number, item: EntryCard) => {
@@ -660,22 +605,8 @@ function openBatch(action: import('@/api/entry-batches').EntryBatchAction = 'sta
 }
 async function batchChanged() { clearSelection(); resetPage(); await handlePendingChanged(); }
 
-// Opens ONLY the trace drawer for this card — does NOT pop the
-// document detail drawer behind it. The trace drawer attaches to
-// body so it renders independent of its host's visibility; we just
-// need `details` populated so the timeline component knows which
-// entry_id to fetch. getCardDetails resets details synchronously
-// then fills asynchronously, so we re-stamp the id/parse_status
-// right after the call to avoid the brief empty-id window that
-// would otherwise prevent the drawer from mounting.
-const docContentRef = ref<any>(null);
-const handleViewTrace = (index: number, item: EntryCard) => {
-  getCardDetails(item);
-  details.id = item.id;
-  details.parse_status = item.parse_status || '';
-  nextTick(() => {
-    docContentRef.value?.openTimeline?.();
-  });
+const handleViewTrace = (_index: number, item: EntryCard) => {
+  void router.push({ ...entryDetailLocation(item.id), query: { tab: 'processing' } });
 };
 
 const confirmRebuildEntry = async (index: number, item: EntryCard) => {
@@ -745,27 +676,6 @@ const handleScroll = () => {
   const element = entryScroll.value;
   if (element && element.scrollTop + element.clientHeight >= element.scrollHeight - 10) void loadMoreEntries();
 };
-const getDoc = (page: number) => {
-  getfDetails(details.id, page || 1)
-};
-
-const syncDocumentProcessingState = (state: { id?: string; [key: string]: unknown }) => {
-  if (!state?.id) return;
-  const card = cardList.value.find((item: EntryCard) => item.id === state.id);
-  if (card) Object.assign(card, state);
-  if (details.id === state.id) Object.assign(details, state);
-  if (selectedStarred.value !== '' && typeof state.starred === 'boolean' && String(state.starred) !== selectedStarred.value) {
-    selectedIds.value.delete(state.id);
-    resetPage();
-    void loadEntryFiles(libraryId.value);
-  }
-};
-const syncEntryJudgment = (state: EntryJudgment) => {
-  syncDocumentProcessingState({ ...state });
-  if (details.id === state.id) Object.assign(details, state);
-  void pendingCounts.refresh();
-};
-
 const clearSelection = () => { selectedIds.value.clear(); };
 const {
   onContainerMouseDown: onDocMarqueeMouseDown,
@@ -791,13 +701,7 @@ const pendingReviewsRef = ref<InstanceType<typeof PendingReviews>>();
 const handlePendingChanged = async () => {
   await Promise.all([loadEntryFiles(libraryId.value), pendingCounts.refresh()]);
 };
-const handleReviewChanged = async (_value: unknown, removed: boolean) => {
-  if (removed) { closeDoc(); resetPage(); }
-  else if (details.id) getCardDetails({ id: details.id });
-  await Promise.all([loadEntryFiles(libraryId.value), pendingReviewsRef.value?.refresh(), pendingCounts.refresh()]);
-};
 const handlePersonalDocumentDeleted = async (id: string) => {
-  if (details.id === id) closeDoc();
   selectedIds.value.delete(id);
   resetPage();
   await Promise.all([loadEntryFiles(libraryId.value), pendingReviewsRef.value?.refresh(), pendingCounts.refresh()]);
@@ -893,13 +797,9 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </div>
       <DocumentBatchBar v-if="selectedIds.size" :count="selectedIds.size" @cancel="clearSelection" @manage="openBatch()" @action="openBatch" />
     </template>
-      <!-- Document content drawer -->
+      <!-- Batch management -->
       <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" :initial-action="batchInitialAction" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" :entity-options="entityFilterOptions" :topic-options="topicFilterOptions" @changed="batchChanged" />
-    <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
-        :libraryId="libraryId"
-        @openEntry="openSourceDoc" @openEntity="openArticleEntity" @openTopic="openReportTopic"
-        @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @review-changed="handleReviewChanged">
-      </DocContent>
+
     </div>
 
   <!-- 库编辑器（创建/编辑统一组件） -->

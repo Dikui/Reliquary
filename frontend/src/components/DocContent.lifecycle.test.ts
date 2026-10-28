@@ -1,3 +1,5 @@
+import * as reading from '../utils/readingParagraphs'
+import * as feedback from './ui/feedback'
 import assert from 'node:assert/strict'
 import * as entrySourceLabels from '../utils/entrySourceLabels'
 import { readFileSync } from 'node:fs'
@@ -92,6 +94,7 @@ test('mounted detail switches full-text articles, closes and unmounts without un
       'highlight.js': { __esModule: true, default: {} }, mermaid: { __esModule: true, default: { initialize() {} } },
       'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } },
       '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 25 },
+      '@/utils/readingParagraphs': reading, '@/components/ui/feedback': feedback,
       '@/utils/clipboard': { copyWithToast() {} },
       '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => { imageHydrations++ }, createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }) },
       '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {},
@@ -116,7 +119,7 @@ test('mounted detail switches full-text articles, closes and unmounts without un
     const root = node(); app.mount(root); await nextTick()
     Object.assign(props.details, { has_update:true, latest_entry_id:'latest' }); await nextTick()
     const flatten = (n: HostNode): HostNode[] => [n, ...n.children.flatMap(flatten)]
-    assert.equal(flatten(root).find(n=>n.props?.href==='/platform/entries?entry_id=latest')?.props?.href, '/platform/entries?entry_id=latest')
+    assert.equal(flatten(root).find(n=>n.props?.href==='/platform/entries/latest')?.props?.href, '/platform/entries/latest')
     const beforeVaultMetadata = imageHydrations
     Object.assign(props.details, { source_kind: 'article', vault_path: 'articles/2026-10/event.md' })
     await nextTick(); await nextTick()

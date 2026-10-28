@@ -41,7 +41,7 @@ async function fixture(path = '/platform/libraries', collapsed = false, mobileOv
       '@/stores/pendingCounts': { usePendingCountsStore: () => pending },
     }) },
   }
-  const router = routerApi.createRouter({ history: routerApi.createMemoryHistory(), routes: [{ path: '/:pathMatch(.*)*', name: 'entries', component: { render: () => null } }] })
+  const router = routerApi.createRouter({ history: routerApi.createMemoryHistory(), routes: [{ path: '/platform/entries/:id', name: 'entryDetail', component: { render: () => null } }, { path: '/:pathMatch(.*)*', name: 'entries', component: { render: () => null } }] })
   await router.push(path)
   const component = loadComponent(new URL('./SideMenu.vue', import.meta.url), modules)
   const root = doc.createElement('main')
@@ -87,6 +87,14 @@ test('search entry and collapsed navigation remain keyboard accessible', async t
   await send(expand, 'click')
   assert.equal(f.ui.sidebarCollapsed, false)
   assert.equal(f.root.querySelector('[aria-current="page"]')?.props.href, '/platform/search')
+})
+
+test('detail tabs keep the material library selected in the sidebar', async t => {
+  const f = await fixture('/platform/entries/material-a?libraries=b&tab=entities')
+  t.after(() => f.unmount())
+  const current = f.root.querySelectorAll('[aria-current="page"]')
+  assert.equal(current.length, 1)
+  assert.equal(current[0]!.props.href, '/platform/entries?libraries=b')
 })
 
 test('entity, pending and multi-library routes select only their matching navigation entry', async t => {

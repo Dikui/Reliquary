@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { getSearchOptions, searchEntries } from '@/api/search'
 import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue'
 import { useLibraryScope } from '@/composables/useLibraryScope'
-import { referenceQuery } from '@/utils/bodyReference'
+import { entryDetailLocation } from '@/utils/bodyReference'
 import type { SourceLocation } from '@/types/search'
 import SearchFilters from '@/components/SearchFilters.vue'
 import SearchEntry from '@/components/SearchEntry.vue'
@@ -95,7 +95,7 @@ function clearQuery() {
   inputRef.value?.focus()
 }
 function finishComposition() { composing.value = false; scheduleSearch() }
-function openArticle(article: Article, location?: SourceLocation) { void router.push({ path: '/platform/entries', query: referenceQuery(article.entry_id, location) }) }
+function openArticle(article: Article, location?: SourceLocation) { void router.push(entryDetailLocation(article.entry_id, location)) }
 function filterEntity(id: string) { filters.value.entity_ids = [id] }
 watch(libraryScope, () => { filters.value.entity_ids = []; filters.value.topic_ids = []; options.value = { entities: [], topics: [] }; void loadOptions(); scheduleSearch() }, { deep: true })
 watch(stateKey, () => { if (!synchronizing) scheduleSearch() })

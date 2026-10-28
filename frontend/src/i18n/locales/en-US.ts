@@ -1,5 +1,22 @@
 import { ikb18En } from './ikb18'
 export default {
+  entryDetail: {
+    previewImage: 'View image',
+    "breadcrumb": "Location",
+    "information": "Material information",
+    "loadFailed": "Could not load this material. Try again.",
+    "changeType": "Change content type",
+    "exportMarkdown": "Export Markdown",
+    "bodyLength": "Body",
+    "characters": "{count} characters",
+    "keyTerms": "Key terms",
+    "relationsFailed": "Some entities or relations could not be loaded. Try again.",
+    "modelCalls": "View model calls for this material",
+    "backgroundHint": "The body is saved. Summary, entities and relations update as background processing finishes.",
+    "reprocessHint": "Reprocess this material using its current library configuration. The body is preserved; summary, entities and relations are regenerated.",
+    "deleteHint": "Delete “{title}”, including its body, summary, index, entity links and relations. Entities supported only by this material are also removed. This cannot be undone."
+  },
+
   entries: {
     pagination: 'Result pages', previous: 'Previous', next: 'Next',
     "all": "All",

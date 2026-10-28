@@ -44,6 +44,9 @@ export async function resolveBodyReference(body: string, location: SourceLocatio
 export function referenceQuery(entryId: string, location?: SourceLocation) {
   return { entry_id: entryId, ...(location ? { reference: JSON.stringify(location) } : {}) }
 }
+export function entryDetailLocation(id: string, location?: SourceLocation) {
+  return { path: `/platform/entries/${encodeURIComponent(id)}`, query: location ? { reference: JSON.stringify(location) } : {} }
+}
 export function parseReference(value: unknown): SourceLocation | undefined {
   try {
     if (typeof value !== 'string') return

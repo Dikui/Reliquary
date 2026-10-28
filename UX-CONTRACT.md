@@ -201,7 +201,7 @@ preview. Existing pages keep their canonical TDesign owners above until migrated
 
 For `/platform/entries` with the documents tab, DocumentListView owns the list and
 table presentation. The list opens a preview on focus or pointer selection; J/K
-moves focus and Enter opens the existing detail destination. At 900px and below,
+moves focus and Enter opens the independent detail route. At 900px and below,
 the inline preview is hidden and each row offers an explicit Open button.
 DataTable owns checked rows, Shift ranges and the single current row. Checked
 rows use the soft surface; focus uses yellow. The former grid is removed.
@@ -220,7 +220,7 @@ failed-item retry remain authoritative. Swiss Dialog/Select/Checkbox/Button own
 its presentation. The final action uses the shared confirm service; cancelling
 retains the preview. The existing ReparseConfirmDialog still owns per-entry
 processing configuration. `useLibrary` and the page now report through toast.
-The existing detail drawer keeps its controls until its own migration.
+Material links now open the independent detail route described below.
 
 The backend does not expose alternate material sort orders, today's intake count,
 or a batch Markdown export. The page does not fabricate these capabilities. Its
@@ -228,6 +228,43 @@ sort control identifies the supported newest-collected order, and its total is t
 filtered result count. Entry identifiers come from actual IDs rather than sample
 sequence numbers. New filters invalidate old paging requests and clear checked
 rows; failed requests display retry and cannot be confused with an empty library.
+
+## Swiss material detail migration
+
+`/platform/entries/:id` owns full material reading. List/preview, search, follows,
+entity sources, related material and command results use this route. Old
+`?entry_id=` links preserve their reference and library context through a
+compatibility redirect. Browser Back restores the originating URL and filters.
+
+The existing body API supplies the complete saved Markdown and ETag. DocContent
+retains its rendering pipeline; a reading variant adds paragraph numbers and
+source highlighting after rendering. Stale body hashes show the existing changed
+body notice and fall back to paragraph location. Inline images open an accessible
+shared Dialog; the saved Markdown can be downloaded locally without a new export
+endpoint. The body editor retains draft, conflict and unsaved-leave protection,
+with Swiss controls and shared feedback.
+
+Summary, entity and relation data remain server-owned. Relations are obtained
+through linked entities' existing relation endpoints, filtered to the current
+material and deduplicated by relation ID. Missing details or partial reads show
+retry instead of invented rows. Real processing spans supply status, timing and
+model information; active work refreshes until terminal status. Responses for a
+previous material cannot replace the current route's data.
+
+Star and content-type corrections retain their existing APIs. Reprocessing uses
+the stored processing overrides. Confirmed deletion uses the documents endpoint
+for personal documents and the entries endpoint for other materials. The shared
+confirmation prevents duplicate submissions and retains failures for retry;
+pending mutations block route departure. Successful deletion returns to the
+material's library. Entity/topic follow controls use the existing follow store.
+
+The reading flag is a Boolean runtime prop, including when passed as a bare
+attribute. Reference and processing updates preserve the rendered body when
+the Markdown, entry, attachment context and locale are unchanged. Async image
+and diagram work is tied to the latest render; the original Markdown renderer
+remains the content owner. Hidden tab panels have a shared visibility guard.
+The star action keeps its native button enabled while exposing aria-disabled
+and blocking duplicate requests, so focus survives a pending star update.
 
 
 Expanded materials filters must not collapse the results to zero height. The
