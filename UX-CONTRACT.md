@@ -340,3 +340,22 @@ library content types retain their names.
 Forms retain drafts on failure, associate validation with fields, and block
 duplicate submissions. The shared Dialog, confirm and toast owners handle
 modality, feedback and focus; browser verification remains a separate step.
+
+## Swiss diagnostics
+
+Failure filters and paging remain in the URL. Selecting a failure adds its ID
+and opens the shared drawer without removing the list. Reading a captured
+material never submits or retries ingestion. Closing or replacing a material
+invalidates pending reads and releases any image URL. Expired or missing
+materials retain explicit errors. Failed saved materials use their existing
+processing action and the shared confirmation; retrying all matching failures
+uses the existing batch preview, confirmation and progress dialog.
+
+Check records select the first batch on a page unless the URL identifies a
+batch. List responses omit reports, so uninspected batches show actual processing
+progress instead of an invented problem count. Findings retain their three
+categories and exact source locations. Failed checks preserve completed results
+and expose a confirmed recheck of unfinished materials. Schedule edits stay in
+a draft until saved, use active models, and preserve the backend's Beijing time
+semantics. Cancel leaves the saved schedule unchanged. Shared Swiss primitives
+own forms, feedback, overlays and keyboard focus on these migrated pages.

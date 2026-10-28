@@ -14,6 +14,7 @@
 :where(.rq-button, .rq-control, .rq-checkbox, .rq-radio, .rq-switch, .rq-chip, .rq-icon-button, .rq-tabs__trigger):disabled,
 .rq-menu__item[data-disabled] { cursor: not-allowed; opacity: 0.5; }
 .rq-button { position: relative; display: inline-flex; justify-content: center; align-items: center; gap: var(--space-2); min-height: var(--control); padding: var(--space-2) var(--space-4); background: var(--surface); border: 1px solid var(--border); font-weight: 700; }
+.rq-button, .rq-button__label { white-space: nowrap; overflow-wrap: normal; }
 .rq-button:not(:disabled):hover { background: var(--surface-soft); }
 .rq-button:not(:disabled):active, .rq-chip:not(:disabled):active { transform: translateY(1px); }
 .rq-button--primary { color: var(--bg); background: var(--text); border-color: var(--text); }

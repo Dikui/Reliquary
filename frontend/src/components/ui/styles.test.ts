@@ -85,3 +85,9 @@ test('active tabs retain the contrasting palette on hover in both themes', () =>
   }
   assert.doesNotMatch(styles, /\.rq-tabs__trigger:not\(:disabled\):hover\s*\{/)
 })
+
+test('button labels stay on one line inside containers that wrap long text anywhere', () => {
+  const buttonText = declarations(styles, '.rq-button, .rq-button__label')
+  assert.equal(buttonText['white-space'], 'nowrap')
+  assert.equal(buttonText['overflow-wrap'], 'normal')
+})

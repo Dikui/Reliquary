@@ -24,7 +24,9 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   },
   { file: 'views/library/components/DocumentListView.vue', expressions: ['`entries.columns.${key}`', 'entryProcessingState(item).label', 'entryProcessingState(row).label'], reason: 'The fixed material columns and shared processing state labels exist in both locales.' },
   { file: 'views/library/components/EntryPreview.vue', expressions: ['`knowledgeStages.stage.${node.name}`', '`knowledgeStages.status.${status}`', 'state.label'], reason: 'Preview stage names and statuses are restricted to the existing localized enums; entry state uses the shared resolver.' },
-  { file: 'views/insights/ContentChecksPage.vue', expressions: ['`contentCheck.day${value}`', '`contentCheck.${s}`', '`contentCheck.${kind}`'], reason: 'Weekdays, run states and finding kinds use the fixed content-check contract and have labels in both locales.' },
+  { file: 'views/insights/IngestFailuresPage.vue', expressions: ['`ingestDiagnostics.${key}`'], reason: 'Fixed failure table columns have labels in both locales.' },
+  { file: 'views/insights/FailedProcessingEntries.vue', expressions: ['`library.contentTypes.${value}`', 'entryProcessingState(row).label'], reason: 'Built-in content types are guarded by CONTENT_TYPES; processing labels come from the shared state resolver.' },
+  { file: 'views/insights/ContentChecksPage.vue', expressions: ['`contentCheck.day${value}`', '`contentCheck.${status}`', '`contentCheck.${group.kind}`'], reason: 'Weekdays, run states and finding kinds use the fixed content-check contract and have labels in both locales.' },
   { file: 'components/EntryBatchDialog.vue', expressions: ['`entryBatch.actions.${value}`', '`entryBatch.actions.${batch.action}`', '`entryBatch.reasons.${reason.code}`', '`entryBatch.status.${batch.status}`', '`entryBatch.status.${item.status}`'], reason: 'Batch actions, item states and preview reasons use the server batch contract; unknown reasons retain their raw code.' },
   { file: 'components/EntryProcessingStatus.vue', expressions: ['state.label'], reason: 'entryProcessingState returns the fixed admission and processing label keys defined in the locale bundles.' },
   {

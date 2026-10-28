@@ -269,3 +269,16 @@ Topic layout sizes use pixels or the shared pixel-based tokens, independent of
 the legacy 14px root font. The progress bar uses the 12px spacing token. Material
 titles have 700 weight and content types use the shared Tag with localized
 built-in names; custom library type names are preserved.
+
+### Swiss diagnostics
+
+Ingest failures use a 1280px reading area, a wrapping filter form and a table
+with a 1180px minimum width in its own horizontal scroller. Failure details use
+the shared right drawer at 544px. Material tabs only appear for captured data;
+raw text and images keep their existing authenticated read and release behavior.
+
+Check records use a 272px batch list beside grouped, numbered problems and gray
+source quotations. The current quotation uses the shared focus colors. Below
+900px the batch list precedes the findings. Both diagnostic pages keep 24px of
+top padding below the mobile navigation. Native date and time controls retain
+platform-owned pickers, while the shared dialog owns weekly schedule editing.
