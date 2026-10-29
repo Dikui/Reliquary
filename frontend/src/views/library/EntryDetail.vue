@@ -192,6 +192,7 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
           <Tag v-if="entry.source_unverified">{{ t('review.sourceUnverified') }}</Tag>
           <RouterLink v-if="entry.has_update && entry.latest_entry_id" :to="entryDetailLocation(entry.latest_entry_id)">{{ t('ikb18.hasUpdate') }}</RouterLink>
         </div>
+        <div class="entry-detail__split">
         <dl class="entry-detail__facts">
           <div><dt>{{ t('entries.library') }}</dt><dd><LibMark v-if="library" :color="library.color" /> {{ library?.display_name || library?.name || entry.library_name || entry.library_id || t('entries.unknown') }}</dd></div>
           <div><dt>{{ t('library.contentTypeFilter') }}</dt><dd><Tag v-if="entry.content_type">{{ contentTypeLabel(entry.content_type, t) }}</Tag><span v-else>{{ t('entries.unknown') }}</span></dd></div>
@@ -202,6 +203,7 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
           <div v-if="entry.vault_path"><dt>{{ t('library.vaultPath') }}</dt><dd>{{ entry.vault_path }}</dd></div>
           <div><dt>{{ t('entryDetail.bodyLength') }}</dt><dd>{{ bodyReady ? t('entryDetail.characters', { count: Array.from(body).length }) : t('entries.unknown') }}</dd></div>
         </dl>
+        <div class="entry-detail__main">
         <p v-if="entry.collect_reason">{{ entry.collect_reason }}</p>
         <RepostSources :sources="entry.repost_sources" />
         <div class="entry-detail__body-head"><h2>{{ t('entryEditor.markdown') }}</h2><Button v-if="entry.vault_path" ref="editButton" :disabled="busy || editing || processing.active || !bodyReady" @click="content?.startContentEdit()">{{ t('entryEditor.title') }}</Button></div>
@@ -209,6 +211,8 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
         <ErrorState v-if="bodyError" :title="t('entryEditor.loadFailed')"><Button @click="state.loadBody">{{ t('common.retry') }}</Button></ErrorState>
         <Skeleton v-else-if="!bodyReady" :label="t('common.loading')" />
         <DocContent v-if="bodyReady" ref="content" :visible="true" :details="renderDetails" :reference="reference" :library-id="entry.library_id" @get-doc="state.loadBody(); state.refresh()" @processing-state-change="state.refresh()" @preview-image="imagePreview = $event" @editing-change="editingChanged" />
+        </div>
+        </div>
       </article>
       <aside class="entry-detail__rail" :aria-label="t('entryDetail.information')">
         <Tabs v-model="tab" :label="t('entryDetail.information')" :items="tabs">
@@ -265,14 +269,21 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
 .entry-detail__crumbs { min-width: 0; font-size: var(--text-sm); font-weight: 700; }
 .entry-detail__id { font-family: var(--mono); overflow-wrap: anywhere; }
 .entry-detail__actions .rq-button { min-height: 32px; }
-.entry-detail__layout { display: grid; grid-template-columns: minmax(0, 1fr) 352px; }
-.entry-detail__reading { display: flex; flex-direction: column; gap: 24px; padding: 40px 48px 64px; min-width: 0; }
-.entry-detail__reading > * { margin-block: 0; }
+.entry-detail__layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(352px, 26vw, 480px); }
+.entry-detail__reading { display: flex; flex-direction: column; gap: 24px; padding: 40px 48px 64px; min-width: 0; container-type: inline-size; }
+.entry-detail__split, .entry-detail__main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.entry-detail__reading > *, .entry-detail__main > * { margin-block: 0; }
 .entry-detail__reading h1 { max-width: 22ch; font-size: var(--text-3xl); font-weight: 800; line-height: 1.08; letter-spacing: -0.04em; overflow-wrap: anywhere; }
 .entry-detail__eyebrow { font-size: var(--text-xs); font-weight: 700; }
 .entry-detail__facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(136px, 1fr)); gap: 16px; max-width: 704px; padding-top: 16px; border-top: 2px solid var(--rule); font-size: var(--text-sm); }
 .entry-detail__facts dt { color: var(--muted); font-size: var(--text-xs); font-weight: 700; }
 .entry-detail__facts dd { margin: 4px 0 0; overflow-wrap: anywhere; font-weight: 700; }
+/* 60rem fits the 12rem fact column, the 48px gap and the 612px body at the 14px root; narrower keeps facts above the body. */
+@container (min-width: 60rem) {
+  .entry-detail__split { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: 48px; align-items: start; }
+  .entry-detail__facts { position: sticky; top: 16px; grid-template-columns: minmax(0, 1fr); gap: 12px; max-width: none; }
+  .entry-detail__facts > div { padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+}
 .entry-detail__body-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; max-width: 612px; }
 .entry-detail__body-head h2, .entry-detail__rail h3 { font-size: var(--text-sm); margin: 0; }
 .entry-detail__reading :deep(.doc-reading) { max-width: 36em; font-size: 17px; line-height: 1.85; }
