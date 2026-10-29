@@ -98,11 +98,11 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer) })
 .entry-preview__id { font: var(--text-xs) var(--mono); margin-right: auto; }
 .entry-preview__hint { font-size: var(--text-xs); color: var(--muted); }
 .entry-preview h2 { margin: 0; font-size: var(--text-2xl); font-weight: 800; line-height: 1.15; letter-spacing: -0.03em; }
-.entry-preview h3 { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 12px; }
+.entry-preview h3 { font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 12px; }
 .entry-preview p { margin: 0; white-space: pre-wrap; }
 .entry-preview section, .entry-preview__facts { border-top: 2px solid var(--rule); padding-top: 16px; }
 .entry-preview__facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 16px; margin: 0; }
-.entry-preview dt { font-size: var(--text-xs); color: var(--muted); }
+.entry-preview dt { font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); color: var(--muted); }
 .entry-preview dd { margin: 4px 0 0; font-weight: 700; }
 .entry-preview a { color: inherit; text-decoration: underline; }
 .entry-preview a:hover { color: var(--accent); }

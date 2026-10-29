@@ -343,8 +343,8 @@ const emitUpdate = () => {
 .library-chunking-settings { min-width: 0; width: 100%; color: var(--text); }
 .settings-group { display: grid; }
 .setting-row { display: grid; gap: 10px; padding: 16px 0; border-top: 2px solid var(--rule); }
-.setting-info label { display: block; font-size: var(--text-sm); font-weight: 700; }
-.desc, .warn { margin: 4px 0 0; font-size: var(--text-xs); color: var(--muted); }
+.setting-info label { display: block; font-size: var(--type-label-size); font-weight: var(--type-label-weight); }
+.desc, .warn { margin: 4px 0 0; font-size: var(--type-note-size); color: var(--muted); }
 .warn { color: var(--warning); }
 .setting-control, .strategy-control { display: grid; gap: 8px; min-width: 0; }
 .strategy-info-panel { margin-bottom: 16px; padding: 12px; border-left: 2px solid var(--rule); background: var(--surface-soft); font-size: var(--text-sm); }

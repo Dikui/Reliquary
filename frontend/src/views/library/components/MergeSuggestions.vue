@@ -82,7 +82,7 @@ onBeforeUnmount(() => { disposed = true; dialog?.destroy(); emit('busy-change', 
 .merge-suggestions { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; outline-offset: 4px; }
 .merge-toolbar, .merge-queue, .merge-decide { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .merge-toolbar { justify-content: space-between; }
-.merge-toolbar p, .merge-reason p { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading); }
+.merge-toolbar p, .merge-reason p { margin: 0; color: var(--muted); font-size: var(--type-note-size); line-height: var(--leading); }
 .merge-toolbar .rq-select { width: auto; }
 .merge-queue { justify-content: flex-end; }
 .merge-queue .rq-tag { margin-right: auto; }

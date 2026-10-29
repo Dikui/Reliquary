@@ -645,7 +645,7 @@ onMounted(() => {
 
 <style scoped>
  .section-header__top, .model-card__header, .model-card__actions, .model-type-tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; justify-content: space-between; }
-.builtin-models-hint { padding: var(--space-3) 0; border-top: 2px solid var(--rule); color: var(--muted); font-size: var(--text-sm); }
+.builtin-models-hint { padding: var(--space-3) 0; border-top: 2px solid var(--rule); color: var(--muted); font-size: var(--type-note-size); }
 .builtin-hint-label { color: var(--text); font-weight: 800; }
 .model-type-tabs { justify-content: flex-start; margin: var(--space-4) 0; }
 .model-list-title { margin: var(--space-6) 0 0; padding-top: var(--space-4); border-top: 2px solid var(--rule); }
@@ -658,7 +658,7 @@ onMounted(() => {
 .model-card__title button { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: inherit; text-align: left; text-decoration: underline; cursor: pointer; }
 .model-card__title button:hover { color: var(--accent); }
 .model-card__title button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.model-card__subtitle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--muted); }
+.model-card__subtitle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--type-note-size); color: var(--muted); }
 .model-card--add { cursor: pointer; font: inherit; }
 .model-usage-group ul { padding: 0; list-style: none; }
 .model-usage-group li, .model-usage-bindings { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: space-between; margin-bottom: var(--space-3); }

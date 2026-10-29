@@ -596,8 +596,8 @@ onUnmounted(() => {
  .settings-section-tabs, .setting-control-row, .setting-control-actions, .setting-label { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .settings-section-tabs { margin-bottom: var(--space-4); }
 .setting-control-row { flex: 1; min-width: 0; width: 100%; }
-.setting-label { font-weight: 800; }
-.setting-meta, .settings-section-intro { color: var(--muted); font-size: var(--text-sm); }
+.setting-label { font-size: var(--type-label-size); font-weight: var(--type-label-weight); }
+.setting-meta, .settings-section-intro { color: var(--muted); font-size: var(--type-note-size); font-weight: var(--type-note-weight); }
 .ssrf-whitelist-input { display: grid; gap: var(--space-3); width: 100%; min-width: 0; }
 .ssrf-whitelist-input .rq-control { flex: 1; min-width: 160px; }
 .setting-save-state { display: flex; gap: var(--space-2); font-size: var(--text-sm); }

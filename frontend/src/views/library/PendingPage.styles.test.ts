@@ -52,11 +52,11 @@ function computed(path: string[], property: string) {
 
 test('pending layout uses design widths, token typography and compact empty states', () => {
   assert.equal(computed(['main.pending-page', 'div.pending-wrap'], 'max-width'), '1152px')
-  assert.equal(computed(['header.pending-heading', 'h1'], 'font'), '800 var(--text-3xl)/1 var(--font)')
+  assert.equal(computed(['header.pending-heading', 'h1'], 'font'), 'var(--type-page-weight) var(--type-page-size)/1 var(--font)')
   assert.equal(computed(['div.merge-pair'], 'grid-template-columns'), 'minmax(0, 1fr) minmax(0, 1fr)')
   assert.equal(computed(['div.merge-pair'], 'border'), '2px solid var(--rule)')
   assert.equal(computed(['article.merge-candidate', 'h3'], 'font'), '800 var(--text-2xl)/1.1 var(--font)')
-  assert.equal(computed(['li.review-record', 'h3'], 'font'), '800 var(--text-md)/var(--leading) var(--font)')
+  assert.equal(computed(['li.review-record', 'h3'], 'font'), 'var(--type-subsection-weight) var(--type-subsection-size)/var(--leading) var(--font)')
   assert.equal(computed(['div.pending-wrap', 'section.rq-empty'], 'padding'), 'var(--space-5) 0')
   assert.equal(computed(['section.pending-reviews'], 'min-height'), '')
   assert.equal(computed(['section.merge-suggestions'], 'min-height'), '')

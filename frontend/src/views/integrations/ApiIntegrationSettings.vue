@@ -189,7 +189,7 @@ onMounted(load)
 .setting-control .rq-button { flex-shrink: 0; }
 .api-key-expiry-field { display: flex; flex-direction: column; gap: var(--space-2); width: 100%; min-width: 0; }
 .api-key-expiry { width: 100%; }
-.api-key-expiry-hint { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.api-key-expiry-hint { margin: 0; color: var(--muted); font-size: var(--type-note-size); }
 .token-value { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .token-value .rq-control { flex: 1; min-width: 160px; }
 .query-result { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; padding: var(--space-3); background: var(--surface-soft); color: var(--text); font-family: var(--mono); }

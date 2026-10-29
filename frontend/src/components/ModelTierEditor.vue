@@ -57,10 +57,10 @@ async function refresh() {
 
 <style scoped>
  .model-tier-heading { display: flex; gap: var(--space-3); justify-content: space-between; }
-.model-tier-heading p, .model-tier-info p, .model-tier-current, .model-tier-footnote { color: var(--muted); font-size: var(--text-sm); }
+.model-tier-heading p, .model-tier-info p, .model-tier-current, .model-tier-footnote { color: var(--muted); font-size: var(--type-note-size); font-weight: var(--type-note-weight); }
 .model-tier-row { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: var(--space-6); padding: var(--space-4) 0; border-top: 2px solid var(--rule); }
 .model-tier-control { min-width: 0; }
-.model-tier-info label { font-weight: 800; }
+.model-tier-info label { font-size: var(--type-label-size); font-weight: var(--type-label-weight); }
 @container settings-content (max-width: 720px) { .model-tier-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }
 @media (max-width: 640px) { .model-tier-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }
 </style>

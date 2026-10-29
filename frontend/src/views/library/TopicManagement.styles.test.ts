@@ -53,7 +53,7 @@ test('material columns have readable minimum sizes and local horizontal scrollin
 test('topic geometry uses the 16px design baseline independently of the app root font', () => {
   assert.equal(value('.topic-detail', 'max-width'), '1024px')
   assert.equal(value('.topic-progress-bar', 'height'), 'var(--space-3)')
-  assert.equal(value('h3', 'font-size'), 'var(--text-md)')
+  assert.equal(value('h3', 'font-size'), 'var(--type-subsection-size)')
   assert.doesNotMatch(descriptor.styles[0]!.content, /\b[\d.]+rem\b/)
 })
 

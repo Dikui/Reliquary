@@ -47,10 +47,10 @@ onBeforeUnmount(() => emit('busy-change', false))
 
 <style scoped>
 .pending-reviews { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; color: var(--text); }
-.review-description { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading); }
+.review-description { margin: 0; color: var(--muted); font-size: var(--type-note-size); line-height: var(--leading); }
 .reviews { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--rule); }
 .review-record { display: grid; gap: var(--space-2); padding: var(--space-4) 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
-.review-record h3 { margin: 0; color: var(--text); font: 800 var(--text-md)/var(--leading) var(--font); }
+.review-record h3 { margin: 0; color: var(--text); font: var(--type-subsection-weight) var(--type-subsection-size)/var(--leading) var(--font); }
 .review-record p { margin: 0; font-size: var(--text-sm); }
 .review-reason b { color: var(--danger); }
 .review-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; color: var(--muted); font-size: var(--text-xs); }

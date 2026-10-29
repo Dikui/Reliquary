@@ -173,7 +173,7 @@ onUnmounted(() => { disposed = true; requestVersion++; stopLoginPoll() })
 <style scoped>
  .chatgpt-settings { padding-top: var(--space-4); border-top: 2px solid var(--rule); margin: var(--space-6) 0 var(--space-4); }
 .chatgpt-settings__header, .chatgpt-account__actions { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: space-between; }
-.chatgpt-settings__hint, .chatgpt-settings__header p { color: var(--muted); font-size: var(--text-sm); }
+.chatgpt-settings__hint, .chatgpt-settings__header p { color: var(--muted); font-size: var(--type-note-size); }
 .chatgpt-settings__error { color: var(--danger); overflow-wrap: anywhere; }
 .chatgpt-signin { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 40px; padding: 8px 16px; border: 1px solid #000; border-radius: 0; background: #000; color: #fff; font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
 .chatgpt-signin:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -183,10 +183,10 @@ onUnmounted(() => { disposed = true; requestVersion++; stopLoginPoll() })
 .chatgpt-accounts li { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: space-between; border-top: 1px solid var(--border); padding: var(--space-3) 0; }
 .chatgpt-account__info { display: grid; gap: var(--space-1); min-width: 0; overflow-wrap: anywhere; }
 .chatgpt-account__info strong { font-weight: 600; }
-.chatgpt-account__info > span { color: var(--muted); font-size: var(--text-sm); }
+.chatgpt-account__info > span { color: var(--muted); font-size: var(--type-note-size); }
 .chatgpt-policy { display: grid; gap: var(--space-4); }
 .chatgpt-policy__row { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: var(--space-6); border-top: 2px solid var(--rule); padding-top: var(--space-4); }
-.chatgpt-policy__row > label { font-size: var(--text-sm); font-weight: 700; }
+.chatgpt-policy__row > label { font-size: var(--type-label-size); font-weight: var(--type-label-weight); }
 .chatgpt-daily-limit { width: 200px; max-width: 100%; }
 @container settings-content (max-width: 720px) { .chatgpt-policy__row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }
 @media (max-width: 640px) { .chatgpt-policy__row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }

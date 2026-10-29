@@ -119,7 +119,7 @@ onBeforeUnmount(invalidate)
 .graph-hint, .graph-source-meta { color: var(--muted); font-size: var(--text-xs); }
 .graph-source-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .graph-candidates { display: grid; justify-items: start; gap: var(--space-3); }
-.graph-candidates h2 { font-size: var(--text-lg); }
+.graph-candidates h2 { font-size: var(--type-section-size); font-weight: var(--type-section-weight); }
 .graph-candidates code { font-family: var(--mono); overflow-wrap: anywhere; }
 .graph-table-wrap { overflow-x: auto; }
 .graph-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }

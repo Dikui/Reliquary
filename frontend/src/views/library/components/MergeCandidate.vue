@@ -80,10 +80,10 @@ onBeforeUnmount(() => { generation++; controller?.abort() })
 <style scoped>
 .merge-candidate { padding: var(--space-4) var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; overflow-wrap: anywhere; }
 .candidate-library { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); }
-.candidate-label { font-size: var(--text-xs); font-weight: 700; color: var(--muted); }
+.candidate-label { font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); color: var(--muted); }
 .merge-candidate h3 { margin: 0; font: 800 var(--text-2xl)/1.1 var(--font); color: var(--text); letter-spacing: -0.03em; }
 .merge-candidate dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-3); margin: 0; font-size: var(--text-sm); }
-.merge-candidate dt { font-weight: 700; color: var(--muted); }
+.merge-candidate dt { font-size: var(--type-label-size); font-weight: var(--type-label-weight); color: var(--muted); }
 .merge-candidate dd { margin: 0; }
 .merge-candidate .mono { font-family: var(--mono); }
 .merge-candidate p { margin: 0; font-size: var(--text-sm); line-height: 1.75; }

@@ -233,12 +233,12 @@ onMounted(() => { void loadCatalog(); void refreshAll(); void loadPendingCount()
 onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; nameEmbeddingRequest++; catalogRequest++; pendingRequest++; relationRequest++; clearNameEmbeddingPoll(); if (entitySearchTimer) clearTimeout(entitySearchTimer) })
 </script>
 <style scoped>
-.entry-workbench { display: grid; grid-template-columns: 304px minmax(0, 1fr); min-height: 100%; font-family: var(--font); color: var(--text); background: var(--bg); font-size: var(--text-md); }
+.entry-workbench { display: grid; grid-template-columns: 304px minmax(0, 1fr); min-height: 100%; font-family: var(--font); color: var(--text); background: var(--bg); font-size: var(--type-body-size); }
 .entry-workbench.is-empty { grid-template-columns: minmax(0, 1fr); }
 .entry-workbench.is-empty .entity-list { border-right: 0; }
 .entity-list { border-right: 2px solid var(--rule); min-width: 0; }
 .entity-list-head { display: grid; gap: var(--space-3); padding: var(--space-5) var(--space-4) var(--space-3); }
-h1, h2 { margin: 0; font-size: var(--text-3xl); font-weight: 800; line-height: 1.05; letter-spacing: -0.045em; overflow-wrap: anywhere; }
+h1, h2 { margin: 0; font-size: var(--type-page-size); font-weight: var(--type-page-weight); line-height: 1.05; letter-spacing: -0.045em; overflow-wrap: anywhere; }
 .entity-search { display: flex; gap: var(--space-1); min-width: 0; }
 .entity-search :deep(input) { flex: 1; min-width: 0; width: 100%; }
 .entity-filters { display: flex; gap: var(--space-2); }
@@ -253,11 +253,11 @@ h1, h2 { margin: 0; font-size: var(--text-3xl); font-weight: 800; line-height: 1
 .entity-items button:hover:not([aria-current="true"]), .entity-items button:focus-visible:not([aria-current="true"]) { background: var(--select); color: var(--on-select); }
 .entity-items button:hover:not([aria-current="true"]) small, .entity-items button:focus-visible:not([aria-current="true"]) small { color: var(--on-select); }
 .entity-detail { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; padding: var(--space-5) var(--space-6) var(--space-7); }
-.entity-eyebrow { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-xs); color: var(--muted); overflow-wrap: anywhere; }
+.entity-eyebrow { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); color: var(--muted); overflow-wrap: anywhere; }
 .entity-head, .entity-actions { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); }
 .entity-intro { max-width: 46em; font-size: var(--text-lg); line-height: 1.6; margin: 0; }
 .entity-facts { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(70px, 1fr)); gap: var(--space-3); border-top: 2px solid var(--rule); padding-top: var(--space-3); margin: 0; }
-.entity-facts dt { color: var(--muted); font-size: var(--text-xs); font-weight: 700; }
+.entity-facts dt { color: var(--muted); font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); }
 .entity-facts dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 .mono { font-family: var(--mono); }
 .entity-table-scroll { overflow-x: auto; margin-top: var(--space-3); }

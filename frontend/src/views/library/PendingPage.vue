@@ -139,12 +139,12 @@ onBeforeUnmount(() => { catalogGeneration++; mergeGeneration++; reviewGeneration
 .pending-page { flex: 1; min-width: 0; min-height: 0; overflow: auto; background: var(--bg); color: var(--text); }
 .pending-wrap { max-width: 1152px; padding: var(--space-5) var(--space-6) var(--space-7); display: flex; flex-direction: column; gap: var(--space-4); }
 .pending-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-3); }
-.pending-heading h1 { margin: 0; color: var(--text); font: 800 var(--text-3xl)/1 var(--font); letter-spacing: -0.045em; }
+.pending-heading h1 { margin: 0; color: var(--text); font: var(--type-page-weight) var(--type-page-size)/1 var(--font); letter-spacing: -0.045em; }
 .pending-scope { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .pending-scope .rq-select { width: auto; max-width: 100%; min-height: 32px; }
 .pending-scope button { color: inherit; }
 .pending-scope .rq-tag button { border: 0; background: transparent; cursor: pointer; }
 .pending-wrap :deep(.rq-empty) { padding: var(--space-5) 0; }
 .pending-wrap :deep(.rq-tabs__panel) { padding-top: var(--space-4); }
-@media (max-width: 760px) { .pending-wrap { padding: var(--space-4); } .pending-heading h1 { font-size: var(--text-2xl); } }
+@media (max-width: 760px) { .pending-wrap { padding: var(--space-4); } }
 </style>

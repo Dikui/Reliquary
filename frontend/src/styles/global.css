@@ -26,3 +26,5 @@ input:-webkit-autofill, textarea:-webkit-autofill, select:-webkit-autofill {
   -webkit-text-fill-color: var(--text);
   caret-color: var(--text);
 }
+/* Page titles step down on narrow screens; tokens.css keeps only the two theme blocks. */
+@media (max-width: 640px) { :root { --type-page-size: var(--text-2xl); } }

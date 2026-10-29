@@ -107,17 +107,17 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(pollTimer) }
 
 .embedding-rebuild { margin-top: 24px; padding-top: 24px; border-top: 2px solid var(--rule); color: var(--text); }
 .embedding-rebuild-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-h3 { margin: 0 0 8px; font-size: 16px; }
+h3 { margin: 0 0 8px; font-size: var(--type-section-size); font-weight: var(--type-section-weight); }
 p { margin: 6px 0; line-height: 1.6; overflow-wrap: anywhere; }
-.embedding-rebuild-heading p, .rebuild-hint { font-size: 13px; color: var(--muted); }
-.rebuild-model, .rebuild-progress { font-size: 13px; margin-top: 16px; }
+.embedding-rebuild-heading p, .rebuild-hint { font-size: var(--type-note-size); color: var(--muted); }
+.rebuild-model, .rebuild-progress { font-size: var(--type-note-size); margin-top: 16px; }
 progress { display: block; width: 100%; height: 10px; margin: 12px 0; accent-color: var(--text); }
 .rebuild-counts { display: flex; flex-wrap: wrap; gap: 16px 36px; margin: 12px 0; }
 dt { color: var(--muted); }
 dd { margin: 4px 0 0; font-variant-numeric: tabular-nums; }
 .rebuild-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
 .rebuild-error { color: var(--danger); }
-.rebuild-failures { margin-top: 16px; font-size: 13px; }
+.rebuild-failures { margin-top: 16px; font-size: var(--type-note-size); }
 summary { cursor: pointer; color: var(--muted); border-radius: 0; }
 summary:hover { text-decoration: underline; }
 summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

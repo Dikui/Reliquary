@@ -211,9 +211,9 @@ onUnmounted(() => { disposed = true; catalogSequence++; optionsSequence++; inval
 </template>
 
 <style scoped>
-.search-page { width: 100%; height: 100%; min-height: 0; overflow-y: auto; color: var(--text); background: var(--bg); font: var(--text-md)/var(--leading) var(--font); }
+.search-page { width: 100%; height: 100%; min-height: 0; overflow-y: auto; color: var(--text); background: var(--bg); font: var(--type-body-weight) var(--type-body-size)/var(--leading) var(--font); }
 .search-wrap { display: flex; flex-direction: column; gap: var(--space-4); max-width: 64rem; padding: var(--space-5) var(--space-6) var(--space-7); }
-h1 { margin: 0; font-size: var(--text-3xl); font-weight: 800; line-height: 1.08; letter-spacing: -.035em; }
+h1 { margin: 0; font-size: var(--type-page-size); font-weight: var(--type-page-weight); line-height: 1.08; letter-spacing: -.035em; }
 .search-normal, .search-form, .search-results, .loading-results { display: grid; gap: var(--space-4); min-width: 0; }
 .search-tabs :deep(.rq-tabs__panel:not([hidden])) { padding-top: var(--space-4); }
 .query-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; border: 2px solid var(--rule); }

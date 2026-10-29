@@ -64,14 +64,14 @@ onBeforeUnmount(() => { request++ })
 <style scoped>
 .library-list { flex: 1; min-height: 0; overflow: auto; padding: 24px 32px; color: var(--text); }
 header { margin-bottom: 24px; }
-h1 { margin: 0 0 8px; font-size: 24px; }
+h1 { margin: 0 0 8px; font-size: var(--type-page-size); font-weight: var(--type-page-weight); }
 header p, .library-card p, .library-card > span { color: var(--muted); }
 .library-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 16px; }
 .library-card { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; min-width: 0; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .library-card h2, .library-card p { margin: 0; }
 .library-card h2 { font-size: 18px; }
 .library-card p { line-height: 1.6; }
-.library-card > span { margin-top: auto; font-size: 13px; }
+.library-card > span { margin-top: auto; font-size: var(--type-note-size); }
 .library-card:hover { border-color: var(--accent); background: var(--surface-soft); }
 .library-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 @media (max-width: 640px) { .library-list { padding: 16px; } }

@@ -273,10 +273,10 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
 .entry-detail__reading { display: flex; flex-direction: column; gap: 24px; padding: 40px 48px 64px; min-width: 0; container-type: inline-size; }
 .entry-detail__split, .entry-detail__main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .entry-detail__reading > *, .entry-detail__main > * { margin-block: 0; }
-.entry-detail__reading h1 { max-width: 22ch; font-size: var(--text-3xl); font-weight: 800; line-height: 1.08; letter-spacing: -0.04em; overflow-wrap: anywhere; }
-.entry-detail__eyebrow { font-size: var(--text-xs); font-weight: 700; }
+.entry-detail__reading h1 { max-width: 22ch; font-size: var(--type-page-size); font-weight: var(--type-page-weight); line-height: 1.08; letter-spacing: -0.04em; overflow-wrap: anywhere; }
+.entry-detail__eyebrow { font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); }
 .entry-detail__facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(136px, 1fr)); gap: 16px; max-width: 704px; padding-top: 16px; border-top: 2px solid var(--rule); font-size: var(--text-sm); }
-.entry-detail__facts dt { color: var(--muted); font-size: var(--text-xs); font-weight: 700; }
+.entry-detail__facts dt { color: var(--muted); font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); }
 .entry-detail__facts dd { margin: 4px 0 0; overflow-wrap: anywhere; font-weight: 700; }
 /* 60rem fits the 12rem fact column, the 48px gap and the 612px body at the 14px root; narrower keeps facts above the body. */
 @container (min-width: 60rem) {
@@ -285,7 +285,7 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
   .entry-detail__facts > div { padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 }
 .entry-detail__body-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; max-width: 612px; }
-.entry-detail__body-head h2, .entry-detail__rail h3 { font-size: var(--text-sm); margin: 0; }
+.entry-detail__body-head h2, .entry-detail__rail h3 { font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); margin: 0; }
 .entry-detail__reading :deep(.doc-reading) { max-width: 36em; font-size: 17px; line-height: 1.85; }
 .entry-detail__notice { padding: 16px; background: var(--surface-soft); border-top: 2px solid var(--rule); max-width: 704px; }
 .entry-detail__notice p { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -313,5 +313,5 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
 .entry-detail__image { display: block; max-width: 100%; max-height: 75vh; object-fit: contain; margin: auto; }
 .entry-detail :deep(.repost-sources a) { color: var(--text); }
 @media (max-width: 960px) { .entry-detail__layout { grid-template-columns: minmax(0, 1fr); } .entry-detail__reading { padding: 24px; } .entry-detail__rail { border-left: 0; border-top: 2px solid var(--rule); } }
-@media (max-width: 480px) { .entry-detail__topbar, .entry-detail__reading { padding-inline: 16px; } .entry-detail__reading h1 { font-size: var(--text-2xl); } }
+@media (max-width: 480px) { .entry-detail__topbar, .entry-detail__reading { padding-inline: 16px; } }
 </style>

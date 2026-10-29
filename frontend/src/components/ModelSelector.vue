@@ -131,6 +131,6 @@ onMounted(() => {
 
 <style scoped>
  .model-selector { width: 100%; min-width: 0; }
-.model-context, .model-plan-usage { color: var(--muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.model-context, .model-plan-usage { color: var(--muted); font-size: var(--type-note-size); overflow-wrap: anywhere; }
 
 </style>

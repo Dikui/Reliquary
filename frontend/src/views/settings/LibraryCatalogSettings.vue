@@ -223,10 +223,10 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
 .library-choice[aria-pressed='true'] { background: var(--text); color: var(--bg); border-color: var(--rule); font-weight: 700; }
 .catalog-form fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
 .catalog-section { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: var(--space-6); padding-top: var(--space-4); margin-bottom: var(--space-5); border-top: 2px solid var(--rule); }
-.catalog-section h2 { font-size: var(--text-md); font-weight: 800; margin: 0 0 var(--space-1); }
-.catalog-section header p, .catalog-hint { font-size: var(--text-sm); color: var(--muted); line-height: var(--leading); margin: 0; }
+.catalog-section h2 { font-size: var(--type-section-size); font-weight: var(--type-section-weight); margin: 0 0 var(--space-1); }
+.catalog-section header p, .catalog-hint { font-size: var(--type-note-size); font-weight: var(--type-note-weight); color: var(--muted); line-height: var(--leading); margin: 0; }
 .catalog-controls { display: grid; gap: var(--space-4); min-width: 0; align-content: start; }
-.catalog-form label:not(.catalog-check):not(.color-choice) { display: grid; gap: var(--space-2); min-width: 0; font-size: var(--text-sm); }
+.catalog-form label:not(.catalog-check):not(.color-choice) { display: grid; gap: var(--space-2); min-width: 0; font-size: var(--type-label-size); }
 .catalog-form input:not([type='checkbox']):not([type='radio']), .catalog-form textarea, .catalog-form select { box-sizing: border-box; width: 100%; min-width: 0; min-height: var(--control); border: 1px solid var(--border); border-radius: 0; padding: var(--space-2) var(--space-3); color: var(--text); background: var(--bg); font: inherit; }
 .catalog-form input[readonly] { background: var(--surface-soft); color: var(--muted); font-family: var(--mono); }
 .catalog-form textarea { resize: vertical; }
@@ -235,7 +235,7 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
 .catalog-form input[type='number'] { font-family: var(--mono); }
 .catalog-check { display: flex; gap: var(--space-2); align-items: center; font-size: var(--text-sm); }
 .catalog-check input { accent-color: var(--text); width: 16px; height: 16px; }
-.catalog-colors legend { margin-bottom: var(--space-2); font-size: var(--text-sm); }
+.catalog-colors legend { margin-bottom: var(--space-2); font-size: var(--type-label-size); font-weight: var(--type-label-weight); }
 .color-choice { position: relative; display: grid; place-items: center; width: 36px; height: 36px; border: 2px solid transparent; cursor: pointer; }
 .color-choice input { position: absolute; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .color-choice :deep(.rq-lib-mark) { width: 24px; height: 24px; }

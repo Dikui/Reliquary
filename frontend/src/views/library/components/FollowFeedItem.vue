@@ -77,7 +77,7 @@ const entityHref = (entity: SearchEntity) => `/platform/entities?${new URLSearch
 .feed-item-title a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 .feed-item-read .feed-item-title a { font-weight: 600; color: var(--muted); }
 .feed-item-title a:hover, .feed-reasons button:hover, .similar-toggle:hover { color: var(--accent); }
-.feed-item .feed-overview, .feed-item .feed-details p { margin: 0; font-size: var(--text-sm); color: var(--muted); }
+.feed-item .feed-overview, .feed-item .feed-details p { margin: 0; font-size: var(--type-note-size); color: var(--muted); }
 .feed-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; font-size: var(--text-xs); color: var(--muted); }
 .feed-meta code, .feed-meta time { font: var(--text-xs)/var(--leading) var(--mono); color: var(--muted); }
 .feed-meta :deep(.entry-update-notice) { color: var(--text); }

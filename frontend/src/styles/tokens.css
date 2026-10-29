@@ -42,6 +42,14 @@
   --text-xl: 28px;
   --text-2xl: 36px;
   --text-3xl: 44px;
+  /* Type roles: pages pick a role, not a size, so the same role reads the same everywhere. */
+  --type-page-size: var(--text-3xl); --type-page-weight: 800;
+  --type-section-size: var(--text-lg); --type-section-weight: 800;
+  --type-subsection-size: var(--text-md); --type-subsection-weight: 800;
+  --type-eyebrow-size: var(--text-xs); --type-eyebrow-weight: 800;
+  --type-label-size: var(--text-sm); --type-label-weight: 700;
+  --type-body-size: var(--text-md); --type-body-weight: 400;
+  --type-note-size: var(--text-sm); --type-note-weight: 400;
   --leading: 1.55;
   --space-1: 4px;
   --space-2: 8px;
