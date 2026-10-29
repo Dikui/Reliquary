@@ -63,8 +63,10 @@ const MONO_KEY = 'font_mono'
 const SIZE_KEY = 'font_size'
 
 export const SANS_STACKS: Record<FontKey, string> = {
+  // Must equal --font in styles/tokens.css: useFont overrides --font itself,
+  // so var(--font) here would be a self-reference.
   system:
-    'var(--font)',
+    '"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
   // Mac
   pingfang:
     '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", -apple-system, BlinkMacSystemFont, sans-serif',
@@ -85,7 +87,8 @@ export const SANS_STACKS: Record<FontKey, string> = {
 }
 
 export const MONO_STACKS: Record<MonoFontKey, string> = {
-  system: 'var(--mono)',
+  // Must equal --mono in styles/tokens.css (see SANS_STACKS.system).
+  system: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
   // Mac
   menlo: 'Menlo, Monaco, Consolas, "Courier New", monospace',
   monaco: 'Monaco, Menlo, Consolas, "Courier New", monospace',
@@ -215,11 +218,11 @@ function applyFont() {
   const monoStack = MONO_STACKS[currentMono.value] ?? MONO_STACKS[DEFAULT_MONO]
   const scale = String(FONT_SCALES[currentSize.value] ?? FONT_SCALES[DEFAULT_SIZE])
   if (lastApplied.sans !== sansStack) {
-    root.style.setProperty('--app-font-family', sansStack)
+    root.style.setProperty('--font', sansStack)
     lastApplied.sans = sansStack
   }
   if (lastApplied.mono !== monoStack) {
-    root.style.setProperty('--app-font-family-mono', monoStack)
+    root.style.setProperty('--mono', monoStack)
     lastApplied.mono = monoStack
   }
   if (lastApplied.scale !== scale) {
