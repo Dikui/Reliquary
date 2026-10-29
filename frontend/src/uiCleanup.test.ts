@@ -44,7 +44,7 @@ test('application sources and dependencies contain no legacy component library r
 test('the document baseline uses the shared tokens and always honors hidden elements', () => {
   const css = readFileSync(new URL('./styles/global.css', import.meta.url), 'utf8')
   assert.match(css, /font-size: var\(--text-sm\)/)
-  assert.match(css, /font-family: var\(--app-font-family, var\(--font\)\)/)
+  assert.match(css, /font-family: var\(--font\)/)
   assert.match(css, /background: var\(--bg\)/)
   assert.match(css, /\[hidden\]\s*\{\s*display:\s*none !important/)
 })
