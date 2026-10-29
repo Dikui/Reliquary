@@ -51,20 +51,26 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer) })
 <template>
   <article class="entry-preview" :aria-label="t('entries.preview')" :aria-busy="loading">
     <div class="entry-preview__top"><span class="entry-preview__id">{{ entry.id }}</span><span class="entry-preview__hint">{{ t('entries.keyboardHint') }}</span><Button variant="primary" @click="emit('open')">{{ t('entries.open') }} ↵</Button></div>
+    <div class="entry-preview__body">
+    <div class="entry-preview__main">
     <h2>{{ value.display_name || value.title || value.file_name || t('library.untitledDocument') }}</h2>
-    <Tag v-if="value.acquisition === 'model_written'" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</Tag>
-    <Tag v-if="value.cannot_be_fact || value.source_kind === 'report'">{{ t('ingestStatus.cannotBeFact') }}</Tag>
-    <StatusSquare :status="state.failed ? 'danger' : state.active ? 'warning' : state.status === 'completed' ? 'success' : 'neutral'" :label="t(state.label)" />
+    <div class="entry-preview__marks">
+      <Tag v-if="value.acquisition === 'model_written'" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</Tag>
+      <Tag v-if="value.cannot_be_fact || value.source_kind === 'report'">{{ t('ingestStatus.cannotBeFact') }}</Tag>
+      <StatusSquare :status="state.failed ? 'danger' : state.active ? 'warning' : state.status === 'completed' ? 'success' : 'neutral'" :label="t(state.label)" />
+    </div>
+    <p v-if="value.source_unverified">{{ t('review.sourceUnverified') }}</p>
+    <Skeleton v-if="loading" :label="t('common.loading')" />
+    <ErrorState v-if="error" :title="error"><Button @click="load">{{ t('common.retry') }}</Button></ErrorState>
+    <section><h3>{{ t('entries.summary') }}</h3><p>{{ plainText(value.structured_summary?.overview || value.description || t('entries.noSummary')) }}</p><ul v-if="value.structured_summary?.points?.length"><li v-for="(point, index) in value.structured_summary.points" :key="index">{{ plainText(point) }}</li></ul></section>
+    </div>
+    <div class="entry-preview__side">
     <dl class="entry-preview__facts">
       <div><dt>{{ t('entries.library') }}</dt><dd><LibMark v-if="library" :color="library.color" /> {{ library?.display_name || library?.name || value.library_id || t('entries.unknown') }}</dd></div>
       <div><dt>{{ t('library.contentTypeFilter') }}</dt><dd><Tag v-if="value.content_type">{{ contentTypeLabel(value.content_type, t) }}</Tag><span v-else>{{ t('entries.unknown') }}</span></dd></div>
       <div><dt>{{ t('entries.columns.created') }}</dt><dd>{{ created }}</dd></div>
       <div><dt>{{ t('entries.source') }}</dt><dd><a v-if="sourceURL" :href="sourceURL" target="_blank" rel="noopener noreferrer">{{ source }}</a><span v-else>{{ source || t('entries.unknown') }}</span></dd></div>
     </dl>
-    <p v-if="value.source_unverified">{{ t('review.sourceUnverified') }}</p>
-    <Skeleton v-if="loading" :label="t('common.loading')" />
-    <ErrorState v-if="error" :title="error"><Button @click="load">{{ t('common.retry') }}</Button></ErrorState>
-    <section><h3>{{ t('entries.summary') }}</h3><p>{{ plainText(value.structured_summary?.overview || value.description || t('entries.noSummary')) }}</p><ul v-if="value.structured_summary?.points?.length"><li v-for="(point, index) in value.structured_summary.points" :key="index">{{ plainText(point) }}</li></ul></section>
     <section><h3>{{ t('entries.entities') }}</h3><div class="entry-preview__entities"><Button v-for="entity in value.entities" :key="entity.id" variant="ghost" @click="emit('open-entity', entity.id)">{{ entity.canonical_name }}</Button><span v-if="!value.entities?.length">{{ t('entries.noEntities') }}</span></div></section>
     <section><h3>{{ t('entries.processing') }}</h3>
       <ErrorState v-if="traceError" :title="traceError"><Button @click="load">{{ t('common.retry') }}</Button></ErrorState>
@@ -78,12 +84,17 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer) })
       <Button v-if="state.active" @click="emit('action', 'cancel-parse', entry)">{{ t('library.cancelParse') }}</Button>
       <Button variant="danger" @click="emit('action', 'delete', entry)">{{ t('library.deleteDocument') }}</Button>
     </div>
+    </div>
+    </div>
   </article>
 </template>
 
 <style scoped>
-.entry-preview { display: flex; flex-direction: column; gap: 24px; padding: 24px 32px; max-width: 736px; min-width: 0; overflow-wrap: anywhere; }
-.entry-preview__top, .entry-preview__entities, .entry-preview__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.entry-preview { display: flex; flex-direction: column; gap: 24px; padding: 24px 32px; min-width: 0; overflow-wrap: anywhere; container-type: inline-size; }
+.entry-preview__body, .entry-preview__main, .entry-preview__side { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+/* 60rem fits the 42rem reading column, the 48px gap and an 18rem side column; narrower stacks them. */
+@container (min-width: 60rem) { .entry-preview__body { display: grid; grid-template-columns: minmax(0, 42rem) minmax(18rem, 1fr); gap: 48px; align-items: start; } }
+.entry-preview__top, .entry-preview__marks, .entry-preview__entities, .entry-preview__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .entry-preview__id { font: var(--text-xs) var(--mono); margin-right: auto; }
 .entry-preview__hint { font-size: var(--text-xs); color: var(--muted); }
 .entry-preview h2 { margin: 0; font-size: var(--text-2xl); font-weight: 800; line-height: 1.15; letter-spacing: -0.03em; }
