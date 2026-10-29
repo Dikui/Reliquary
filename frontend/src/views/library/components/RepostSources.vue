@@ -31,5 +31,6 @@ function matchMethodLabel(method: string) {
 ul { padding-left: 18px; margin: 8px 0; min-width: 0; max-width: 100%; box-sizing: border-box; }
 li { margin-bottom: 8px; overflow-wrap: anywhere; }
 li > span { margin-right: 8px; }
-a { color: var(--td-brand-color); white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+a { color: var(--text); text-decoration: underline; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+a:hover { color: var(--accent); }
 </style>

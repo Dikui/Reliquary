@@ -38,7 +38,7 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
     '@/api/library': { listLibraries: () => envelope(options.libraries || [{ id: 'library-a', name: 'Library A', color: 1 }]) },
     '@/api/relations': { listEntityRelations: () => envelope([]) },
     '@/utils/search': { searchErrorCode: (cause: any) => cause.code },
-    '@/components/ui': Object.fromEntries(['Button','Combobox','Dialog','EmptyState','ErrorState','Input','LibMark','Select','Skeleton','Tabs'].map(name => [name, defineComponent({
+    '@/components/ui': Object.fromEntries(['Button','Combobox','Dialog','EmptyState','ErrorState','Input','LibMark','Select','Skeleton','Tabs','Tag'].map(name => [name, defineComponent({
       props: ['modelValue', 'title', 'label', 'description', 'disabled', 'items'],
       setup: (props, { attrs, slots }) => () => name === 'Dialog' && !props.modelValue ? null : name === 'Tabs' ? h('div', [h('nav', props.items.map((item: any) => h('button', item.label))), slots[String(props.modelValue)]?.()]) : h(name === 'Button' ? 'button' : 'div', { ...attrs, role: name === 'ErrorState' ? 'alert' : undefined }, [props.title, props.description, props.label, slots.default?.(), slots.footer?.()])
     })])),

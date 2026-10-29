@@ -22,12 +22,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       fetch: async (url: string, options: RequestInit) => { requests.push({ url, options }); return { ok: requests.length > 1, status: 503, blob: async () => new Blob(['fixture'], { type: 'image/png' }) } },
     })) { previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key)); Object.defineProperty(globalThis, key, { configurable: true, value }) }
     URL.revokeObjectURL = value => { revoked.push(value); originalRevoke(value) }
-    const preview = loadComponent(new URL('./ImagePreview.vue', import.meta.url), {
-      'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
-    })
     const component = loadComponent(new URL('./SearchImage.vue', import.meta.url), {
       '@/components/ui': { ...entryPresentationTestModules['@/components/ui'] as object, Dialog: loadUiComponent('Dialog') },
-      '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': { __esModule: true, default: preview },
+      '@/utils/protectedFileAccess': protectedAccess,
     })
     const app = renderer.createApp(component, { articleId: 'search-image-1', path: relative, title: 'Image evidence' })
     app.use(createI18n({ legacy: false, locale, messages })); registerPrimitives(app)

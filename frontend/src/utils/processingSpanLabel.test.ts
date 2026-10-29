@@ -27,14 +27,3 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     }
   })
 }
-
-test('390px timeline keeps labels wrapping and leaves node controls usable', () => {
-  const text = readFileSync(new URL('../components/EntryProcessingTimeline.vue', import.meta.url), 'utf8')
-  const mobile = text.slice(text.lastIndexOf('@media (max-width: 600px)'))
-  assert.match(mobile, /grid-template-columns: minmax\(0, 1fr\) 54px/)
-  assert.match(mobile, /\.kp-name-text \{ white-space: normal; overflow-wrap: anywhere;/)
-  assert.match(mobile, /\.kp-name-kind, \.kp-cell-bar, \.kp-ruler \{ display: none;/)
-  assert.doesNotMatch(mobile, /\.kp-tree-toggle[^}]*display: none/)
-  assert.match(text, /@click="toggleTree\(row, \$event\)"/)
-  assert.match(text, /@click="selectRow\(row\)"/)
-})

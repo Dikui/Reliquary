@@ -34,7 +34,7 @@ const modules: Record<string, unknown> = {
 for (const [, path] of readFileSync(url, 'utf8').matchAll(/from ['"]([^'"]+\.vue)['"]/g)) modules[path!] = empty
 const Component = loadComponent(url, modules)
 
-test('the compiled EntryDetail call casts bare reading to Boolean and never mounts the old drawer', async () => {
+test('the compiled EntryDetail call renders the body without a legacy drawer', async () => {
   const invocation = readFileSync(new URL('../views/library/EntryDetail.vue', import.meta.url), 'utf8').match(/<DocContent\b[\s\S]*?\/>/)![0]
   const source = `<script setup>
     import { ref } from 'vue'
@@ -48,19 +48,19 @@ test('the compiled EntryDetail call casts bare reading to Boolean and never moun
   const compiled = compileScript(descriptor, { id: 'entry-detail-callsite', inlineTemplate: true })
   const observed: any[] = []
   const child = { ...Component, setup(props: any, context: any) {
-    observed.push({ reading: props.reading, visible: props.visible })
+    observed.push({ visible: props.visible })
     return Component.setup(props, context)
   } }
   const module = { exports: {} as any }, require = createRequire(import.meta.url)
   const code = ts.transpileModule(compiled.content, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   new Function('require', 'module', 'exports', code)((name: string) => name === './DocContent.vue' ? { __esModule: true, default: child } : require(name), module, module.exports)
   const app = createSSRApp(module.exports.default, { details: { id: 'reading-entry', title: 'Saved body', md: [{ content: 'The actual body' }], custom_metadata: {}, parse_status: 'completed' } })
-  for (const name of new Set(readFileSync(url, 'utf8').match(/\bt-[\w-]+(?=[\s>])/g))) {
+  for (const name of new Set(readFileSync(url, 'utf8').match(/\bt-[\w-]+(?=[\s>])/g) || [])) {
     app.component(name, defineComponent({ setup: (_props, { slots }) => () => h('aside', { 'data-legacy-drawer': name === 't-drawer' }, slots.default?.()) }))
   }
   app.use(createI18n({ legacy: false, locale: 'en-US', messages: { 'en-US': en } }))
   const html = await renderToString(app)
-  assert.deepEqual(observed, [{ reading: true, visible: true }])
+  assert.deepEqual(observed, [{ visible: true }])
   assert.match(html, /class="doc-reading"/)
   assert.match(html, /The actual body/)
   assert.doesNotMatch(html, /data-legacy-drawer|doc-main-drawer|doc_content|doc-detail-rows|doc-content-section/)
@@ -68,8 +68,8 @@ test('the compiled EntryDetail call casts bare reading to Boolean and never moun
 
 for (const locale of ['zh-CN', 'en-US']) test(`${locale}: the reading layout retains formulas, diagrams, syntax highlighting and protected images`, async () => {
   const body = '# Heading\n\nInline $x^2$ and a formula:\n\n$$\\frac{a}{b}$$\n\n```typescript\nconst value = 1\n```\n\n```mermaid\ngraph TD; A-->B\n```\n\n![Chart](../attachments/figure.png)'
-  const app = createSSRApp(Component, { visible: true, reading: true, details: { id: 'entry', title: 'Stored material', source_kind: 'article', vault_path: 'articles/entry.md', parse_status: 'completed', md: [{ content: body }], custom_metadata: {} } })
-  for (const name of new Set(readFileSync(url, 'utf8').match(/\bt-[\w-]+(?=[\s>])/g))) app.component(name, empty.default)
+  const app = createSSRApp(Component, { visible: true, details: { id: 'entry', title: 'Stored material', source_kind: 'article', vault_path: 'articles/entry.md', parse_status: 'completed', md: [{ content: body }], custom_metadata: {} } })
+  for (const name of new Set(readFileSync(url, 'utf8').match(/\bt-[\w-]+(?=[\s>])/g) || [])) app.component(name, empty.default)
   app.use(createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } }))
   const html = await renderToString(app)
   assert.ok(html.includes('class="doc-reading"'))
@@ -174,7 +174,7 @@ async function mountedReading(holdImages = false) {
   const body = '# Heading\n\nOriginal paragraph\n\n```mermaid\ngraph TD; A-->B\n```\n\n![Chart](../attachments/figure.png)'
   const props = reactive({ reading: '', visible: true, details: { id: 'entry', source_kind: 'article', vault_path: 'articles/entry.md', md: [{ content: body }], custom_metadata: {}, parse_status: 'completed' }, reference: undefined as any })
   const app = runtimeRenderer.createApp({ setup: () => () => h(view, { ...props, onPreviewImage: (image: unknown) => previews.push(image) }) })
-  for (const name of new Set(readFileSync(url, 'utf8').match(/\bt-[\w-]+(?=[\s>])/g))) app.component(name, empty.default)
+  for (const name of new Set(readFileSync(url, 'utf8').match(/\bt-[\w-]+(?=[\s>])/g) || [])) app.component(name, empty.default)
   app.use(createI18n({ legacy: false, locale: 'en-US', messages: { 'en-US': en } }))
   const errors: unknown[] = []; app.config.errorHandler = error => errors.push(error)
   const root = new MarkdownElement('main'); doc.body.appendChild(root); app.mount(root)

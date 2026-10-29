@@ -12,7 +12,7 @@ const { t } = useI18n()
 </template>
 
 <style scoped>
-.entry-update-notice { display: inline-block; flex-shrink: 0; font-size: 12px; color: var(--td-warning-color); }
+.entry-update-notice { display: inline-block; flex-shrink: 0; font-size: 12px; color: var(--warning); }
 a { color: inherit; text-decoration: underline; }
-a:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>

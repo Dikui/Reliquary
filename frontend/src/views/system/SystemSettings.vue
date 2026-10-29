@@ -215,14 +215,6 @@ function addWhitelistEntry() {
   newWhitelistEntry.value = ''
 }
 
-// Friendly labels for enum options live in i18n
-// (system.globalSettings.enumLabels.<key>.<value>). Falls back to the
-// raw enum value when no translation exists.
-function enumLabel(itemKey: string, optionValue: string): string {
-  const path = `system.globalSettings.enumLabels.${itemKey}.${optionValue}`
-  return te(path) ? (t(path) as string) : optionValue
-}
-
 const emptyListPlaceholder = computed(() => t('system.globalSettings.tagInputPlaceholder'))
 
 const settings = ref<SystemSettingItem[]>([])
@@ -310,7 +302,7 @@ function hasEnum(item: SystemSettingItem): boolean {
 
 function enumOptions(item: SystemSettingItem): { label: string; value: string }[] {
   const opts = item.enum ?? []
-  return opts.map((v) => ({ label: enumLabel(item.key, v), value: v }))
+  return opts.map((v) => ({ label: v, value: v }))
 }
 
 // hasOverride reports whether the row carries a real DB override (vs a

@@ -6,7 +6,7 @@ import { toast } from '@/components/ui/feedback'
 import { useFollowStore } from '@/stores/follows'
 import type { FollowTargetType } from '@/types/follows'
 
-const props = withDefaults(defineProps<{ targetType: FollowTargetType; targetId: string; name: string; compact?: boolean; swiss?: boolean }>(), { compact: false })
+const props = withDefaults(defineProps<{ targetType: FollowTargetType; targetId: string; name: string; compact?: boolean }>(), { compact: false })
 const { t } = useI18n()
 const store = useFollowStore(), error = ref('')
 const followed = computed(() => store.isFollowing(props.targetType, props.targetId))
@@ -28,17 +28,14 @@ onMounted(load)
 
 <template>
   <span class="follow-control" :class="{ compact }" @click.stop>
-    <Button v-if="swiss" variant="ghost" :loading="saving || store.targetsLoading" :disabled="saving || store.targetsLoading || !store.targetsLoaded || store.targetsError" :aria-pressed="followed" :aria-label="t(followed ? 'follows.unfollowNamed' : 'follows.followNamed', { name })" @click="toggle">{{ label }}</Button>
-    <t-button v-else size="small" :variant="compact ? 'text' : 'outline'" :theme="followed ? 'primary' : 'default'" :loading="saving || store.targetsLoading" :disabled="saving || store.targetsLoading || !store.targetsLoaded || store.targetsError" :aria-pressed="followed" :aria-label="t(followed ? 'follows.unfollowNamed' : 'follows.followNamed', { name })" @click="toggle">
-      <template #icon><t-icon :name="followed ? 'check' : 'add'" /></template>{{ label }}
-    </t-button>
+    <Button variant="ghost" :loading="saving || store.targetsLoading" :disabled="saving || store.targetsLoading || !store.targetsLoaded || store.targetsError" :aria-pressed="followed" :aria-label="t(followed ? 'follows.unfollowNamed' : 'follows.followNamed', { name })" @click="toggle">{{ label }}</Button>
     <span v-if="error" class="follow-error" role="alert">{{ error }}</span>
-    <span v-if="store.targetsError" class="follow-error" role="alert">{{ t('follows.targetsFailed') }} <Button v-if="swiss" variant="ghost" @click="load">{{ t('common.retry') }}</Button><t-button v-else size="small" variant="text" @click="load">{{ t('common.retry') }}</t-button></span>
+    <span v-if="store.targetsError" class="follow-error" role="alert">{{ t('follows.targetsFailed') }} <Button variant="ghost" @click="load">{{ t('common.retry') }}</Button></span>
   </span>
 </template>
 
 <style scoped lang="less">
 .follow-control { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.follow-error { color: var(--td-error-color); font-size: 12px; overflow-wrap: anywhere; }
-.compact :deep(.t-button) { height: 24px; font-size: 12px; padding-inline: 4px; }
+.follow-error { color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
+.compact :deep(.rq-button) { min-height: 24px; font-size: 12px; padding-inline: 4px; }
 </style>

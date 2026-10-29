@@ -1,6 +1,5 @@
 <template>
   <div class="rq-retrieval-settings settings-form">
-    <template>
       <p class="rq-retrieval-description">{{ t('retrievalSettings.description') }}</p>
       <p v-if="loadError" role="alert">{{ loadError }} <Button @click="loadConfig">{{ t('common.retry') }}</Button></p>
       <p v-if="saveError" role="alert">{{ saveError }}</p>
@@ -14,7 +13,6 @@
         <p v-if="field.hint" :id="`cmdk-retrieval-${field.key}-hint`">{{ field.hint }}</p>
       </div>
       </form>
-    </template>
 
   </div>
 </template>

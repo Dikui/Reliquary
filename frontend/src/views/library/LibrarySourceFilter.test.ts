@@ -133,7 +133,6 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     '@/utils/markdownPlainText': markdownPlainText,
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => '' },
     '@/assets/img/more-actions.png': moduleOf(''),
-    'tdesign-vue-next': { MessagePlugin: { success: (message: string) => notices.push(message) }, DialogPlugin: { confirm: (options: unknown) => { confirmation = options; return { destroy() { confirmation = undefined } } } } },
     './entryStatusPolling': polling,
     './entryDownloadFileName': {},
     './documentListFilters': documentListFilters,
@@ -156,7 +155,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
       return () => null
     },
   }))
-  modules['@/components/SelectionCheckbox.vue'] = moduleOf(loadComponent(new URL('../../components/SelectionCheckbox.vue', import.meta.url), modules))
+  modules['@/components/EntryUpdateNotice.vue'] = moduleOf(loadComponent(new URL('../../components/EntryUpdateNotice.vue', import.meta.url), modules))
   for (const view of ['List']) modules[`./components/Document${view}View.vue`] = moduleOf(
     loadComponent(new URL(`./components/Document${view}View.vue`, import.meta.url), modules),
   )

@@ -131,7 +131,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const { html, state, requests } = await renderEditor({ locale })
     assert.deepEqual(requests, ['chat'])
     assert.deepEqual(state.providerOptions.value.map((preset: ModelProviderOption) => preset.value), presetIds)
-    assert.deepEqual(Object.keys((locale === 'zh-CN' ? zhCN : enUS).model.editor.providers), presetIds)
+    assert.deepEqual(Object.keys((locale === 'zh-CN' ? zhCN : enUS).model.editor.providers).sort(), [...presetIds].sort())
     for (const preset of state.providerOptions.value) {
       assert.match(html, new RegExp(`value="${preset.value}"`))
       assert.ok(html.includes(preset.label), preset.label)

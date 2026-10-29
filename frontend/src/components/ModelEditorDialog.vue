@@ -155,11 +155,6 @@
             <label class="form-label" :for="`${formId}-field-2`">{{ $t('model.editor.providerLabel') }}</label>
             <Select v-model="formData.provider" :placeholder="$t('model.editor.providerPlaceholder')"
               @update:model-value="handleProviderChange" :id="`${formId}-field-2`">
-              <!--
-                show-overflow-tooltip=false: TDesign 默认在 hover 时给选项浮一个
-                完整 label 的小气泡，但这里选项本身就是双行（主名 + 描述），不会
-                出现省略，tooltip 只会和已经命中的灰底打架。直接关掉。
-              -->
               <option v-for="opt in providerOptions" :key="opt.value" :value="opt.value"
                >{{ opt.label }}</option>
             </Select>
@@ -541,9 +536,7 @@ const thinkingControlOptions = computed(() => {
   }))
 })
 
-// Header icon for the SettingDrawer — uses the same TDesign icon name table
-// as the model card list, so the drawer's leading badge visually matches the
-// card the user just clicked on.
+// Header icon matches the model kind shown in the list.
 const modelTypeIcon = computed(() => {
   const map: Record<string, string> = {
     chat: 'chat',

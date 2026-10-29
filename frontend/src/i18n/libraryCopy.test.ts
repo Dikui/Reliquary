@@ -20,7 +20,6 @@ const pages = [
   '../views/settings/SpaceInfo.vue',
   '../components/DocContent.vue',
   '../components/SideMenu.vue',
-  '../components/UserMenu.vue',
 ]
 
 for (const [locale, bundle] of Object.entries({ 'zh-CN': zhCN, 'en-US': enUS })) {
@@ -58,20 +57,19 @@ test('navigation and article labels use the same current names in both locales',
   assert.equal(enUS.menu.library, 'Libraries')
   assert.equal(zhCN.knowledgeEditor.document.title, '资料')
   assert.equal(enUS.knowledgeEditor.document.title, 'Materials')
-  assert.equal(zhCN.menu.search, '知识检索')
-  assert.equal(zhCN.knowledgeWorkbench.tabLabel, '实体')
+  assert.equal(zhCN.menu.searchMaterials, '检索')
+  assert.equal(zhCN.menu.entities, '实体')
   assert.equal(zhCN.settings.vault.title, '资料导出与备份')
-  assert.equal(zhCN.settings.taskQueue, '运行队列')
+  assert.equal(zhCN.settingsPage.queues, '任务队列')
 })
 
 test('library settings labels and model source labels describe their separate roles in both locales', () => {
   for (const [bundle, label] of [[enUS, 'Library settings'], [zhCN, '资料库设置']] as const) {
     assert.equal(bundle.settings.librarySettings, label)
     assert.equal(bundle.modelSettings.usage.librarySettings, label)
-    assert.equal(bundle.modelTiers.sources.library, bundle === enUS ? 'Selected library' : '当前库设置')
   }
 })
 
 test('removed screenshot carousel copy stays absent', () => {
-  for (const bundle of [zhCN, enUS]) assert.equal('carousel' in bundle.platform, false)
+  for (const bundle of [zhCN, enUS]) assert.equal(getLocaleValueAtPath(bundle, 'platform.carousel') !== undefined, false)
 })

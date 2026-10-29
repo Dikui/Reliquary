@@ -12,7 +12,7 @@ import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
 import { CONTENT_TYPES } from '../../types/entryClassification'
 import { buildSearchRequest, defaultSearchFilters, searchStateFromURL, searchStateToURL } from '../../utils/search'
-import { safeTextareaTestModule } from '../../components/__tests__/safeTextareaStub'
+import { reactive } from 'vue'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zh, 'en-US': en }
@@ -24,7 +24,8 @@ function evaluate(code: string, modules: Record<string, unknown>) {
   return module.exports
 }
 function component(path: string, modules: Record<string, unknown>) {
-  modules = { '@/components/LibraryScopeSelect.vue': empty, '@/api/library': { listLibraries: async () => ({ success: true, data: [{ id: 'lib-a', name: 'Library A', display_name: 'Library A' }, { id: 'lib-b', name: 'Library B', display_name: 'Library B' }] }) }, '@/components/FollowToggle.vue': empty, '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) }, ...modules }
+  const route = reactive({ query: { libraries: 'lib-a' } as Record<string, string> })
+  modules = { 'vue-router': { RouterLink: defineComponent({ props: ['to'], setup: (props, { slots }) => () => h('a', { href: props.to.path }, slots.default?.()) }), useRoute: () => route, useRouter: () => ({ replace: async ({ query }: any) => { route.query = query } }) }, '@/components/ui/feedback': { toast: { success() {} }, confirm: (options: any) => { confirmation = options; return { destroy() {}, update() {} } } }, '@/components/LibraryScopeSelect.vue': empty, '@/api/library': { listLibraries: async () => ({ success: true, data: [{ id: 'lib-a', color: 1, name: 'Library A', display_name: 'Library A' }, { id: 'lib-b', color: 2, name: 'Library B', display_name: 'Library B' }] }) }, '@/components/FollowToggle.vue': empty, '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) }, ...modules }
   const filename = path.split('/').at(-1)!
   const { descriptor, errors } = parse(readFileSync(new URL(path, import.meta.url), 'utf8'), { filename })
   assert.deepEqual(errors, [])
@@ -57,73 +58,15 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   assert.deepEqual(warnings, [])
   return html
 }
-const notifications = { MessagePlugin: { success() {} } }
+let confirmation: any
 const topic = { id: 'topic-a', library_id: 'lib-a', name: 'Space research', description: 'Space missions and research', entry_count: 3, created_at: '', updated_at: '' }
 const article = { id: 'article-a', library_id: 'lib-a', content_type: 'event', processing_mode: 'full', starred: false, topics: [{ id: 'old-topic', name: 'Old topic' }], parse_status: 'completed' }
-function judgments(api: Record<string, unknown>, details?: unknown, notificationModule: { MessagePlugin: { success: (message: string) => unknown } } = notifications) {
-  return component('../../components/EntryArticleJudgments.vue', {
-    '@/types/entryClassification': { CONTENT_TYPES }, '@/api/entry-judgments': api,
-    '@/api/topics': { listTopics: async () => ({ success: true, data: [topic] }) },
-    '@/api/library': { getEntryDetails: async () => ({ success: true, data: details }) },
-    './EntryStarToggle.vue': empty, 'tdesign-vue-next': notificationModule,
-  })
-}
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: star actions wait for confirmation, emit updates and preserve state after failure`, async () => {
-    const calls: unknown[] = [], updates: unknown[] = []
-    let fail = false
-    const star = component('../../components/EntryStarToggle.vue', {
-      'tdesign-vue-next': notifications,
-      '@/api/entry-judgments': { setEntryStar: async (id: string, starred: boolean) => { calls.push({ id, starred }); if (fail) throw new Error('network'); return { success: true, data: { id, starred } } } },
-    })
-    const value = { ...article }
-    const html = await render(star, { entry: value, onUpdated: (update: any) => { updates.push(update); Object.assign(value, update) } }, locale, async state => {
-      await state.toggle()
-      assert.equal(value.starred, true)
-      await state.toggle()
-      assert.equal(value.starred, false)
-      fail = true
-      await state.toggle()
-      assert.equal(value.starred, false)
-    })
-    assert.deepEqual(calls, [{ id: 'article-a', starred: true }, { id: 'article-a', starred: false }, { id: 'article-a', starred: true }])
-    assert.equal(updates.length, 2)
-    assert.ok(html.includes(messages[locale].articleJudgments.starFailed))
-    assert.match(html, /aria-pressed="false"/)
-  })
-
-  test(`${locale}: article type guidance preserves full text and images`, async () => {
-    const html = await render(judgments({}), { entry: { ...article } }, locale)
-    const expected = locale === 'zh-CN'
-      ? '用户修正的类型将在重新处理时保留。修改内容类型不会删除正文或图片。'
-      : 'Your corrected type is preserved when reprocessing. Changing the type preserves the full text and images.'
-    assert.equal(messages[locale].articleJudgments.contentTypeHint, expected)
-    assert.ok(html.includes(expected))
-    assert.doesNotMatch(html, /重新抓取|fetches the original URL again/)
-  })
-
-
-
-
-
-  test(`${locale}: topic corrections submit selected IDs and reload the article after a success-only response`, async () => {
-    const calls: unknown[] = [], updates: any[] = []
-    const view = judgments({ correctEntryTopics: async (...input: unknown[]) => { calls.push(input); return { success: true } } }, { ...article, topics: [topic] })
-    await render(view, { entry: { ...article }, onUpdated: (value: any) => updates.push(value) }, locale, async state => {
-      await state.loadTopics()
-      state.topicDraft.value = ['topic-a']
-      await state.saveTopics()
-      state.topicDraft.value = []
-      await state.saveTopics()
-    })
-    assert.deepEqual(calls, [['article-a', ['topic-a']], ['article-a', []]])
-    assert.equal(updates[0].topics[0].id, 'topic-a')
-  })
   test(`${locale}: topic management renders counts and failed batches, retries, creates, edits and deletes`, async () => {
     const calls: unknown[] = []
     let run = { id: 'run-a', topic_id: topic.id, status: 'failed', total: 31, processed: 31, failed_entries: 1, failed_batches: 1, batches: [{ id: 'batch-a', ordinal: 2, entry_count: 1, status: 'failed', attempts: 1, error: 'Model timeout' }] }
     const view = component('./TopicManagement.vue', {
-      '@/components/SafeTextarea.vue': safeTextareaTestModule, 'tdesign-vue-next': notifications,
+
       '@/api/topics': {
         listTopics: async () => ({ success: true, data: [topic] }), getTopicBackfill: async () => ({ success: true, data: run }),
         createTopic: async (input: any) => { calls.push(['create', input]); return { success: true, data: topic } },
@@ -132,13 +75,13 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         retryTopicBackfill: async (id: string) => { calls.push(['retry', id]); run = { ...run, status: 'completed', failed_entries: 0, failed_batches: 0, batches: [] }; return { success: true, data: run } },
       },
     })
-    const html = await render(view, {}, locale, async state => { state.libraryScope.value = ['lib-a']; await state.load() })
+    const html = await render(view, {}, locale, async state => { state.libraries.value = [{ id: 'lib-a', color: 1, name: 'Library A' }]; await state.load() })
     assert.ok(html.includes(topic.name))
     assert.ok(html.includes('31 / 31'))
     assert.ok(html.includes('Model timeout'))
     assert.ok(html.includes(messages[locale].topicManagement.retryFailedBatches))
     const fresh = component('./TopicManagement.vue', {
-      '@/components/SafeTextarea.vue': safeTextareaTestModule, 'tdesign-vue-next': notifications,
+
       '@/api/topics': {
         listTopics: async () => ({ success: true, data: [topic] }), getTopicBackfill: async () => ({ success: true, data: run }),
         createTopic: async (input: any) => { calls.push(['create', input]); return { success: true, data: topic } },
@@ -148,11 +91,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       },
     })
     await render(fresh, {}, locale, async state => {
-      state.libraryScope.value = ['lib-a']
+      state.libraries.value = [{ id: 'lib-a', color: 1, name: 'Library A' }]
       await state.load()
       await state.retry(topic.id)
       state.openEditor()
-      state.draft.value = { name: ' New topic ', description: ' New description ' }
+      state.draft.value = { name: ' New topic ', description: ' New description ', libraryId: 'lib-a' }
       await state.save()
       state.openEditor(topic)
       assert.equal('library_ids' in state.draft.value, false)
@@ -161,14 +104,14 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       state.progress[topic.id] = { ...run, status: 'cancelled', failed_batches: 1 }
       await state.retry(topic.id)
       state.requestDelete(topic)
-      await state.remove()
+      await confirmation.onConfirm()
     })
     assert.deepEqual(calls, [['retry', topic.id], ['create', { name: 'New topic', description: 'New description', library_id: 'lib-a' }], ['update', topic.id, { name: topic.name, description: 'Changed description' }], ['delete', topic.id]])
   })
   test(`${locale}: operation log displays before and after, time and type filters`, async () => {
     const calls: unknown[] = [], urls: unknown[] = [], route = { path: '/platform/settings', query: { section: 'operation-logs', operation_type: 'star', page: '2' } }
     const view = component('./OperationLogs.vue', {
-      'vue-router': { useRoute: () => route, useRouter: () => ({ replace: (value: any) => { urls.push(value); return Promise.resolve() } }) },
+      'vue-router': { RouterLink: defineComponent({ props: ['to'], setup: (props, { slots }) => () => h('a', { href: props.to.path }, slots.default?.()) }), useRoute: () => route, useRouter: () => ({ replace: (value: any) => { urls.push(value); return Promise.resolve() } }) },
       '@/api/operation-logs': { OPERATION_TYPES, listOperationLogs: async (input: any) => { calls.push(input); return { success: true, data: { items: [{ id: 'log-a', operation_type: 'star', object_id: 'article-a', before: { starred: false }, after: { starred: true }, created_at: '2026-10-11T04:00:00Z' }], total: 1 } } } },
     })
     const html = await render(view, {}, locale, async state => { state.readURL(); await state.load(); state.operationType.value = 'correct_topics'; state.filterChanged(); await nextTick() })
@@ -189,7 +132,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       { actor: 'api_key:4', actor_name: '   ' },
     ]
     const view = component('./OperationLogs.vue', {
-      'vue-router': { useRoute: () => ({ query: {} }), useRouter: () => ({ replace: async () => {} }) },
+      'vue-router': { RouterLink: defineComponent({ props: ['to'], setup: (props, { slots }) => () => h('a', { href: props.to.path }, slots.default?.()) }), useRoute: () => ({ query: {} }), useRouter: () => ({ replace: async () => {} }) },
       '@/api/operation-logs': { OPERATION_TYPES, listOperationLogs: async () => ({ success: true, data: {
         items: actors.map((actor, index) => ({ ...actor, id: String(index), operation_type: 'star', object_id: 'article-a', before: false, after: true, created_at: '2026-10-11T04:00:00Z' })), total: actors.length,
       } }) },
@@ -206,14 +149,14 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 
   test(`${locale}: a duplicate topic name keeps the editor and entered text`, async () => {
     const view = component('./TopicManagement.vue', {
-      '@/components/SafeTextarea.vue': safeTextareaTestModule, 'tdesign-vue-next': notifications,
+
       '@/api/topics': { createTopic: async () => { throw { status: 409 } } },
     })
     const html = await render(view, {}, locale, async state => {
-      state.libraryScope.value = ['lib-a']
+      state.libraries.value = [{ id: 'lib-a', color: 1, name: 'Library A' }]
       await nextTick()
       state.openEditor()
-      state.draft.value = { name: topic.name, description: 'My description' }
+      state.draft.value = { name: topic.name, description: 'My description', libraryId: 'lib-a' }
       await state.save()
       assert.equal(state.editorVisible.value, true)
       assert.equal(state.draft.value.description, 'My description')

@@ -50,8 +50,8 @@ function computed(path: string[], property: string) {
 }
 
 test('search image and update notice override their legacy colors and round corners', () => {
-  assert.equal(computed(['article.search-result', 'figure.search-image.search-image--swiss', 'div.search-image-preview'], 'border-radius'), '0')
-  assert.equal(computed(['article.search-result', 'figure.search-image.search-image--swiss', 'div.search-image-preview'], 'background'), 'var(--surface-soft)')
+  assert.equal(computed(['article.search-result', 'figure.search-image', 'div.search-image-preview'], 'border-radius'), '0')
+  assert.equal(computed(['article.search-result', 'figure.search-image', 'div.search-image-preview'], 'background'), 'var(--surface-soft)')
   assert.equal(computed(['article.search-result', 'div.result-meta', 'span.entry-update-notice', 'a'], 'color'), 'inherit')
   assert.equal(computed(['article.search-result', 'div.result-snippets', 'mark.search-highlight'], 'background'), 'var(--select)')
   assert.equal(computed(['article.search-result', 'div.result-snippets', 'mark.search-highlight'], 'color'), 'var(--on-select)')

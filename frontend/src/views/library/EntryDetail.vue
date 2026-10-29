@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { contentTypeLabel } from '@/utils/contentTypeLabel'
+import { formatDateTime } from '@/utils/dateTime'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { onBeforeRouteUpdate, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -12,7 +14,7 @@ import { listEntityRelations } from '@/api/relations'
 import { correctEntryContentType, setEntryStar } from '@/api/entry-judgments'
 import { entryDetailLocation, parseReference } from '@/utils/bodyReference'
 import { entryProcessingState } from '@/utils/entryProcessingStatus'
-import { entryChannelLabel, entryFileFormatLabel } from '@/utils/entrySourceLabels'
+import { entryChannelLabel, entryFileFormatLabel, getExternalToolName } from '@/utils/entrySourceLabels'
 import { safeExternalUrl } from '@/utils/externalUrl'
 import { markdownToPlainText } from '@/utils/markdownPlainText'
 import { processingSpanLabel } from '@/utils/processingSpanLabel'
@@ -49,7 +51,7 @@ const source = computed(() => entry.value?.metadata?.intake?.source_info?.origin
 const sourceURL = computed(() => safeExternalUrl(source.value))
 const created = computed(() => {
   const value = entry.value?.created_at
-  return value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : t('entries.unknown')
+  return formatDateTime(value, locale.value, { dateStyle: 'medium', timeStyle: 'short' }, t('entries.unknown'))
 })
 const plain = (value: string) => markdownToPlainText(value, `[${t('ingestStatus.missingTypes.image')}]`)
 const typeOptions = computed(() => entry.value?.library_content_types?.filter(option => option.enabled) || [])
@@ -182,7 +184,7 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
           <Button v-if="processing.active" :disabled="busy" @click="cancelProcessing">{{ t('library.cancelParse') }}</Button>
         </div>
         <p v-if="actionError && !typeOpen" class="entry-detail__error" role="alert">{{ actionError }}</p>
-        <div class="entry-detail__eyebrow">{{ entry.content_type || t('entries.unknown') }} · {{ created }}</div>
+        <div class="entry-detail__eyebrow">{{ contentTypeLabel(entry.content_type, t) || t('entries.unknown') }} · {{ created }}</div>
         <h1>{{ title }}</h1>
         <div class="entry-detail__markers">
           <Tag v-if="entry.acquisition === 'model_written'">{{ t('ingestStatus.modelWritten') }}</Tag>
@@ -192,9 +194,10 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
         </div>
         <dl class="entry-detail__facts">
           <div><dt>{{ t('entries.library') }}</dt><dd><LibMark v-if="library" :color="library.color" /> {{ library?.display_name || library?.name || entry.library_name || entry.library_id || t('entries.unknown') }}</dd></div>
-          <div><dt>{{ t('library.contentTypeFilter') }}</dt><dd>{{ entry.content_type || t('entries.unknown') }}</dd></div>
+          <div><dt>{{ t('library.contentTypeFilter') }}</dt><dd><Tag v-if="entry.content_type">{{ contentTypeLabel(entry.content_type, t) }}</Tag><span v-else>{{ t('entries.unknown') }}</span></dd></div>
           <div><dt>{{ t('entries.source') }}</dt><dd><a v-if="sourceURL" :href="sourceURL" target="_blank" rel="noopener noreferrer">{{ source }}</a><span v-else>{{ source || t('entries.unknown') }}</span></dd></div>
           <div><dt>{{ t('library.channelLabel') }}</dt><dd>{{ entryChannelLabel(entry, t) }}</dd></div>
+          <div v-if="getExternalToolName(entry)"><dt>{{ t('library.externalTool') }}</dt><dd>{{ getExternalToolName(entry) }}</dd></div>
           <div><dt>{{ t('library.fileTypeFilter') }}</dt><dd>{{ entryFileFormatLabel(entry, t) }}</dd></div>
           <div v-if="entry.vault_path"><dt>{{ t('library.vaultPath') }}</dt><dd>{{ entry.vault_path }}</dd></div>
           <div><dt>{{ t('entryDetail.bodyLength') }}</dt><dd>{{ bodyReady ? t('entryDetail.characters', { count: Array.from(body).length }) : t('entries.unknown') }}</dd></div>
@@ -205,7 +208,7 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
         <p v-if="reference && bodyReady && reference.body_hash !== bodyHash" class="entry-detail__notice" role="status">{{ t('ikb18.bodyChanged') }}</p>
         <ErrorState v-if="bodyError" :title="t('entryEditor.loadFailed')"><Button @click="state.loadBody">{{ t('common.retry') }}</Button></ErrorState>
         <Skeleton v-else-if="!bodyReady" :label="t('common.loading')" />
-        <DocContent v-if="bodyReady" ref="content" reading :visible="true" :details="renderDetails" :reference="reference" :library-id="entry.library_id" @get-doc="state.loadBody(); state.refresh()" @processing-state-change="state.refresh()" @preview-image="imagePreview = $event" @editing-change="editingChanged" />
+        <DocContent v-if="bodyReady" ref="content" :visible="true" :details="renderDetails" :reference="reference" :library-id="entry.library_id" @get-doc="state.loadBody(); state.refresh()" @processing-state-change="state.refresh()" @preview-image="imagePreview = $event" @editing-change="editingChanged" />
       </article>
       <aside class="entry-detail__rail" :aria-label="t('entryDetail.information')">
         <Tabs v-model="tab" :label="t('entryDetail.information')" :items="tabs">
@@ -213,14 +216,14 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
             <p class="entry-detail__overview">{{ plain(entry.structured_summary?.overview || entry.description || t('entries.noSummary')) }}</p>
             <ul v-if="entry.structured_summary?.points?.length"><li v-for="(point, index) in entry.structured_summary.points" :key="index">{{ plain(point) }}</li></ul>
             <section v-if="entry.structured_summary?.key_terms?.length"><h3>{{ t('entryDetail.keyTerms') }}</h3><div class="entry-detail__markers"><Tag v-for="term in entry.structured_summary.key_terms" :key="term">{{ plain(term) }}</Tag></div></section>
-            <section v-if="entry.topics?.length"><h3>{{ t('articleJudgments.topics') }}</h3><p v-for="topic in entry.topics" :key="topic.id"><RouterLink :to="{ path: '/platform/topics', query: { topic_id: topic.id } }">{{ topic.name }}</RouterLink> <FollowToggle swiss target-type="topic" :target-id="topic.id" :name="topic.name" /></p></section>
+            <section v-if="entry.topics?.length"><h3>{{ t('articleJudgments.topics') }}</h3><p v-for="topic in entry.topics" :key="topic.id"><RouterLink :to="{ path: '/platform/topics', query: { topic_id: topic.id } }">{{ topic.name }}</RouterLink> <FollowToggle target-type="topic" :target-id="topic.id" :name="topic.name" /></p></section>
             <section v-if="entry.metadata?.related_entry_ids?.length"><h3>{{ t('library.relatedEntries') }}</h3><p v-for="relatedId in entry.metadata.related_entry_ids" :key="relatedId"><RouterLink :to="entryDetailLocation(relatedId)">{{ relatedId }}</RouterLink></p></section>
             <dl v-if="entry.custom_metadata && Object.keys(entry.custom_metadata).length" class="entry-detail__metadata"><template v-for="(value, key) in entry.custom_metadata" :key="key"><dt>{{ key }}</dt><dd>{{ value }}</dd></template></dl>
           </template>
           <template #entities>
             <Skeleton v-if="relationsLoading" :label="t('common.loading')" />
             <ErrorState v-if="relationsError" :title="t('entryDetail.relationsFailed')"><Button @click="state.loadRelations">{{ t('common.retry') }}</Button></ErrorState>
-            <div v-for="entity in entities" :key="entity.id" class="entry-detail__entity"><div><RouterLink :to="entityLocation(entity.id)">{{ entity.canonical_name }}</RouterLink><span>{{ t(`knowledgeWorkbench.entities.types.${entity.entity_type}`) }}</span></div><p v-if="entity.description">{{ entity.description }}</p><FollowToggle swiss target-type="entity" :target-id="entity.id" :name="entity.canonical_name" /></div>
+            <div v-for="entity in entities" :key="entity.id" class="entry-detail__entity"><div><RouterLink :to="entityLocation(entity.id)">{{ entity.canonical_name }}</RouterLink><span>{{ t(`knowledgeWorkbench.entities.types.${entity.entity_type}`) }}</span></div><p v-if="entity.description">{{ entity.description }}</p><FollowToggle target-type="entity" :target-id="entity.id" :name="entity.canonical_name" /></div>
             <EmptyState v-if="!relationsLoading && !relationsError && !entities.length" :title="t('entries.noEntities')" />
           </template>
           <template #relations>

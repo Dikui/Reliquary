@@ -64,8 +64,8 @@ test('unused generic high-risk confirmation is removed while SSRF entry confirma
     assert.ok(source.includes(`confirmSsrfListEntryChange('${action}', entry)`))
   }
   for (const bundle of [enUS, zhCN]) {
-    assert.equal('highRiskBody' in bundle.system.globalSettings.confirm, false)
-    assert.equal('bodyAuthRegistrationMode' in bundle.system.globalSettings.confirm, false)
+    assert.equal(getLocaleValueAtPath(bundle, 'system.globalSettings.confirm.highRiskBody') !== undefined, false)
+    assert.equal(getLocaleValueAtPath(bundle, 'system.globalSettings.confirm.bodyAuthRegistrationMode') !== undefined, false)
     for (const action of ['add', 'remove'] as const) {
       const confirmation = bundle.system.globalSettings.listConfirm.ssrf.whitelist[action]
       assert.match(confirmation.body, /\{entry\}/)

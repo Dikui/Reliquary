@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import type { DeploymentCapabilityKey } from '@/config/deploymentCapabilities'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { toast } from '@/components/ui/feedback'
 import i18n from '@/i18n'
 import { createApplicationRoutes } from './routes'
 import { notifyRemovedFeatureRedirect } from './routeFallbacks'
@@ -36,7 +36,7 @@ router.beforeEach(async (to, from, next) => {
   await deploymentCapabilities.ensureLoaded()
   const requiredCapability = to.meta.requiredCapability as DeploymentCapabilityKey | undefined
   if (requiredCapability && !deploymentCapabilities.isSupported(requiredCapability)) {
-    MessagePlugin.warning(i18n.global.t('settings.capabilityUnavailable'))
+    toast.warning(i18n.global.t('settings.capabilityUnavailable'))
     next('/platform/entries')
     return
   }
@@ -46,7 +46,7 @@ router.beforeEach(async (to, from, next) => {
 
 router.afterEach((to, _from, failure) => {
   if (!failure) {
-    notifyRemovedFeatureRedirect(to, () => MessagePlugin.info(i18n.global.t('navigation.removedFeature')))
+    notifyRemovedFeatureRedirect(to, () => toast.info(i18n.global.t('navigation.removedFeature')))
   }
 })
 

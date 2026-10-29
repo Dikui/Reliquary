@@ -1,4 +1,4 @@
-/* Scoped foundation: existing TDesign pages keep their own typography and controls. */
+/* Shared controls use the application tokens. */
 :where(.rq-ui, .rq-button, .rq-control, .rq-chip, .rq-field, .rq-tabs, .rq-table-wrap, .rq-dialog, .rq-menu, .rq-tooltip, .rq-toast, .rq-empty, .rq-tag, .rq-status) {
   box-sizing: border-box;
   font: var(--text-md)/var(--leading) var(--font);

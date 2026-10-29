@@ -804,7 +804,7 @@ function attachTasksScrollObserver() {
   detachTasksScrollObserver()
   const sentinel = tasksSentinelRef.value
   if (!sentinel || !taskDrawerVisible.value || !tasksHasMore.value) return
-  const root = sentinel.closest('.t-drawer__body') as HTMLElement | null
+  const root = sentinel.closest('.rq-dialog__body') as HTMLElement | null
   if (!root) return
   tasksScrollObserver = new IntersectionObserver(
     (entries) => {

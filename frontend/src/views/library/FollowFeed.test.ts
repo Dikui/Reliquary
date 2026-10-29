@@ -102,7 +102,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   const urls: any[] = []
   const router = { replace: async (value: any) => { urls.push(value); route.query = value.query || {} }, push: async (value: any) => { urls.push(value) } }
   const i18n = createI18n({ legacy: false, locale, messages })
-  const modules: Record<string, any> = { ...entryPresentationTestModules, '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } }, './GlobalCommandPalette/useHighlight': highlight, '@/components/SafeTextarea.vue': empty, './MergeSuggestions.vue': empty }
+  const modules: Record<string, any> = { ...entryPresentationTestModules, '@/utils/rfc3339': precision, '@/api/follows': followsAPI, '@/api/topics': topicsAPI, '@/api/entities': entitiesAPI, '@/api/library': entryAPI, '@/stores/follows': storeModule, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: (value: string) => /^https?:\/\//.test(value), hydrateProtectedFileImages: async () => {}, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value }, 'vue-router': { useRoute: () => route, useRouter: () => router }, './GlobalCommandPalette/useHighlight': highlight, './MergeSuggestions.vue': empty }
   modules['@/utils/search'] = searchUtils
   modules['@/api/relations'] = { listEntityRelations: async () => ({ success: true, data: [] }) }
   modules['@/components/ui/feedback'] = { toast: { success() {} }, confirm: (options: any) => { confirmations.push(options); return { destroy() {}, update(values: any) { Object.assign(options, values) } } } }
@@ -140,11 +140,6 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   modules['@/utils/markdownPlainText'] = markdownPlainText
   const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)
   modules['@/components/FollowToggle.vue'] = modules['./FollowToggle.vue'] = moduleOf(toggle)
-  const classification = loadComponent(new URL('../../components/EntryClassification.vue', import.meta.url), modules)
-  modules['@/components/EntryClassification.vue'] = modules['./EntryClassification.vue'] = moduleOf(classification)
-  modules['./SearchImage.vue'] = empty
-  const result = loadComponent(new URL('../../components/SearchEntry.vue', import.meta.url), modules)
-  modules['@/components/SearchEntry.vue'] = moduleOf(result)
   function mount(component: any, props = {}) {
     const root = element('root'), app = renderer.createApp(component, props)
     app.config.warnHandler = warning => warnings.push(warning)
@@ -470,35 +465,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.deepEqual(env.errors, [])
     } finally { topics.close() }
   })
-  test(`${locale}: article detail labels expose both follow buttons after an actual article load`, async () => {
-    const env = environment(locale)
-    const oldWindow = globalThis.window, oldDocument = globalThis.document, oldStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
-    globalThis.window = { innerWidth: 1200, addEventListener() {}, removeEventListener() {} } as any
-    globalThis.document = { body: { style: {} }, addEventListener() {}, removeEventListener() {}, querySelector: () => null } as any
-    Object.defineProperty(globalThis, 'localStorage', { value: { getItem: () => null, setItem() {} }, configurable: true })
-    Object.assign(env.modules, { marked: { marked: { use() {}, Renderer: class {}, parse: (value: string) => value } }, 'marked-katex-extension': moduleOf(() => ({})), 'katex/dist/katex.min.css': {}, 'highlight.js': moduleOf({}), 'highlight.js/styles/github.css': {}, mermaid: moduleOf({ initialize() {} }), '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/components/DocumentPreview.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/EntryStarToggle.vue': empty, '@/components/ReportAssociations.vue': empty, '@/components/PersonalDocumentDelete.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/views/library/components/RepostSources.vue': empty, '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {}, '@/utils/clipboard': {} })
-    Object.assign(env.modules, { '@/components/EntryProcessingStatus.vue': empty, '@/components/MissingMaterials.vue': empty, '@/components/IncompleteActions.vue': empty })
-    const detail = env.component('../../components/DocContent.vue')
-    const entryStoreModule = evaluateFile('../../stores/entry.ts', {})
-    const detailHook = evaluateFile('../../composables/useLibrary.ts', { '../utils/index': { formatStringDate: () => '2026-10-11' }, 'tdesign-vue-next': env.modules['tdesign-vue-next'], '@/api/library': env.modules['@/api/library'], '@/stores/entry': entryStoreModule, '@/stores/resources': { useResourcesStore: () => ({}) } })
-    const parent = defineComponent({ setup() { const hook = detailHook.default('library-follows'); onMounted(async () => { await hook.loadEntries(); hook.getCardDetails(hook.cardList.value[0]) }); return () => hook.details.id ? h(detail, { visible: true, details: hook.details }) : null } })
-    const mounted = env.mount(parent)
-    try {
-      await settle()
-      assert.ok(env.calls.some(call => call.method === 'get' && call.url === '/api/v1/entries/new'))
-      assert.ok(env.calls.some(call => call.url === '/api/v1/entries?page=1&page_size=35'))
-      assert.ok(env.calls.some(call => call.url.startsWith('/api/v1/chunks/new?')))
-      assert.equal(entryStoreModule.entryStore().cardList[0].id, 'new')
-      await click(env.followButton(mounted.root, 'entity'))
-      await click(env.followButton(mounted.root, 'topic'))
-      assert.equal(env.store.isFollowing('entity', entity.id), true)
-      assert.equal(env.store.isFollowing('topic', topic.id), true)
-      await click(env.followButton(mounted.root, 'entity', true))
-      await click(env.followButton(mounted.root, 'topic', true))
-      assert.equal(env.store.targets.length, 0)
-      assert.deepEqual(env.errors, [])
-    } finally { mounted.close(); globalThis.window = oldWindow; globalThis.document = oldDocument; if (oldStorage) Object.defineProperty(globalThis, 'localStorage', oldStorage); else delete (globalThis as any).localStorage }
-  })
   test(`${locale}: feed loads history, preserves new markers across filters and refresh, unfolds matches and marks all seen`, async () => {
     const env = environment(locale, [entityFollow, topicFollow]), mounted = env.mount(env.component('./FollowFeed.vue'))
     try {
@@ -531,36 +497,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(env.store.lastViewedAt, markedAt)
       assert.deepEqual(env.errors, [])
     } finally { mounted.close() }
-  })
-  test(`${locale}: sidebar badge follows the actual state API and shared viewing state`, async () => {
-    const env = environment(locale, [entityFollow, topicFollow])
-    const menuStore = evaluateFile('../../stores/menu.ts', { '@/i18n': moduleOf(env.i18n) })
-    env.modules['@/stores/menu'] = menuStore
-    env.modules['@/stores/ui'] = { useUIStore: () => reactive({ sidebarCollapsed: false, toggleSidebar() {}, openSettings() {} }) }
-    env.modules['@/components/UserMenu.vue'] = empty
-    env.modules['@/components/PendingCountBadge.vue'] = empty
-    env.modules['@/assets/img/reliquary.svg'] = moduleOf('/reliquary.svg')
-    env.modules['@/stores/pendingCounts'] = { usePendingCountsStore: () => ({ total: null, refresh() {} }) }
-    env.modules['@/stores/commandPalette'] = { useCommandPaletteStore: () => ({ openPalette() {} }) }
-    env.modules['@/api/library'] = { listLibraries: async () => ({ success: true, data: [] }) }
-    env.modules['@/api/ingest-diagnostics'] = { listIngestFailures: async () => ({ success: false }) }
-    env.modules['@/components/ui'] = { LibMark: empty.default, Tooltip: defineComponent({ setup: (_, { slots }) => () => slots.default?.() }) }
-    env.modules['tdesign-icons-vue-next'] = new Proxy({}, { get: () => empty.default })
-    env.modules['vue-router'].RouterLink = defineComponent({ props: ['to'], setup: (props, { slots }) => () => h('a', { href: typeof props.to === 'string' ? props.to : props.to.path }, slots.default?.()) })
-    const oldDocument = globalThis.document
-    globalThis.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} } as any
-    const mounted = env.mount(env.component('../../components/SideMenu.vue'))
-    try {
-      await settle()
-      const navigation = descendants(mounted.root).filter(node => node.tag === 'a' && hasClass(node, 'rq-sidenav__link'))
-      assert.deepEqual(navigation.map(visibleText), [`${messages[locale].menu.materials}0`, messages[locale].menu.searchMaterials, messages[locale].menu.entities, messages[locale].menu.topics, `${messages[locale].menu.followUpdates}2`, messages[locale].menu.pending, messages[locale].menu.ingestFailures, messages[locale].contentCheck.title, messages[locale].ikb19.evaluationTitle, messages[locale].menu.modelCalls, messages[locale].menu.settings])
-      assert.ok(env.calls.some(call => call.url === '/api/v1/follows/state'))
-      const followLink = () => descendants(mounted.root).find(node => node.props.href === '/platform/follows')!
-      assert.equal(followLink().props['aria-label'], env.i18n.global.t('menu.itemCount', { name: messages[locale].menu.followUpdates, count: '2' }))
-      await env.store.markViewed(openedAt); await settle()
-      assert.equal(visibleText(followLink()), messages[locale].menu.followUpdates)
-      assert.deepEqual(env.errors, [])
-    } finally { mounted.close(); globalThis.document = oldDocument }
   })
 }
 

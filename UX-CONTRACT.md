@@ -62,8 +62,7 @@ The Swiss platform sidebar preserves the existing route destinations during the
 page migration. Materials opens the library catalogue; each library opens the
 entry page with its `libraries` query. Entities and pending confirmation keep the
 existing `tab=entities` and `tab=reviews` routes. Settings still opens the existing
-settings surface. The sidebar alone migrates in this phase; page scroll owners
-and legacy content styling stay unchanged.
+settings surface. Page scroll owners remain responsible for their content; all pages use the shared Swiss tokens.
 
 Navigation uses native links, persisted collapse state and a 640px mobile
 breakpoint. The shared Reka drawer traps focus, closes on Escape, navigation or
@@ -120,9 +119,9 @@ Reliquary 保留现有页面结构、色彩、字体和交互。产品显示名�
 
 主导航“库”进入 /platform/libraries，按现有库显示卡片；点击卡片进入 /platform/entries?libraries=<id>，只查看所选库的资料。资料页标题为“库 > 当前库”，可返回库卡片。实体和历史待审保留独立侧栏入口，不再在资料页顶部重复展示。资料页仅默认展开库、处理状态和内容类型；低频筛选收进“更多筛选”，有已应用的低频筛选时自动展开。
 
-实体页面包含实体档案和待合并建议。实体详情以类型、别名和提及该实体的文章为主要信息结构，文章可通过原有文章详情入口打开。实体类型固定为公司、人物、产品、项目、组织、其他。模型配置、合并操作和名称向量重建沿用现有 TDesign 组件与中英文文案。
+实体页面包含实体档案和待合并建议。实体详情以类型、别名和提及该实体的文章为主要信息结构，文章可通过原有文章详情入口打开。实体类型固定为公司、人物、产品、项目、组织、其他。模型配置、合并操作和名称向量重建使用共享组件与中英文文案。
 
-运行时样式以 frontend/src/assets/theme/theme.css 为唯一色彩与圆角来源，经 frontend/src/main.ts 加载后供 TDesign 组件及 var(--td-*) 使用。字体由 frontend/src/composables/useFont.ts 管理，保留既有中文与英文选择。新增区域不另建色彩、字体或阴影体系。滚动条使用全局主题变量，所有新增溢出区域自动继承。
+运行时样式以 frontend/src/styles/tokens.css 为色彩、字体和圆角来源；frontend/src/styles/global.css 提供页面基础样式。字体由 frontend/src/composables/useFont.ts 管理，保留既有中文与英文选择。新增区域不另建色彩、字体或阴影体系。滚动条使用全局主题变量，所有新增溢出区域自动继承。
 
 实体列表使用显式加载更多，实体详情保持自然高度。窄屏把实体列表与档案改为上下排列，长实体名、别名和文章标题换行。实体合并前明确保留实体与相关文章影响，待合并建议通过共享确认对话框处理。
 
@@ -164,12 +163,12 @@ Batch submissions retain batch_id in the documents route. The result link and a 
 ## Saved entries and background processing
 
 Source: the confirmed library intake rules in ADR 0014 and the request to separate saved state from background work.
-EntryProcessingStatus owns saved/background labels and failed-work retry across document cards, rows and details. A confirmed body save announces Saved (已入库); only accepted/unchanged save results count as success. Drafts and legacy rejected entries do not receive the saved badge.
+`entryProcessingState` supplies saved/background labels to shared status indicators; the owning list and detail views control failed-work retries. A confirmed body save announces Saved (已入库); only accepted/unchanged save results count as success. Drafts and legacy rejected entries do not receive the saved badge.
 The entry API's parse_status describes body indexing, and summary_status describes background enrichment. Completed body indexing must not hide pending or failed background work. Both fields participate in polling; a completed body index with failed enrichment retains the saved badge and body access. Retry uses the existing reparse endpoint, disables duplicate activation, updates the owning list/detail from the server response, and preserves readable errors. No retry toast claims processing has completed. Index rebuilding may temporarily affect search availability.
 
 ## Weekly content checks
 
-Source: .scratch/weekly-self-check/spec.md (local only). ContentChecksPage under Diagnostics reuses TDesign selects, input, switch, buttons, loading and pagination, the shared theme and the existing entry reference route. Settings are explicitly saved; no model or schedule is enabled by default. List page and selected run live in URL state. Inline failures remain visible with existing results; only explicit recheck starts another run. Details expose source excerpts as escaped text and navigate through the existing reference/hash validation.
+Source: .scratch/weekly-self-check/spec.md (local only). ContentChecksPage under Diagnostics uses shared selects, input, switch, buttons, loading and pagination, the shared tokens and the material detail route. Settings are explicitly saved; no model or schedule is enabled by default. List page and selected run live in URL state. Inline failures remain visible with existing results; only explicit recheck starts another run. Details expose source excerpts as escaped text and navigate through the existing reference/hash validation.
 
 
 ## Swiss UI foundation
@@ -237,7 +236,7 @@ entity sources, related material and command results use this route. Old
 compatibility redirect. Browser Back restores the originating URL and filters.
 
 The existing body API supplies the complete saved Markdown and ETag. DocContent
-retains its rendering pipeline; a reading variant adds paragraph numbers and
+retains a single reading presentation that adds paragraph numbers and
 source highlighting after rendering. Stale body hashes show the existing changed
 body notice and fall back to paragraph location. Inline images open an accessible
 shared Dialog; the saved Markdown can be downloaded locally without a new export
@@ -258,8 +257,7 @@ confirmation prevents duplicate submissions and retains failures for retry;
 pending mutations block route departure. Successful deletion returns to the
 material's library. Entity/topic follow controls use the existing follow store.
 
-The reading flag is a Boolean runtime prop, including when passed as a bare
-attribute. Reference and processing updates preserve the rendered body when
+Reference and processing updates preserve the rendered body when
 the Markdown, entry, attachment context and locale are unchanged. Async image
 and diagram work is tied to the latest render; the original Markdown renderer
 remains the content owner. Hidden tab panels have a shared visibility guard.
@@ -406,3 +404,6 @@ in the existing user/space-scoped browser storage. Clear removes targets and
 queries together. Retrieval parameters keep the same API and automatic saving;
 the palette's drawer uses native controls and shared feedback. This migration
 adds no backend operations or database migration.
+
+Calendar-date values keep the recorded day in every timezone. Timestamp values
+continue to display in the viewer’s timezone. `utils/dateTime.ts` owns this distinction.

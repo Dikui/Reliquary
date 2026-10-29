@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/dateTime'
 import { onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button, EmptyState, ErrorState, LibMark, Tag } from '@/components/ui'
@@ -19,7 +20,7 @@ function originalURL(item: ReviewEntry) {
   return /^https?:\/\//i.test(url) && isValidURL(url) ? url : ''
 }
 function library(id?: string) { return props.libraries?.find(item => item.id === id) }
-function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale.value) }
+function formatDate(value: string) { return formatDateTime(value, locale.value, { dateStyle: 'medium', timeStyle: 'short' }, value) }
 function typeLabel(value: string) { return CONTENT_TYPES.includes(value as ContentType) ? t(`library.contentTypes.${value}`) : value }
 onBeforeUnmount(() => emit('busy-change', false))
 </script>

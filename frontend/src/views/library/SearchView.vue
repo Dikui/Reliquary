@@ -184,7 +184,7 @@ onUnmounted(() => { disposed = true; catalogSequence++; optionsSequence++; inval
                 </div>
                 <Button variant="primary" type="submit" :loading="loading">{{ t('knowledgeSearch.search') }}</Button>
               </div>
-              <SearchFilters v-model="filters" :options="options" :loading="optionsLoading" swiss>
+              <SearchFilters v-model="filters" :options="options" :loading="optionsLoading">
                 <template #libraries>
                 <button v-for="(library, index) in libraries" :key="library.id" type="button" class="library-filter" :style="{ '--lib': libraryColorVar(library.color) }" :aria-pressed="libraryScope.includes(library.id)" @click="toggleLibrary(library.id)"><LibMark :color="library.color" /><span>{{ library.display_name || library.name }}</span><span class="library-number">{{ t('entries.libraryNumber', { number: String(index + 1).padStart(2, '0') }) }}</span></button>
                 </template>

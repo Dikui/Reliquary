@@ -137,8 +137,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   const api=evaluate('../api/library.ts',f.modules)
   const storeModule=evaluate('../stores/entry.ts',f.modules)
   const modules={...f.modules,pinia:require('pinia'),'@/api/library':api,'@/stores/entry':storeModule,
-    '../utils/index': { formatStringDate:()=> '2026-10-01' },
-    'tdesign-vue-next':{MessagePlugin:{}},'vue-i18n':{useI18n:()=>({t:f.i18n.global.t})},
+    '../utils/index': { formatStringDate:()=> '2026-10-01' },'vue-i18n':{useI18n:()=>({t:f.i18n.global.t})},
     }
   const hook=evaluate('../composables/useLibrary.ts',modules).default('library-entries')
   await hook.loadEntries()

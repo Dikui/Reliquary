@@ -48,7 +48,6 @@ function catalogModules(calls: any[], options: { fail?: boolean } = {}) {
     '@/types/entryClassification': classification,
     '@/components/ui': { ...(entryPresentationTestModules['@/components/ui'] as object), Dialog: empty.default, toast: { success() {} }, confirm: (value: any) => { dialog = value; return { destroy() {}, update() {} } } },
     '@/utils/modelTiers': { copyModelTiers },
-    'tdesign-vue-next': { DialogPlugin: { confirm: (value: any) => { dialog = value; return { destroy() {}, update() {} } } } },
     '@/api/library': {
       listLibraries: async () => ({ success: true, data: [current] }), getCatalogLibrary: async () => ({ success: true, data: JSON.parse(JSON.stringify(current)) }),
       saveCatalogLibrary: async (id: string, body: any) => { calls.push({ id, body }); if (options.fail) return { success: false, message: 'offline' }; current = { ...current, ...body }; return { success: true } },
@@ -173,72 +172,51 @@ test('mixed emoji and Chinese/English references highlight UTF-16 ranges only af
   const mismatch = await references.resolveBodyReference(body + 'changed', location); assert.equal(mismatch.matches, false); assert.equal(mismatch.range, null); assert.equal(mismatch.paragraph, 2)
   assert.equal(references.codePointRange(body, -1, 2), null)
   assert.deepEqual(references.parseReference(JSON.stringify(location)), location); assert.equal(references.parseReference('{'), undefined)
-  const oldFetch = globalThis.fetch
-  try {
-    globalThis.fetch = async () => new Response(body)
-    const modules = { '@/utils/bodyReference': references, '@/utils/api-base': { getApiBaseUrl: () => 'http://fixture' } }
-    const html = await scenario('./components/BodyReference.vue', { entryId: 'a', location }, modules, async state => { await state.load(); assert.equal(state.changed.value, false) })
-    assert.match(html, /<mark>😀中 <\/mark>/)
-    const degraded = await scenario('./components/BodyReference.vue', { entryId: 'a', location: { ...location, body_hash: 'old' } }, modules, async state => { await state.load(); assert.equal(state.changed.value, true) })
-    assert.match(degraded, /正文已变化/); assert.doesNotMatch(degraded, /<mark>/)
-  } finally { globalThis.fetch = oldFetch }
+
 })
 test('body paragraphs preserve fenced code, list items, CRLF, tables and setext headings', () => {
   const body = '# H\r\n\r\nA😀\r\n\r\n- one\n- two\n\n```md\n# inside\n\ncode\n```\n\n| a |\n| - |\n\nTitle\n=====\n'
   const blocks = references.bodyParagraphs(body); assert.equal(blocks.length, 7); assert.equal(blocks.map(block => block.text).join(''), body); assert.match(blocks[4].text, /# inside\n\ncode/)
 })
-test('entity relation groups filter libraries, source links retain positions, and deletion requires suppression confirmation', async () => {
-  const calls: string[] = [], libraryScope = ref<string[]>([])
+test('entity relation sources preserve body positions and deletion waits for suppression confirmation', async () => {
+  const calls: string[] = []
   const location = { start: 1, end: 3, paragraph: 2, body_hash: '', heading_path: ['H'], mapping: 'exact' }
   const relation = { id: 'r', relation_type: '合作', direction: 'outgoing', peer: { id: 'p', canonical_name: 'Peer' }, library_id: 'mine', library_name: 'Notes', source_count: 1, sources: [{ entry_id: 'a', title: 'Source', body_hash: 'hash', evidence: [{ locations: [location], speaker: { name: 'Speaker' } }] }] }
-  let deleted = false
-  const html = await scenario('./views/library/components/EntityRelations.vue', { entityId: 'e' }, {
-    '@/composables/useLibraryScope': { useLibraryScope: () => libraryScope },
-    '@/api/relations': { listEntityRelations: async () => ({ success: true, data: deleted ? [] : [{ relation_type: '合作', relations: [relation] }] }), deleteEntityRelation: async (id: string) => { calls.push(id); deleted = true; return { success: true } } },
+  let confirmation: any
+  const props = { entityId: 'e', entityName: 'Center', groups: [{ relation_type: '合作', relations: [relation] }] }
+  const html = await scenario('./views/library/components/EntityRelations.vue', props, {
+    '@/api/relations': { deleteEntityRelation: async (id: string) => { calls.push(id); return { success: true } } },
+    '@/components/ui/feedback': { toast: { success() {} }, confirm: (options: any) => { confirmation = options; return { destroy() {} } } },
   }, async state => {
-    await state.load(); assert.equal(state.filtered.value[0].relation_type, '合作')
-    libraryScope.value = ['other']; assert.equal(state.filtered.value.length, 0); libraryScope.value = []
     assert.equal(state.locationFor(relation.sources[0], location).body_hash, 'hash')
-    state.deleting.value = relation; assert.equal(calls.length, 0)
+    state.remove(relation)
+    assert.equal(calls.length, 0)
+    assert.match(confirmation.body, /抑制记录/)
+    await confirmation.onConfirm()
   })
-  assert.match(html, /Peer/); assert.match(html, /Source/); assert.match(html, /Speaker/); assert.match(html, /抑制记录/); assert.match(html, /段落 2/)
-  await scenario('./views/library/components/EntityRelations.vue', { entityId: 'e' }, {
-    '@/composables/useLibraryScope': { useLibraryScope: () => ref([]) },
-    '@/api/relations': { listEntityRelations: async () => ({ success: true, data: [] }), deleteEntityRelation: async (id: string) => { calls.push(id); return { success: true } } },
-  }, async state => { state.deleting.value = relation; await state.remove(); assert.equal(state.deleting.value, null) })
+  assert.match(html, /Peer/); assert.match(html, /Source/); assert.match(html, /Speaker/); assert.match(html, /段落 2/)
   assert.deepEqual(calls, ['r'])
 })
-for (const locale of ['zh-CN', 'en-US']) test(`${locale}: pending review shows library and segment reason and filters intake by library`, async () => {
-  const calls: any[] = []
-  const modules = {
-    '@/composables/useLibraryScope': { useLibraryScope: () => ref(['mine']) }, '@/utils/security': { isValidURL: () => true },
-    '@/api/entry-review': { listPendingEntry: async (input: any) => { calls.push(input); return { success: true, total: 1, data: [{ id: 'a', title: 'Pending', library_name: 'Notes', metadata: { intake: { reason: '第 2/3 段: body incomplete' } } }] } } },
-  }
-  const html = await scenario('./views/library/components/PendingReviews.vue', {}, modules, async state => { await state.load() }, locale)
-  assert.match(html, /Notes/); assert.match(html, /第 2\/3 段/); assert.deepEqual(calls[0].libraries, ['mine'])
+for (const locale of ['zh-CN', 'en-US']) test(`${locale}: pending review renders its library and intake reason`, async () => {
+  const html = await scenario('./views/library/components/PendingReviews.vue', {
+    records: [{ id: 'a', title: 'Pending', library_name: 'Notes', metadata: { intake: { reason: '第 2/3 段: body incomplete' } } }],
+    total: 1, page: 1, loading: false, error: '',
+  }, {}, async () => {}, locale)
+  assert.match(html, /Notes/); assert.match(html, /第 2\/3 段/)
 })
 
-test('mounted relation source opens exact body position and suppression deletion waits for confirm', async () => {
-  const { loadComponent, renderer, element, descendants, click, registerPrimitives, settle, visibleText } = await import('./views/library/componentTestHarness')
+test('mounted relation source opens its exact saved-body position', async () => {
+  const { loadComponent, renderer, element, descendants, click, settle, visibleText } = await import('./views/library/componentTestHarness')
   const location = { start: 2, end: 5, paragraph: 2, body_hash: '', heading_path: ['H'], mapping: 'exact' }
   const relation = { id: 'rel', relation_type: '合作', direction: 'incoming', peer: { id: 'peer', canonical_name: 'Peer' }, library_id: 'mine', library_name: 'Notes', source_count: 1, sources: [{ entry_id: 'source', title: 'Source title', body_hash: 'saved-hash', evidence: [{ locations: [location], speaker: { name: 'Speaker' } }] }] }
-  const scopeRef = ref<string[]>([]), opened: any[] = [], deleted: string[] = []
-  let exists = true
-  const component = loadComponent(new URL('./views/library/components/EntityRelations.vue', import.meta.url), {
-    '@/composables/useLibraryScope': { useLibraryScope: () => scopeRef }, '@/components/LibraryScopeSelect.vue': empty,
-    '@/api/relations': { listEntityRelations: async () => ({ success: true, data: exists ? [{ relation_type: '合作', relations: [relation] }] : [] }), deleteEntityRelation: async (id: string) => { deleted.push(id); exists = false; return { success: true } } },
-  })
-  const root = element('root'), app = renderer.createApp(component, { entityId: 'entity', onOpenSource: (...args: any[]) => opened.push(args) })
-  app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } })); registerPrimitives(app); app.mount(root)
+  const opened: any[] = []
+  const component = loadComponent(new URL('./views/library/components/EntityRelations.vue', import.meta.url), { ...entryPresentationTestModules, '@/api/relations': { deleteEntityRelation: async () => ({ success: true }) } })
+  const root = element('root'), app = renderer.createApp(component, { entityId: 'entity', entityName: 'Center', groups: [{ relation_type: '合作', relations: [relation] }], onOpenSource: (...args: any[]) => opened.push(args) })
+  app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } })); app.mount(root)
   try {
     await settle()
-    assert.ok(visibleText(root).includes('指向此实体'))
-    const button = (label: string) => descendants(root).find(node => node.tag === 'button' && visibleText(node) === label)!
-    await click(button('Source title')); assert.deepEqual(opened, [['source', { ...location, body_hash: 'saved-hash' }]])
-    scopeRef.value = ['references']; await settle(); assert.ok(!visibleText(root).includes('Source title'))
-    scopeRef.value = []; await settle(); await click(button('删除关系'))
-    assert.equal(deleted.length, 0); assert.ok(visibleText(root).includes('抑制记录'))
-    await click(button('确认')); assert.deepEqual(deleted, ['rel']); assert.ok(!visibleText(root).includes('Source title'))
+    const button = descendants(root).find(node => node.tag === 'button' && visibleText(node) === 'Source title')!
+    await click(button); assert.deepEqual(opened, [['source', { ...location, body_hash: 'saved-hash' }]])
   } finally { app.unmount() }
 })
 
@@ -256,10 +234,10 @@ test('390 wide material list and search keep controls bounded and advanced filte
   assert.equal(styleDeclarationsAtWidth(list, '.entries-mobile-open', 390).display, 'block')
   const page = await compiledSFCStyleRules(new URL('./views/library/Library.vue', import.meta.url))
   assert.equal(styleDeclarationsAtWidth(page, '.entries-split', 390)['grid-template-columns'], 'minmax(0, 1fr)')
-  const search = await compiledSFCStyleRules(new URL('./views/library/SearchView.vue', import.meta.url))
-  assert.equal(styleDeclarationsAtWidth(search, '.advanced-filter-controls', 390).display, 'none')
-  assert.equal(styleDeclarationsAtWidth(search, '.advanced-filter-controls.expanded', 390).display, 'grid')
-  assert.equal(styleDeclarationsAtWidth(search, '.advanced-filter-controls', 1440).display, 'grid')
+  const search = await compiledSFCStyleRules(new URL('./components/SearchFilters.vue', import.meta.url))
+  assert.equal(styleDeclarationsAtWidth(search, '.advanced-grid', 390)['grid-template-columns'], 'minmax(0, 1fr)')
+  assert.equal(styleDeclarationsAtWidth(search, '.advanced-grid', 1440)['grid-template-columns'], 'repeat(2, minmax(0, 1fr))')
+
 })
 
 test('English newline separator labels display literal escapes', async () => {

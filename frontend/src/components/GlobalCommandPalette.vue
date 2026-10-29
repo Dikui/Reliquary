@@ -18,7 +18,7 @@
           @update:model-value="libraryScope = [currentLibrary.id]">{{ t('commandPalette.currentLibrary', { name: currentLibrary.display_name || currentLibrary.name }) }}</Chip>
         <details class="rq-cmdk__libraries">
           <summary>{{ t('commandPalette.chooseLibraries') }}<span v-if="libraryScope.length"> ({{ libraryScope.length }})</span></summary>
-          <LibraryScopeSelect v-model="libraryScope" swiss @loaded="libraryCatalog = $event" />
+          <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
         </details>
         <button type="button" class="rq-cmdk__settings" @click="drawerVisible = true">{{ t('commandPalette.retrieval') }}</button>
       </div>
@@ -50,7 +50,7 @@
                 <EntryUpdateNotice :has-update="file.has_update" :latest-entry-id="file.latest_entry_id" />
                 <template v-if="!hasLocatedBodyChunk(file)">
                   <span v-if="file.chunks[0]?.content" class="rq-cmdk__excerpt" v-html="highlight(file.chunks[0].content)" />
-                  <span @click.stop @keydown.enter.stop @keydown.space.stop><SearchImage v-if="file.imagePath" :article-id="file.entryId" :path="file.imagePath" :title="file.title" compact interactive swiss :preview-layer="2500" /></span>
+                  <span @click.stop @keydown.enter.stop @keydown.space.stop><SearchImage v-if="file.imagePath" :article-id="file.entryId" :path="file.imagePath" :title="file.title" compact interactive :preview-layer="2500" /></span>
                 </template>
               </template>
             </ResultItem>
@@ -66,7 +66,7 @@
               <template #title><span>{{ item.file.title }}</span><span v-if="item.chunk.locations?.[0]?.paragraph" class="rq-cmdk__id">¶{{ item.chunk.locations[0].paragraph }}</span></template>
               <template #subtitle>
                 <span class="rq-cmdk__excerpt" v-html="highlight(item.chunk.matched_content || item.chunk.content)" />
-                <span @click.stop @keydown.enter.stop @keydown.space.stop><SearchImage v-if="item.file.imagePath" :article-id="item.file.entryId" :path="item.file.imagePath" :title="item.file.title" compact interactive swiss :preview-layer="2500" /></span>
+                <span @click.stop @keydown.enter.stop @keydown.space.stop><SearchImage v-if="item.file.imagePath" :article-id="item.file.entryId" :path="item.file.imagePath" :title="item.file.title" compact interactive :preview-layer="2500" /></span>
               </template>
             </ResultItem>
           </ResultGroup>

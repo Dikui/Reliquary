@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { contentTypeLabel } from '@/utils/contentTypeLabel'
+import { formatDateTime } from '@/utils/dateTime'
+import EntryUpdateNotice from '@/components/EntryUpdateNotice.vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DataTable, Tag, StatusSquare } from '@/components/ui'
@@ -34,7 +37,7 @@ const { t, locale } = useI18n()
 const columns = computed(() => ['id', 'title', 'summary', 'type', 'entities', 'relations', 'status', 'created'].map(key => ({ key, label: t(`entries.columns.${key}`) })))
 const title = (item: EntryItem) => item.display_name || item.title || item.file_name || t('library.untitledDocument')
 const summary = (item: EntryItem) => markdownToPlainText(item.structured_summary?.overview || item.description || '', `[${t('ingestStatus.missingTypes.image')}]`)
-const date = (value?: string) => value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat(locale.value, { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value)) : t('entries.unknown')
+const date = (value?: string) => formatDateTime(value, locale.value, { year: 'numeric', month: '2-digit', day: '2-digit' }, t('entries.unknown'))
 const tone = (item: EntryItem) => { const state = entryProcessingState(item); return state.failed ? 'danger' : state.active ? 'warning' : state.status === 'completed' ? 'success' : 'neutral' }
 function keydown(event: KeyboardEvent, item: EntryItem) {
   if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.target !== event.currentTarget) return
@@ -67,21 +70,22 @@ function keydown(event: KeyboardEvent, item: EntryItem) {
         <Tag v-if="item.cannot_be_fact || item.source_kind === 'report'">{{ t('ingestStatus.cannotBeFact') }}</Tag>
         <span class="entries-source">{{ entryFileFormatLabel(item, t) }} · {{ entryChannelLabel(item, t) }}</span>
         <span v-if="item.source_unverified" class="entries-source">{{ t('knowledgeReview.sourceUnverified') }}</span>
-        <span class="entries-list__meta"><Tag v-if="item.content_type">{{ item.content_type }}</Tag><time>{{ date(item.created_at) }}</time>
+        <span class="entries-list__meta"><Tag v-if="item.content_type">{{ contentTypeLabel(item.content_type, t) }}</Tag><time>{{ date(item.created_at) }}</time>
           <span v-if="item.entity_count != null">{{ t('entries.entityCount', { count: item.entity_count }) }}</span>
           <span v-if="item.relation_count != null">{{ t('entries.relationCount', { count: item.relation_count }) }}</span>
           <StatusSquare :status="tone(item)" :label="t(entryProcessingState(item).label)" />
         </span>
       </button>
+      <EntryUpdateNotice :has-update="item.has_update" :latest-entry-id="item.latest_entry_id" />
       <button type="button" class="entries-mobile-open" @click.stop="emit('open', item)">{{ t('entries.open') }}</button>
     </li>
   </ul>
   <DataTable v-else :rows="items" :columns="columns" :label="t('entries.table')" selectable :selected="[...selectedIds]" :focused="focused"
     @activate="emit('open', $event)" @update:selected="emit('update:selected', $event)" @update:focused="emit('update:focused', $event)">
     <template #cell-id="{ row }"><span class="entries-id" :title="row.id">{{ row.id }}</span></template>
-    <template #cell-title="{ row }"><button type="button" class="entries-title-link" @click="emit('open', row)">{{ title(row) }}</button><small v-if="row.source_unverified">{{ t('knowledgeReview.sourceUnverified') }}</small><Tag v-if="row.acquisition === 'model_written'" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</Tag><Tag v-if="row.cannot_be_fact || row.source_kind === 'report'">{{ t('ingestStatus.cannotBeFact') }}</Tag></template>
+    <template #cell-title="{ row }"><button type="button" class="entries-title-link" @click="emit('open', row)">{{ title(row) }}</button><EntryUpdateNotice :has-update="row.has_update" :latest-entry-id="row.latest_entry_id" /><small v-if="row.source_unverified">{{ t('knowledgeReview.sourceUnverified') }}</small><Tag v-if="row.acquisition === 'model_written'" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</Tag><Tag v-if="row.cannot_be_fact || row.source_kind === 'report'">{{ t('ingestStatus.cannotBeFact') }}</Tag></template>
     <template #cell-summary="{ row }"><span class="entries-table-summary">{{ summary(row) }}</span></template>
-    <template #cell-type="{ row }"><Tag v-if="row.content_type">{{ row.content_type }}</Tag></template>
+    <template #cell-type="{ row }"><Tag v-if="row.content_type">{{ contentTypeLabel(row.content_type, t) }}</Tag></template>
     <template #cell-entities="{ row }">{{ row.entity_count ?? t('entries.unknown') }}</template>
     <template #cell-relations="{ row }">{{ row.relation_count ?? t('entries.unknown') }}</template>
     <template #cell-status="{ row }"><StatusSquare :status="tone(row)" :label="t(entryProcessingState(row).label)" /></template>

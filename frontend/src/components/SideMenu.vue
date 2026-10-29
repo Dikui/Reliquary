@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ChartLineIcon, ChevronLeftIcon, ChevronRightIcon, FileIcon, FolderIcon, HeartIcon, SearchIcon, SettingIcon, TaskIcon, ToolsIcon, UsergroupIcon } from 'tdesign-icons-vue-next'
 import { LibMark, Tooltip } from '@/components/ui'
 import PendingCountBadge from '@/components/PendingCountBadge.vue'
 import { listLibraries, type LibraryCatalogItem } from '@/api/library'
@@ -24,7 +23,6 @@ const pending = usePendingCountsStore()
 const commands = useCommandPaletteStore()
 const { menuGroups } = storeToRefs(useMenuStore())
 const sidebarCollapsed = computed(() => !props.mobileOverlay && ui.sidebarCollapsed)
-const icons: Record<string, Component> = { file: FileIcon, search: SearchIcon, usergroup: UsergroupIcon, folder: FolderIcon, heart: HeartIcon, task: TaskIcon, tools: ToolsIcon, 'chart-line': ChartLineIcon }
 const libraries = ref<LibraryCatalogItem[]>([])
 const catalogLoading = ref(true), catalogError = ref(false)
 const failureCount = ref<number | null>(null)
@@ -117,13 +115,13 @@ onUnmounted(() => {
       </RouterLink>
       <Tooltip v-if="!mobileOverlay" :content="t(sidebarCollapsed ? 'menu.expandSidebar' : 'menu.collapseSidebar')">
         <button type="button" class="rq-sidebar__toggle" :aria-label="t(sidebarCollapsed ? 'menu.expandSidebar' : 'menu.collapseSidebar')" @click="ui.toggleSidebar()">
-          <component :is="sidebarCollapsed ? ChevronRightIcon : ChevronLeftIcon" aria-hidden="true" />
+          <span aria-hidden="true">{{ sidebarCollapsed ? '›' : '‹' }}</span>
         </button>
       </Tooltip>
     </div>
     <Tooltip :content="t('menu.commandSearch')" :disabled="!sidebarCollapsed">
       <button type="button" class="rq-sidebar__command" :aria-label="t('menu.commandSearch')" @click="openCommands">
-        <SearchIcon v-if="sidebarCollapsed" aria-hidden="true" />
+        <span v-if="sidebarCollapsed" aria-hidden="true">⌕</span>
         <template v-else><span>{{ t('menu.commandSearch') }}</span><kbd>⌘K</kbd></template>
       </button>
     </Tooltip>
@@ -132,7 +130,7 @@ onUnmounted(() => {
         <Tooltip v-for="item in menuGroups[0]?.items" :key="item.key" :content="item.title" :disabled="!sidebarCollapsed">
           <RouterLink class="rq-sidenav__link" :to="{ path: `/platform/${item.path}`, query: item.tab ? { tab: item.tab } : {} }"
             :aria-label="navigationLabel(item.key, item.title)" :aria-current="active(item.path, item.tab) ? 'page' : undefined" @click="closeNavigation">
-            <component :is="icons[item.icon]" v-if="sidebarCollapsed" aria-hidden="true" />
+            <span v-if="sidebarCollapsed" aria-hidden="true">{{ item.title.slice(0, 1) }}</span>
             <span v-else class="rq-sidenav__label">{{ item.title }}</span>
             <span v-if="item.key === 'articles' && entryCount !== null" class="rq-sidenav__count">{{ n(entryCount) }}</span>
             <span v-if="item.key === 'follows' && !follows.stateError && validCount(follows.newCount) && follows.newCount > 0" class="rq-sidenav__count">{{ n(follows.newCount) }}</span>
@@ -161,7 +159,7 @@ onUnmounted(() => {
         <Tooltip v-for="item in menuGroups[1]?.items" :key="item.key" :content="item.title" :disabled="!sidebarCollapsed">
           <RouterLink class="rq-sidenav__link" :to="`/platform/${item.path}`" :aria-label="navigationLabel(item.key, item.title)"
             :aria-current="active(item.path) ? 'page' : undefined" @click="closeNavigation">
-            <component :is="icons[item.icon]" v-if="sidebarCollapsed" aria-hidden="true" />
+            <span v-if="sidebarCollapsed" aria-hidden="true">{{ item.title.slice(0, 1) }}</span>
             <span v-else class="rq-sidenav__label">{{ item.title }}</span>
             <span v-if="item.key === 'diagnostics' && failureCount !== null" class="rq-sidenav__count rq-sidenav__count--bad">{{ n(failureCount) }}</span>
           </RouterLink>
@@ -172,7 +170,11 @@ onUnmounted(() => {
       <Tooltip :content="t('menu.settings')" :disabled="!sidebarCollapsed">
         <RouterLink class="rq-sidenav__link" to="/platform/settings" :aria-label="t('menu.settings')"
           :aria-current="active('settings') ? 'page' : undefined" @click="closeNavigation">
-          <SettingIcon v-if="sidebarCollapsed" aria-hidden="true" /><span v-else>{{ t('menu.settings') }}</span>
+          <svg v-if="sidebarCollapsed" aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+            <path d="M8 2h4l.5 2 1.5.9 2-.6 2 3.4-1.5 1.4v1.8l1.5 1.4-2 3.4-2-.6-1.5.9-.5 2H8l-.5-2-1.5-.9-2 .6-2-3.4 1.5-1.4V9.1L2 7.7l2-3.4 2 .6L7.5 4Z" />
+            <circle cx="10" cy="10" r="2.5" />
+          </svg>
+          <span v-else>{{ t('menu.settings') }}</span>
         </RouterLink>
       </Tooltip>
     </nav>

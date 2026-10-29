@@ -37,7 +37,7 @@ async function save() {
       <label class="field">{{ t('ikb19.query') }}<textarea class="rq-control" required :value="query" @input="query = ($event.target as HTMLTextAreaElement).value" /></label>
       <label class="field">{{ t('ikb19.method') }}<select class="rq-control" :value="method" @change="method = ($event.target as HTMLSelectElement).value"><option value="ordinary">{{ t('ikb19.ordinary') }}</option><option value="graph">{{ t('ikb19.graph') }}</option></select></label>
     </div>
-    <div class="scope-field"><p>{{ t('ikb19.libraries') }}</p><LibraryScopeSelect swiss :model-value="selectedLibraries" :disabled="busy" @update:model-value="selectedLibraries = $event" @loaded="catalog = $event" /></div>
+    <div class="scope-field"><p>{{ t('ikb19.libraries') }}</p><LibraryScopeSelect :model-value="selectedLibraries" :disabled="busy" @update:model-value="selectedLibraries = $event" @loaded="catalog = $event" /></div>
     <label><input class="rq-checkbox" type="checkbox" :checked="collapse" @change="collapse = ($event.target as HTMLInputElement).checked" /> {{ t('ikb19.collapse') }}</label>
     <label v-if="method === 'graph'" class="field">{{ t('ikb19.graphParameters') }}<textarea class="rq-control" :value="graph" @input="graph = ($event.target as HTMLTextAreaElement).value" /></label>
     <h3>{{ t('ikb19.answers') }}</h3>

@@ -55,14 +55,6 @@ async function render(path: string, locale: 'zh-CN' | 'en-US', modules: Record<s
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: the article empty state directs external tools to the ingest interface`, async () => {
-    const html = await render('components/EmptyEntry.vue', locale)
-    const copy = locale === 'zh-CN' ? zh : en
-    assert.ok(html.includes(copy.library.emptyArticles))
-    assert.ok(html.includes(copy.library.ingestOnlyHint))
-    assert.doesNotMatch(html, /type="file"|dragenter|upload|manual-editor/i)
-  })
-
   test(`${locale}: the actual settings navigation excludes collection and canonicalizes the old datasource bookmark`, async () => {
     const replacements: unknown[] = []
     const html = await render('views/settings/Settings.vue', locale, {
@@ -73,7 +65,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/config/settingsAccess': settingsAccess,
       '@/config/integrations': integrations,
       '@/config/deploymentCapabilities': capabilities,
-      'tdesign-vue-next': { MessagePlugin: { warning: () => assert.fail('Retired sections use the default settings page') } },
     }, {}, state => {
       assert.equal(state.currentSection.value, 'general')
       const keys = state.navGroups.value.flatMap((group: { items: string[] }) => group.items)

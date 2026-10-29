@@ -6,11 +6,11 @@
             <Drawer v-model="mobileSidebarOpen" placement="left" :title="t('menu.mainNavigation')"
                 content-class="rq-navigation-drawer" @close-auto-focus="commandPaletteStore.open && $event.preventDefault()">
                 <template #trigger>
-                    <button type="button" :aria-label="t('menu.expandSidebar')"><MenuIcon aria-hidden="true" /></button>
+                    <button type="button" :aria-label="t('menu.expandSidebar')"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor"><path d="M3 5h14M3 10h14M3 15h14" /></svg></button>
                 </template>
                 <Menu mobile-overlay @close="mobileSidebarOpen = false" />
             </Drawer>
-            <button type="button" :aria-label="t('menu.commandSearch')" @click="commandPaletteStore.openPalette()"><SearchIcon aria-hidden="true" /></button>
+            <button type="button" :aria-label="t('menu.commandSearch')" @click="commandPaletteStore.openPalette()"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor"><circle cx="8" cy="8" r="5" /><path d="m12 12 5 5" /></svg></button>
         </header>
         <div v-if="isRouterAlive" class="platform-route-outlet">
             <ContentCheckNotice />
@@ -25,7 +25,6 @@ import Menu from '@/components/SideMenu.vue'
 import ContentCheckNotice from '@/components/ContentCheckNotice.vue'
 import { ref, onMounted, onUnmounted, nextTick, provide, watch } from 'vue';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import { MenuIcon, SearchIcon } from 'tdesign-icons-vue-next'
 import { Drawer } from '@/components/ui'
 import { connectSettingsNavigation } from '@/config/settingsNavigation'
 import { useUIStore } from '@/stores/ui'
@@ -94,7 +93,7 @@ onUnmounted(() => {
     height: 100%;
     min-width: 0;
     min-height: 0;
-    background: var(--td-bg-color-container);
+    background: var(--surface);
 }
 
 /* 右侧路由区：占满剩余宽度与整列高度，并把 min-height:0 传给子页面以便内部 flex 滚动 */

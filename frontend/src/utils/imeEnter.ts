@@ -15,7 +15,7 @@ export function createImeEnterGuard(now: () => number = () => performance.now())
   }
 }
 
-/** Capture before TDesign emits enter and before Vue's .prevent key modifiers run. */
+/** Capture before controls emit enter and before Vue's .prevent key modifiers run. */
 export function installImeEnterGuard(root: Document, now?: () => number) {
   const guards = new WeakMap<EventTarget, ReturnType<typeof createImeEnterGuard>>()
   function guard(event: Event) {

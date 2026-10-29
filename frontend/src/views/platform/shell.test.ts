@@ -15,7 +15,6 @@ test('mobile navigation traps focus, restores the trigger and closes on route or
   const menu = defineComponent({ setup: () => () => h('nav', [h('a', { href: '/platform/libraries', id: 'mobile-library' }, 'Materials'), h('button', { id: 'mobile-last' }, 'Settings')]) })
   const component = loadComponent(new URL('./index.vue', import.meta.url), {
     'vue-router': { useRoute: () => route, useRouter: () => ({ replace() {} }), RouterView: empty, RouterLink: defineComponent({ setup: (_, { slots }) => () => h('a', slots.default?.()) }) },
-    'tdesign-icons-vue-next': { MenuIcon: empty, SearchIcon: empty },
     '@/components/SideMenu.vue': { __esModule: true, default: menu },
     '@/components/ContentCheckNotice.vue': { __esModule: true, default: empty },
     '@/config/settingsNavigation': { connectSettingsNavigation: () => () => {} },

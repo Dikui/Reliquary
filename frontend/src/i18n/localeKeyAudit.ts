@@ -56,7 +56,6 @@ const EXTRA_PREFIXES = [
   'system.globalSettings.listConfirm.',
   'system.globalSettings.keyLabels.',
   'system.globalSettings.keyDescriptions.',
-  'system.globalSettings.enumLabels.',
   'system.globalSettings.audit.actorRole.',
   'model.editor.description.',
   'integrations.tabs.',
@@ -69,6 +68,8 @@ const EXTRA_PREFIXES = [
   'system.globalSettings.runtime.queueDescriptions.',
   'system.globalSettings.runtime.tasks.taskTypes.',
   'modelSettings.builtinModels.',
+  'modelSettings.usage.bindings.',
+  'entryStatus.',
 ] as const
 
 /** Keys that must survive pruning even when static analysis misses them. */

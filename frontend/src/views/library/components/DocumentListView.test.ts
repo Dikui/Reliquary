@@ -12,6 +12,7 @@ const require = createRequire(import.meta.url)
 const { createI18n } = require('vue-i18n') as typeof import('vue-i18n')
 const ui = Object.fromEntries(['Button', 'DataTable', 'Tag', 'StatusSquare'].map(name => [name, loadUiComponent(name)]))
 const Component = loadComponent(new URL('./DocumentListView.vue', import.meta.url), {
+  '@/components/EntryUpdateNotice.vue': { __esModule: true, default: loadComponent(new URL('../../../components/EntryUpdateNotice.vue', import.meta.url), {}) },
   '@/utils/entrySourceLabels': { entryChannelLabel: () => '', entryFileFormatLabel: () => '' }, '@/utils/markdownPlainText': markdown, '@/components/ui': ui, '@/utils/entryProcessingStatus': processing,
 })
 

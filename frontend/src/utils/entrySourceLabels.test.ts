@@ -1,4 +1,4 @@
-import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
+import { detailPresentation, entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -70,27 +70,28 @@ async function renderView(name: 'DocumentListView', record: Record<string, unkno
 
 async function renderDetail(details: Record<string, unknown>, locale: keyof typeof messages) {
   const unexpectedRequest = () => { throw new Error('Rendering the source label must not call an API') }
-  const component = createComponent('../components/DocContent.vue', {
+  const component = detailPresentation({
     '@/utils/entrySourceLabels': entrySourceLabels,
     marked: { marked: { use() {}, Renderer: class {}, parse: (value: string) => value } },
     'marked-katex-extension': { __esModule: true, default: () => ({}) },
     'highlight.js': { __esModule: true, default: {} },
     mermaid: { __esModule: true, default: { initialize() {} } },
-    'tdesign-vue-next': { MessagePlugin: { error: unexpectedRequest, warning: unexpectedRequest } },
     '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedRequest },
     '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: () => false, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value },
     '@/utils/mermaidViewer': {}, '@/utils/clipboard': {},
     '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
   })
-  return renderComponent(component, { visible: true, details }, locale)
+  const previousDocument = globalThis.document
+  globalThis.document = { title: '' } as Document
+  try { return await renderComponent(component, { visible: true, details }, locale) }
+  finally { globalThis.document = previousDocument }
 }
 
 function createLoadingHook(read: (id: string) => Promise<unknown>, records: object[] = []) {
   return evaluate(readFileSync(new URL('../composables/useLibrary.ts', import.meta.url), 'utf8'), {
     pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
     '../utils/index': { formatStringDate: () => '2026-10-12' },
-    'tdesign-vue-next': { MessagePlugin: {} },
     '@/stores/entry': { entryStore: () => ({}) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/api/library': {
@@ -171,7 +172,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     for (const html of views) {
       assert.ok(html.includes('Markdown'))
       assert.ok(html.includes(messages[locale].library.channelApi))
-      assert.ok(!html.includes(`>${messages[locale].library.typeManual}<`))
     }
     assert.ok(views[1].includes('Research Bot'))
     const legacy = await renderView('DocumentListView', { ...record, channel: 'web', metadata: { intake: { source: 'manual' } } }, locale)

@@ -26,7 +26,7 @@
       <EmptyState v-else-if="!selectedEntity" :title="t('knowledgeWorkbench.entities.choose')" />
       <template v-else>
         <div class="entity-eyebrow"><LibMark v-if="selectedLibrary" :color="selectedLibrary.color" />{{ selectedLibrary?.display_name || selectedLibrary?.name || selectedEntity.library_id }} · {{ entityTypeLabel(selectedEntity.entity_type) }} · <span class="mono">{{ selectedEntity.id }}</span></div>
-        <div class="entity-head"><h2>{{ selectedEntity.canonical_name }}</h2><div class="entity-actions"><FollowToggle swiss target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><Button @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</Button></div></div>
+        <div class="entity-head"><h2>{{ selectedEntity.canonical_name }}</h2><div class="entity-actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><Button @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</Button></div></div>
         <p v-if="selectedEntity.description" class="entity-intro">{{ selectedEntity.description }}</p>
         <dl class="entity-facts"><div><dt>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</dt><dd>{{ selectedEntity.aliases?.join(' · ') || t('knowledgeWorkbench.entities.noAliases') }}</dd></div><div><dt>{{ t('entityPage.materials') }}</dt><dd class="mono">{{ entityEntries.length }}</dd></div><div><dt>{{ t('ikb18.relations') }}</dt><dd class="mono">{{ relationsLoading || relationError ? t('knowledgeWorkbench.nameEmbeddings.unknown') : relationCount }}</dd></div></dl>
         <Tabs v-model="relationView" :items="detailTabs" :label="t('entityGraph.view')">
@@ -38,7 +38,7 @@
               <EmptyState v-if="!entityEntries.length" :title="t('knowledgeWorkbench.entities.noArticles')" />
               <div v-else class="entity-table-scroll">
                 <table><thead><tr><th>{{ t('entityPage.number') }}</th><th>{{ t('entityPage.title') }}</th><th>{{ t('entityPage.type') }}</th><th>{{ t('entityPage.collected') }}</th></tr></thead>
-                  <tbody><tr v-for="article in entityEntries" :key="article.id"><td class="mono" :title="article.id">{{ article.id.slice(0, 8) }}</td><td><button class="entity-link" type="button" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('knowledgeWorkbench.entities.untitledArticle') }}</button></td><td>{{ article.content_type || t('entityPage.unknownType') }}</td><td class="mono">{{ formatDate(article.created_at) }}</td></tr></tbody>
+                  <tbody><tr v-for="article in entityEntries" :key="article.id"><td class="mono" :title="article.id">{{ article.id.slice(0, 8) }}</td><td><button class="entity-link" type="button" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('knowledgeWorkbench.entities.untitledArticle') }}</button></td><td><Tag v-if="article.content_type">{{ contentTypeLabel(article.content_type, t) }}</Tag><span v-else>{{ t('entityPage.unknownType') }}</span></td><td class="mono">{{ formatDate(article.created_at) }}</td></tr></tbody>
                 </table>
               </div>
             </section>
@@ -56,9 +56,11 @@
   </section>
 </template>
 <script setup lang="ts">
+import { contentTypeLabel } from '@/utils/contentTypeLabel'
+import { formatDateTime } from '@/utils/dateTime'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Button, Combobox, Dialog, EmptyState, ErrorState, Input, LibMark, Select, Skeleton, Tabs } from '@/components/ui'
+import { Button, Combobox, Dialog, EmptyState, ErrorState, Input, LibMark, Select, Skeleton, Tabs, Tag } from '@/components/ui'
 import { toast } from '@/components/ui/feedback'
 import { listLibraries, type LibraryCatalogItem } from '@/api/library'
 import { listEntityRelations, type RelationGroup } from '@/api/relations'
@@ -91,7 +93,7 @@ let entityRequest = 0, detailRequest = 0, mergeTargetRequest = 0
 let entitySearchTimer: ReturnType<typeof setTimeout> | null = null
 function entityTypeLabel(value: string) { return t(`knowledgeWorkbench.entities.types.${ENTITY_TYPES.includes(value as EntityType) ? value : 'other'}`) }
 function changeLibrary(id: string) { libraryScope.value = id ? [id] : []; emit('select-entity', '', id) }
-function formatDate(value?: string) { return value ? new Date(value).toLocaleString(locale.value) : t('knowledgeWorkbench.unknownDate') }
+function formatDate(value?: string) { return formatDateTime(value, locale.value, { dateStyle: 'medium', timeStyle: 'short' }, t('knowledgeWorkbench.unknownDate')) }
 function envelopeData<T>(response: { success: boolean; data: T; error?: string }): T { if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed')); return response.data }
 function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : t('knowledgeWorkbench.requestFailed') }
 async function loadEntities(more = false) {

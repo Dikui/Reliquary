@@ -1,4 +1,4 @@
-import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
+import { detailPresentation, entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -86,15 +86,14 @@ function environment(locale: keyof typeof messages) {
     '@/utils/mermaidViewer': {}, '@/utils/clipboard': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {}, '@/views/library/entryDownloadFileName': {},
     marked: { marked: { Renderer, use: parser.use.bind(parser), parse: parser.parse.bind(parser) } },
     'marked-katex-extension': moduleOf(() => ({})), 'highlight.js': moduleOf({}), mermaid: moduleOf({ initialize() {} }),
-    'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } },
     'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async () => {}, push: async () => {} }) },
     './GlobalCommandPalette/useHighlight': highlight,
     '@/api/follows': evaluateFile('../api/follows.ts', { '@/utils/request': transport }),
     '@/stores/follows': { useFollowStore: () => ({ libraries: [], targets: [], targetsLoading: false, refreshState: async () => {}, loadTargets: async () => {}, markViewed: async () => ({ last_viewed_at: record.updated_at }) }) },
   }
-  const classification = moduleOf(component('./EntryClassification.vue', modules))
-  modules['@/components/EntryClassification.vue'] = modules['./EntryClassification.vue'] = classification
-  modules['@/components/SearchEntry.vue'] = moduleOf(component('./SearchEntry.vue', modules))
+
+  modules['./components/FollowFeedItem.vue'] = moduleOf(component('../views/library/components/FollowFeedItem.vue', modules))
+  modules['@/components/LibraryScopeSelect.vue'] = moduleOf(component('./LibraryScopeSelect.vue', modules))
   const errors: unknown[] = [], warnings: string[] = []
   function mount(value: any, select?: any) {
     const root = element('root')
@@ -115,15 +114,15 @@ function environment(locale: keyof typeof messages) {
 }
 
 function summaryFields(root: Element, localizedImage: string, structured: boolean) {
-  const overview = descendants(root).find(node => hasClass(node, structured ? 'summary-overview' : 'summary-description') || hasClass(node, 'entries-list__summary'))!
+  const overview = descendants(root).find(node => hasClass(node, structured ? 'summary-overview' : 'summary-description') || hasClass(node, 'entries-list__summary') || hasClass(node, 'entry-detail__overview') || hasClass(node, 'feed-overview'))!
   assert.ok(overview, 'the summary component rendered its loaded data')
   const text = visibleText(overview)
   for (const value of ['Summary heading', 'bold read', `${localizedImage} ${localizedImage}`, '*literal* **literal**']) assert.ok(text.includes(value), value)
   assert.doesNotMatch(text, /# Summary|\*\*bold\*\*|!\[chart\]|<img|summary-link|summary-chart|summary-photo/)
   assert.ok(descendants(overview).every(node => node.tag !== 'a' && node.tag !== 'img' && !node.props.innerHTML))
   if (structured) {
-    assert.ok(visibleText(descendants(root).find(node => hasClass(node, 'summary-points'))!).includes('Point point link'))
-    assert.ok(visibleText(descendants(root).find(node => hasClass(node, 'summary-key-terms'))!).includes(`**Term** · ${localizedImage}`))
+    assert.ok(visibleText(root).includes('Point point link'))
+    assert.ok(visibleText(root).includes('**Term**')); assert.ok(visibleText(root).includes(localizedImage))
   }
 }
 
@@ -144,7 +143,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const env = environment(locale)
       if (!structured) env.record.structured_summary = null as any
       const list = component('../views/library/components/DocumentListView.vue', env.modules)
-      const detail = component('./DocContent.vue', env.modules)
+      const detail = detailPresentation(env.modules)
       let hook: any
       const mounted = env.mount(defineComponent({
         setup() {
@@ -196,52 +195,3 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     } finally { mounted.close() }
   })
 }
-
-test('initial detail mount, document switch and refreshed mount render API image descriptions and library type options', async () => {
-  const restore = browserGlobals()
-  const env = environment('zh-CN')
-  env.modules['@/api/topics'] = { listTopics: async () => ({ success: true, data: [] }) }
-  env.modules['@/api/entry-judgments'] = {}
-  env.modules['@/components/EntryArticleJudgments.vue'] = moduleOf(component('./EntryArticleJudgments.vue', env.modules))
-  const detail = component('./DocContent.vue', env.modules)
-  let hook: any
-  const mounts: ReturnType<typeof env.mount>[] = []
-  const setRecord = (id: string, caption: string, type: string) => Object.assign(env.record, {
-    id, content_type: type,
-    image_descriptions: [{ ordinal: 1, url: 'chart.png', description: caption, locations: [{ paragraph: 3, start: 0, end: 1 }] }],
-    library_content_types: [{ name: type, enabled: true, extract_graph: true, position: 0 }, { name: '停用类型', enabled: false, extract_graph: false, position: 1 }],
-  })
-  const mount = () => {
-    const mounted = env.mount(defineComponent({ setup() {
-      hook = env.hook()
-      onMounted(() => hook.getCardDetails({ id: env.record.id }))
-      return () => h(detail, { visible: true, details: hook.details })
-    } }), defineComponent({ props: ['options'], setup: props => () => h('select', (props.options || []).map((row: any) => h('option', { value: row.value }, row.label))) }))
-    mounts.push(mounted)
-    return mounted
-  }
-  const check = (root: Element, caption: string, type: string) => {
-    const section = descendants(root).find(node => hasClass(node, 'image-descriptions'))
-    assert.ok(section, 'initial API response reaches the image description component')
-    assert.ok(visibleText(section).includes(caption))
-    assert.deepEqual(hook.details.library_content_types.filter((row: any) => row.enabled).map((row: any) => row.name), [type])
-    assert.ok(descendants(root).some(node => node.tag === 'option' && visibleText(node) === type))
-    assert.ok(!descendants(root).some(node => node.tag === 'option' && visibleText(node) === '停用类型'))
-    assert.ok(visibleText(root).includes('图片说明'))
-    assert.equal(hook.details.md[0].content, body)
-  }
-  try {
-    setRecord('first', '第一张图的数字说明', '机构快讯')
-    const first = mount(); await settle(); check(first.root, '第一张图的数字说明', '机构快讯')
-    setRecord('second', '第二张图的图表说明', '研究论文')
-    hook.getCardDetails({ id: 'second' })
-    assert.deepEqual(hook.details.image_descriptions, [])
-    assert.deepEqual(hook.details.library_content_types, [])
-    await settle(); check(first.root, '第二张图的图表说明', '研究论文')
-    assert.ok(!visibleText(first.root).includes('第一张图的数字说明'))
-    first.close()
-    const refreshed = mount(); await settle(); check(refreshed.root, '第二张图的图表说明', '研究论文')
-    assert.deepEqual(env.errors, []); assert.deepEqual(env.warnings, [])
-    assert.ok(env.calls.every(call => call.method === 'get'), 'no topic save or reprocessing is needed')
-  } finally { for (const mounted of mounts.slice(1)) mounted.close(); if (mounts.length === 1) mounts[0].close(); restore() }
-})

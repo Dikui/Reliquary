@@ -50,7 +50,7 @@ function computed(path: string[], property: string) {
 
 function reading(...children: string[]) { return ['div.doc-reading', 'div.md-content', ...children] }
 
-test('reading typography wins over legacy Markdown rules after SFC compilation', () => {
+test('reading typography uses the shared tokens after SFC compilation', () => {
   assert.equal(computed(['div.doc-reading'], 'font-size'), '17px')
   assert.equal(computed(['div.doc-reading'], 'line-height'), '1.85')
   for (const node of ['p', 'blockquote', 'ul', 'ol', 'dl', 'table', 'summary']) {
@@ -60,7 +60,6 @@ test('reading typography wins over legacy Markdown rules after SFC compilation',
   assert.equal(computed(reading('h2'), 'font-size'), 'var(--text-lg)')
   assert.equal(computed(reading('h3'), 'font-weight'), '800')
   assert.equal(computed(reading('h2', 'a'), 'color'), 'inherit')
-  assert.equal(computed(['div.doc_content', 'div.md-content', 'p'], 'font-size'), '14px', 'legacy presentation stays unchanged')
 })
 
 test('reading media, quotations, code and tables use square neutral surfaces', () => {
@@ -79,5 +78,4 @@ test('reading media, quotations, code and tables use square neutral surfaces', (
   assert.equal(computed(reading('table', 'tbody', 'tr', 'td'), 'padding'), '8px')
   assert.equal(computed(reading('table', 'thead'), 'background'), 'var(--surface-soft)')
   assert.equal(computed(reading('table', 'tbody', 'tr'), 'border-top'), '1px solid var(--border)')
-  assert.equal(computed(['div.doc_content', 'div.md-content', 'figure'], 'border-radius'), '8px', 'legacy presentation stays unchanged')
 })

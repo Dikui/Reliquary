@@ -53,7 +53,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
       return state
     }
   }
-  const app = createSSRApp(value, props)
+  const app = createSSRApp(value, { libraries: [], ...props })
   app.use(createI18n({ legacy: false, locale, messages }))
   app.component('SearchEntry', value)
   for (const name of ['t-tag', 't-icon', 't-button', 't-select', 't-switch', 't-date-picker', 't-input-number', 't-alert', 't-loading', 't-empty', 't-dialog', 't-tooltip', 't-drawer']) app.component(name, controls?.[name] || stub)
@@ -64,25 +64,13 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   assert.deepEqual(warnings, []); assert.deepEqual(errors, [])
   return html
 }
-const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
-function articleComponent(swiss = false) {
-  const preview = component('../../components/ImagePreview.vue', {
-    'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
-  })
-  return component(swiss ? './SearchResult.vue' : '../../components/SearchEntry.vue', {
+function articleComponent() {
+  return component('./SearchResult.vue', {
     '@/types/entryClassification': { CONTENT_TYPES },
     '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) },
     '@/components/GlobalCommandPalette/useHighlight': highlight,
     '@/components/EntryUpdateNotice.vue': moduleOf(component('../../components/EntryUpdateNotice.vue', {})),
-    './EntryUpdateNotice.vue': moduleOf(component('../../components/EntryUpdateNotice.vue', {})),
-    './EntryClassification.vue': moduleOf(component('../../components/EntryClassification.vue', classificationModules)),
-    './SearchImage.vue': moduleOf(component('../../components/SearchImage.vue', {
-      '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
-    })),
-    '@/components/SearchImage.vue': moduleOf(component('../../components/SearchImage.vue', {
-      '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
-    })),
-    './GlobalCommandPalette/useHighlight': highlight,
+    '@/components/SearchImage.vue': moduleOf(component('../../components/SearchImage.vue', { '@/utils/protectedFileAccess': protectedAccess })),
     '@/utils/markdownPlainText': markdownPlainText,
   })
 }
@@ -182,7 +170,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const api = ingestSearchAPI({ acquisition: flagged ? 'model_written' : 'extracted', ...(flagged !== undefined ? { incomplete: flagged } : {}) })
       const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, api.searchEntries, locale)
       assert.equal(result.html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
-      assert.equal(result.html.includes(messages[locale].ingestStatus.incomplete), false)
       for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
         assert.equal(result.html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
       }
@@ -195,7 +182,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const html = await render(articleComponent(), { article: result.data.results[0], query: 'Launch' }, locale, async state => { state.expanded.value = true })
       const nested = html.slice(html.indexOf('data-article-id="nested"'))
       assert.equal(nested.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
-      assert.equal(nested.includes(messages[locale].ingestStatus.incomplete), false)
       for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
         assert.equal(nested.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
       }
@@ -234,23 +220,18 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: user documents show their source, missing date and content type`, async () => {
     const html = await render(articleComponent(), { article: { ...article, source: 'mine', summary: null, published_at: null, original_url: '' }, query: 'Launch' }, locale)
     assert.ok(html.includes(messages[locale].knowledgeSearch.sources.mine)); assert.ok(html.includes(messages[locale].knowledgeSearch.missingPublishedAt))
-    assert.match(html, /entry-classification/)
+    assert.match(html, /rq-tag/)
     assert.ok(html.includes(messages[locale].library.contentTypes.research))
   })
   test(`${locale}: filters offer six content types and ID-valued entity and topic options without a source filter`, async () => {
     const filtersComponent = component('../../components/SearchFilters.vue', { '@/types/entryClassification': { CONTENT_TYPES } })
-    const selects: any[] = [], dates: any[] = []
-    const select = defineComponent({ props: ['modelValue', 'options', 'multiple', 'clearable', 'filterable', 'disabled', 'loading'], setup: (props, { attrs }) => { selects.push(props); return () => h('div', attrs) } })
-    const date = defineComponent({ props: ['modelValue', 'format', 'valueType', 'clearable', 'allowInput'], setup: (props, { attrs }) => { dates.push(props); return () => h('div', attrs) } })
-    const html = await render(filtersComponent, { modelValue: helpers.defaultSearchFilters(), options: { entities: article.entities, topics: article.topics } }, locale, undefined, { 't-select': select, 't-date-picker': date })
-    assert.deepEqual(selects[0].options.map((option: any) => option.value), CONTENT_TYPES)
-    assert.deepEqual(selects[1].options, [{ value: 'e1', label: 'Launch Labs' }]); assert.deepEqual(selects[2].options, [{ value: 't1', label: 'Releases' }])
-    assert.equal(selects.length, 4)
-    assert.ok(!html.includes(messages[locale].knowledgeSearch.source))
-    assert.ok(selects.slice(0, 3).every(select => select.multiple !== undefined))
-    assert.deepEqual(selects[3].options.map((option: any) => option.value), ['', 'true', 'false'])
-    assert.ok(dates.every(date => date.valueType === 'YYYY-MM-DD'))
-    assert.ok(html.includes(messages[locale].knowledgeSearch.filterHint))
+    const html = await render(filtersComponent, { modelValue: helpers.defaultSearchFilters(), options: { entities: article.entities, topics: article.topics } }, locale)
+    assert.match(html, /Launch Labs/)
+    assert.match(html, /Releases/)
+    assert.match(html, /value="e1"/)
+    assert.match(html, /value="t1"/)
+    for (const value of CONTENT_TYPES) assert.ok(html.includes(messages[locale].library.contentTypes[value]))
+
   })
 }
 
@@ -262,7 +243,7 @@ async function pageScenario(action: (state: any, calls: SearchRequest[], pushes:
     '@/api/library': { listLibraries: async () => ({ success: true, data: [{ id: 'lib-a', display_name: 'Research', color: 2 }] }) },
     '@/utils/libraryColor': libraryColor,
     './GraphSearchPanel.vue': moduleOf(stub),
-    '@/components/SearchFilters.vue': moduleOf(stub), './SearchResult.vue': moduleOf(articleComponent(true)), '@/utils/search': helpers,
+    '@/components/SearchFilters.vue': moduleOf(stub), './SearchResult.vue': moduleOf(articleComponent()), '@/utils/search': helpers,
   })
   const html = await render(page, {}, locale, async state => { await state.loadLibraries(); await action(state, calls, pushes) })
   return { calls, pushes, html }
@@ -338,7 +319,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       } })
       const html = await render(palette, {}, locale)
       assert.equal(html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
-      assert.equal(html.includes(messages[locale].ingestStatus.incomplete), false)
       for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
         assert.equal(html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
       }

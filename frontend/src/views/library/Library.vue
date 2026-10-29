@@ -777,7 +777,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
       </div>
       <div class="entries-search-row"><div class="entries-search"><Input ref="searchInput" v-model="docSearchKeyword" class="doc-search-input" :aria-label="t('library.docSearchPlaceholder')" :placeholder="t('library.docSearchPlaceholder')" @compositionstart="composingSearch = true" @compositionend="composingSearch = false" @keydown.enter="submitSearch" /><Button v-if="docSearchKeyword" :aria-label="t('entries.clearSearch')" @click="clearSearch">×</Button></div><Button @click="openBatch()">{{ t('entryBatch.title') }}</Button></div>
       <details class="entries-filters" :open="hasAdvancedFilters"><summary>{{ t('ikb18.moreFilters') }}</summary><div class="entries-filters__grid">
-        <LibraryScopeSelect v-model="libraryScope" swiss @loaded="libraryCatalog = $event" />
+        <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
         <Select v-model="selectedStarred" :aria-label="t('articleJudgments.starLabel')"><option v-for="option in starredOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
         <Select v-model="selectedSourceKind" :aria-label="t('library.materialCategory')"><option v-for="option in sourceKindOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
         <Select v-model="selectedSource" :aria-label="t('library.channelLabel')"><option v-for="option in sourceOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { contentTypeLabel } from '@/utils/contentTypeLabel'
+import { formatDateTime } from '@/utils/dateTime'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEntryDetails, getEntrySpans, type LibraryCatalogItem } from '@/api/library'
@@ -20,7 +22,7 @@ const library = computed(() => props.libraries.find(lib => lib.id === value.valu
 const state = computed(() => entryProcessingState(value.value))
 const source = computed(() => value.value.metadata?.intake?.source_info?.original_url || value.value.source || '')
 const sourceURL = computed(() => safeExternalUrl(source.value))
-const created = computed(() => value.value.created_at && Number.isFinite(Date.parse(value.value.created_at)) ? new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium' }).format(new Date(value.value.created_at)) : t('entries.unknown'))
+const created = computed(() => formatDateTime(value.value.created_at, locale.value, { dateStyle: 'medium' }, t('entries.unknown')))
 const stages = computed(() => (trace.value?.children || []).filter(node => node.kind === 'stage'))
 const plainText = (text: string) => markdownToPlainText(text, `[${t('ingestStatus.missingTypes.image')}]`)
 const stageLabel = (node: EntryTraceNode) => ['docreader', 'processing', 'chunking', 'embedding'].includes(node.name) ? t(`knowledgeStages.stage.${node.name}`) : node.name
@@ -55,7 +57,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer) })
     <StatusSquare :status="state.failed ? 'danger' : state.active ? 'warning' : state.status === 'completed' ? 'success' : 'neutral'" :label="t(state.label)" />
     <dl class="entry-preview__facts">
       <div><dt>{{ t('entries.library') }}</dt><dd><LibMark v-if="library" :color="library.color" /> {{ library?.display_name || library?.name || value.library_id || t('entries.unknown') }}</dd></div>
-      <div><dt>{{ t('library.contentTypeFilter') }}</dt><dd>{{ value.content_type || t('entries.unknown') }}</dd></div>
+      <div><dt>{{ t('library.contentTypeFilter') }}</dt><dd><Tag v-if="value.content_type">{{ contentTypeLabel(value.content_type, t) }}</Tag><span v-else>{{ t('entries.unknown') }}</span></dd></div>
       <div><dt>{{ t('entries.columns.created') }}</dt><dd>{{ created }}</dd></div>
       <div><dt>{{ t('entries.source') }}</dt><dd><a v-if="sourceURL" :href="sourceURL" target="_blank" rel="noopener noreferrer">{{ source }}</a><span v-else>{{ source || t('entries.unknown') }}</span></dd></div>
     </dl>

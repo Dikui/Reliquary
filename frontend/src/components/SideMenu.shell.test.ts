@@ -28,7 +28,6 @@ async function fixture(path = '/platform/libraries', collapsed = false, mobileOv
   const modules = {
     'vue-router': routerApi,
     'pinia': { storeToRefs: (store: unknown) => store },
-    'tdesign-icons-vue-next': icons,
     '@/stores/menu': { useMenuStore: module.exports.useMenuStore },
     '@/stores/ui': { useUIStore: () => ui },
     '@/stores/follows': { useFollowStore: () => follows },
@@ -88,6 +87,23 @@ test('search entry and collapsed navigation remain keyboard accessible', async t
   await send(expand, 'click')
   assert.equal(f.ui.sidebarCollapsed, false)
   assert.equal(f.root.querySelector('[aria-current="page"]')?.props.href, '/platform/search')
+})
+
+test('collapsed settings navigation renders a visible SVG gear and expands to its label', async t => {
+  const f = await fixture('/platform/libraries', true)
+  t.after(() => f.unmount())
+  const settings = f.root.querySelector('a[href="/platform/settings"]')!
+  assert.equal(settings.props['aria-label'], 'Settings')
+  const gear = settings.querySelector('svg')
+  assert.ok(gear, 'The collapsed settings link must contain a rendered icon')
+  assert.equal(gear.props['aria-hidden'], 'true')
+  assert.equal(gear.props.viewBox, '0 0 20 20')
+  assert.ok(gear.querySelector('path'))
+  assert.ok(gear.querySelector('circle'))
+  await send(f.root.querySelector('button[aria-label="Expand sidebar"]')!, 'click')
+  const expandedSettings = f.root.querySelector('a[href="/platform/settings"]')!
+  assert.equal(expandedSettings.textContent, 'Settings')
+  assert.equal(expandedSettings.querySelector('svg'), null)
 })
 
 test('detail tabs keep the material library selected in the sidebar', async t => {

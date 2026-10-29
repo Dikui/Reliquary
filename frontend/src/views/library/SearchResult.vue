@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/dateTime'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { LibraryCatalogItem } from '@/api/library'
@@ -32,7 +33,7 @@ const similarRegionID = computed(() => `similar-reports-${props.article.entry_id
     <span class="result-score" :aria-label="t('knowledgeSearch.score')">{{ article.score.toLocaleString(locale, { maximumFractionDigits: 4 }) }}</span>
     <div v-if="article.snippets?.length" class="result-snippets">
       <div v-for="(snippet, index) in article.snippets.slice(0, 3)" :key="snippet.chunk_id || snippet.image_path || index" class="result-snippet">
-        <SearchImage v-if="snippet.image_path && article.source === 'article'" :article-id="article.entry_id" :path="snippet.image_path" :title="article.title" swiss />
+        <SearchImage v-if="snippet.image_path && article.source === 'article'" :article-id="article.entry_id" :path="snippet.image_path" :title="article.title" />
         <span v-if="snippet.chunk_type === 'image_description'">{{ t('articleJudgments.imageDescriptions') }}</span>
         <a v-if="snippet.content" class="snippet-reference" :href="entryDetailHref(article.entry_id, snippet.locations?.[0])" @click.prevent="emit('open-article', article, snippet.locations?.[0])"><span v-html="highlightText(plainText(snippet.content), query)" /></a>
         <div v-if="snippet.locations?.length" class="snippet-positions"><a v-for="(location, locationIndex) in snippet.locations" :key="locationIndex" :href="entryDetailHref(article.entry_id, location)" :title="location.heading_path?.join(' / ')" @click.prevent="emit('open-article', article, location)">{{ t('searchPage.hitParagraph', { paragraph: location.paragraph }) }}</a></div>
@@ -40,7 +41,7 @@ const similarRegionID = computed(() => `similar-reports-${props.article.entry_id
     </div>
     <div class="result-meta">
       <Tag v-if="contentType">{{ contentType }}</Tag><span class="article-library">{{ libraryName }}</span><span v-if="library">{{ t('entries.libraryNumber', { number: String(libraries.indexOf(library) + 1).padStart(2, '0') }) }}</span>
-      <time v-if="article.published_at" :datetime="article.published_at">{{ new Date(article.published_at).toLocaleDateString(locale) }}</time><span v-else>{{ t('knowledgeSearch.missingPublishedAt') }}</span>
+      <time v-if="article.published_at" :datetime="article.published_at">{{ formatDateTime(article.published_at, locale) }}</time><span v-else>{{ t('knowledgeSearch.missingPublishedAt') }}</span>
       <code>{{ article.entry_id }}</code><span>{{ t(`knowledgeSearch.sources.${article.source}`) }}</span>
       <Tag v-if="article.cannot_be_fact || article.source === 'report'">{{ t('ingestStatus.cannotBeFact') }}</Tag>
       <Tag v-if="article.source_unverified">{{ t('knowledgeReview.sourceUnverified') }}</Tag>

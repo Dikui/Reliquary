@@ -13,7 +13,6 @@ function createHook(detailsAPI: (id: string) => Promise<unknown>, list: object[]
   const modules: Record<string, unknown> = {
     pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
     '../utils/index': { formatStringDate: () => '2026-10-11' },
-    'tdesign-vue-next': { MessagePlugin: {} },
     '@/api/library': {
       getEntryDetails: detailsAPI,
       listEntryFiles: async () => ({ success: true, data: list, total: list.length }),

@@ -61,7 +61,6 @@ async function mountLibrary() {
     '@/utils/markdownPlainText': markdownPlainText,
     '@/utils/files': { formatFileSize: () => '', getFileIcon: () => '' },
     '@/assets/img/more-actions.png': { __esModule: true, default: '' },
-    'tdesign-vue-next': { MessagePlugin: {} },
     './entryStatusPolling': polling,
     './entryDownloadFileName': {},
     './documentListFilters': documentListFilters,
@@ -70,8 +69,7 @@ async function mountLibrary() {
     const url = new URL(file, import.meta.url)
     for (const match of readFileSync(url, 'utf8').matchAll(/from\s+['"]([^'"]+\.vue)['"]/g)) modules[match[1]] = stub
   }
-  modules['@/components/SelectionCheckbox.vue'] = { __esModule: true,
-    default: loadComponent(new URL('../../components/SelectionCheckbox.vue', import.meta.url), modules) }
+  modules['@/components/EntryUpdateNotice.vue'] = { __esModule: true, default: loadComponent(new URL('../../components/EntryUpdateNotice.vue', import.meta.url), modules) }
   modules['./components/DocumentListView.vue'] = { __esModule: true, default: loadComponent(new URL('./components/DocumentListView.vue', import.meta.url), modules) }
   const app = renderer.createApp(loadComponent(new URL('./Library.vue', import.meta.url), modules))
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }))

@@ -52,7 +52,7 @@ test('all-library list selects a topic, reads its materials, and keeps the full 
   await settle()
   assert.deepEqual(calls.lists, ['a', 'b'])
   assert.match(visibleText(root), /Description one/)
-  assert.equal(descendants(root).find(node => node.props['data-follow'] === 'one')?.props['data-swiss'], true)
+  assert.ok(descendants(root).some(node => node.props['data-follow'] === 'one'))
   assert.deepEqual(calls.entries[0], ['a', { page: 1, page_size: 20, libraries: ['a'], topic_ids: ['one'] }])
   const link = find(root, 'a', 'Actual material')
   assert.equal(link.props.href, '/platform/entries/12345678-full-entry-id')

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/dateTime'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import cytoscape, { type Core, type StylesheetJson } from 'cytoscape'
@@ -167,7 +168,7 @@ onBeforeUnmount(() => { stopQuery(); resizeObserver?.disconnect(); themeObserver
           <p>{{ t('ikb18.sources', { count: selectedEdge.source_count }) }}</p>
           <article v-for="source in selectedEdge.sources" :key="source.entry_id" class="graph-source">
             <button class="entity-link" type="button" @click="emit('open-source', source.entry_id, source.evidence?.[0]?.locations?.[0])">{{ source.title || source.entry_id }}</button>
-            <p>{{ source.library_name }} · {{ source.published_at ? new Date(source.published_at).toLocaleDateString(locale) : t('knowledgeWorkbench.unknownDate') }}</p>
+            <p>{{ source.library_name }} · {{ source.published_at ? formatDateTime(source.published_at, locale) : t('knowledgeWorkbench.unknownDate') }}</p>
             <p v-if="source.source_unverified" class="graph-source-warning">{{ t('entityGraph.sourceUnverified') }}</p>
             <div v-for="(evidence, index) in source.evidence || []" :key="index">
               <p v-if="evidence.speaker">{{ t('ikb18.speaker') }}: <button v-if="evidence.speaker.entity_id" class="entity-link" type="button" @click="emit('open-entity', evidence.speaker.entity_id)">{{ evidence.speaker.name }}</button><span v-else>{{ evidence.speaker.name }}</span></p>

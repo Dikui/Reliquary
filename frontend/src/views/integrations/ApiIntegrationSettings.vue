@@ -32,7 +32,7 @@
       <form novalidate class="settings-form" @submit.prevent="runQuery">
         <Field :label="t('integrations.api.apiKeyValue')"><Input v-model="playground.apiKey" type="password" autocomplete="off" :disabled="running" /></Field>
         <Field :label="t('integrations.api.playgroundQuestion')"><Textarea v-model="playground.query" rows="4" :disabled="running" /></Field>
-        <SearchFilters v-model="playgroundFilters" :options="searchOptions" :loading="searchOptionsLoading" :disabled="running" swiss />
+        <SearchFilters v-model="playgroundFilters" :options="searchOptions" :loading="searchOptionsLoading" :disabled="running" />
       </form>
       <p v-if="searchOptionsError" class="settings-error" role="alert">{{ searchOptionsError }} <Button @click="loadSearchOptions">{{ t('common.retry') }}</Button></p>
       <strong class="request-preview-label">{{ t('knowledgeSearch.requestPreview') }}</strong><pre class="query-result">{{ playgroundRequestPreview }}</pre>

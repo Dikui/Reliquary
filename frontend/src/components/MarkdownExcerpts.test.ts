@@ -71,7 +71,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/stores/entry': { entryStore: () => ({}) },
       '@/api/library': api,
       '../utils/index': { formatStringDate: () => '2026-10-13' },
-      'tdesign-vue-next': { MessagePlugin: {} },
       'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     })
     const hook = hookModule.default('excerpts')
@@ -98,7 +97,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       'marked-katex-extension': { __esModule: true, default: () => ({}) },
       'highlight.js': { __esModule: true, default: {} },
       mermaid: { __esModule: true, default: { initialize() {} } },
-      'tdesign-vue-next': { MessagePlugin: {} },
       '@/api/library': api,
       '@/utils/entrySourceLabels': entrySourceLabels,
       '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }),

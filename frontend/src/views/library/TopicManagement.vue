@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/dateTime'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -56,8 +57,7 @@ function contentTypeName(value?: string) {
   return CONTENT_TYPES.includes(value as ContentType) ? t(`library.contentTypes.${value}`) : value
 }
 function collected(value?: string) {
-  if (!value || Number.isNaN(new Date(value).getTime())) return t('knowledgeWorkbench.unknownDate')
-  return new Date(value).toLocaleString(locale.value)
+  return formatDateTime(value, locale.value, { dateStyle: 'medium', timeStyle: 'short' }, t('knowledgeWorkbench.unknownDate'))
 }
 function setLibrary(value: string) {
   if (saving.value || deleting.value || editorVisible.value) return
@@ -265,7 +265,7 @@ onUnmounted(() => { disposed = true; generation++; entryGeneration++; catalogGen
       <div class="topic-scope"><span>{{ t('topicManagement.libraries') }}:</span><LibMark v-if="library(selected.library_id)" :color="library(selected.library_id)!.color" />{{ libraryName(selected.library_id) }}</div>
       <header class="topic-detail-head">
         <h2>{{ selected.name }}</h2>
-        <div class="topic-actions"><FollowToggle :key="selected.id" target-type="topic" :target-id="selected.id" :name="selected.name" swiss /><Button :disabled="deleting" @click="openEditor(selected)">{{ t('topicManagement.edit') }}</Button><Button variant="danger" :disabled="deleting" @click="requestDelete(selected)">{{ t('common.delete') }}</Button></div>
+        <div class="topic-actions"><FollowToggle :key="selected.id" target-type="topic" :target-id="selected.id" :name="selected.name" /><Button :disabled="deleting" @click="openEditor(selected)">{{ t('topicManagement.edit') }}</Button><Button variant="danger" :disabled="deleting" @click="requestDelete(selected)">{{ t('common.delete') }}</Button></div>
       </header>
       <p class="topic-description">{{ selected.description || t('topicManagement.noDescription') }}</p>
       <section class="topic-progress" :aria-label="t('topicManagement.historyProgress')">
