@@ -44,7 +44,7 @@ function catalogModules(calls: any[], options: { fail?: boolean } = {}) {
   return {
     '@/utils/libraryCatalogForm': form,
     '@/utils/modelTiers': { copyModelTiers },
-    'tdesign-vue-next': { DialogPlugin: { confirm: (value: any) => { dialog = value; return { destroy() {}, update() {} } } } },
+    'tdesign-vue-next': { DialogPlugin: { confirm: (value: any) => { dialog = value; return { destroy() {}, update() {} } } }, MessagePlugin: { success() {} } },
     '@/api/library': {
       listLibraries: async () => ({ success: true, data: [current] }), getCatalogLibrary: async () => ({ success: true, data: JSON.parse(JSON.stringify(current)) }),
       saveCatalogLibrary: async (id: string, body: any) => { calls.push({ id, body }); if (options.fail) return { success: false, message: 'offline' }; current = { ...current, ...body }; return { success: true } },
@@ -72,11 +72,12 @@ for (const locale of ['zh-CN', 'en-US']) {
       assert.equal(body.chunking_config.chunk_size, 256)
       assert.equal(body.chunking_config.enable_parent_child, true)
       assert.equal(body.name, 'Notes'); assert.deepEqual(body.content_types[0], { name: 'SOP', enabled: false, extract_graph: true, position: 0 })
-      assert.equal(body.relation_types.length, 1)
+      assert.equal('relation_types' in body, false, 'library settings must not overwrite graph relation types')
       for (const field of ['directory', 'template', 'system_role', 'review_criteria', 'source_evidence_rule']) assert.equal(field in body, false)
     }, locale)
     assert.match(html, /personal\//); assert.match(html, /Delete library|删除库/)
     assert.doesNotMatch(html, /抽取图谱|Extract graph|从模板新建库|Create library from template|父子分块由模板|External timely|外部时效型/)
+    assert.doesNotMatch(html, /关系类型|Relation types|合并关系类型|Merge relation types/)
     assert.ok(html.includes((locale === 'zh-CN' ? zh : en).ikb18.admissionPolicyHint))
   })
   test(`${locale}: new library validates directory and enters created library settings`, async () => {
@@ -89,14 +90,13 @@ for (const locale of ['zh-CN', 'en-US']) {
     }, locale)
   })
 }
-test('standard libraries expose content and relation types under the shared admission policy', async () => {
+test('standard library settings expose only content types under the shared admission policy', async () => {
   const original = library('reports', { template: 'standard', review_criteria: '旧审核规则', source_evidence_rule: 'link_required', processing_model_tiers: ['generation', 'entity_resolution'] })
   const calls: any[] = [], modules = catalogModules(calls)
   modules['@/api/library'].listLibraries = async () => ({ success: true, data: [original] })
   modules['@/api/library'].getCatalogLibrary = async () => ({ success: true, data: structuredClone(original) })
   const html = await scenario('./views/settings/LibraryCatalogSettings.vue', {}, modules, async state => {
     await state.load()
-    assert.deepEqual(state.typeSections, ['content_types', 'relation_types'])
     assert.deepEqual(state.modelTiers.value, ['generation', 'entity_resolution', 'rerank'])
     state.draft.value.name = 'Updated reports'
     await state.save()
@@ -107,7 +107,7 @@ test('standard libraries expose content and relation types under the shared admi
   })
   assert.ok(html.includes(zh.ikb18.admissionPolicyHint))
   assert.match(html, /内容类型/)
-  assert.match(html, /关系类型/)
+  assert.doesNotMatch(html, /关系类型/)
   assert.doesNotMatch(html, /旧审核规则|抽取图谱|来源证据规则/)
 })
 test('deleting the last empty system library leaves the catalogue ready to create a library', async () => {
@@ -125,19 +125,49 @@ test('deleting the last empty system library leaves the catalogue ready to creat
   assert.doesNotMatch(html, /personal\//)
   assert.match(html, /新建/)
 })
-test('library validation preserves failed drafts, rejects duplicate and empty types, and confirms relation merging', async () => {
+test('library validation preserves failed drafts and rejects duplicate and empty content types', async () => {
   const calls: any[] = [], modules = catalogModules(calls)
   await scenario('./views/settings/LibraryCatalogSettings.vue', {}, modules, async state => {
     await state.load(); state.draft.value.name = ' '; await state.save(); assert.equal(calls.length, 0)
     state.draft.value.name = 'Notes'; state.draft.value.content_types.push({ name: '笔记', enabled: true, extract_graph: false })
     await state.save(); assert.equal(calls.length, 0)
-    state.draft.value.content_types.pop(); state.draft.value = JSON.parse(state.saved.value)
-    state.fromType.value = '合作'; state.toType.value = '依赖'; state.merge()
-    assert.equal(calls.length, 0); assert.ok(modules.dialog().body.includes('合作 → 依赖'))
-    await modules.dialog().onConfirm(); assert.deepEqual(calls[0].merge, ['mine', '合作', '依赖'])
   })
   await scenario('./views/settings/LibraryCatalogSettings.vue', {}, catalogModules([], { fail: true }), async state => {
     await state.load(); state.draft.value.name = 'Draft'; state.draft.value.model_tiers.generation = 'pending-model'; await state.save(); assert.equal(state.draft.value.name, 'Draft'); assert.equal(state.draft.value.model_tiers.generation, 'pending-model'); assert.equal(state.error.value, 'offline'); assert.equal(state.dirty.value, true)
+  })
+})
+test('graph relation type manager saves only relation types and confirms merging within the selected library', async () => {
+  const calls: any[] = [], modules = catalogModules(calls)
+  const html = await scenario('./views/library/components/RelationTypeManager.vue', { initialLibraryId: 'mine' }, modules, async state => {
+    await state.load()
+    state.types.value.push({ name: ' 引用 ', enabled: true, position: 5 })
+    state.moveType(state.types.value, 2, -1)
+    await state.save()
+    assert.equal(state.dirty.value, false)
+    assert.deepEqual(calls[0], { id: 'mine', body: { relation_types: [
+      { name: '合作', enabled: true, position: 0 }, { name: '引用', enabled: true, position: 1 }, { name: '依赖', enabled: true, position: 2 },
+    ] } })
+    state.fromType.value = '合作'; state.toType.value = '依赖'; state.merge()
+    assert.equal(calls.length, 1)
+    assert.ok(modules.dialog().body.includes('合作 → 依赖'))
+    await modules.dialog().onConfirm()
+    assert.deepEqual(calls[1].merge, ['mine', '合作', '依赖'])
+  })
+  assert.match(html, /自动生成，无需提前配置/)
+  assert.match(html, /合并关系类型/)
+})
+test('graph relation type manager retains failed edits and guards unsaved close and library changes', async () => {
+  const calls: any[] = [], modules = catalogModules(calls, { fail: true })
+  await scenario('./views/library/components/RelationTypeManager.vue', { initialLibraryId: 'mine' }, modules, async state => {
+    await state.load()
+    state.types.value[0].name = '依赖'; await state.save()
+    assert.equal(calls.length, 0); assert.equal(state.error.value, zh.ikb18.invalidTypes)
+    state.types.value[0].name = 'Draft'; await state.save()
+    assert.equal(state.types.value[0].name, 'Draft'); assert.equal(state.error.value, 'offline'); assert.equal(state.dirty.value, true)
+    state.close(); assert.equal(modules.dialog().body, zh.ikb18.relationTypesUnsaved)
+    modules.dialog().onCancel(); assert.equal(state.dirty.value, true)
+    state.switchLibrary('other'); assert.equal(state.libraryId.value, 'mine'); assert.equal(state.dirty.value, true)
+    modules.dialog().onConfirm(); assert.equal(state.dirty.value, false)
   })
 })
 test('directory validation matches backend boundaries', () => {

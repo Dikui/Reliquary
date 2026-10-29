@@ -12,7 +12,6 @@ export function librarySettingsPayload(draft: LibraryCatalogItem) {
     ...(draft.chunking_config ? { chunking_config: { ...draft.chunking_config } } : {}),
     feed_enabled: draft.feed_enabled,
     content_types: draft.content_types.map((row, position) => ({ ...row, name: row.name.trim(), position })),
-    relation_types: draft.relation_types.map((row, position) => ({ ...row, name: row.name.trim(), position })),
   }
 }
 export function moveType(rows: unknown[], index: number, delta: number) {

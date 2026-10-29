@@ -31,6 +31,7 @@ async function fixture(t: TestContext, search: (request: GraphSearchRequest, sig
   const requests: Array<{ request: GraphSearchRequest; signal?: AbortSignal }> = []
   const graphs: any[] = [], sources: Array<[string, SourceLocation | undefined]> = [], centers: string[] = []
   const selectedEntity = ref(center), active = ref(true), savedScope = ref<string[]>([])
+  let relationName = '隶属'
   const component = loadComponent(new URL('./EntityGraph.vue', import.meta.url), {
     'cytoscape': { __esModule: true, default: (options: any) => {
       const graph = { options, handlers: {} as Record<string, (event: unknown) => void>, destroyed: false, moves: [] as unknown[],
@@ -42,6 +43,12 @@ async function fixture(t: TestContext, search: (request: GraphSearchRequest, sig
       graphs.push(graph); return graph
     } },
     '@/api/graph': { searchGraph: (request: GraphSearchRequest, signal?: AbortSignal) => { requests.push({ request, signal }); return search(request, signal) } },
+    '@/api/library': { listLibraries: async () => ({ success: true, data: ['official', 'media'].map(id => ({ id, relation_types: [{ name: relationName, enabled: true }] })) }) },
+    './RelationTypeManager.vue': { __esModule: true, default: defineComponent({
+      props: ['initialLibraryId'], emits: ['changed', 'close'], setup(props, { emit }) {
+        return () => h('section', { 'data-relation-manager': props.initialLibraryId }, h('button', { 'data-save-types': true, onClick: () => { relationName = '属于'; emit('changed'); emit('close') } }, 'Save relation types'))
+      },
+    }) },
     '@/api/entity-types': { ENTITY_TYPES }, '@/utils/libraryScope': { scopedLibraryIDs, readLibraryScope: () => savedScope.value },
     '@/composables/useLibraryScope': { useLibraryScope: () => ref<string[]>([]) },
     '@/components/LibraryScopeSelect.vue': { __esModule: true, default: defineComponent({
@@ -96,6 +103,13 @@ test('entity graph preserves directed parallel edges, scope, evidence navigation
   f.savedScope.value = ['official']
   f.active.value = true; await settle()
   assert.deepEqual(f.requests.at(-1)!.request.libraries, ['official'], 'reopening graph uses library changes made in the list')
+  const relationSelect = descendants(f.root).find(node => node.props['aria-label'] === zh.entityGraph.relationTypes)!
+  relationSelect.props.onChange(['隶属']); await settle()
+  await click(descendants(f.root).find(node => node.tag === 'button' && visibleText(node) === zh.ikb18.manageRelationTypes)!)
+  assert.equal(descendants(f.root).find(node => node.props['data-relation-manager'])?.props['data-relation-manager'], 'official')
+  await click(descendants(f.root).find(node => node.props['data-save-types'])!)
+  assert.deepEqual(f.requests.at(-1)!.request.relation_types, [], 'merging away a selected relation type removes the stale graph filter')
+  assert.equal(descendants(f.root).some(node => node.props['data-relation-manager']), false)
   assert.deepEqual(f.errors, [])
 })
 

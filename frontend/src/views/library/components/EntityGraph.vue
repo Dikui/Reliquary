@@ -4,12 +4,13 @@ import { useI18n } from 'vue-i18n'
 import cytoscape, { type Core, type StylesheetJson } from 'cytoscape'
 import { searchGraph } from '@/api/graph'
 import { ENTITY_TYPES } from '@/api/entity-types'
-import type { LibraryCatalogItem } from '@/api/library'
+import { listLibraries, type LibraryCatalogItem } from '@/api/library'
 import type { GraphSearchResponse } from '@/types/graph'
 import type { SearchEntity, SourceLocation } from '@/types/search'
 import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue'
 import { useLibraryScope } from '@/composables/useLibraryScope'
 import { readLibraryScope, scopedLibraryIDs } from '@/utils/libraryScope'
+import RelationTypeManager from './RelationTypeManager.vue'
 
 const props = withDefaults(defineProps<{ entity: SearchEntity; active?: boolean }>(), { active: true })
 const emit = defineEmits<{ 'open-source': [id: string, location?: SourceLocation]; 'open-entity': [id: string]; 'open-profile': [id: string] }>()
@@ -18,6 +19,7 @@ const scope = useLibraryScope(), catalog = ref<LibraryCatalogItem[]>([])
 const relationTypes = ref<string[]>([]), hops = ref(1), limit = ref(50)
 const data = ref<GraphSearchResponse | null>(null), loading = ref(false), error = ref('')
 const canvas = ref<HTMLElement | null>(null)
+const managingTypes = ref(false)
 const selection = ref<{ type: 'node' | 'edge'; id: string } | null>(null)
 const relationOptions = computed(() => [...new Set(catalog.value
   .filter(library => !scope.value.length || scope.value.includes(library.id))
@@ -70,6 +72,19 @@ async function runQuery() {
 function loadedLibraries(libraries: LibraryCatalogItem[]) {
   catalog.value = libraries; catalogReady = true
   void runQuery()
+}
+async function refreshRelationTypes() {
+  const current = sequence
+  try {
+    const response = await listLibraries()
+    if (current !== sequence) return
+    if (!response.success) throw new Error(response.message || t('entityGraph.failed'))
+    catalog.value = response.data || []
+    const available = new Set(relationOptions.value.map(option => option.value))
+    const next = relationTypes.value.filter(type => available.has(type))
+    if (next.length !== relationTypes.value.length) relationTypes.value = next
+    else await runQuery()
+  } catch (cause) { if (current === sequence) error.value = (cause as { message?: string })?.message || t('entityGraph.failed') }
 }
 function graphStyle(): StylesheetJson {
   const style = getComputedStyle(canvas.value!)
@@ -160,7 +175,9 @@ onBeforeUnmount(() => { stopQuery(); resizeObserver?.disconnect(); themeObserver
       <label><span>{{ t('entityGraph.hops') }}</span><t-select v-model="hops" :options="hopOptions" :aria-label="t('entityGraph.hops')" /></label>
       <label><span>{{ t('entityGraph.limit') }}</span><t-select v-model="limit" :options="limitOptions" :aria-label="t('entityGraph.limit')" /></label>
       <t-button type="submit" :loading="loading" :disabled="loading || !catalogReady">{{ t('entityGraph.query') }}</t-button>
+      <t-button variant="outline" :disabled="!catalog.length" @click="managingTypes = true">{{ t('ikb18.manageRelationTypes') }}</t-button>
     </form>
+    <RelationTypeManager v-if="managingTypes && active" :initial-library-id="scope[0] || catalog[0]?.id" @close="managingTypes = false" @changed="refreshRelationTypes" />
     <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" :loading="loading" @click="runQuery">{{ t('common.retry') }}</t-button></template></t-alert>
     <div class="graph-notices" aria-live="polite">
       <p v-if="graphTruncated">{{ t('entityGraph.truncated') }}</p>
