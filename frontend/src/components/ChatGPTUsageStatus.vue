@@ -39,6 +39,7 @@ const formatTime = (value: string) => new Date(value).toLocaleString(locale.valu
  .chatgpt-usage { display: flex; flex-wrap: wrap; align-items: start; gap: var(--space-4); padding: var(--space-4); border-top: 2px solid var(--rule); background: var(--surface-soft); color: var(--text); }
 .chatgpt-usage--paused { border-top-color: var(--danger); }
 .chatgpt-usage__copy { flex: 1; min-width: min(100%, 220px); }
+.chatgpt-usage__copy > strong { font-weight: 600; }
 .chatgpt-usage p { margin: var(--space-2) 0 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
 .chatgpt-usage__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .chatgpt-usage a { color: var(--text); text-decoration: underline; }

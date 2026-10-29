@@ -2199,6 +2199,7 @@ export default {
   },
   modelSettings: {
     description: 'Manage different types of AI models, including local Ollama and remote APIs',
+    listTitle: 'Models',
     typeShort: {
       chat: 'Generation',
       embedding: 'Embedding',

@@ -31,6 +31,7 @@
 
     <ChatGPTSettings :models="allModels" />
 
+    <h3 class="model-list-title">{{ $t('modelSettings.listTitle') }}</h3>
     <nav class="model-type-tabs" :aria-label="$t('model.editor.typeLabel')">
       <Button v-for="type in (['all', 'chat', 'embedding', 'rerank'] as const)" :key="type" :aria-pressed="activeTypeFilter === type" :variant="activeTypeFilter === type ? 'primary' : 'default'" @click="activeTypeFilter = type">{{ type === 'all' ? $t('common.all') : typeLabel(type) }} ({{ type === 'all' ? allLegacyModels.length : countByType(type) }})</Button>
     </nav>
@@ -647,12 +648,13 @@ onMounted(() => {
 .builtin-models-hint { padding: var(--space-3) 0; border-top: 2px solid var(--rule); color: var(--muted); font-size: var(--text-sm); }
 .builtin-hint-label { color: var(--text); font-weight: 800; }
 .model-type-tabs { justify-content: flex-start; margin: var(--space-4) 0; }
+.model-list-title { margin: var(--space-6) 0 0; padding-top: var(--space-4); border-top: 2px solid var(--rule); }
 .model-grid { display: grid; }
 .model-card { display: flex; gap: var(--space-3); min-width: 0; padding: var(--space-4) 0; border: 0; border-top: 2px solid var(--rule); background: var(--bg); color: var(--text); text-align: left; }
 .model-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .model-card__badge { min-width: 64px; font-size: var(--text-xs); color: var(--muted); }
 .model-card__body { flex: 1; min-width: 0; }
-.model-card__title { overflow-wrap: anywhere; margin: 0; }
+.model-card__title { overflow-wrap: anywhere; margin: 0; font-size: var(--text-md); font-weight: 600; }
 .model-card__title button { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: inherit; text-align: left; text-decoration: underline; cursor: pointer; }
 .model-card__title button:hover { color: var(--accent); }
 .model-card__title button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

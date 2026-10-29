@@ -326,7 +326,7 @@
       </section>
 
       <section class="pricing-config" :aria-label="$t('ikb18.priceTitle')">
-        <h3>{{ $t('ikb18.priceTitle') }}</h3>
+        <h4 class="setting-drawer__section-title">{{ $t('ikb18.priceTitle') }}</h4>
         <p v-if="formData.source === 'chatgpt'" class="form-desc">{{ $t('ikb18.priceNotApplicable') }}</p>
         <template v-else>
           <div class="form-item"><label class="form-label" for="model-price-input">{{ $t(activeModelType === 'chat' ? 'ikb18.priceInput' : 'ikb18.priceTextInput') }}</label><Input id="model-price-input" :model-value="formData.inputPerMillion ?? ''" @update:model-value="formData.inputPerMillion = $event" type="number" :min="0" :aria-label="$t(activeModelType === 'chat' ? 'ikb18.priceInput' : 'ikb18.priceTextInput')" /></div>

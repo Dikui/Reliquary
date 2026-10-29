@@ -265,6 +265,7 @@ export default {
   },
   modelSettings: {
     description: '管理不同类型的 AI 模型，支持 Ollama 本地模型和远程 API',
+    listTitle: '模型列表',
     copySuffix: ' 副本',
     builtinTag: '内置',
     confirmDelete: '确定删除模型「{name}」吗？',
