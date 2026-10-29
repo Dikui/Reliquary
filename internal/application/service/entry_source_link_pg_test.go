@@ -29,7 +29,7 @@ func TestMissingSourceAndOldCriteriaDoNotGateIngest(t *testing.T) {
 	h, _ := newIngestHarness(t)
 	capture := captureMineReview(h)
 	require.NoError(t, h.db.Model(h.library).Updates(map[string]any{
-		"source_evidence_rule": "link_required", "review_criteria": "Only accept complete original publications.",
+		"review_criteria": "Only accept complete original publications.",
 	}).Error)
 	h.processor.reject = true
 	result, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", Content: "An unfinished note records 42 pascals."})

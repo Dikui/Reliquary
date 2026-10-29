@@ -44,8 +44,10 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 			require.NoError(t, f.articles.(interfaces.EntryService).ProcessManualUpdate(f.ctx, f.queue.tasks[0]))
 			var document types.Entry
 			require.NoError(t, f.db.First(&document, "id=?", id).Error)
-			require.Equal(t, "mine", document.SourceKind)
+			require.Equal(t, "article", document.SourceKind)
 			require.Equal(t, types.ParseStatusCompleted, document.ParseStatus, document.ErrorMessage)
+			// The compatibility delete_document route only handles historical personal documents.
+			require.NoError(t, f.db.Model(&document).Update("source_kind", "mine").Error)
 			require.NoError(t, f.vault.RefreshHeader(f.ctx, id))
 			filePath := filepath.Join(f.root, document.VaultPath)
 			require.FileExists(t, filePath)
