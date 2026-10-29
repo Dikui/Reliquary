@@ -225,14 +225,14 @@ test('current backend parsing statuses and error codes are localized and retaine
   const timelineStatuses = new Set([...spanStatuses, ...parseStatuses, 'draft'].map(parseStatusToTimelineStatus))
 
   const keys = [
-    ...parsingCodes.flatMap(code => [`knowledgeStages.errorCode.${code}`, `knowledgeStages.errorCode.${code}_SUGGESTION`]),
-    ...[...timelineStatuses].map(status => `knowledgeStages.status.${status}`),
+    ...parsingCodes.flatMap(code => [`processingStages.errorCode.${code}`, `processingStages.errorCode.${code}_SUGGESTION`]),
+    ...[...timelineStatuses].map(status => `processingStages.status.${status}`),
   ]
   assert.deepEqual(findUsedKeysMissingInLocales(keys, localeKeysByName), [])
   for (const [localeName, localeKeys] of Object.entries(localeKeysByName)) {
     for (const code of parsingCodes) {
       for (const suffix of ['', '_SUGGESTION']) {
-        const key = `knowledgeStages.errorCode.${code}${suffix}`
+        const key = `processingStages.errorCode.${code}${suffix}`
         const caseVariants = [...localeKeys].filter(candidate => candidate.toLowerCase() === key.toLowerCase())
         assert.deepEqual(caseVariants, [key], `${localeName}: preserve the backend error code casing without duplicate keys`)
       }

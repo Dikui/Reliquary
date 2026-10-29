@@ -78,7 +78,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const taskType = descendants(dialog).find(node => hasClass(node, 'rq-failed-row-type'))!
       assert.equal(visibleText(taskType), runtime.tasks.taskTypes[kind])
       assert.doesNotMatch(visibleText(dialog), /knowledge:embedding_rebuild|topic:backfill/)
-      for (const [label, value] of [[runtime.tasks.libraryLabel, 'library-12345678-1234-1234-1234-123456789012'], [runtime.tasks.knowledgeLabel, 'article-12345678-1234-1234-1234-123456789012']]) {
+      for (const [label, value] of [[runtime.tasks.libraryLabel, 'library-12345678-1234-1234-1234-123456789012'], [runtime.tasks.entryLabel, 'article-12345678-1234-1234-1234-123456789012']]) {
         const reference: ReturnType<typeof descendants>[number] | undefined = descendants(dialog).find(node => hasClass(node, 'rq-failed-ref') && descendants(node).some(child => child.tag === 'dt' && visibleText(child) === label))
         assert.ok(reference, label)
         assert.equal(visibleText(descendants(reference).find(child => child.tag === 'dd')!), value.length > 36 ? value.slice(0, 12) + '…' : value)

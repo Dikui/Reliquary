@@ -16,7 +16,7 @@ const historical = computed(() => props.status !== 'pending')
 const displayName = computed(() => (historical.value ? props.name : detail.value?.entity.canonical_name || props.name) || props.entityId.slice(0, 8))
 const entityType = computed(() => detail.value?.entity.entity_type || 'other')
 const library = computed(() => props.libraries?.find(item => item.id === detail.value?.entity.library_id))
-const typeLabel = computed(() => t(`knowledgeWorkbench.entities.types.${ENTITY_TYPES.includes(entityType.value as EntityType) ? entityType.value : 'other'}`))
+const typeLabel = computed(() => t(`workbench.entities.types.${ENTITY_TYPES.includes(entityType.value as EntityType) ? entityType.value : 'other'}`))
 const pieces = computed(() => {
   const text = evidence.value?.text || ''
   const names = [displayName.value, ...(detail.value?.entity.aliases || [])].filter(Boolean).sort((a, b) => b.length - a.length)
@@ -67,10 +67,10 @@ onBeforeUnmount(() => { generation++; controller?.abort() })
     <div v-if="library" class="candidate-library"><LibMark :color="library.color" />{{ library.display_name || library.name }}</div>
     <h3 :title="entityId">{{ displayName }}</h3>
     <p v-if="historical && mergedIntoName">{{ t('pendingPage.mergedInto', { name: mergedIntoName }) }}</p>
-    <a v-if="historical && entryId" :href="entryDetailHref(entryId)">{{ t('knowledgeWorkbench.entities.openArticle') }}</a>
+    <a v-if="historical && entryId" :href="entryDetailHref(entryId)">{{ t('workbench.entities.openArticle') }}</a>
     <p v-if="loading" role="status">{{ t('common.loading') }}</p>
     <p v-if="error" role="alert">{{ error }} <Button variant="ghost" @click="load">{{ t('common.retry') }}</Button></p>
-    <dl v-if="detail"><dt>{{ t('entityPage.materials') }}</dt><dd class="mono">{{ detail.entries.length }}</dd><dt>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</dt><dd>{{ detail.entity.aliases?.join(' · ') || t('knowledgeWorkbench.entities.noAliases') }}</dd><template v-if="detail.entity.description"><dt>{{ t('pendingPage.description') }}</dt><dd>{{ detail.entity.description }}</dd></template></dl>
+    <dl v-if="detail"><dt>{{ t('entityPage.materials') }}</dt><dd class="mono">{{ detail.entries.length }}</dd><dt>{{ t('workbench.entities.aliasLabel') }}</dt><dd>{{ detail.entity.aliases?.join(' · ') || t('workbench.entities.noAliases') }}</dd><template v-if="detail.entity.description"><dt>{{ t('pendingPage.description') }}</dt><dd>{{ detail.entity.description }}</dd></template></dl>
     <blockquote v-if="evidence" class="candidate-evidence"><a :href="entryDetailHref(evidence.id, evidence.location)" :title="evidence.id">{{ evidence.title || evidence.id.slice(0, 8) }} · ¶{{ evidence.location.paragraph }}</a><p><template v-for="(piece, index) in pieces" :key="index"><mark v-if="piece.marked">{{ piece.text }}</mark><template v-else>{{ piece.text }}</template></template></p></blockquote>
     <a v-else-if="detail?.entries[0]" :href="entryDetailHref(detail.entries[0].id)" :title="detail.entries[0].id">{{ detail.entries[0].title || detail.entries[0].file_name || detail.entries[0].id.slice(0, 8) }}</a>
     <p v-if="evidenceError" role="alert">{{ evidenceError }} <Button variant="ghost" @click="load">{{ t('common.retry') }}</Button></p>

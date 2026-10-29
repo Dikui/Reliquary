@@ -281,7 +281,7 @@ for (const locale of ['zh-CN', 'en-US']) {
       const source = env.control('library.materialCategory')
       assert.deepEqual(descendants(source).filter(node => node.tag === 'option').map(node => ({ value: node.props.value, label: visibleText(node) })), [
         { value: '', label: env.t('library.allMaterialCategories') },
-        ...SEARCH_SOURCES.map(value => ({ value, label: env.t(`knowledgeSearch.sources.${value}`) })),
+        ...SEARCH_SOURCES.map(value => ({ value, label: env.t(`search.sources.${value}`) })),
       ])
       assert.equal(env.requests[0].has('source_kind'), false)
       assert.equal(env.ids().length, 35)
@@ -529,7 +529,7 @@ test('bulk management retains exact filters and server count across both steps a
     assert.equal(env.control('entryBatch.action'), undefined)
     assert.equal(button('entryBatch.preview'), undefined)
     assert.ok(summary().includes(env.t('entryBatch.matchedCount', { count: 73 })), 'count comes from the batch server, not the displayed list')
-    for (const value of ['Research', 'Target Entity', 'Target Topic', 'Needle', 'tutorial', 'Markdown', '2026-10-01', '2026-10-18', env.t('articleJudgments.unstarredOnly'), env.t('library.parseStatusFailed'), env.t('knowledgeSearch.sources.mine'), env.t('library.channelApi')]) assert.ok(summary().includes(value), value)
+    for (const value of ['Research', 'Target Entity', 'Target Topic', 'Needle', 'tutorial', 'Markdown', '2026-10-01', '2026-10-18', env.t('articleJudgments.unstarredOnly'), env.t('library.parseStatusFailed'), env.t('search.sources.mine'), env.t('library.channelApi')]) assert.ok(summary().includes(value), value)
     const selection = { filters: { libraries: ['library-source'], entity_ids: ['entity-1'], topic_ids: ['topic-1'], published_from: '2026-10-01', keyword: 'Needle', starred: false, parse_status: 'failed', source_kind: 'mine', source: 'api', file_type: 'md', content_type: 'tutorial', start_time: '2026-10-01 00:00:00', end_time: '2026-10-18 23:59:59' } }
     assert.deepEqual(env.rebuildRequests, [{ path: '/api/v1/entries/batches/preview', data: { action: 'star', starred: true, selection } }])
     const firstSummary = summary()

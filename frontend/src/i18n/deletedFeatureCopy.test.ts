@@ -12,11 +12,11 @@ const allowed: Record<string, string> = {
   'ikb18.systemRole': 'System library identity is read only and does not describe user permissions.',
   'agent.editor.systemPromptPlaceholder': 'The model persona in a system prompt is still configurable.',
   'agentEditor.desc.systemPrompt': 'The role describes a model persona, not a user permission.',
-  'knowledgeWorkbench.subtitle': '组织 is a verb meaning organize documents.',
+  'workbench.subtitle': '组织 is a verb meaning organize documents.',
   'agent.subtitle': '组织 is a verb meaning organize documents.',
   'knowledgeList.subtitle': '组织 is a verb meaning organize documents.',
-  'knowledgeEditor.document.subtitle': '组织 is a verb meaning organize documents.',
-  'knowledgeWorkbench.entities.types.organization': 'Organization is a supported entity type, not an organization account.',
+  'libraryEditor.document.subtitle': '组织 is a verb meaning organize documents.',
+  'workbench.entities.types.organization': 'Organization is a supported entity type, not an organization account.',
 }
 
 for (const [locale, bundle] of Object.entries({ 'en-US': enUS, 'zh-CN': zhCN })) {

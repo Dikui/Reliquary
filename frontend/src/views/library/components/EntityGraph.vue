@@ -30,7 +30,7 @@ let sequence = 0, controller: AbortController | undefined
 
 function entityName(id: string) { return data.value?.entities.find(entity => entity.id === id)?.canonical_name || id }
 function entityType(type: string) {
-  const labels: Record<string, string> = { company: t('knowledgeWorkbench.entities.types.company'), person: t('knowledgeWorkbench.entities.types.person'), product: t('knowledgeWorkbench.entities.types.product'), project: t('knowledgeWorkbench.entities.types.project'), organization: t('knowledgeWorkbench.entities.types.organization'), other: t('knowledgeWorkbench.entities.types.other') }
+  const labels: Record<string, string> = { company: t('workbench.entities.types.company'), person: t('workbench.entities.types.person'), product: t('workbench.entities.types.product'), project: t('workbench.entities.types.project'), organization: t('workbench.entities.types.organization'), other: t('workbench.entities.types.other') }
   return labels[type] || labels.other
 }
 
@@ -168,7 +168,7 @@ onBeforeUnmount(() => { stopQuery(); resizeObserver?.disconnect(); themeObserver
           <p>{{ t('ikb18.sources', { count: selectedEdge.source_count }) }}</p>
           <article v-for="source in selectedEdge.sources" :key="source.entry_id" class="graph-source">
             <button class="entity-link" type="button" @click="emit('open-source', source.entry_id, source.evidence?.[0]?.locations?.[0])">{{ source.title || source.entry_id }}</button>
-            <p>{{ source.library_name }} · {{ source.published_at ? formatDateTime(source.published_at, locale) : t('knowledgeWorkbench.unknownDate') }}</p>
+            <p>{{ source.library_name }} · {{ source.published_at ? formatDateTime(source.published_at, locale) : t('workbench.unknownDate') }}</p>
             <p v-if="source.source_unverified" class="graph-source-warning">{{ t('entityGraph.sourceUnverified') }}</p>
             <div v-for="(evidence, index) in source.evidence || []" :key="index">
               <p v-if="evidence.speaker">{{ t('ikb18.speaker') }}: <button v-if="evidence.speaker.entity_id" class="entity-link" type="button" @click="emit('open-entity', evidence.speaker.entity_id)">{{ evidence.speaker.name }}</button><span v-else>{{ evidence.speaker.name }}</span></p>

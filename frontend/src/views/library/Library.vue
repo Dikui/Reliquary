@@ -58,7 +58,7 @@ const libraryCatalog = ref<import('@/api/library').LibraryCatalogItem[]>([]);
 const currentLibraryLabel = computed(() => {
   const selected = libraryCatalog.value.find(item => item.id === libraryScope.value[0]);
   return libraryScope.value.length === 1 && selected
-    ? selected.display_name || selected.name : t('knowledgeEditor.document.title');
+    ? selected.display_name || selected.name : t('libraryEditor.document.title');
 });
 const libraryLoading = ref(false);
 const libraryError = ref('');
@@ -202,7 +202,7 @@ const selectedSource = ref(initialDocumentFilters.source);
 const selectedSourceKind = ref(initialDocumentFilters.sourceKind);
 const sourceKindOptions = computed(() => [
   { label: t('library.allMaterialCategories'), value: '' },
-  ...SEARCH_SOURCES.map(value => ({ value, label: t(`knowledgeSearch.sources.${value}`) })),
+  ...SEARCH_SOURCES.map(value => ({ value, label: t(`search.sources.${value}`) })),
 ]);
 // Submission channels are independent of file format and material category.
 const sourceOptions = computed(() => [
@@ -620,7 +620,7 @@ const handleViewTrace = (_index: number, item: EntryCard) => {
 
 const confirmRebuildEntry = async (index: number, item: EntryCard) => {
   if (!item?.id) {
-    toast.warning(t('knowledgeEditor.messages.missingId'));
+    toast.warning(t('libraryEditor.messages.missingId'));
     return;
   }
   if (entryNeedsStatusPolling(item)) {
@@ -782,7 +782,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
         <Select v-model="selectedSourceKind" :aria-label="t('library.materialCategory')"><option v-for="option in sourceKindOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
         <Select v-model="selectedSource" :aria-label="t('library.channelLabel')"><option v-for="option in sourceOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
         <Select v-model="selectedFileType" :aria-label="t('library.fileTypeFilter')"><option v-for="option in fileTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
-        <label>{{ t('entryBatch.entities') }}<select class="rq-control" multiple :value="entityFilterValues" :aria-label="t('entryBatch.entities')" @change="entityFilterValues = updateSelectedOptions($event)"><option v-for="option in entityFilterOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select><Button v-if="moreEntityChoices" :loading="choicesLoading" @click="loadFilterChoices(true)">{{ t('knowledgeWorkbench.loadMore') }}</Button></label>
+        <label>{{ t('entryBatch.entities') }}<select class="rq-control" multiple :value="entityFilterValues" :aria-label="t('entryBatch.entities')" @change="entityFilterValues = updateSelectedOptions($event)"><option v-for="option in entityFilterOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select><Button v-if="moreEntityChoices" :loading="choicesLoading" @click="loadFilterChoices(true)">{{ t('workbench.loadMore') }}</Button></label>
         <label>{{ t('entryBatch.topics') }}<select class="rq-control" multiple :value="topicFilterValues" :aria-label="t('entryBatch.topics')" @change="topicFilterValues = updateSelectedOptions($event)"><option v-for="option in topicFilterOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
         <fieldset><legend>{{ t('entryBatch.publishedDates') }}</legend><label>{{ t('entryBatch.publishedFrom') }}<input type="date" class="rq-control" :aria-label="t('entryBatch.publishedFrom')" :value="publishedRange[0] || ''" @change="updateDate('published', 0, $event)" /></label><label>{{ t('entryBatch.publishedTo') }}<input type="date" class="rq-control" :aria-label="t('entryBatch.publishedTo')" :value="publishedRange[1] || ''" @change="updateDate('published', 1, $event)" /></label><small v-if="publishedRange.length">{{ t('entryBatch.publishedHint') }}</small></fieldset>
         <fieldset><legend>{{ t('entryBatch.updatedDates') }}</legend><label>{{ t('entryBatch.updatedFrom') }}<input type="date" class="rq-control" :aria-label="t('entryBatch.updatedFrom')" :max="updatedTimeRange[1] || latestFilterDate" :value="updatedTimeRange[0] || ''" @change="updateDate('updated', 0, $event)" /></label><label>{{ t('entryBatch.updatedTo') }}<input type="date" class="rq-control" :aria-label="t('entryBatch.updatedTo')" :min="updatedTimeRange[0] || undefined" :max="latestFilterDate" :value="updatedTimeRange[1] || ''" @change="updateDate('updated', 1, $event)" /></label></fieldset>
@@ -797,7 +797,7 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
           <EntryPreview v-if="viewMode === 'list' && focusedEntry" :entry="focusedEntry" :libraries="libraryCatalog" @open="openEntryItem(focusedEntry)" @open-entity="openArticleEntity" @action="handleListAction" />
         </div>
         <EmptyState v-else :title="t('library.emptyArticles')" :description="t('entries.emptyHint')" />
-        <div v-if="cardList.length < total && !listError" class="entries-more"><Button :loading="docListLoading || scrollLoading" @click="loadMoreEntries">{{ t('knowledgeWorkbench.loadMore') }}</Button></div>
+        <div v-if="cardList.length < total && !listError" class="entries-more"><Button :loading="docListLoading || scrollLoading" @click="loadMoreEntries">{{ t('workbench.loadMore') }}</Button></div>
       </div>
       <DocumentBatchBar v-if="selectedIds.size" :count="selectedIds.size" @cancel="clearSelection" @manage="openBatch()" @action="openBatch" />
     </template>

@@ -43,14 +43,14 @@ test('Swiss filters retain multiple content types, inclusive date presets and ad
     range.props.onChange({ target: { value: 'custom' } })
     await settle()
     assert.equal(descendants(root).filter(node => node.tag === 'input' && node.props.type === 'date').length, 2)
-    const entitySelect = descendants(root).find(node => node.tag === 'select' && node.props['aria-label'] === zh.knowledgeSearch.entities)!
+    const entitySelect = descendants(root).find(node => node.tag === 'select' && node.props['aria-label'] === zh.search.entities)!
     assert.equal(entitySelect.props.multiple, undefined)
     entitySelect.props.onChange({ target: { value: 'entity' } })
     assert.deepEqual(model.value.entity_ids, ['entity'])
     const stars = descendants(root).find(node => node.tag === 'select' && node.props['aria-label'] === zh.articleJudgments.starLabel)!
     stars.props.onChange({ target: { value: 'false' } })
     assert.equal(model.value.starred, false)
-    await click(descendants(root).find(node => node.tag === 'button' && visibleText(node) === zh.knowledgeSearch.resetFilters)!)
+    await click(descendants(root).find(node => node.tag === 'button' && visibleText(node) === zh.search.resetFilters)!)
     assert.deepEqual(model.value, search.defaultSearchFilters())
   } finally { app.unmount() }
 })
@@ -63,14 +63,14 @@ for (const locale of ['zh-CN', 'en-US'] as const) test(`${locale}: empty entity 
     assert.ok(text.includes(locale === 'zh-CN' ? '该库还没有主题' : 'This library has no topics yet.'))
     assert.ok(!descendants(f.root).some(node => node.tag === 'select' && node.props.multiple !== undefined))
     const messages = locale === 'zh-CN' ? zh : en
-    assert.ok(!descendants(f.root).some(node => node.tag === 'button' && visibleText(node) === messages.knowledgeSearch.resetFilters))
+    assert.ok(!descendants(f.root).some(node => node.tag === 'button' && visibleText(node) === messages.search.resetFilters))
   } finally { f.app.unmount() }
 })
 
 test('compact entity and topic pickers preserve multiple IDs, restore their placeholders and support removal', async () => {
   const f = mountFilters({ entities: [{ id: 'e1', canonical_name: 'First', entity_type: 'company' }, { id: 'e2', canonical_name: 'Second', entity_type: 'product' }], topics: [{ id: 't1', name: 'Topic' }] })
   try {
-    const entity = descendants(f.root).find(node => node.tag === 'select' && node.props['aria-label'] === zh.knowledgeSearch.entities)!
+    const entity = descendants(f.root).find(node => node.tag === 'select' && node.props['aria-label'] === zh.search.entities)!
     assert.equal(entity.props.multiple, undefined)
     assert.ok(entity.children.some(node => node.tag === 'option' && node.props.value === ''))
     const event = { target: { value: 'e1' } }
@@ -78,7 +78,7 @@ test('compact entity and topic pickers preserve multiple IDs, restore their plac
     assert.equal(event.target.value, '')
     await settle()
     entity.props.onChange({ target: { value: 'e2' } })
-    const topic = descendants(f.root).find(node => node.tag === 'select' && node.props['aria-label'] === zh.knowledgeSearch.topics)!
+    const topic = descendants(f.root).find(node => node.tag === 'select' && node.props['aria-label'] === zh.search.topics)!
     topic.props.onChange({ target: { value: 't1' } })
     await settle()
     assert.deepEqual(f.model.value.entity_ids, ['e1', 'e2'])
@@ -86,9 +86,9 @@ test('compact entity and topic pickers preserve multiple IDs, restore their plac
     const remove = descendants(f.root).find(node => node.tag === 'button' && String(node.props['aria-label']).includes('First'))!
     await click(remove)
     assert.deepEqual(f.model.value.entity_ids, ['e2'])
-    const reset = descendants(f.root).find(node => node.tag === 'button' && visibleText(node) === zh.knowledgeSearch.resetFilters)!
+    const reset = descendants(f.root).find(node => node.tag === 'button' && visibleText(node) === zh.search.resetFilters)!
     await click(reset)
     assert.deepEqual(f.model.value, search.defaultSearchFilters())
-    assert.ok(!descendants(f.root).some(node => node.tag === 'button' && visibleText(node) === zh.knowledgeSearch.resetFilters))
+    assert.ok(!descendants(f.root).some(node => node.tag === 'button' && visibleText(node) === zh.search.resetFilters))
   } finally { f.app.unmount() }
 })

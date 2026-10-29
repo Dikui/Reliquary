@@ -25,8 +25,8 @@ const sourceURL = computed(() => safeExternalUrl(source.value))
 const created = computed(() => formatDateTime(value.value.created_at, locale.value, { dateStyle: 'medium' }, t('entries.unknown')))
 const stages = computed(() => (trace.value?.children || []).filter(node => node.kind === 'stage'))
 const plainText = (text: string) => markdownToPlainText(text, `[${t('ingestStatus.missingTypes.image')}]`)
-const stageLabel = (node: EntryTraceNode) => ['docreader', 'processing', 'chunking', 'embedding'].includes(node.name) ? t(`knowledgeStages.stage.${node.name}`) : node.name
-const stageStatus = (status: string) => ['pending', 'running', 'done', 'failed', 'skipped', 'cancelled', 'finalizing'].includes(status) ? t(`knowledgeStages.status.${status}`) : t('entries.unknown')
+const stageLabel = (node: EntryTraceNode) => ['docreader', 'processing', 'chunking', 'embedding'].includes(node.name) ? t(`processingStages.stage.${node.name}`) : node.name
+const stageStatus = (status: string) => ['pending', 'running', 'done', 'failed', 'skipped', 'cancelled', 'finalizing'].includes(status) ? t(`processingStages.status.${status}`) : t('entries.unknown')
 async function load() {
   clearTimeout(timer)
   const request = ++generation, id = props.entry.id
@@ -61,7 +61,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer) })
       <div><dt>{{ t('entries.columns.created') }}</dt><dd>{{ created }}</dd></div>
       <div><dt>{{ t('entries.source') }}</dt><dd><a v-if="sourceURL" :href="sourceURL" target="_blank" rel="noopener noreferrer">{{ source }}</a><span v-else>{{ source || t('entries.unknown') }}</span></dd></div>
     </dl>
-    <p v-if="value.source_unverified">{{ t('knowledgeReview.sourceUnverified') }}</p>
+    <p v-if="value.source_unverified">{{ t('review.sourceUnverified') }}</p>
     <Skeleton v-if="loading" :label="t('common.loading')" />
     <ErrorState v-if="error" :title="error"><Button @click="load">{{ t('common.retry') }}</Button></ErrorState>
     <section><h3>{{ t('entries.summary') }}</h3><p>{{ plainText(value.structured_summary?.overview || value.description || t('entries.noSummary')) }}</p><ul v-if="value.structured_summary?.points?.length"><li v-for="(point, index) in value.structured_summary.points" :key="index">{{ plainText(point) }}</li></ul></section>
@@ -73,7 +73,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer) })
       <p v-if="value.error_message" role="alert">{{ value.error_message }}</p>
     </section>
     <div class="entry-preview__actions">
-      <Button @click="emit('action', 'view-trace', entry)">{{ t('knowledgeStages.viewTrace') }}</Button>
+      <Button @click="emit('action', 'view-trace', entry)">{{ t('processingStages.viewTrace') }}</Button>
       <Button :disabled="state.active" @click="emit('action', 'reparse', entry)">{{ t('library.reprocess') }}</Button>
       <Button v-if="state.active" @click="emit('action', 'cancel-parse', entry)">{{ t('library.cancelParse') }}</Button>
       <Button variant="danger" @click="emit('action', 'delete', entry)">{{ t('library.deleteDocument') }}</Button>

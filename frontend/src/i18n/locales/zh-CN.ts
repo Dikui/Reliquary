@@ -117,7 +117,7 @@ export default {
       adjustRetrieval: '调整检索参数'
     },
     quick: {
-      knowledge: '打开资料',
+      entries: '打开资料',
       settings: '打开设置',
       search: '打开检索',
       follows: '打开关注动态'
@@ -135,7 +135,7 @@ export default {
       quickActions: '快捷操作'
     }
   },
-  knowledgeSearch: {
+  search: {
     imageMatch: '图片命中',
     imageAlt: '{title} 的命中图片',
     previewImage: '查看图片：{title}',
@@ -804,12 +804,12 @@ export default {
           attempts: '执行 {current}/{max}',
           unknownTarget: '未识别到关联记录',
           libraryLabel: '库 ID',
-          knowledgeLabel: '文档 ID',
+          entryLabel: '文档 ID',
           taskIDLabel: '业务任务 ID',
           spaceLabel: '空间 ID',
           sourceLibraryLabel: '来源库',
           targetLibraryLabel: '目标库',
-          knowledgeCountLabel: '文档数量',
+          entryCountLabel: '文档数量',
           enqueuedAt: '入队时间',
           startedAt: '开始时间',
           nextProcessAt: '下次执行',
@@ -995,7 +995,7 @@ export default {
       descriptionEmptyPlaceholder: '未填写'
     }
   },
-  knowledgeEditor: {
+  libraryEditor: {
     chunking: {
       title: '分块设置',
       sizeLabel: '分块大小',
@@ -1190,7 +1190,7 @@ export default {
     deleted: '资料已删除',
     deleteFailed: '资料未删除，请重试。'
   },
-  knowledgeStages: {
+  processingStages: {
     intakeReview: '收录审核',
     segmentProgress: '第 {current}/{total} 段',
     summaryMerge: '合并各段摘要',
@@ -1315,7 +1315,7 @@ export default {
       mine: '个人产出'
     }
   },
-  knowledgeWorkbench: {
+  workbench: {
     title: '实体',
     refresh: '刷新',
     requestFailed: '请求失败，请稍后重试。',
@@ -1437,7 +1437,7 @@ export default {
     removedFeature: '此功能已移除，已返回资料页面。',
     pageNotFound: '页面不存在',
     pageNotFoundDescription: '请检查页面地址，或返回资料页面继续使用。',
-    returnToKnowledge: '返回资料页面'
+    returnToEntries: '返回资料页面'
   },
   menu: {
     materials: '资料',
@@ -1580,7 +1580,7 @@ export default {
     contentTypeSaved: '内容类型已保存',
     topics: '主题'
   },
-  knowledgeReview: {
+  review: {
     conflictReason: '与已有资料正文不同',
     relatedArticle: '关联资料',
     saveAsNew: '确认收录此资料',
@@ -2352,7 +2352,7 @@ export default {
     discardHint: '未保存的正文修改将丢失。',
     discard: '放弃修改',
     keepEditing: '继续编辑',
-    uncertain: '未能确认保存结果，草稿已保留。可以重试，相同正文不会重复处理。'
+    saveUnconfirmed: '未能确认保存结果，草稿已保留。可以重试，相同正文不会重复处理。'
   },
   entryStatus: {
     title: '入库与后台处理状态',

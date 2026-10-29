@@ -21,7 +21,7 @@ const activeTab = ref(route.query.tab === 'reviews' ? 'reviews' : 'merges')
 const pendingMergeCount = computed(() => mergeError.value || mergeLoading.value ? null : merges.value.filter(item => item.status === 'pending').length)
 const tabs = computed(() => [
   { value: 'merges', label: `${t('mergeSuggestions.title')}${pendingMergeCount.value === null ? '' : ` ${n(pendingMergeCount.value)}`}`, disabled: busy.value },
-  { value: 'reviews', label: `${t('knowledgeReview.title')}${reviewTotal.value === null ? '' : ` ${n(reviewTotal.value)}`}`, disabled: busy.value },
+  { value: 'reviews', label: `${t('review.title')}${reviewTotal.value === null ? '' : ` ${n(reviewTotal.value)}`}`, disabled: busy.value },
 ])
 const onlyReviews = computed(() => !mergeLoading.value && !mergeError.value && merges.value.length === 0 && reviewTotal.value !== null && reviewTotal.value > 0)
 const showTabs = computed(() => !onlyReviews.value && (reviewTotal.value === null || reviewTotal.value > 0))
@@ -78,7 +78,7 @@ async function loadReviews() {
       reviewPage.value = Math.max(1, Math.ceil(response.total / 20))
       await loadReviews()
     }
-  } catch { if (generation === reviewGeneration) reviewError.value = t('knowledgeReview.loadFailed') }
+  } catch { if (generation === reviewGeneration) reviewError.value = t('review.loadFailed') }
   finally { if (generation === reviewGeneration) reviewLoading.value = false }
 }
 async function loadCatalog() {

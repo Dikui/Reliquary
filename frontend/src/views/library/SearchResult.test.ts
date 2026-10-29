@@ -36,7 +36,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) test(`${locale}: results link 
   assert.ok(html.includes(bodyReference.entryDetailHref('entry', location).replaceAll('&', '&amp;')))
   assert.match(html, /<mark class="search-highlight">needle<\/mark>/)
   assert.match(html, /¶7/)
-  for (const value of ['Research', 'Custom type', '0.73', 'var(--lib-6)', locale === 'zh-CN' ? '来源未核实' : en.knowledgeReview.sourceUnverified]) assert.ok(html.includes(value), value)
+  for (const value of ['Research', 'Custom type', '0.73', 'var(--lib-6)', locale === 'zh-CN' ? '来源未核实' : en.review.sourceUnverified]) assert.ok(html.includes(value), value)
   assert.doesNotMatch(html, /<script>|\*\*needle|class="t-/)
 })
 
@@ -54,7 +54,7 @@ test('folded search results expand with their own source markers and reference l
     const toggle = descendants(root).find(node => node.tag === 'button' && node.props['aria-expanded'] === false)!
     await click(toggle)
     assert.ok(visibleText(root).includes('Related material'))
-    assert.ok(visibleText(root).includes(en.knowledgeReview.sourceUnverified))
+    assert.ok(visibleText(root).includes(en.review.sourceUnverified))
     assert.ok(descendants(root).some(node => node.tag === 'a' && node.props.href === bodyReference.entryDetailHref('nested', location)))
     await click(toggle)
     assert.ok(!visibleText(root).includes('Related material'))

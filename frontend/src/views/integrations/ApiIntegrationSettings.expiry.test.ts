@@ -289,7 +289,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         assert.doesNotMatch(state.playgroundRequestPreview.value, /secret|apiKey/)
         assert.equal(JSON.parse(state.playgroundResult.value).data.excluded_missing_published_at, 1)
       })
-      assert.ok(result.html.includes((locale === 'zh-CN' ? zh : en).knowledgeSearch.requestPreview))
+      assert.ok(result.html.includes((locale === 'zh-CN' ? zh : en).search.requestPreview))
     } finally { globalThis.fetch = originalFetch }
   })
   test(`${locale}: Playground rejects reversed publication dates before making a request`, async () => {
@@ -301,7 +301,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         state.playground.apiKey = 'secret'; state.playground.query = 'Launch'
         state.playgroundFilters.value.published_from = '2026-10-12'; state.playgroundFilters.value.published_to = '2026-10-11'
         await state.runQuery()
-        assert.equal(state.playgroundError.value, (locale === 'zh-CN' ? zh : en).knowledgeSearch.invalidDateRange)
+        assert.equal(state.playgroundError.value, (locale === 'zh-CN' ? zh : en).search.invalidDateRange)
       })
       assert.equal(calls, 0)
     } finally { globalThis.fetch = originalFetch }

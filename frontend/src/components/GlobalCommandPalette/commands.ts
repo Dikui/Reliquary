@@ -34,7 +34,7 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
   return [
     {
       id: 'open-entry',
-      label: t('commandPalette.quick.knowledge'),
+      label: t('commandPalette.quick.entries'),
       keywords: ['library', 'entry', 'base', '库', '文档'],
       run: () => {
         close()

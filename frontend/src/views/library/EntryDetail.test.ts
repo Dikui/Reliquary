@@ -63,7 +63,7 @@ for (const locale of ['zh-CN', 'en-US']) test(`${locale}: detail loads real cont
     await click(descendants(view.root).find(node => node.tag === 'button' && visibleText(node) === '¶2')!)
     assert.equal(JSON.parse(String(view.route.query.reference)).body_hash, 'current-hash')
     view.route.query.tab = 'processing'; await settle()
-    assert.ok(visibleText(view.root).includes(messages.knowledgeStages.stage.processing))
+    assert.ok(visibleText(view.root).includes(messages.processingStages.stage.processing))
     assert.ok(visibleText(view.root).includes('1.3'))
   } finally { view.close() }
 })

@@ -9,7 +9,7 @@
       <div v-if="badge || cannotBeFact || sourceUnverified || acquisition === 'model_written'" class="rq-cmdk-item__badges">
         <Tag v-if="badge">{{ badge }}</Tag>
         <Tag v-if="cannotBeFact">{{ t('ingestStatus.cannotBeFact') }}</Tag>
-        <Tag v-if="sourceUnverified">{{ t('knowledgeReview.sourceUnverified') }}</Tag>
+        <Tag v-if="sourceUnverified">{{ t('review.sourceUnverified') }}</Tag>
         <Tag v-if="acquisition === 'model_written'" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</Tag>
       </div>
     </div>

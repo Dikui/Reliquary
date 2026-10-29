@@ -115,7 +115,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const thumbnail = descendants(root).find(node => hasClass(node, 'search-image-open'))
       assert.ok(thumbnail, 'the loaded picture has an operable preview trigger')
       assert.equal(thumbnail.tag, 'button')
-      assert.equal(thumbnail.props['aria-label'], messages[locale].knowledgeSearch.previewImage.replace('{title}', 'Visual evidence'))
+      assert.equal(thumbnail.props['aria-label'], messages[locale].search.previewImage.replace('{title}', 'Visual evidence'))
       const source = descendants(thumbnail).find(node => node.tag === 'img')!.props.src
       assert.match(source, /^blob:/)
       await click(thumbnail)

@@ -30,7 +30,7 @@ const similarRegionID = computed(() => `similar-reports-${props.article.entry_id
   <article class="search-result" :class="{ nested }" :data-article-id="article.entry_id">
     <LibMark class="result-mark" :color="library?.color || 8" :label="libraryName" />
     <h2 class="result-title"><a :href="entryDetailHref(article.entry_id, firstLocation)" @click.prevent="emit('open-article', article, firstLocation)">{{ article.title }}</a></h2>
-    <span class="result-score" :aria-label="t('knowledgeSearch.score')">{{ article.score.toLocaleString(locale, { maximumFractionDigits: 4 }) }}</span>
+    <span class="result-score" :aria-label="t('search.score')">{{ article.score.toLocaleString(locale, { maximumFractionDigits: 4 }) }}</span>
     <div v-if="article.snippets?.length" class="result-snippets">
       <div v-for="(snippet, index) in article.snippets.slice(0, 3)" :key="snippet.chunk_id || snippet.image_path || index" class="result-snippet">
         <SearchImage v-if="snippet.image_path && article.source === 'article'" :article-id="article.entry_id" :path="snippet.image_path" :title="article.title" />
@@ -41,10 +41,10 @@ const similarRegionID = computed(() => `similar-reports-${props.article.entry_id
     </div>
     <div class="result-meta">
       <Tag v-if="contentType">{{ contentType }}</Tag><span class="article-library">{{ libraryName }}</span><span v-if="library">{{ t('entries.libraryNumber', { number: String(libraries.indexOf(library) + 1).padStart(2, '0') }) }}</span>
-      <time v-if="article.published_at" :datetime="article.published_at">{{ formatDateTime(article.published_at, locale) }}</time><span v-else>{{ t('knowledgeSearch.missingPublishedAt') }}</span>
-      <code>{{ article.entry_id }}</code><span>{{ t(`knowledgeSearch.sources.${article.source}`) }}</span>
+      <time v-if="article.published_at" :datetime="article.published_at">{{ formatDateTime(article.published_at, locale) }}</time><span v-else>{{ t('search.missingPublishedAt') }}</span>
+      <code>{{ article.entry_id }}</code><span>{{ t(`search.sources.${article.source}`) }}</span>
       <Tag v-if="article.cannot_be_fact || article.source === 'report'">{{ t('ingestStatus.cannotBeFact') }}</Tag>
-      <Tag v-if="article.source_unverified">{{ t('knowledgeReview.sourceUnverified') }}</Tag>
+      <Tag v-if="article.source_unverified">{{ t('review.sourceUnverified') }}</Tag>
       <Tag v-if="article.acquisition === 'model_written'" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</Tag>
       <EntryUpdateNotice :has-update="article.has_update" :latest-entry-id="article.latest_entry_id" />
     </div>
@@ -57,7 +57,7 @@ const similarRegionID = computed(() => `similar-reports-${props.article.entry_id
       <code v-if="article.vault_path" class="result-path">{{ article.vault_path }}</code>
     </details>
     <div v-if="!nested && article.similar_reports?.length" class="result-similar">
-      <button type="button" :aria-expanded="expanded" :aria-controls="similarRegionID" @click="expanded = !expanded">{{ t(expanded ? 'knowledgeSearch.hideSimilar' : 'knowledgeSearch.showSimilar', { count: article.similar_reports.length }, article.similar_reports.length) }}</button>
+      <button type="button" :aria-expanded="expanded" :aria-controls="similarRegionID" @click="expanded = !expanded">{{ t(expanded ? 'search.hideSimilar' : 'search.showSimilar', { count: article.similar_reports.length }, article.similar_reports.length) }}</button>
       <div v-if="expanded" :id="similarRegionID"><SearchResult v-for="similar in article.similar_reports" :key="similar.entry_id" :article="similar" :query="query" :libraries="libraries" nested @open-article="(entry, location) => emit('open-article', entry, location)" @open-entity="emit('open-entity', $event)" /></div>
     </div>
   </article>

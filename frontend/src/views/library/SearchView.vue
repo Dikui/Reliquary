@@ -64,10 +64,10 @@ async function runSearch(updateURL = true) {
   if (librariesLoading.value) return
   if (!request.libraries.length) { error.value = t('searchPage.chooseLibraries'); return }
   if (filters.value.published_from && filters.value.published_to && filters.value.published_from > filters.value.published_to) {
-    error.value = t('knowledgeSearch.invalidDateRange'); return
+    error.value = t('search.invalidDateRange'); return
   }
   if (!Number.isInteger(filters.value.limit) || filters.value.limit < 1 || filters.value.limit > 100) {
-    error.value = t('knowledgeSearch.invalidLimit'); return
+    error.value = t('search.invalidLimit'); return
   }
   const current = sequence
   const started = performance.now()
@@ -125,7 +125,7 @@ async function loadOptions() {
     if (current !== optionsSequence) return
     if (!response.success) throw new Error(response.message)
     options.value = response.data
-  } catch { if (current === optionsSequence) optionsError.value = t('knowledgeSearch.optionsFailed') }
+  } catch { if (current === optionsSequence) optionsError.value = t('search.optionsFailed') }
   finally { if (current === optionsSequence) optionsLoading.value = false }
 }
 function clearQuery() {
@@ -179,10 +179,10 @@ onUnmounted(() => { disposed = true; catalogSequence++; optionsSequence++; inval
             <form class="search-form" role="search" novalidate @submit.prevent="runSearch()">
               <div class="query-row">
                 <div class="query-field">
-                  <input ref="inputRef" v-model="query" type="search" :aria-label="t('knowledgeSearch.query')" :placeholder="t('knowledgeSearch.queryPlaceholder')" @compositionstart="composing = true; invalidate()" @compositionend="finishComposition" />
-                  <button v-if="query" type="button" class="clear-query" :aria-label="t('knowledgeSearch.clearQuery')" @click="clearQuery">×</button>
+                  <input ref="inputRef" v-model="query" type="search" :aria-label="t('search.query')" :placeholder="t('search.queryPlaceholder')" @compositionstart="composing = true; invalidate()" @compositionend="finishComposition" />
+                  <button v-if="query" type="button" class="clear-query" :aria-label="t('search.clearQuery')" @click="clearQuery">×</button>
                 </div>
-                <Button variant="primary" type="submit" :loading="loading">{{ t('knowledgeSearch.search') }}</Button>
+                <Button variant="primary" type="submit" :loading="loading">{{ t('search.search') }}</Button>
               </div>
               <SearchFilters v-model="filters" :options="options" :loading="optionsLoading">
                 <template #libraries>
@@ -191,16 +191,16 @@ onUnmounted(() => { disposed = true; catalogSequence++; optionsSequence++; inval
               </SearchFilters>
             </form>
             <ErrorState v-if="optionsError" :title="optionsError"><Button @click="loadOptions">{{ t('common.retry') }}</Button></ErrorState>
-            <section class="search-results" :aria-label="t('knowledgeSearch.results')" :aria-busy="loading">
+            <section class="search-results" :aria-label="t('search.results')" :aria-busy="loading">
               <p v-if="vectorUnavailable" class="search-notice" role="status">{{ t('searchPage.vectorFallback') }}</p>
-              <p v-if="excludedMissingPublishedAt" class="search-notice" role="status">{{ t('knowledgeSearch.excludedMissingPublishedAt', { count: excludedMissingPublishedAt }, excludedMissingPublishedAt) }}</p>
+              <p v-if="excludedMissingPublishedAt" class="search-notice" role="status">{{ t('search.excludedMissingPublishedAt', { count: excludedMissingPublishedAt }, excludedMissingPublishedAt) }}</p>
               <ErrorState v-if="error" :title="error" :description="dependencyUnavailable ? t('searchPage.fallbackCapability') : undefined"><Button @click="runSearch()">{{ t('common.retry') }}</Button></ErrorState>
-              <div v-else-if="loading" class="loading-results"><Skeleton v-for="n in 3" :key="n" :label="t('knowledgeSearch.searching')" /></div>
+              <div v-else-if="loading" class="loading-results"><Skeleton v-for="n in 3" :key="n" :label="t('search.searching')" /></div>
               <template v-else-if="results.length">
-                <div class="summary-line" role="status"><strong>{{ t('knowledgeSearch.resultCount', { count: results.length }, results.length) }} · {{ t('searchPage.librariesCount', { count: libraryScope.length }) }}</strong><span v-if="elapsedMs !== null">{{ t('searchPage.elapsed', { seconds: (elapsedMs / 1000).toFixed(2) }) }}</span></div>
+                <div class="summary-line" role="status"><strong>{{ t('search.resultCount', { count: results.length }, results.length) }} · {{ t('searchPage.librariesCount', { count: libraryScope.length }) }}</strong><span v-if="elapsedMs !== null">{{ t('searchPage.elapsed', { seconds: (elapsedMs / 1000).toFixed(2) }) }}</span></div>
                 <ol class="results-list"><li v-for="article in results" :key="article.entry_id"><SearchResult :article="article" :query="query" :libraries="libraries" @open-article="openArticle" @open-entity="filterEntity" /></li></ol>
               </template>
-              <EmptyState v-else :title="t(hasSearched ? 'knowledgeSearch.noResults' : 'knowledgeSearch.idle')" />
+              <EmptyState v-else :title="t(hasSearched ? 'search.noResults' : 'search.idle')" />
             </section>
           </div>
         </template>

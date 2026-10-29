@@ -45,7 +45,7 @@ const entityHref = (entity: SearchEntity) => `/platform/entities?${new URLSearch
         <Tag v-if="contentType">{{ contentType }}</Tag>
         <Tag v-if="article.acquisition === 'model_written'" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</Tag>
         <Tag v-if="article.cannot_be_fact || article.source === 'report'">{{ t('ingestStatus.cannotBeFact') }}</Tag>
-        <Tag v-if="article.source_unverified">{{ t('knowledgeReview.sourceUnverified') }}</Tag>
+        <Tag v-if="article.source_unverified">{{ t('review.sourceUnverified') }}</Tag>
         <EntryUpdateNotice :has-update="article.has_update" :latest-entry-id="article.latest_entry_id" />
         <time v-if="article.collected_at" :datetime="article.collected_at" :title="t('follows.collectedAt', { time: new Date(article.collected_at).toLocaleString(locale) })">{{ collectedTime }}</time>
         <code :title="article.entry_id">{{ article.entry_id.slice(0, 8) }}</code>
@@ -59,7 +59,7 @@ const entityHref = (entity: SearchEntity) => `/platform/entities?${new URLSearch
         <a v-if="originalURL" :href="originalURL" target="_blank" rel="noopener noreferrer">{{ t('library.originalArticle') }}</a>
       </details>
       <div v-if="article.similar_reports?.length" class="feed-similar">
-        <button class="similar-toggle" type="button" :aria-expanded="expanded" :aria-controls="`follow-similar-${article.entry_id}`" @click="expanded = !expanded">{{ t(expanded ? 'knowledgeSearch.hideSimilar' : 'knowledgeSearch.showSimilar', { count: article.similar_reports.length }, article.similar_reports.length) }}</button>
+        <button class="similar-toggle" type="button" :aria-expanded="expanded" :aria-controls="`follow-similar-${article.entry_id}`" @click="expanded = !expanded">{{ t(expanded ? 'search.hideSimilar' : 'search.showSimilar', { count: article.similar_reports.length }, article.similar_reports.length) }}</button>
         <ul v-if="expanded" :id="`follow-similar-${article.entry_id}`" class="feed-similar-items"><FollowFeedItem v-for="similar in article.similar_reports" :key="similar.entry_id" :article="similar" :libraries="libraries" @open-article="(entry, location) => emit('open-article', entry, location)" @filter-target="emit('filter-target', $event)" /></ul>
       </div>
     </div>

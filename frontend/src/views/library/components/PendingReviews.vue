@@ -26,16 +26,16 @@ onBeforeUnmount(() => emit('busy-change', false))
 </script>
 
 <template>
-  <section class="pending-reviews" :aria-label="t('knowledgeReview.title')">
-    <p class="review-description">{{ t('knowledgeReview.intakeHint') }}</p>
+  <section class="pending-reviews" :aria-label="t('review.title')">
+    <p class="review-description">{{ t('review.intakeHint') }}</p>
     <ErrorState v-if="error" :title="error"><Button :disabled="busy" @click="emit('refresh')">{{ t('common.retry') }}</Button></ErrorState>
     <p v-if="loading" role="status">{{ t('common.loading') }}</p>
-    <EmptyState v-else-if="!records.length && !error" :title="t('knowledgeReview.emptyIntake')" />
+    <EmptyState v-else-if="!records.length && !error" :title="t('review.emptyIntake')" />
     <ul v-else class="reviews">
       <li v-for="item in records" :key="item.id" class="review-record" :data-review-id="item.id">
         <h3><a :href="entryDetailHref(item.id)">{{ item.title || item.file_name || t('library.untitledDocument') }}</a></h3>
         <p v-if="item.structured_summary?.overview || item.description">{{ item.structured_summary?.overview || item.description }}</p>
-        <p v-if="item.related_entry_id" class="review-reason"><b>{{ t('pendingPage.reviewReason') }}</b>{{ t('knowledgeReview.conflictReason') }} <a :href="entryDetailHref(item.related_entry_id)">{{ t('knowledgeReview.relatedArticle') }}</a></p>
+        <p v-if="item.related_entry_id" class="review-reason"><b>{{ t('pendingPage.reviewReason') }}</b>{{ t('review.conflictReason') }} <a :href="entryDetailHref(item.related_entry_id)">{{ t('review.relatedArticle') }}</a></p>
         <p v-else-if="item.metadata?.intake?.reason" class="review-reason"><b>{{ t('pendingPage.reviewReason') }}</b>{{ item.metadata.intake.reason }}</p>
         <div class="review-meta"><LibMark v-if="library(item.library_id)" :color="library(item.library_id)!.color" /><span v-if="item.library_name">{{ item.library_name }}</span><Tag v-if="item.content_type">{{ typeLabel(item.content_type) }}</Tag><Tag v-if="item.source_kind === 'mine'">{{ t('library.sourceKinds.mine') }}</Tag><Tag v-if="item.acquisition === 'model_written'" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</Tag><a v-if="originalURL(item)" :href="originalURL(item)" target="_blank" rel="noopener noreferrer">{{ originalURL(item) }}</a><time v-if="item.created_at" :datetime="item.created_at">{{ formatDate(item.created_at) }}</time><span class="mono" :title="item.id">{{ item.id.slice(0, 8) }}</span></div>
         <PendingReviewActions :entry="item" :disabled="busy || loading" @changed="emit('changed')" @busy-change="busyChanged" />

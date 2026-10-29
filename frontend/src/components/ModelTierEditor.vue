@@ -11,7 +11,7 @@
           @update:selected-model-id="value => setTier(tier, value)" @add-model="openModels(tier)" />
         <p v-if="loading" class="model-tier-current" role="status">{{ t('common.loading') }}</p>
         <p v-else-if="!error" class="model-tier-current">{{ t('modelTiers.effective', { model: modelName(resolved[tier]?.model_id), source: sourceName(resolved[tier]?.source) }) }}</p>
-        <p v-if="tier === 'embedding' && embeddingLocked" class="model-tier-current">{{ t('knowledgeEditor.models.embeddingLocked') }}</p>
+        <p v-if="tier === 'embedding' && embeddingLocked" class="model-tier-current">{{ t('libraryEditor.models.embeddingLocked') }}</p>
       </div>
     </div>
     <p v-if="scope === 'library' && (tiers.includes('light') || tiers.includes('entity_resolution'))" class="model-tier-footnote">{{ t('modelTiers.explicitChoice') }}</p>

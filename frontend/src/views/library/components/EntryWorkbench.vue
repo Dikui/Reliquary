@@ -1,57 +1,57 @@
 <template>
   <section class="entry-workbench" :class="{ 'is-empty': !entities.length && !entitiesLoading && !selectedEntity && !entityDetailLoading && !initialEntityId }">
-    <aside class="entity-list" :aria-label="t('knowledgeWorkbench.entities.title')">
+    <aside class="entity-list" :aria-label="t('workbench.entities.title')">
       <div class="entity-list-head">
-        <h1>{{ t('knowledgeWorkbench.entities.title') }}</h1>
+        <h1>{{ t('workbench.entities.title') }}</h1>
         <div class="entity-filters">
           <Select :model-value="selectedLibraryId" @update:model-value="changeLibrary" :disabled="merging || catalogLoading" :aria-label="t('entityPage.library')"><option value="" disabled>{{ t('searchPage.chooseLibrary') }}</option><option v-for="library in libraries" :key="library.id" :value="library.id">{{ library.display_name || library.name }}</option></Select>
-          <Select v-model="entityTypeFilter" :disabled="merging" :aria-label="t('knowledgeWorkbench.entities.type')"><option value="">{{ t('knowledgeWorkbench.entities.allTypes') }}</option><option v-for="option in entityTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
+          <Select v-model="entityTypeFilter" :disabled="merging" :aria-label="t('workbench.entities.type')"><option value="">{{ t('workbench.entities.allTypes') }}</option><option v-for="option in entityTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
         </div>
-        <div class="entity-search"><Input ref="searchInput" v-model="entityFilter" type="search" :disabled="merging" :placeholder="t('knowledgeWorkbench.entities.filter')" :aria-label="t('knowledgeWorkbench.entities.filter')" @compositionstart="entityComposing = true" @compositionend="endEntityComposition" @keydown.enter="onEntityEnter(undefined, { e: $event })" /><Button v-if="entityFilter" variant="ghost" :aria-label="t('common.clear')" @click="clearSearch">×</Button></div>
+        <div class="entity-search"><Input ref="searchInput" v-model="entityFilter" type="search" :disabled="merging" :placeholder="t('workbench.entities.filter')" :aria-label="t('workbench.entities.filter')" @compositionstart="entityComposing = true" @compositionend="endEntityComposition" @keydown.enter="onEntityEnter(undefined, { e: $event })" /><Button v-if="entityFilter" variant="ghost" :aria-label="t('common.clear')" @click="clearSearch">×</Button></div>
       </div>
       <a class="merge-link" :href="pendingHref">{{ t('mergeSuggestions.title') }}<span v-if="pendingCount !== null" class="mono">{{ pendingCount }}</span></a>
       <ErrorState v-if="catalogError" :title="catalogError"><Button @click="loadCatalog">{{ t('common.retry') }}</Button></ErrorState>
       <ErrorState v-else-if="loadError" :title="loadError"><Button @click="loadEntities()">{{ t('common.retry') }}</Button></ErrorState>
       <Skeleton v-if="entitiesLoading && !entities.length" :label="t('common.loading')" />
       <ul v-else class="entity-items">
-        <li v-for="entity in entities" :key="entity.id"><button type="button" :disabled="merging" :aria-current="selectedEntity?.id === entity.id ? 'true' : undefined" @click="selectEntity(entity)"><strong>{{ entity.canonical_name }}</strong><small>{{ entityTypeLabel(entity.entity_type) }} · {{ entity.aliases?.length || 0 }} {{ t('knowledgeWorkbench.entities.aliases', entity.aliases?.length || 0) }}</small></button></li>
+        <li v-for="entity in entities" :key="entity.id"><button type="button" :disabled="merging" :aria-current="selectedEntity?.id === entity.id ? 'true' : undefined" @click="selectEntity(entity)"><strong>{{ entity.canonical_name }}</strong><small>{{ entityTypeLabel(entity.entity_type) }} · {{ entity.aliases?.length || 0 }} {{ t('workbench.entities.aliases', entity.aliases?.length || 0) }}</small></button></li>
       </ul>
-      <EmptyState v-if="!entities.length && !entitiesLoading && !loadError && !catalogLoading && !catalogError" :title="t(entityFilter || entityTypeFilter ? 'knowledgeWorkbench.entities.noResults' : 'entityPage.empty')" :description="t('entityPage.emptyHint')"><a href="/platform/entries">{{ t('entityPage.viewMaterials') }}</a></EmptyState>
-      <Button v-if="hasMoreEntities" :loading="entitiesLoading" @click="loadEntities(true)">{{ t('knowledgeWorkbench.loadMore') }}</Button>
+      <EmptyState v-if="!entities.length && !entitiesLoading && !loadError && !catalogLoading && !catalogError" :title="t(entityFilter || entityTypeFilter ? 'workbench.entities.noResults' : 'entityPage.empty')" :description="t('entityPage.emptyHint')"><a href="/platform/entries">{{ t('entityPage.viewMaterials') }}</a></EmptyState>
+      <Button v-if="hasMoreEntities" :loading="entitiesLoading" @click="loadEntities(true)">{{ t('workbench.loadMore') }}</Button>
     </aside>
     <div v-if="selectedEntity || entityDetailLoading || entityDetailError || entityNotFound || entities.length" class="entity-detail">
       <EmptyState v-if="entityNotFound" :title="t('entityPage.notFound')" :description="t('entityPage.notFoundHint')" />
       <ErrorState v-else-if="entityDetailError" :title="entityDetailError"><Button @click="selectedEntity ? selectEntity(selectedEntity) : selectInitialEntity(initialEntityId)">{{ t('common.retry') }}</Button></ErrorState>
       <Skeleton v-else-if="entityDetailLoading" :label="t('common.loading')" />
-      <EmptyState v-else-if="!selectedEntity" :title="t('knowledgeWorkbench.entities.choose')" />
+      <EmptyState v-else-if="!selectedEntity" :title="t('workbench.entities.choose')" />
       <template v-else>
         <div class="entity-eyebrow"><LibMark v-if="selectedLibrary" :color="selectedLibrary.color" />{{ selectedLibrary?.display_name || selectedLibrary?.name || selectedEntity.library_id }} · {{ entityTypeLabel(selectedEntity.entity_type) }} · <span class="mono">{{ selectedEntity.id }}</span></div>
-        <div class="entity-head"><h2>{{ selectedEntity.canonical_name }}</h2><div class="entity-actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><Button @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</Button></div></div>
+        <div class="entity-head"><h2>{{ selectedEntity.canonical_name }}</h2><div class="entity-actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><Button @click="openMerge">{{ t('workbench.entities.merge') }}</Button></div></div>
         <p v-if="selectedEntity.description" class="entity-intro">{{ selectedEntity.description }}</p>
-        <dl class="entity-facts"><div><dt>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</dt><dd>{{ selectedEntity.aliases?.join(' · ') || t('knowledgeWorkbench.entities.noAliases') }}</dd></div><div><dt>{{ t('entityPage.materials') }}</dt><dd class="mono">{{ entityEntries.length }}</dd></div><div><dt>{{ t('ikb18.relations') }}</dt><dd class="mono">{{ relationsLoading || relationError ? t('knowledgeWorkbench.nameEmbeddings.unknown') : relationCount }}</dd></div></dl>
+        <dl class="entity-facts"><div><dt>{{ t('workbench.entities.aliasLabel') }}</dt><dd>{{ selectedEntity.aliases?.join(' · ') || t('workbench.entities.noAliases') }}</dd></div><div><dt>{{ t('entityPage.materials') }}</dt><dd class="mono">{{ entityEntries.length }}</dd></div><div><dt>{{ t('ikb18.relations') }}</dt><dd class="mono">{{ relationsLoading || relationError ? t('workbench.nameEmbeddings.unknown') : relationCount }}</dd></div></dl>
         <Tabs v-model="relationView" :items="detailTabs" :label="t('entityGraph.view')">
           <template #graph><EntityGraph :entity="selectedEntity" :relation-type-options="graphRelationTypes" :active="relationView === 'graph'" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" /></template>
           <template #list><EntityRelations :entity-id="selectedEntity.id" :entity-name="selectedEntity.canonical_name" :groups="relations" :loading="relationsLoading" :error="relationError" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @retry="loadRelations()" @changed="loadRelations()" /></template>
           <template #entries>
             <section class="entity-articles">
               <a :href="`/platform/entries?libraries=${encodeURIComponent(selectedEntity.library_id)}&entity_ids=${encodeURIComponent(selectedEntity.id)}`">{{ t('entryBatch.manageRelated') }}</a>
-              <EmptyState v-if="!entityEntries.length" :title="t('knowledgeWorkbench.entities.noArticles')" />
+              <EmptyState v-if="!entityEntries.length" :title="t('workbench.entities.noArticles')" />
               <div v-else class="entity-table-scroll">
                 <table><thead><tr><th>{{ t('entityPage.number') }}</th><th>{{ t('entityPage.title') }}</th><th>{{ t('entityPage.type') }}</th><th>{{ t('entityPage.collected') }}</th></tr></thead>
-                  <tbody><tr v-for="article in entityEntries" :key="article.id"><td class="mono" :title="article.id">{{ article.id.slice(0, 8) }}</td><td><button class="entity-link" type="button" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('knowledgeWorkbench.entities.untitledArticle') }}</button></td><td><Tag v-if="article.content_type">{{ contentTypeLabel(article.content_type, t) }}</Tag><span v-else>{{ t('entityPage.unknownType') }}</span></td><td class="mono">{{ formatDate(article.created_at) }}</td></tr></tbody>
+                  <tbody><tr v-for="article in entityEntries" :key="article.id"><td class="mono" :title="article.id">{{ article.id.slice(0, 8) }}</td><td><button class="entity-link" type="button" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('workbench.entities.untitledArticle') }}</button></td><td><Tag v-if="article.content_type">{{ contentTypeLabel(article.content_type, t) }}</Tag><span v-else>{{ t('entityPage.unknownType') }}</span></td><td class="mono">{{ formatDate(article.created_at) }}</td></tr></tbody>
                 </table>
               </div>
             </section>
           </template>
-          <template #aliases><section class="entity-aliases"><h3>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</h3><ul v-if="selectedEntity.aliases?.length"><li v-for="alias in selectedEntity.aliases" :key="alias">{{ alias }}</li></ul><p v-else>{{ t('knowledgeWorkbench.entities.noAliases') }}</p><p>{{ t('knowledgeWorkbench.entities.mergeHint') }}</p><Button @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</Button>
-            <details class="name-embedding-rebuild"><summary>{{ t('knowledgeWorkbench.nameEmbeddings.title') }}</summary><p>{{ t('knowledgeWorkbench.nameEmbeddings.pending', { count: nameEmbeddingStatus?.pending_count ?? t('knowledgeWorkbench.nameEmbeddings.unknown') }, nameEmbeddingStatus?.pending_count ?? 0) }}</p><div class="entity-actions"><Button :loading="nameEmbeddingStatusLoading" @click="loadNameEmbeddingStatus">{{ t('knowledgeWorkbench.refresh') }}</Button><Button :loading="nameEmbeddingRebuilding" :disabled="nameEmbeddingStatusLoading || !nameEmbeddingStatus?.pending_count || nameEmbeddingBusy" @click="rebuildNameEmbeddings">{{ t('knowledgeWorkbench.nameEmbeddings.rebuild') }}</Button></div><p v-if="nameEmbeddingStatus?.latest_run" role="status">{{ t('knowledgeWorkbench.nameEmbeddings.latest', { status: nameEmbeddingRunStatus, processed: nameEmbeddingStatus.latest_run.processed_count, total: nameEmbeddingStatus.latest_run.total_count }, nameEmbeddingStatus.latest_run.total_count) }}</p><p v-if="nameEmbeddingStatus?.latest_run?.error" class="run-error" role="alert">{{ nameEmbeddingStatus.latest_run.error }}</p><p v-if="nameEmbeddingError" class="run-error" role="alert">{{ nameEmbeddingError }}</p></details>
+          <template #aliases><section class="entity-aliases"><h3>{{ t('workbench.entities.aliasLabel') }}</h3><ul v-if="selectedEntity.aliases?.length"><li v-for="alias in selectedEntity.aliases" :key="alias">{{ alias }}</li></ul><p v-else>{{ t('workbench.entities.noAliases') }}</p><p>{{ t('workbench.entities.mergeHint') }}</p><Button @click="openMerge">{{ t('workbench.entities.merge') }}</Button>
+            <details class="name-embedding-rebuild"><summary>{{ t('workbench.nameEmbeddings.title') }}</summary><p>{{ t('workbench.nameEmbeddings.pending', { count: nameEmbeddingStatus?.pending_count ?? t('workbench.nameEmbeddings.unknown') }, nameEmbeddingStatus?.pending_count ?? 0) }}</p><div class="entity-actions"><Button :loading="nameEmbeddingStatusLoading" @click="loadNameEmbeddingStatus">{{ t('workbench.refresh') }}</Button><Button :loading="nameEmbeddingRebuilding" :disabled="nameEmbeddingStatusLoading || !nameEmbeddingStatus?.pending_count || nameEmbeddingBusy" @click="rebuildNameEmbeddings">{{ t('workbench.nameEmbeddings.rebuild') }}</Button></div><p v-if="nameEmbeddingStatus?.latest_run" role="status">{{ t('workbench.nameEmbeddings.latest', { status: nameEmbeddingRunStatus, processed: nameEmbeddingStatus.latest_run.processed_count, total: nameEmbeddingStatus.latest_run.total_count }, nameEmbeddingStatus.latest_run.total_count) }}</p><p v-if="nameEmbeddingStatus?.latest_run?.error" class="run-error" role="alert">{{ nameEmbeddingStatus.latest_run.error }}</p><p v-if="nameEmbeddingError" class="run-error" role="alert">{{ nameEmbeddingError }}</p></details>
           </section></template>
         </Tabs>
       </template>
     </div>
-    <Dialog v-model="mergeVisible" :title="t('knowledgeWorkbench.entities.mergeTitle')" :closable="!merging" :close-on-overlay-click="false" :close-on-esc-keydown="!merging">
-      <div class="merge-form"><p>{{ t('knowledgeWorkbench.entities.mergeSource') }}: {{ selectedEntity?.canonical_name }}</p><p>{{ t('knowledgeWorkbench.entities.mergeHint') }}</p><label for="entity-merge-target">{{ t('knowledgeWorkbench.entities.mergeTarget') }}</label><Combobox id="entity-merge-target" v-model="mergeTargetId" :options="mergeTargetOptions" :disabled="merging || mergeTargetsLoading" :placeholder="t('knowledgeWorkbench.entities.mergeTargetPlaceholder')" /><p v-if="mergeTargetsLoading" role="status">{{ t('common.loading') }}</p><Button v-if="hasMoreMergeTargets" :loading="mergeTargetsLoading" :disabled="merging" @click="loadMergeTargets(true)">{{ t('knowledgeWorkbench.loadMore') }}</Button><p>{{ t('knowledgeWorkbench.entities.mergeWarning') }}</p><p v-if="mergeError" class="run-error" role="alert">{{ mergeError }}</p><Button v-if="mergeError" :disabled="merging" @click="loadMergeTargets()">{{ t('common.retry') }}</Button></div>
-      <template #footer><Button :disabled="merging" @click="mergeVisible = false">{{ t('common.cancel') }}</Button><Button variant="primary" :loading="merging" :disabled="!mergeTargetId || mergeTargetsLoading" @click="confirmMerge">{{ t('knowledgeWorkbench.entities.merge') }}</Button></template>
+    <Dialog v-model="mergeVisible" :title="t('workbench.entities.mergeTitle')" :closable="!merging" :close-on-overlay-click="false" :close-on-esc-keydown="!merging">
+      <div class="merge-form"><p>{{ t('workbench.entities.mergeSource') }}: {{ selectedEntity?.canonical_name }}</p><p>{{ t('workbench.entities.mergeHint') }}</p><label for="entity-merge-target">{{ t('workbench.entities.mergeTarget') }}</label><Combobox id="entity-merge-target" v-model="mergeTargetId" :options="mergeTargetOptions" :disabled="merging || mergeTargetsLoading" :placeholder="t('workbench.entities.mergeTargetPlaceholder')" /><p v-if="mergeTargetsLoading" role="status">{{ t('common.loading') }}</p><Button v-if="hasMoreMergeTargets" :loading="mergeTargetsLoading" :disabled="merging" @click="loadMergeTargets(true)">{{ t('workbench.loadMore') }}</Button><p>{{ t('workbench.entities.mergeWarning') }}</p><p v-if="mergeError" class="run-error" role="alert">{{ mergeError }}</p><Button v-if="mergeError" :disabled="merging" @click="loadMergeTargets()">{{ t('common.retry') }}</Button></div>
+      <template #footer><Button :disabled="merging" @click="mergeVisible = false">{{ t('common.cancel') }}</Button><Button variant="primary" :loading="merging" :disabled="!mergeTargetId || mergeTargetsLoading" @click="confirmMerge">{{ t('workbench.entities.merge') }}</Button></template>
     </Dialog>
   </section>
 </template>
@@ -91,11 +91,11 @@ const mergeTargets = ref<Entity[]>([]), mergeTargetsLoading = ref(false), hasMor
 const mergeTargetOptions = computed(() => mergeTargets.value.filter(item => item.id !== selectedEntity.value?.id && !item.merged_into_id).map(item => ({ value: item.id, label: `${item.canonical_name} · ${entityTypeLabel(item.entity_type)}` })))
 let entityRequest = 0, detailRequest = 0, mergeTargetRequest = 0
 let entitySearchTimer: ReturnType<typeof setTimeout> | null = null
-function entityTypeLabel(value: string) { return t(`knowledgeWorkbench.entities.types.${ENTITY_TYPES.includes(value as EntityType) ? value : 'other'}`) }
+function entityTypeLabel(value: string) { return t(`workbench.entities.types.${ENTITY_TYPES.includes(value as EntityType) ? value : 'other'}`) }
 function changeLibrary(id: string) { libraryScope.value = id ? [id] : []; emit('select-entity', '', id) }
-function formatDate(value?: string) { return formatDateTime(value, locale.value, { dateStyle: 'medium', timeStyle: 'short' }, t('knowledgeWorkbench.unknownDate')) }
-function envelopeData<T>(response: { success: boolean; data: T; error?: string }): T { if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed')); return response.data }
-function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : t('knowledgeWorkbench.requestFailed') }
+function formatDate(value?: string) { return formatDateTime(value, locale.value, { dateStyle: 'medium', timeStyle: 'short' }, t('workbench.unknownDate')) }
+function envelopeData<T>(response: { success: boolean; data: T; error?: string }): T { if (!response.success) throw new Error(response.error || t('workbench.requestFailed')); return response.data }
+function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : t('workbench.requestFailed') }
 async function loadEntities(more = false) {
   if (more && entitiesLoading.value) return
   const current = ++entityRequest
@@ -129,13 +129,13 @@ async function confirmMerge() {
   if (merging.value || !selectedEntity.value || !mergeTargetId.value) return
   const retainedId = mergeTargetId.value, sourceId = selectedEntity.value.id
   merging.value = true; mergeError.value = ''
-  try { const response = await mergeEntities({ keep_entity_id: retainedId, merge_entity_id: sourceId }); if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed')); mergeVisible.value = false; toast.success(t('knowledgeWorkbench.entities.mergeSaved')); await refreshAfterMerge(retainedId) }
+  try { const response = await mergeEntities({ keep_entity_id: retainedId, merge_entity_id: sourceId }); if (!response.success) throw new Error(response.error || t('workbench.requestFailed')); mergeVisible.value = false; toast.success(t('workbench.entities.mergeSaved')); await refreshAfterMerge(retainedId) }
   catch (cause) { mergeError.value = errorMessage(cause) }
   finally { merging.value = false }
 }
 const nameEmbeddingStatus = ref<EntityNameEmbeddingRebuildStatus | null>(null), nameEmbeddingStatusLoading = ref(false), nameEmbeddingRebuilding = ref(false), nameEmbeddingError = ref('')
 const nameEmbeddingBusy = computed(() => ['pending', 'running'].includes(nameEmbeddingStatus.value?.latest_run?.status || ''))
-const nameEmbeddingRunStatus = computed(() => { const status = nameEmbeddingStatus.value?.latest_run?.status || ''; return ['pending', 'running', 'completed', 'failed'].includes(status) ? t(`knowledgeWorkbench.nameEmbeddings.status.${status}`) : status })
+const nameEmbeddingRunStatus = computed(() => { const status = nameEmbeddingStatus.value?.latest_run?.status || ''; return ['pending', 'running', 'completed', 'failed'].includes(status) ? t(`workbench.nameEmbeddings.status.${status}`) : status })
 let nameEmbeddingRequest = 0
 let nameEmbeddingPollTimer: ReturnType<typeof setTimeout> | null = null
 function clearNameEmbeddingPoll() { if (nameEmbeddingPollTimer) clearTimeout(nameEmbeddingPollTimer); nameEmbeddingPollTimer = null }
@@ -149,7 +149,7 @@ async function loadNameEmbeddingStatus() {
 async function rebuildNameEmbeddings() {
   if (nameEmbeddingRebuilding.value || nameEmbeddingBusy.value || !nameEmbeddingStatus.value?.pending_count) return
   const current = ++nameEmbeddingRequest; clearNameEmbeddingPoll(); nameEmbeddingRebuilding.value = true; nameEmbeddingError.value = ''
-  try { const result = envelopeData(await rebuildEntityNameEmbeddings()); if (current === nameEmbeddingRequest) { nameEmbeddingStatus.value = result; toast.success(t('knowledgeWorkbench.nameEmbeddings.queued')); scheduleNameEmbeddingPoll() } }
+  try { const result = envelopeData(await rebuildEntityNameEmbeddings()); if (current === nameEmbeddingRequest) { nameEmbeddingStatus.value = result; toast.success(t('workbench.nameEmbeddings.queued')); scheduleNameEmbeddingPoll() } }
   catch (cause) { if (current === nameEmbeddingRequest) nameEmbeddingError.value = errorMessage(cause) }
   finally { if (current === nameEmbeddingRequest) nameEmbeddingRebuilding.value = false }
 }
@@ -193,7 +193,7 @@ async function loadCatalog() {
   const current = ++catalogRequest; catalogLoading.value = true; catalogError.value = ''
   try {
     const response = await listLibraries()
-    if (!response.success) throw new Error(response.message || t('knowledgeWorkbench.requestFailed'))
+    if (!response.success) throw new Error(response.message || t('workbench.requestFailed'))
     if (current !== catalogRequest) return
     libraries.value = response.data || []
     if (!selectedLibraryId.value && !props.initialEntityId) libraryScope.value = libraries.value[0] ? [libraries.value[0].id] : []
@@ -206,7 +206,7 @@ async function loadRelations(id = selectedEntity.value?.id) {
   relationsLoading.value = true
   try {
     const response = await listEntityRelations(id)
-    if (!response.success) throw new Error(response.message || t('knowledgeWorkbench.requestFailed'))
+    if (!response.success) throw new Error(response.message || t('workbench.requestFailed'))
     if (current === relationRequest) relations.value = response.data || []
   } catch (cause) { if (current === relationRequest) relationError.value = errorMessage(cause) }
   finally { if (current === relationRequest) relationsLoading.value = false }

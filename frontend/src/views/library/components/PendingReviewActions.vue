@@ -22,15 +22,15 @@ async function submit(action: IntakeReviewAction, confirmed = false) {
   error.value = ''; invalidURL.value = false
   if (action === 'supplement_url') {
     const url = source.value.original_url?.trim() || ''
-    if (!/^https?:\/\//i.test(url) || !isValidURL(url)) { invalidURL.value = true; error.value = t('knowledgeReview.invalidLink'); urlInput.value?.focus(); return }
+    if (!/^https?:\/\//i.test(url) || !isValidURL(url)) { invalidURL.value = true; error.value = t('review.invalidLink'); urlInput.value?.focus(); return }
     source.value.original_url = url
   }
   if (!confirmed && (action === 'admit_unverified' || action === 'reject')) {
     asking.value = true; emit('busy-change', true)
     dialog = confirm({
-      header: action === 'reject' ? t('knowledgeReview.confirmations.reject.title') : t('knowledgeReview.confirmations.admit_unverified.title'),
-      body: `${props.entry.title || props.entry.file_name || props.entry.id.slice(0, 8)}\n\n${action === 'reject' ? t('knowledgeReview.confirmations.reject.description') : t('knowledgeReview.confirmations.admit_unverified.description')}`,
-      confirmBtn: action === 'reject' ? t('pendingPage.reject') : t('knowledgeReview.actions.admit_unverified'),
+      header: action === 'reject' ? t('review.confirmations.reject.title') : t('review.confirmations.admit_unverified.title'),
+      body: `${props.entry.title || props.entry.file_name || props.entry.id.slice(0, 8)}\n\n${action === 'reject' ? t('review.confirmations.reject.description') : t('review.confirmations.admit_unverified.description')}`,
+      confirmBtn: action === 'reject' ? t('pendingPage.reject') : t('review.actions.admit_unverified'),
       theme: action === 'reject' ? 'danger' : 'default',
       onConfirm: () => submit(action, true),
     })
@@ -41,11 +41,11 @@ async function submit(action: IntakeReviewAction, confirmed = false) {
   try {
     const response = await resolveIntakeReview(props.entry.id, { action, ...(confirmed ? { confirmed: true } : { source_info: { ...source.value } }) })
     if (!response.success) throw response
-    if (!disposed) { toast.success(t('knowledgeReview.saved')); emit('changed') }
+    if (!disposed) { toast.success(t('review.saved')); emit('changed') }
   } catch (cause: any) {
     if (!disposed) {
       const code = searchErrorCode(cause)
-      error.value = t(code === 1003 || cause?.status === 404 ? 'pendingPage.notFound' : code === 1000 || code === 1005 || cause?.status === 409 ? 'pendingPage.changed' : 'knowledgeReview.failed')
+      error.value = t(code === 1003 || cause?.status === 404 ? 'pendingPage.notFound' : code === 1000 || code === 1005 || cause?.status === 409 ? 'pendingPage.changed' : 'review.failed')
     }
     if (confirmed) throw cause
   } finally { busy.value = false; if (!disposed && !asking.value) emit('busy-change', false) }
@@ -54,9 +54,9 @@ onBeforeUnmount(() => { disposed = true; dialog?.destroy(); emit('busy-change', 
 </script>
 
 <template>
-  <section class="pending-review-actions" :aria-label="t('knowledgeReview.intake')">
+  <section class="pending-review-actions" :aria-label="t('review.intake')">
     <template v-if="entry.source_kind !== 'mine'">
-      <p v-if="missingLink">{{ t('knowledgeReview.missingLinkHint') }}</p>
+      <p v-if="missingLink">{{ t('review.missingLinkHint') }}</p>
       <label v-if="missingLink" :for="`${id}-url`">{{ t('library.intakeOriginalUrl') }}<Input :id="`${id}-url`" ref="urlInput" v-model="source.original_url" type="url" :disabled="disabled" :aria-invalid="invalidURL" :aria-describedby="error ? `${id}-error` : undefined" /></label>
       <details class="review-source-fields"><summary>{{ t('pendingPage.editSource') }}</summary><div>
         <label :for="`${id}-author`">{{ t('library.intakeAuthor') }}<Input :id="`${id}-author`" v-model="source.author" :disabled="disabled" /></label>
@@ -65,7 +65,7 @@ onBeforeUnmount(() => { disposed = true; dialog?.destroy(); emit('busy-change', 
         <label :for="`${id}-date`">{{ t('library.intakePublishedAt') }}<Input :id="`${id}-date`" v-model="source.published_at" :disabled="disabled" /></label>
       </div></details>
     </template>
-    <div class="review-buttons"><template v-if="missingLink"><Button variant="primary" :disabled="disabled" :loading="busy" @click="submit('supplement_url')">{{ t('knowledgeReview.actions.supplement_url') }}</Button><Button :disabled="disabled" @click="submit('admit_unverified')">{{ t('knowledgeReview.actions.admit_unverified') }}</Button></template><Button v-else variant="primary" :disabled="disabled" :loading="busy" @click="submit('approve')">{{ t(entry.related_entry_id ? 'knowledgeReview.saveAsNew' : 'articleJudgments.approveReview') }}</Button><Button variant="danger" :disabled="disabled" @click="submit('reject')">{{ t('pendingPage.reject') }}</Button></div>
+    <div class="review-buttons"><template v-if="missingLink"><Button variant="primary" :disabled="disabled" :loading="busy" @click="submit('supplement_url')">{{ t('review.actions.supplement_url') }}</Button><Button :disabled="disabled" @click="submit('admit_unverified')">{{ t('review.actions.admit_unverified') }}</Button></template><Button v-else variant="primary" :disabled="disabled" :loading="busy" @click="submit('approve')">{{ t(entry.related_entry_id ? 'review.saveAsNew' : 'articleJudgments.approveReview') }}</Button><Button variant="danger" :disabled="disabled" @click="submit('reject')">{{ t('pendingPage.reject') }}</Button></div>
     <p v-if="error" :id="`${id}-error`" class="review-error" role="alert">{{ error }}</p>
   </section>
 </template>

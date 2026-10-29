@@ -8,7 +8,7 @@
           :aria-busy="loading" role="combobox" aria-autocomplete="list" :aria-expanded="open" :aria-controls="resultsId"
           :aria-activedescendant="flatItems.length ? `${resultsId}-${selectedIndex}` : undefined" spellcheck="false" @compositionstart="composing = true" @compositionend="composing = false" />
         <span v-if="loading" class="rq-cmdk__loading" role="status">{{ t('commandPalette.searching') }}</span>
-        <button v-if="query" type="button" class="rq-icon-button" :aria-label="t('knowledgeSearch.clearQuery')" @click="query = ''; inputRef?.focus()">×</button>
+        <button v-if="query" type="button" class="rq-icon-button" :aria-label="t('search.clearQuery')" @click="query = ''; inputRef?.focus()">×</button>
         <button type="button" class="rq-cmdk__close" :aria-label="t('common.close')" @click="handleClose"><kbd>Esc</kbd></button>
       </div>
       <div class="rq-cmdk__scope">
@@ -58,7 +58,7 @@
           <ResultGroup v-if="flatChunkItems.length" :label="t('commandPalette.group.chunks')">
             <ResultItem v-for="(item, i) in flatChunkItems" :key="item.file.entryId" :id="`${resultsId}-${flatIndexFor('chunks', i)}`" :index="flatIndexFor('chunks', i)"
               :selected="selectedIndex === flatIndexFor('chunks', i)" :shortcut="shortcutFor(flatIndexFor('chunks', i))"
-              :badge="item.chunk.image_path ? t('knowledgeSearch.imageMatch') : item.chunk.match_type === 'vector' ? t('commandPalette.match.vector') : t('commandPalette.match.keyword')"
+              :badge="item.chunk.image_path ? t('search.imageMatch') : item.chunk.match_type === 'vector' ? t('commandPalette.match.vector') : t('commandPalette.match.keyword')"
               :score="item.chunk.score" :source-unverified="item.file.source_unverified"
               :cannot-be-fact="item.file.cannot_be_fact" :acquisition="item.file.acquisition"
               @primary="openChunk(item)" @hover="selectItemAt">
@@ -74,7 +74,7 @@
             <ResultItem v-for="(entity, i) in entities" :key="entity.id" :id="`${resultsId}-${flatIndexFor('entities', i)}`" :index="flatIndexFor('entities', i)"
               :selected="selectedIndex === flatIndexFor('entities', i)" :shortcut="shortcutFor(flatIndexFor('entities', i))"
               :title="entity.canonical_name" @primary="openEntity(entity)" @hover="selectItemAt">
-              <template #subtitle><span>{{ t(`knowledgeWorkbench.entities.types.${entity.entity_type}`) }}</span><span>{{ libraryFor(entity.library_id)?.display_name || libraryFor(entity.library_id)?.name }}</span></template>
+              <template #subtitle><span>{{ t(`workbench.entities.types.${entity.entity_type}`) }}</span><span>{{ libraryFor(entity.library_id)?.display_name || libraryFor(entity.library_id)?.name }}</span></template>
             </ResultItem>
           </ResultGroup>
           <div v-if="!loading && (searchError || entityError)" class="rq-cmdk__empty" role="alert">
@@ -153,7 +153,7 @@ const flatChunkItems = computed<FlatChunkItem[]>(() => visibleFileChunks(fileGro
 const hasLocatedBodyChunk = (file: CmdkFileGroup) => visibleFileChunks([file], 1).length > 0
 const commandRouter = { push: (path: string) => { commandPaletteStore.pushTarget({ title: quickTitle(path), path }); return router.push(path) } } as typeof router
 function quickTitle(path: string) {
-  const labels: Record<string, string> = { '/platform/entries': t('commandPalette.quick.knowledge'), '/platform/search': t('commandPalette.quick.search'), '/platform/follows': t('commandPalette.quick.follows'), '/platform/settings': t('commandPalette.quick.settings') }
+  const labels: Record<string, string> = { '/platform/entries': t('commandPalette.quick.entries'), '/platform/search': t('commandPalette.quick.search'), '/platform/follows': t('commandPalette.quick.follows'), '/platform/settings': t('commandPalette.quick.settings') }
   return labels[path] || path
 }
 const allCommands = computed(() => buildCommands({ router: commandRouter, t, close: handleClose, toggleTheme: () => setTheme((currentTheme.value === 'system' ? document.documentElement.getAttribute('theme-mode') : currentTheme.value) === 'dark' ? 'light' : 'dark') }))

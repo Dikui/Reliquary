@@ -189,7 +189,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: source unverified marker reaches search results through the page API loading path`, async () => {
     const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, async () => ({ success: true, data: { results: [{ ...article, source_unverified: true }], excluded_missing_published_at: 0 } }), locale)
-    assert.ok(result.html.includes(messages[locale].knowledgeReview.sourceUnverified))
+    assert.ok(result.html.includes(messages[locale].review.sourceUnverified))
     assert.match(result.html, /data-article-id="a"/)
   })
   test(`${locale}: real search API loading forwards image snippets to the protected thumbnail component`, async () => {
@@ -200,11 +200,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(state.results.value[0].snippets[0].image_path, imagePath)
     }, async () => ({ success: true, data: { results: [{ ...article, entry_id: 'image-article', snippets: [{ chunk_id: 'image', chunk_index: 0, content: '', score: 0.99, match_type: 'image', image_path: imagePath }] }] } }), locale)
     assert.ok(result.html.includes(`data-image-path="${imagePath}"`))
-    assert.ok(result.html.includes(messages[locale].knowledgeSearch.imageMatch))
+    assert.ok(result.html.includes(messages[locale].search.imageMatch))
   })
   test(`${locale}: article results show summary, attribution, safe link and at most three highlighted snippets`, async () => {
     const html = await render(articleComponent(), { article, query: 'Launch' }, locale)
-    for (const text of ['Launch article', 'Launch overview', 'Useful point', 'Launch term', 'Launch Labs', 'Releases', article.vault_path, messages[locale].knowledgeSearch.sources.article]) assert.ok(html.includes(text), text)
+    for (const text of ['Launch article', 'Launch overview', 'Useful point', 'Launch term', 'Launch Labs', 'Releases', article.vault_path, messages[locale].search.sources.article]) assert.ok(html.includes(text), text)
     assert.match(html, /href="https:\/\/example.com\/a"/)
     assert.match(html, /<mark class="search-highlight">Launch<\/mark> snippet 0/)
     assert.doesNotMatch(html, /snippet 3|<script>/)
@@ -219,7 +219,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: user documents show their source, missing date and content type`, async () => {
     const html = await render(articleComponent(), { article: { ...article, source: 'mine', summary: null, published_at: null, original_url: '' }, query: 'Launch' }, locale)
-    assert.ok(html.includes(messages[locale].knowledgeSearch.sources.mine)); assert.ok(html.includes(messages[locale].knowledgeSearch.missingPublishedAt))
+    assert.ok(html.includes(messages[locale].search.sources.mine)); assert.ok(html.includes(messages[locale].search.missingPublishedAt))
     assert.match(html, /rq-tag/)
     assert.ok(html.includes(messages[locale].library.contentTypes.research))
   })
@@ -267,7 +267,7 @@ test('search page rejects invalid date order and ignores an older response after
   await pageScenario(async (state, calls) => {
     state.query.value = 'invalid'
     state.filters.value.published_from = '2026-10-12'; state.filters.value.published_to = '2026-10-11'
-    await state.runSearch(); assert.equal(calls.length, 0); assert.equal(state.error.value, zh.knowledgeSearch.invalidDateRange)
+    await state.runSearch(); assert.equal(calls.length, 0); assert.equal(state.error.value, zh.search.invalidDateRange)
     state.filters.value = helpers.defaultSearchFilters()
     state.query.value = 'old'
     const first = state.runSearch()
@@ -332,15 +332,15 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const result = await pageScenario(async state => {
       state.query.value = 'Launch'
       await state.runSearch()
-      assert.equal(state.error.value, messages[locale].knowledgeSearch.unavailable)
+      assert.equal(state.error.value, messages[locale].search.unavailable)
     }, async () => { attempts++; throw { error: { code: 2400, message: '<html>EmbedBatch upstream secret</html>' } } }, locale)
-    assert.ok(result.html.includes(messages[locale].knowledgeSearch.unavailable))
+    assert.ok(result.html.includes(messages[locale].search.unavailable))
     assert.ok(result.html.includes(messages[locale].common.retry))
     assert.doesNotMatch(result.html, /EmbedBatch|upstream|html&gt;/)
     assert.equal(attempts, 1)
     await pageScenario(async state => {
       state.query.value = 'Launch'; await state.runSearch()
-      assert.equal(state.error.value, messages[locale].knowledgeSearch.searchFailed)
+      assert.equal(state.error.value, messages[locale].search.searchFailed)
       await state.runSearch(); assert.equal(state.error.value, ''); assert.equal(state.results.value.length, 1)
     }, async () => { if (attempts++ === 1) throw new Error('<html>upstream secret</html>'); return { success: true, data: { results: [article] } } }, locale)
   })
@@ -387,7 +387,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       return () => state.fileGroups.value.length ? h(item, { index: 0, title: state.fileGroups.value[0].title, sourceUnverified: state.fileGroups.value[0].source_unverified }) : null
     } })
     const html = await render(palette, {}, locale)
-    assert.ok(html.includes(messages[locale].knowledgeReview.sourceUnverified))
+    assert.ok(html.includes(messages[locale].review.sourceUnverified))
     assert.match(readFileSync(new URL('../../components/GlobalCommandPalette.vue', import.meta.url), 'utf8'), /:source-unverified="item.file.source_unverified"/)
   })
   test(`${locale}: command palette failure is localized and retry restores article results`, async () => {
@@ -404,7 +404,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       onServerPrefetch(async () => {
         state.query.value = 'Launch'
         await state.retry()
-        assert.equal(state.searchError.value, messages[locale].knowledgeSearch.unavailable)
+        assert.equal(state.searchError.value, messages[locale].search.unavailable)
         assert.equal(state.loading.value, false)
         await state.retry()
         assert.equal(state.searchError.value, '')

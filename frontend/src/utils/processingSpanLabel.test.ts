@@ -13,7 +13,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.equal(processingSpanLabel('intake.review', t), locale === 'zh-CN' ? '收录审核' : 'Intake review')
     assert.equal(processingSpanLabel('processing.segment.3/12', t), locale === 'zh-CN' ? '第 3/12 段' : 'Segment 3/12')
     assert.equal(processingSpanLabel('review.segment.3/12', t), processingSpanLabel('processing.segment.3/12', t))
-    assert.equal(processingSpanLabel('processing.summary_merge', t), t('knowledgeStages.summaryMerge'))
+    assert.equal(processingSpanLabel('processing.summary_merge', t), t('processingStages.summaryMerge'))
     const errors = new Set<string>()
     for (const file of ['entry_segments.go', 'entry_article_segments.go', 'entry_intake.go']) {
       const text = readFileSync(new URL(`../../../internal/application/service/${file}`, import.meta.url), 'utf8')
@@ -21,7 +21,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     }
     assert.ok(errors.has('SEGMENT_FAILED'))
     for (const code of errors) for (const suffix of ['', '_SUGGESTION']) {
-      const key = `knowledgeStages.errorCode.${code}${suffix}`
+      const key = `processingStages.errorCode.${code}${suffix}`
       assert.ok(i18n.global.te(key), key)
       assert.notEqual(t(key), key)
     }

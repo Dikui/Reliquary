@@ -31,7 +31,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const root = element('root')
     try {
       app.mount(root); await settle()
-      assert.ok(visibleText(root).includes(messages[locale].knowledgeSearch.imageLoadFailed))
+      assert.ok(visibleText(root).includes(messages[locale].search.imageLoadFailed))
       await click(descendants(root).find(node => node.tag === 'button')!)
       const image = descendants(root).find(node => node.tag === 'img')!
       assert.match(image.props.src, /^blob:/)

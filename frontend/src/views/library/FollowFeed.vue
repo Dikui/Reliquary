@@ -211,7 +211,7 @@ onUnmounted(() => { disposed = true; sequence++ })
               <select id="follow-target-picker" class="rq-control rq-select feed-target-select" :disabled="loading || marking || !filteredOptions.length" :aria-label="t('follows.filterTarget')" @change="addTarget"><option value="">{{ t('follows.filterTarget') }}</option><option v-for="option in filteredOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select>
             </div>
             <label class="feed-filter-field feed-limit"><span>{{ t('follows.limit') }}</span><Select :model-value="limit" :disabled="loading || marking" :aria-label="t('follows.limit')" @update:model-value="limit = Number($event); changeFilters()"><option v-for="option in limitOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select></label>
-            <label class="feed-filter-field fold-control"><span>{{ t('knowledgeSearch.collapseSimilar') }}</span><Switch v-model="collapseSimilar" :disabled="loading || marking" :aria-label="t('knowledgeSearch.collapseSimilar')" @update:model-value="changeFilters" /></label>
+            <label class="feed-filter-field fold-control"><span>{{ t('search.collapseSimilar') }}</span><Switch v-model="collapseSimilar" :disabled="loading || marking" :aria-label="t('search.collapseSimilar')" @update:model-value="changeFilters" /></label>
           </div>
         </details>
         <Button class="feed-refresh" :loading="loading" :disabled="marking" @click="load()">{{ t('follows.refresh') }}</Button>
@@ -231,7 +231,7 @@ onUnmounted(() => { disposed = true; sequence++ })
           <p class="feed-count" role="status">{{ t('follows.resultCount', { count: visibleArticles.length }) }}</p>
           <p v-if="total > shownArticleCount" class="feed-count" role="status">{{ t('follows.limitHint', { shown: shownArticleCount, total }) }}</p>
         </template>
-        <EmptyState v-else :title="t(!store.targets.length ? 'follows.emptyTargets' : unreadOnly ? 'follows.emptyUnread' : 'follows.emptyFeed')"><div v-if="!store.targets.length" class="empty-actions"><router-link to="/platform/entries?tab=entities">{{ t('knowledgeWorkbench.title') }}</router-link><router-link to="/platform/topics">{{ t('topicManagement.title') }}</router-link></div></EmptyState>
+        <EmptyState v-else :title="t(!store.targets.length ? 'follows.emptyTargets' : unreadOnly ? 'follows.emptyUnread' : 'follows.emptyFeed')"><div v-if="!store.targets.length" class="empty-actions"><router-link to="/platform/entries?tab=entities">{{ t('workbench.title') }}</router-link><router-link to="/platform/topics">{{ t('topicManagement.title') }}</router-link></div></EmptyState>
         <nav v-if="results.length || cursorStack.length" class="feed-pagination" :aria-label="t('follows.pagination')" :aria-busy="loading">
           <Button :loading="loading && paginationAction === 'previous'" :disabled="loading || !cursorStack.length" @click="previousPage">{{ t('follows.previousPage') }}</Button>
           <span>{{ t('follows.pageNumber', { page: cursorStack.length + 1 }) }}</span>

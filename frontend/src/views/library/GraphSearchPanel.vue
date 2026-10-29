@@ -81,7 +81,7 @@ onBeforeUnmount(invalidate)
     </form>
     <section class="graph-results" :aria-busy="loading" :aria-label="t('searchPage.graphResults')">
       <ErrorState v-if="error" :title="error"><Button @click="runSearch()">{{ t('common.retry') }}</Button></ErrorState>
-      <div v-else-if="loading" class="graph-loading" role="status"><Skeleton v-for="n in 3" :key="n" :label="t('knowledgeSearch.searching')" /></div>
+      <div v-else-if="loading" class="graph-loading" role="status"><Skeleton v-for="n in 3" :key="n" :label="t('search.searching')" /></div>
       <EmptyState v-else-if="entityNotFound" :title="t('searchPage.entityNotFound')" :description="t('searchPage.entityNotFoundHint', { library: libraryName })" />
       <template v-else-if="data">
         <div class="graph-summary" role="status">
@@ -98,7 +98,7 @@ onBeforeUnmount(invalidate)
             <thead><tr><th>{{ t('searchPage.subject') }}</th><th>{{ t('searchPage.relation') }}</th><th>{{ t('searchPage.object') }}</th><th>{{ t('searchPage.source') }}</th><th>{{ t('searchPage.position') }}</th><th>{{ t('searchPage.speaker') }}</th></tr></thead>
             <tbody><tr v-for="row in rows" :key="row.key">
               <td><strong>{{ names.get(row.edge.subject_id) || row.edge.subject_id }}</strong></td><td>{{ row.edge.relation_type }}</td><td><strong>{{ names.get(row.edge.object_id) || row.edge.object_id }}</strong></td>
-              <td><a :href="entryDetailHref(row.source.entry_id, row.location)" @click.prevent="openSource(row.source, row.location)">{{ row.source.title }}</a><div class="graph-source-meta"><span>{{ row.source.library_name }}</span><Tag v-if="row.source.source_unverified">{{ t('knowledgeReview.sourceUnverified') }}</Tag><Tag v-if="row.source.acquisition === 'model_written'">{{ t('ingestStatus.modelWritten') }}</Tag></div></td>
+              <td><a :href="entryDetailHref(row.source.entry_id, row.location)" @click.prevent="openSource(row.source, row.location)">{{ row.source.title }}</a><div class="graph-source-meta"><span>{{ row.source.library_name }}</span><Tag v-if="row.source.source_unverified">{{ t('review.sourceUnverified') }}</Tag><Tag v-if="row.source.acquisition === 'model_written'">{{ t('ingestStatus.modelWritten') }}</Tag></div></td>
               <td><a v-if="row.location" :href="entryDetailHref(row.source.entry_id, row.location)" @click.prevent="openSource(row.source, row.location)">¶{{ row.location.paragraph }}</a><span v-else>{{ t('searchPage.noPosition') }}</span></td>
               <td>{{ row.speaker || t('searchPage.noSpeaker') }}</td>
             </tr></tbody>

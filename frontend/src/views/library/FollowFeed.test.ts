@@ -248,7 +248,7 @@ test('feed puts reading actions beside the title and keeps low-frequency filters
     const advanced = descendants(mounted.root).find(node => node.tag === 'details' && hasClass(node, 'feed-more-filters'))!
     assert.ok(advanced)
     assert.ok(!advanced.props.open)
-    for (const label of [en.follows.limit, en.follows.filterTarget, en.knowledgeSearch.collapseSimilar]) {
+    for (const label of [en.follows.limit, en.follows.filterTarget, en.search.collapseSimilar]) {
       assert.ok(descendants(advanced).some(node => node.props['aria-label'] === label), label)
     }
     assert.equal(descendants(advanced).some(node => hasClass(node, 'feed-selected-target')), false)
@@ -706,10 +706,10 @@ test('entity merge refreshes the shared target list with the retained entity', a
   try {
     await settle()
     await click(descendants(mounted.root).find(node => node.tag === 'button' && visibleText(node).startsWith('Aurora'))!)
-    await click(env.button(mounted.root, messages['en-US'].knowledgeWorkbench.entities.merge))
+    await click(env.button(mounted.root, messages['en-US'].workbench.entities.merge))
     const targetControl = descendants(mounted.root).find(node => node.tag === 'select' && node.props.id === 'entity-merge-target')!
     await env.change(targetControl, 'entity-retained')
-    await click(descendants(mounted.root).filter(node => node.tag === 'button' && visibleText(node).trim() === messages['en-US'].knowledgeWorkbench.entities.merge).at(-1)!)
+    await click(descendants(mounted.root).filter(node => node.tag === 'button' && visibleText(node).trim() === messages['en-US'].workbench.entities.merge).at(-1)!)
     assert.equal(env.store.isFollowing('entity', entity.id), false)
     assert.equal(env.store.isFollowing('entity', 'entity-retained'), true)
     assert.equal(env.store.isFollowing('topic', topic.id), true)
@@ -750,7 +750,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     try {
       await settle()
       const toolbar = descendants(mounted.root).find(node => hasClass(node, 'feed-toolbar'))!
-      const labels = [messages[locale].follows.library, messages[locale].follows.searchTargets, messages[locale].follows.filterTarget, messages[locale].follows.limit, messages[locale].knowledgeSearch.collapseSimilar]
+      const labels = [messages[locale].follows.library, messages[locale].follows.searchTargets, messages[locale].follows.filterTarget, messages[locale].follows.limit, messages[locale].search.collapseSimilar]
       const tags = ['select', 'input', 'select', 'select', 'input']
       labels.forEach((label, index) => {
         const controls = descendants(toolbar).filter(node => node.tag === tags[index] && node.props['aria-label'] === label)

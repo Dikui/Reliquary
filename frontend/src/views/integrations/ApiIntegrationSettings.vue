@@ -35,7 +35,7 @@
         <SearchFilters v-model="playgroundFilters" :options="searchOptions" :loading="searchOptionsLoading" :disabled="running" />
       </form>
       <p v-if="searchOptionsError" class="settings-error" role="alert">{{ searchOptionsError }} <Button @click="loadSearchOptions">{{ t('common.retry') }}</Button></p>
-      <strong class="request-preview-label">{{ t('knowledgeSearch.requestPreview') }}</strong><pre class="query-result">{{ playgroundRequestPreview }}</pre>
+      <strong class="request-preview-label">{{ t('search.requestPreview') }}</strong><pre class="query-result">{{ playgroundRequestPreview }}</pre>
       <p v-if="playgroundError" class="settings-error" role="alert">{{ playgroundError }}</p><pre v-if="playgroundResult" class="query-result">{{ playgroundResult }}</pre>
       <template #footer><Button variant="primary" :loading="running" @click="runQuery">{{ t('integrations.api.playgroundRun') }}</Button></template>
     </Dialog>
@@ -157,14 +157,14 @@ async function loadSearchOptions() {
     const response = await getSearchOptions(playgroundLibraries.value)
     if (!response.success) throw new Error(response.message)
     searchOptions.value = response.data
-  } catch { searchOptionsError.value = t('knowledgeSearch.optionsFailed') }
+  } catch { searchOptionsError.value = t('search.optionsFailed') }
   finally { searchOptionsLoading.value = false }
 }
 async function runQuery() {
   if (running.value) return
   if (!playground.apiKey.trim() || !playground.query.trim()) { playgroundError.value = t('integrations.api.playgroundNeedQuestionAndKey'); return }
-  if (playgroundFilters.value.published_from && playgroundFilters.value.published_to && playgroundFilters.value.published_from > playgroundFilters.value.published_to) { playgroundError.value = t('knowledgeSearch.invalidDateRange'); return }
-  if (!Number.isInteger(playgroundFilters.value.limit) || playgroundFilters.value.limit < 1 || playgroundFilters.value.limit > 100) { playgroundError.value = t('knowledgeSearch.invalidLimit'); return }
+  if (playgroundFilters.value.published_from && playgroundFilters.value.published_to && playgroundFilters.value.published_from > playgroundFilters.value.published_to) { playgroundError.value = t('search.invalidDateRange'); return }
+  if (!Number.isInteger(playgroundFilters.value.limit) || playgroundFilters.value.limit < 1 || playgroundFilters.value.limit > 100) { playgroundError.value = t('search.invalidLimit'); return }
   running.value = true
   playgroundError.value = ''
   try {

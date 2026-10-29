@@ -4,15 +4,15 @@
       <!-- Strategy -->
       <div class="setting-row">
         <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.chunking.strategyLabel') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.chunking.strategyDescription') }}</p>
+          <label>{{ $t('libraryEditor.chunking.strategyLabel') }}</label>
+          <p class="desc">{{ $t('libraryEditor.chunking.strategyDescription') }}</p>
         </div>
         <div class="setting-control strategy-control">
           <select
-            v-model="localStrategy" :aria-label="$t('knowledgeEditor.chunking.strategyLabel')"
-            :placeholder="$t('knowledgeEditor.chunking.strategyPlaceholder')"
+            v-model="localStrategy" :aria-label="$t('libraryEditor.chunking.strategyLabel')"
+            :placeholder="$t('libraryEditor.chunking.strategyPlaceholder')"
             @change="handleStrategyChange"
-           class="rq-control rq-select"><option value="">{{ $t('knowledgeEditor.chunking.strategyPlaceholder') }}</option><option v-for="option in strategyOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select>
+           class="rq-control rq-select"><option value="">{{ $t('libraryEditor.chunking.strategyPlaceholder') }}</option><option v-for="option in strategyOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select>
         </div>
       </div>
 
@@ -27,19 +27,19 @@
       <!-- Chunk Size -->
       <div class="setting-row">
         <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.chunking.sizeLabel') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.chunking.sizeDescription') }}</p>
+          <label>{{ $t('libraryEditor.chunking.sizeLabel') }}</label>
+          <p class="desc">{{ $t('libraryEditor.chunking.sizeDescription') }}</p>
         </div>
         <div class="setting-control">
           <div class="slider-container">
             <input type="range" class="rq-range"
-              v-model.number="localChunkSize" :aria-label="$t('knowledgeEditor.chunking.sizeLabel')"
+              v-model.number="localChunkSize" :aria-label="$t('libraryEditor.chunking.sizeLabel')"
               :min="100"
               :max="4000"
               :step="50"
               @change="handleChunkSizeChange"
             />
-            <span class="value-display">{{ localChunkSize }} {{ $t('knowledgeEditor.chunking.characters', localChunkSize) }}</span>
+            <span class="value-display">{{ localChunkSize }} {{ $t('libraryEditor.chunking.characters', localChunkSize) }}</span>
           </div>
         </div>
       </div>
@@ -47,20 +47,20 @@
       <!-- Chunk Overlap -->
       <div class="setting-row">
         <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.chunking.overlapLabel') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.chunking.overlapDescription') }}</p>
-          <p v-if="overlapTooHigh" class="warn">{{ $t('knowledgeEditor.chunking.overlapWarning') }}</p>
+          <label>{{ $t('libraryEditor.chunking.overlapLabel') }}</label>
+          <p class="desc">{{ $t('libraryEditor.chunking.overlapDescription') }}</p>
+          <p v-if="overlapTooHigh" class="warn">{{ $t('libraryEditor.chunking.overlapWarning') }}</p>
         </div>
         <div class="setting-control">
           <div class="slider-container">
             <input type="range" class="rq-range"
-              v-model.number="localChunkOverlap" :aria-label="$t('knowledgeEditor.chunking.overlapLabel')"
+              v-model.number="localChunkOverlap" :aria-label="$t('libraryEditor.chunking.overlapLabel')"
               :min="0"
               :max="500"
               :step="20"
               @change="handleChunkOverlapChange"
             />
-            <span class="value-display">{{ localChunkOverlap }} {{ $t('knowledgeEditor.chunking.characters', localChunkOverlap) }}</span>
+            <span class="value-display">{{ localChunkOverlap }} {{ $t('libraryEditor.chunking.characters', localChunkOverlap) }}</span>
           </div>
         </div>
       </div>
@@ -68,28 +68,28 @@
       <!-- Separators -->
       <div class="setting-row setting-row--separators">
         <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.chunking.separatorsLabel') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.chunking.separatorsDescription') }}</p>
+          <label>{{ $t('libraryEditor.chunking.separatorsLabel') }}</label>
+          <p class="desc">{{ $t('libraryEditor.chunking.separatorsDescription') }}</p>
         </div>
         <div class="setting-control">
           <select
-            v-model="localSeparators" :aria-label="$t('knowledgeEditor.chunking.separatorsLabel')"
+            v-model="localSeparators" :aria-label="$t('libraryEditor.chunking.separatorsLabel')"
             multiple
-            :placeholder="$t('knowledgeEditor.chunking.separatorsPlaceholder')"
+            :placeholder="$t('libraryEditor.chunking.separatorsPlaceholder')"
             @change="handleSeparatorsChange"
-           class="rq-control rq-select"><option v-for="option in availableSeparators" :key="option.value" :value="option.value">{{ option.label }}</option></select><div class="separator-create"><Input v-model="separatorDraft" :aria-label="$t('knowledgeEditor.chunking.separatorsPlaceholder')" :placeholder="$t('knowledgeEditor.chunking.separatorsPlaceholder')" @keydown.enter.prevent="addSeparator" /><Button :disabled="!separatorDraft" @click="addSeparator">{{ $t('common.add') }}</Button></div>
+           class="rq-control rq-select"><option v-for="option in availableSeparators" :key="option.value" :value="option.value">{{ option.label }}</option></select><div class="separator-create"><Input v-model="separatorDraft" :aria-label="$t('libraryEditor.chunking.separatorsPlaceholder')" :placeholder="$t('libraryEditor.chunking.separatorsPlaceholder')" @keydown.enter.prevent="addSeparator" /><Button :disabled="!separatorDraft" @click="addSeparator">{{ $t('common.add') }}</Button></div>
         </div>
       </div>
 
       <!-- Parent-Child Chunking -->
       <div class="setting-row setting-row--toggle">
         <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.chunking.parentChildLabel') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.chunking.parentChildDescription') }}</p>
+          <label>{{ $t('libraryEditor.chunking.parentChildLabel') }}</label>
+          <p class="desc">{{ $t('libraryEditor.chunking.parentChildDescription') }}</p>
         </div>
         <div class="setting-control">
           <Switch
-            v-model="localEnableParentChild" :aria-label="$t('knowledgeEditor.chunking.parentChildLabel')"
+            v-model="localEnableParentChild" :aria-label="$t('libraryEditor.chunking.parentChildLabel')"
             @update:model-value="handleParentChildChange"
           />
         </div>
@@ -98,19 +98,19 @@
       <!-- Parent Chunk Size -->
       <div v-if="localEnableParentChild" class="setting-row">
         <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.chunking.parentChunkSizeLabel') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.chunking.parentChunkSizeDescription') }}</p>
+          <label>{{ $t('libraryEditor.chunking.parentChunkSizeLabel') }}</label>
+          <p class="desc">{{ $t('libraryEditor.chunking.parentChunkSizeDescription') }}</p>
         </div>
         <div class="setting-control">
           <div class="slider-container">
             <input type="range" class="rq-range"
-              v-model.number="localParentChunkSize" :aria-label="$t('knowledgeEditor.chunking.parentChunkSizeLabel')"
+              v-model.number="localParentChunkSize" :aria-label="$t('libraryEditor.chunking.parentChunkSizeLabel')"
               :min="512"
               :max="8192"
               :step="64"
               @change="handleParentChunkSizeChange"
             />
-            <span class="value-display">{{ localParentChunkSize }} {{ $t('knowledgeEditor.chunking.characters', localParentChunkSize) }}</span>
+            <span class="value-display">{{ localParentChunkSize }} {{ $t('libraryEditor.chunking.characters', localParentChunkSize) }}</span>
           </div>
         </div>
       </div>
@@ -118,19 +118,19 @@
       <!-- Child Chunk Size -->
       <div v-if="localEnableParentChild" class="setting-row">
         <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.chunking.childChunkSizeLabel') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.chunking.childChunkSizeDescription') }}</p>
+          <label>{{ $t('libraryEditor.chunking.childChunkSizeLabel') }}</label>
+          <p class="desc">{{ $t('libraryEditor.chunking.childChunkSizeDescription') }}</p>
         </div>
         <div class="setting-control">
           <div class="slider-container">
             <input type="range" class="rq-range"
-              v-model.number="localChildChunkSize" :aria-label="$t('knowledgeEditor.chunking.childChunkSizeLabel')"
+              v-model.number="localChildChunkSize" :aria-label="$t('libraryEditor.chunking.childChunkSizeLabel')"
               :min="64"
               :max="2048"
               :step="32"
               @change="handleChildChunkSizeChange"
             />
-            <span class="value-display">{{ localChildChunkSize }} {{ $t('knowledgeEditor.chunking.characters', localChildChunkSize) }}</span>
+            <span class="value-display">{{ localChildChunkSize }} {{ $t('libraryEditor.chunking.characters', localChildChunkSize) }}</span>
           </div>
         </div>
       </div>
@@ -138,19 +138,19 @@
       <!-- Advanced section toggle -->
       <button type="button" class="advanced-toggle" :aria-expanded="advancedOpen" @click="advancedOpen = !advancedOpen">
         <span aria-hidden="true">{{ advancedOpen ? '⌄' : '›' }}</span>
-        <span>{{ $t('knowledgeEditor.chunking.advancedLabel') }}</span>
+        <span>{{ $t('libraryEditor.chunking.advancedLabel') }}</span>
       </button>
 
       <div v-if="advancedOpen" class="advanced-section">
         <!-- Token Limit -->
         <div class="setting-row" :class="{ disabled: advancedDisabled }">
           <div class="setting-info">
-            <label>{{ $t('knowledgeEditor.chunking.tokenLimitLabel') }}</label>
-            <p class="desc">{{ $t('knowledgeEditor.chunking.tokenLimitDescription') }}</p>
+            <label>{{ $t('libraryEditor.chunking.tokenLimitLabel') }}</label>
+            <p class="desc">{{ $t('libraryEditor.chunking.tokenLimitDescription') }}</p>
           </div>
           <div class="setting-control">
             <input type="number" class="rq-control"
-              v-model.number="localTokenLimit" :aria-label="$t('knowledgeEditor.chunking.tokenLimitLabel')"
+              v-model.number="localTokenLimit" :aria-label="$t('libraryEditor.chunking.tokenLimitLabel')"
               :min="0"
               :max="8192"
               :step="64"
@@ -164,15 +164,15 @@
         <!-- Languages -->
         <div class="setting-row" :class="{ disabled: advancedDisabled }">
           <div class="setting-info">
-            <label>{{ $t('knowledgeEditor.chunking.languagesLabel') }}</label>
-            <p class="desc">{{ $t('knowledgeEditor.chunking.languagesDescription') }}</p>
+            <label>{{ $t('libraryEditor.chunking.languagesLabel') }}</label>
+            <p class="desc">{{ $t('libraryEditor.chunking.languagesDescription') }}</p>
           </div>
           <div class="setting-control">
             <select
-              v-model="localLanguages" :aria-label="$t('knowledgeEditor.chunking.languagesLabel')"
+              v-model="localLanguages" :aria-label="$t('libraryEditor.chunking.languagesLabel')"
               multiple
               :disabled="advancedDisabled"
-              :placeholder="$t('knowledgeEditor.chunking.languagesPlaceholder')"
+              :placeholder="$t('libraryEditor.chunking.languagesPlaceholder')"
               @change="handleLanguagesChange"
              class="rq-control rq-select"><option v-for="option in languageOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select>
           </div>
@@ -246,24 +246,24 @@ function addSeparator() {
 
 const strategyOptions = computed(() => [
   {
-    label: t('knowledgeEditor.chunking.strategies.auto.label'),
+    label: t('libraryEditor.chunking.strategies.auto.label'),
     value: 'auto',
-    tooltip: t('knowledgeEditor.chunking.strategies.auto.tooltip')
+    tooltip: t('libraryEditor.chunking.strategies.auto.tooltip')
   },
   {
-    label: t('knowledgeEditor.chunking.strategies.heading.label'),
+    label: t('libraryEditor.chunking.strategies.heading.label'),
     value: 'heading',
-    tooltip: t('knowledgeEditor.chunking.strategies.heading.tooltip')
+    tooltip: t('libraryEditor.chunking.strategies.heading.tooltip')
   },
   {
-    label: t('knowledgeEditor.chunking.strategies.heuristic.label'),
+    label: t('libraryEditor.chunking.strategies.heuristic.label'),
     value: 'heuristic',
-    tooltip: t('knowledgeEditor.chunking.strategies.heuristic.tooltip')
+    tooltip: t('libraryEditor.chunking.strategies.heuristic.tooltip')
   },
   {
-    label: t('knowledgeEditor.chunking.strategies.legacy.label'),
+    label: t('libraryEditor.chunking.strategies.legacy.label'),
     value: 'legacy',
-    tooltip: t('knowledgeEditor.chunking.strategies.legacy.tooltip')
+    tooltip: t('libraryEditor.chunking.strategies.legacy.tooltip')
   }
 ])
 
@@ -281,20 +281,20 @@ const overlapTooHigh = computed(
 )
 
 const languageOptions = computed(() => [
-  { label: t('knowledgeEditor.chunking.languageOptions.de'), value: 'de' },
-  { label: t('knowledgeEditor.chunking.languageOptions.en'), value: 'en' },
-  { label: t('knowledgeEditor.chunking.languageOptions.zh'), value: 'zh' }
+  { label: t('libraryEditor.chunking.languageOptions.de'), value: 'de' },
+  { label: t('libraryEditor.chunking.languageOptions.en'), value: 'en' },
+  { label: t('libraryEditor.chunking.languageOptions.zh'), value: 'zh' }
 ])
 
 const separatorOptions = computed(() => [
-  { label: t('knowledgeEditor.chunking.separators.doubleNewline'), value: '\n\n' },
-  { label: t('knowledgeEditor.chunking.separators.singleNewline'), value: '\n' },
-  { label: t('knowledgeEditor.chunking.separators.periodCn'), value: '。' },
-  { label: t('knowledgeEditor.chunking.separators.exclamationCn'), value: '！' },
-  { label: t('knowledgeEditor.chunking.separators.questionCn'), value: '？' },
-  { label: t('knowledgeEditor.chunking.separators.semicolonCn'), value: '；' },
-  { label: t('knowledgeEditor.chunking.separators.semicolonEn'), value: ';' },
-  { label: t('knowledgeEditor.chunking.separators.space'), value: ' ' }
+  { label: t('libraryEditor.chunking.separators.doubleNewline'), value: '\n\n' },
+  { label: t('libraryEditor.chunking.separators.singleNewline'), value: '\n' },
+  { label: t('libraryEditor.chunking.separators.periodCn'), value: '。' },
+  { label: t('libraryEditor.chunking.separators.exclamationCn'), value: '！' },
+  { label: t('libraryEditor.chunking.separators.questionCn'), value: '？' },
+  { label: t('libraryEditor.chunking.separators.semicolonCn'), value: '；' },
+  { label: t('libraryEditor.chunking.separators.semicolonEn'), value: ';' },
+  { label: t('libraryEditor.chunking.separators.space'), value: ' ' }
 ])
 
 const availableSeparators = computed(() => [...separatorOptions.value, ...localSeparators.value.filter(value => !separatorOptions.value.some(option => option.value === value)).map(value => ({ value, label: value }))])

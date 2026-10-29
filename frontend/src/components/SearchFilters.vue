@@ -16,8 +16,8 @@ const contentTypeOptions = computed(() => props.options.content_types?.map(value
 const entityOptions = computed(() => props.options.entities.map(entity => ({ value: entity.id, label: entity.library_id ? `${entity.canonical_name} · ${entity.library_id}` : entity.canonical_name })))
 const topicOptions = computed(() => props.options.topics.map(topic => ({ value: topic.id, label: topic.library_id ? `${topic.name} · ${topic.library_id}` : topic.name })))
 const relatedFilters = computed(() => [
-  { key: 'entity_ids' as const, label: t('knowledgeSearch.entities'), options: entityOptions.value, empty: t('searchPage.noEntities'), placeholder: t('searchPage.selectEntity') },
-  { key: 'topic_ids' as const, label: t('knowledgeSearch.topics'), options: topicOptions.value, empty: t('searchPage.noTopics'), placeholder: t('searchPage.selectTopic') },
+  { key: 'entity_ids' as const, label: t('search.entities'), options: entityOptions.value, empty: t('searchPage.noEntities'), placeholder: t('searchPage.selectEntity') },
+  { key: 'topic_ids' as const, label: t('search.topics'), options: topicOptions.value, empty: t('searchPage.noTopics'), placeholder: t('searchPage.selectTopic') },
 ])
 const defaults = defaultSearchFilters()
 const hasActiveFilters = computed(() => model.value.content_types.length > 0 || model.value.entity_ids.length > 0 || model.value.topic_ids.length > 0
@@ -65,7 +65,7 @@ function toggleType(value: string, selected: boolean) {
     <div class="quick-filters">
       <slot name="libraries" />
       <details class="content-picker">
-        <summary :aria-label="t('knowledgeSearch.contentTypes')">{{ model.content_types.length ? model.content_types.map(value => contentTypeLabel(value, t)).join(' · ') : t('searchPage.allContentTypes') }}</summary>
+        <summary :aria-label="t('search.contentTypes')">{{ model.content_types.length ? model.content_types.map(value => contentTypeLabel(value, t)).join(' · ') : t('searchPage.allContentTypes') }}</summary>
         <div class="content-options">
           <label v-for="option in contentTypeOptions" :key="option.value"><Checkbox :model-value="model.content_types.includes(option.value)" :disabled="disabled" @update:model-value="toggleType(option.value, $event)" />{{ option.label }}</label>
           <Button variant="ghost" :disabled="disabled" @click="model.content_types = []">{{ t('searchPage.allContentTypes') }}</Button>
@@ -83,15 +83,15 @@ function toggleType(value: string, selected: boolean) {
           <div v-if="model[filter.key].length" class="selected-filters"><Button v-for="id in model[filter.key]" :key="id" variant="ghost" :disabled="disabled" :aria-label="t('searchPage.removeFilter', { name: filter.options.find(option => option.value === id)?.label || id })" @click="removeRelatedFilter(filter.key, id)">{{ filter.options.find(option => option.value === id)?.label || id }} <span aria-hidden="true">×</span></Button></div>
         </div>
         <label>{{ t('articleJudgments.starLabel') }}<Select v-model="starFilter" :disabled="disabled" :aria-label="t('articleJudgments.starLabel')"><option v-for="option in starOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select></label>
-        <label>{{ t('knowledgeSearch.limit') }}<input v-model.number="model.limit" type="number" min="1" max="100" step="1" class="rq-control" :disabled="disabled" :aria-label="t('knowledgeSearch.limit')"></label>
+        <label>{{ t('search.limit') }}<input v-model.number="model.limit" type="number" min="1" max="100" step="1" class="rq-control" :disabled="disabled" :aria-label="t('search.limit')"></label>
       </div>
     </details>
     <div v-if="timeRange === 'custom'" class="date-filters">
-      <label>{{ t('knowledgeSearch.publishedFrom') }}<input v-model="model.published_from" type="date" class="rq-control" :disabled="disabled" :aria-label="t('knowledgeSearch.publishedFrom')"></label>
-      <label>{{ t('knowledgeSearch.publishedTo') }}<input v-model="model.published_to" type="date" class="rq-control" :disabled="disabled" :aria-label="t('knowledgeSearch.publishedTo')"></label>
+      <label>{{ t('search.publishedFrom') }}<input v-model="model.published_from" type="date" class="rq-control" :disabled="disabled" :aria-label="t('search.publishedFrom')"></label>
+      <label>{{ t('search.publishedTo') }}<input v-model="model.published_to" type="date" class="rq-control" :disabled="disabled" :aria-label="t('search.publishedTo')"></label>
     </div>
-    <Button v-if="hasActiveFilters" class="reset-filters" variant="ghost" :disabled="disabled" @click="model = defaultSearchFilters(); customTime = false">{{ t('knowledgeSearch.resetFilters') }}</Button>
-    <p v-if="model.published_from || model.published_to" class="swiss-filter-hint">{{ t('knowledgeSearch.filterHint') }}</p>
+    <Button v-if="hasActiveFilters" class="reset-filters" variant="ghost" :disabled="disabled" @click="model = defaultSearchFilters(); customTime = false">{{ t('search.resetFilters') }}</Button>
+    <p v-if="model.published_from || model.published_to" class="swiss-filter-hint">{{ t('search.filterHint') }}</p>
   </div>
 
 </template>

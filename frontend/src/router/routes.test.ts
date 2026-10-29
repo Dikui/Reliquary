@@ -76,7 +76,7 @@ test('unknown root and platform paths match an application error page', async ()
   const source = readFileSync(new URL('../views/NotFound.vue', import.meta.url), 'utf8')
   assert.match(source, /<h1>\{\{ t\('navigation.pageNotFound'\) \}\}<\/h1>/)
   assert.match(source, /router.push\('\/platform\/entries'\)/)
-  assert.match(source, /t\('navigation.returnToKnowledge'\)/)
+  assert.match(source, /t\('navigation.returnToEntries'\)/)
 })
 
 test('settings deep links and system shortcuts mount one settings instance', async () => {

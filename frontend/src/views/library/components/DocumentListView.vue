@@ -69,7 +69,7 @@ function keydown(event: KeyboardEvent, item: EntryItem) {
         <Tag v-if="item.acquisition === 'model_written'" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</Tag>
         <Tag v-if="item.cannot_be_fact || item.source_kind === 'report'">{{ t('ingestStatus.cannotBeFact') }}</Tag>
         <span class="entries-source">{{ entryFileFormatLabel(item, t) }} · {{ entryChannelLabel(item, t) }}</span>
-        <span v-if="item.source_unverified" class="entries-source">{{ t('knowledgeReview.sourceUnverified') }}</span>
+        <span v-if="item.source_unverified" class="entries-source">{{ t('review.sourceUnverified') }}</span>
         <span class="entries-list__meta"><Tag v-if="item.content_type">{{ contentTypeLabel(item.content_type, t) }}</Tag><time>{{ date(item.created_at) }}</time>
           <span v-if="item.entity_count != null">{{ t('entries.entityCount', { count: item.entity_count }) }}</span>
           <span v-if="item.relation_count != null">{{ t('entries.relationCount', { count: item.relation_count }) }}</span>
@@ -83,7 +83,7 @@ function keydown(event: KeyboardEvent, item: EntryItem) {
   <DataTable v-else :rows="items" :columns="columns" :label="t('entries.table')" selectable :selected="[...selectedIds]" :focused="focused"
     @activate="emit('open', $event)" @update:selected="emit('update:selected', $event)" @update:focused="emit('update:focused', $event)">
     <template #cell-id="{ row }"><span class="entries-id" :title="row.id">{{ row.id }}</span></template>
-    <template #cell-title="{ row }"><button type="button" class="entries-title-link" @click="emit('open', row)">{{ title(row) }}</button><EntryUpdateNotice :has-update="row.has_update" :latest-entry-id="row.latest_entry_id" /><small v-if="row.source_unverified">{{ t('knowledgeReview.sourceUnverified') }}</small><Tag v-if="row.acquisition === 'model_written'" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</Tag><Tag v-if="row.cannot_be_fact || row.source_kind === 'report'">{{ t('ingestStatus.cannotBeFact') }}</Tag></template>
+    <template #cell-title="{ row }"><button type="button" class="entries-title-link" @click="emit('open', row)">{{ title(row) }}</button><EntryUpdateNotice :has-update="row.has_update" :latest-entry-id="row.latest_entry_id" /><small v-if="row.source_unverified">{{ t('review.sourceUnverified') }}</small><Tag v-if="row.acquisition === 'model_written'" :title="t('ingestStatus.modelWrittenHint')">{{ t('ingestStatus.modelWritten') }}</Tag><Tag v-if="row.cannot_be_fact || row.source_kind === 'report'">{{ t('ingestStatus.cannotBeFact') }}</Tag></template>
     <template #cell-summary="{ row }"><span class="entries-table-summary">{{ summary(row) }}</span></template>
     <template #cell-type="{ row }"><Tag v-if="row.content_type">{{ contentTypeLabel(row.content_type, t) }}</Tag></template>
     <template #cell-entities="{ row }">{{ row.entity_count ?? t('entries.unknown') }}</template>

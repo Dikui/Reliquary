@@ -57,7 +57,7 @@ function contentTypeName(value?: string) {
   return CONTENT_TYPES.includes(value as ContentType) ? t(`library.contentTypes.${value}`) : value
 }
 function collected(value?: string) {
-  return formatDateTime(value, locale.value, { dateStyle: 'medium', timeStyle: 'short' }, t('knowledgeWorkbench.unknownDate'))
+  return formatDateTime(value, locale.value, { dateStyle: 'medium', timeStyle: 'short' }, t('workbench.unknownDate'))
 }
 function setLibrary(value: string) {
   if (saving.value || deleting.value || editorVisible.value) return

@@ -65,11 +65,11 @@ const steps = computed(() => {
   return result
 })
 function stepLabel(node: EntryTraceNode) {
-  const stageKeys: Record<string, string> = { docreader: 'knowledgeStages.stage.docreader', processing: 'knowledgeStages.stage.processing', chunking: 'knowledgeStages.stage.chunking', embedding: 'knowledgeStages.stage.embedding' }
+  const stageKeys: Record<string, string> = { docreader: 'processingStages.stage.docreader', processing: 'processingStages.stage.processing', chunking: 'processingStages.stage.chunking', embedding: 'processingStages.stage.embedding' }
   return stageKeys[node.name] ? t(stageKeys[node.name]!) : processingSpanLabel(node.name, t)
 }
 function stepStatus(status: string) {
-  const keys: Record<string, string> = { pending: 'knowledgeStages.status.pending', running: 'knowledgeStages.status.running', done: 'knowledgeStages.status.done', failed: 'knowledgeStages.status.failed', skipped: 'knowledgeStages.status.skipped', cancelled: 'knowledgeStages.status.cancelled', finalizing: 'knowledgeStages.status.finalizing' }
+  const keys: Record<string, string> = { pending: 'processingStages.status.pending', running: 'processingStages.status.running', done: 'processingStages.status.done', failed: 'processingStages.status.failed', skipped: 'processingStages.status.skipped', cancelled: 'processingStages.status.cancelled', finalizing: 'processingStages.status.finalizing' }
   return keys[status] ? t(keys[status]!) : status
 }
 const modelName = (node: EntryTraceNode) => {
@@ -163,7 +163,7 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
     <header class="entry-detail__topbar">
       <nav class="entry-detail__crumbs" :aria-label="t('entryDetail.breadcrumb')">
         <LibMark v-if="library" :color="library.color" />
-        <RouterLink :to="listLocation">{{ library?.display_name || library?.name || entry?.library_name || t('knowledgeEditor.document.title') }}</RouterLink>
+        <RouterLink :to="listLocation">{{ library?.display_name || library?.name || entry?.library_name || t('libraryEditor.document.title') }}</RouterLink>
         <span aria-hidden="true">/</span><span class="entry-detail__id" aria-current="page">{{ id }}</span>
       </nav>
       <div v-if="entry" class="entry-detail__actions">
@@ -189,7 +189,7 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
         <div class="entry-detail__markers">
           <Tag v-if="entry.acquisition === 'model_written'">{{ t('ingestStatus.modelWritten') }}</Tag>
           <Tag v-if="entry.source_kind === 'report' || entry.cannot_be_fact">{{ t('ingestStatus.cannotBeFact') }}</Tag>
-          <Tag v-if="entry.source_unverified">{{ t('knowledgeReview.sourceUnverified') }}</Tag>
+          <Tag v-if="entry.source_unverified">{{ t('review.sourceUnverified') }}</Tag>
           <RouterLink v-if="entry.has_update && entry.latest_entry_id" :to="entryDetailLocation(entry.latest_entry_id)">{{ t('ikb18.hasUpdate') }}</RouterLink>
         </div>
         <dl class="entry-detail__facts">
@@ -223,7 +223,7 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
           <template #entities>
             <Skeleton v-if="relationsLoading" :label="t('common.loading')" />
             <ErrorState v-if="relationsError" :title="t('entryDetail.relationsFailed')"><Button @click="state.loadRelations">{{ t('common.retry') }}</Button></ErrorState>
-            <div v-for="entity in entities" :key="entity.id" class="entry-detail__entity"><div><RouterLink :to="entityLocation(entity.id)">{{ entity.canonical_name }}</RouterLink><span>{{ t(`knowledgeWorkbench.entities.types.${entity.entity_type}`) }}</span></div><p v-if="entity.description">{{ entity.description }}</p><FollowToggle target-type="entity" :target-id="entity.id" :name="entity.canonical_name" /></div>
+            <div v-for="entity in entities" :key="entity.id" class="entry-detail__entity"><div><RouterLink :to="entityLocation(entity.id)">{{ entity.canonical_name }}</RouterLink><span>{{ t(`workbench.entities.types.${entity.entity_type}`) }}</span></div><p v-if="entity.description">{{ entity.description }}</p><FollowToggle target-type="entity" :target-id="entity.id" :name="entity.canonical_name" /></div>
             <EmptyState v-if="!relationsLoading && !relationsError && !entities.length" :title="t('entries.noEntities')" />
           </template>
           <template #relations>

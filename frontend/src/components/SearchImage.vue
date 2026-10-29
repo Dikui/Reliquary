@@ -39,15 +39,15 @@ onBeforeUnmount(() => { mounted = false; generation++; request?.abort(); release
 <template>
   <component :is="compact ? 'span' : 'figure'" class="search-image" :class="{ compact }" :aria-busy="loading" :data-image-path="path">
     <component :is="compact ? 'span' : 'div'" class="search-image-preview">
-      <button v-if="imageURL && (!compact || interactive)" ref="previewTrigger" type="button" class="search-image-open" :aria-label="t('knowledgeSearch.previewImage', { title })" @click.stop="openPreview">
-        <img :src="imageURL" :alt="t('knowledgeSearch.imageAlt', { title })" loading="lazy" @error="failed = true; previewVisible = false" />
+      <button v-if="imageURL && (!compact || interactive)" ref="previewTrigger" type="button" class="search-image-open" :aria-label="t('search.previewImage', { title })" @click.stop="openPreview">
+        <img :src="imageURL" :alt="t('search.imageAlt', { title })" loading="lazy" @error="failed = true; previewVisible = false" />
       </button>
-      <img v-else-if="imageURL" :src="imageURL" :alt="t('knowledgeSearch.imageAlt', { title })" loading="lazy" @error="failed = true" />
-      <span v-if="failed" class="search-image-state" role="alert"><span>{{ t('knowledgeSearch.imageLoadFailed') }}</span><Button v-if="!compact" @click="load">{{ t('common.retry') }}</Button></span>
+      <img v-else-if="imageURL" :src="imageURL" :alt="t('search.imageAlt', { title })" loading="lazy" @error="failed = true" />
+      <span v-if="failed" class="search-image-state" role="alert"><span>{{ t('search.imageLoadFailed') }}</span><Button v-if="!compact" @click="load">{{ t('common.retry') }}</Button></span>
       <span v-else-if="loading" class="search-image-state" role="status">{{ t('common.loading') }}</span>
     </component>
-    <component :is="compact ? 'span' : 'figcaption'" class="search-image-caption">{{ t('knowledgeSearch.imageMatch') }}</component>
-    <Dialog :layer="previewLayer" :model-value="previewVisible && !!imageURL && !failed" :title="t('knowledgeSearch.previewImage', { title })" @update:model-value="previewVisible = $event" @close-auto-focus="restoreFocus"><img class="search-image-full" :src="imageURL" :alt="t('knowledgeSearch.imageAlt', { title })" /></Dialog>
+    <component :is="compact ? 'span' : 'figcaption'" class="search-image-caption">{{ t('search.imageMatch') }}</component>
+    <Dialog :layer="previewLayer" :model-value="previewVisible && !!imageURL && !failed" :title="t('search.previewImage', { title })" @update:model-value="previewVisible = $event" @close-auto-focus="restoreFocus"><img class="search-image-full" :src="imageURL" :alt="t('search.imageAlt', { title })" /></Dialog>
   </component>
 </template>
 

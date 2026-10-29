@@ -80,7 +80,7 @@ const filterSummary = computed(() => {
   if (f.starred !== undefined) add(t('articleJudgments.starLabel'), t(f.starred ? 'articleJudgments.starredOnly' : 'articleJudgments.unstarredOnly'))
   const statuses: Record<string, string> = { pending: t('library.parseStatusPending'), processing: t('library.parseStatusProcessing'), finalizing: t('library.parseStatusFinalizing'), completed: t('library.parseStatusCompleted'), failed: t('library.parseStatusFailed'), cancelled: t('library.parseStatusCancelled'), draft: t('library.parseStatusDraft'), rejected: t('library.intakeWaiting') }
   if (f.parse_status) add(t('library.parseStatusFilter'), statuses[f.parse_status] || f.parse_status)
-  const sources: Record<string, string> = { article: t('knowledgeSearch.sources.article'), mine: t('knowledgeSearch.sources.mine'), report: t('knowledgeSearch.sources.report') }
+  const sources: Record<string, string> = { article: t('search.sources.article'), mine: t('search.sources.mine'), report: t('search.sources.report') }
   if (f.source_kind) add(t('library.materialCategory'), sources[f.source_kind] || f.source_kind)
   if (f.source) add(t('library.channelLabel'), entryChannelLabel({ channel: f.source }, t))
   if (f.file_type) add(t('library.fileTypeFilter'), entryFileFormatLabel({ file_type: f.file_type }, t))

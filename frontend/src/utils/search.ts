@@ -42,7 +42,7 @@ export function searchStateToURL(query: string, filters: SearchFilters): Record<
 // Dependency messages and response bodies must never become search UI text.
 export function searchErrorMessage(error: unknown, t: (key: string) => string): string {
   const code = searchErrorCode(error)
-  return t(code === 2400 ? 'knowledgeSearch.unavailable' : 'knowledgeSearch.searchFailed')
+  return t(code === 2400 ? 'search.unavailable' : 'search.searchFailed')
 }
 export function searchErrorCode(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined

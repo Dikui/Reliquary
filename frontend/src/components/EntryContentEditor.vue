@@ -73,7 +73,7 @@ async function save() {
     if (controller.signal.aborted) return
     conflict.value = cause?.error?.details?.reason === 'body_changed'
     error.value = conflict.value ? t('entryEditor.conflict') : cause?.status === 409 ? t('entryEditor.busy')
-      : !cause?.status ? t('entryEditor.uncertain') : cause?.message || t('entryEditor.saveFailed')
+      : !cause?.status ? t('entryEditor.saveUnconfirmed') : cause?.message || t('entryEditor.saveFailed')
   } finally { saving.value = false }
 }
 async function copyDraft() {

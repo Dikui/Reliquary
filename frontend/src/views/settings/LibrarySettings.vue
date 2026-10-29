@@ -56,7 +56,7 @@ async function load() {
   try {
     const [response] = await Promise.all([getLibrary(), resources.ensureModels()])
     if (request !== generation) return
-    if (response?.success === false) throw new Error(response.message || t('knowledgeEditor.messages.loadDataFailed'))
+    if (response?.success === false) throw new Error(response.message || t('libraryEditor.messages.loadDataFailed'))
     const library = response?.data
     if (!library) { formData.value = null; saved.value = ''; return }
     loadedLibrary.value = library
@@ -93,7 +93,7 @@ async function load() {
 
     initialIndexingStrategy.value = { ...formData.value.indexingStrategy }
     saved.value = JSON.stringify(formData.value)
-  } catch (cause: any) { if (request === generation) error.value = cause.message || t('knowledgeEditor.messages.loadDataFailed') }
+  } catch (cause: any) { if (request === generation) error.value = cause.message || t('libraryEditor.messages.loadDataFailed') }
   finally { if (request === generation) loading.value = false }
 }
 function handleChunkingConfigUpdate(value: any) { formData.value.chunkingConfig = { ...value } }
@@ -129,8 +129,8 @@ const buildSubmitData = (value = formData.value) => {
 
 async function handleSubmit() {
   if (saving.value || loading.value || !formData.value || !dirty.value) return
-  if (!formData.value.name.trim()) { error.value = t('knowledgeEditor.messages.nameRequired'); currentSection.value = 'basic'; return }
-  if (needsEmbedding.value && !formData.value.modelTiers.embedding) { error.value = t('knowledgeEditor.indexing.embeddingRequired'); currentSection.value = 'models'; return }
+  if (!formData.value.name.trim()) { error.value = t('libraryEditor.messages.nameRequired'); currentSection.value = 'basic'; return }
+  if (needsEmbedding.value && !formData.value.modelTiers.embedding) { error.value = t('libraryEditor.indexing.embeddingRequired'); currentSection.value = 'models'; return }
   saving.value = true; error.value = ''
   try {
     const data = buildSubmitData()
@@ -147,7 +147,7 @@ async function handleSubmit() {
     saved.value = JSON.stringify(formData.value)
     resources.invalidateLibraryDetail()
     window.dispatchEvent(new CustomEvent('reliquary:library-settings-saved'))
-    toast.success(t('knowledgeEditor.messages.updateSuccess'))
+    toast.success(t('libraryEditor.messages.updateSuccess'))
   } catch (cause: any) { error.value = cause.message || t('common.operationFailed') }
   finally { saving.value = false }
 }

@@ -26,7 +26,7 @@ export default {
       gray: 'Gray'
     },
     chunkHint: 'Changes apply to newly collected or reprocessed materials.',
-    typesHint: 'The model chooses from this list and uses Other when uncertain. Types are only used for filtering.',
+    typesHint: 'The model chooses from this list and uses Other when no type fits. Types are only used for filtering.',
     addType: 'Add content type',
     manageTypes: 'Edit names, enabled status and order',
     feedHint: 'Include new materials from this library in the follow feed',
@@ -236,7 +236,7 @@ export default {
     discardHint: 'Your unsaved body changes will be lost.',
     discard: 'Discard changes',
     keepEditing: 'Keep editing',
-    uncertain: 'The save result could not be confirmed. Your draft is retained. You can retry; identical content will not be processed twice.'
+    saveUnconfirmed: 'The save result could not be confirmed. Your draft is retained. You can retry; identical content will not be processed twice.'
   },
   entryBatch: {
     scopeSummary: 'Scope summary',
@@ -939,7 +939,7 @@ export default {
     addLibrary: 'Add library filter',
     removeLibrary: 'Remove library filter: {name}',
     empty: 'Nothing needs confirmation',
-    emptyHint: 'Entities with uncertain identities appear here. New materials are collected after technical validation.',
+    emptyHint: 'Entity identities that need confirmation appear here. New materials are collected after technical validation.',
     previous: 'Previous',
     next: 'Next',
     reason: 'Decision rationale',
@@ -957,7 +957,7 @@ export default {
     reviewReason: 'Review reason: ',
     pagination: 'Historical review pages'
   },
-  knowledgeReview: {
+  review: {
     conflictReason: 'The body differs from an existing material',
     relatedArticle: 'Related material',
     saveAsNew: 'Collect this material',
@@ -1131,7 +1131,7 @@ export default {
     removedFeature: 'This feature has been removed. You have been returned to the materials page.',
     pageNotFound: 'Page not found',
     pageNotFoundDescription: 'Check the page address or return to the materials page.',
-    returnToKnowledge: 'Return to materials'
+    returnToEntries: 'Return to materials'
   },
   modelTiers: {
     title: 'Model tiers',
@@ -1187,7 +1187,7 @@ export default {
       reject: 'Suggestion rejected and entities kept separate'
     }
   },
-  knowledgeWorkbench: {
+  workbench: {
     title: 'Entities',
     refresh: 'Refresh',
     requestFailed: 'The request failed. Please try again.',
@@ -1326,7 +1326,7 @@ export default {
     reparseSource: 'Document to reprocess',
     reparseHint: 'Reprocess saved materials, preserving the body while updating processing results and index. Missing body content must be supplied by an external tool through the ingest API.'
   },
-  knowledgeStages: {
+  processingStages: {
     intakeReview: 'Intake review',
     segmentProgress: 'Segment {current}/{total}',
     summaryMerge: 'Merge segment summaries',
@@ -1491,7 +1491,7 @@ export default {
     discardHint: 'Your changes are not saved. Leaving will discard them.',
     discard: 'Discard changes'
   },
-  knowledgeEditor: {
+  libraryEditor: {
     basic: {
       title: 'Basic Information'
     },
@@ -1778,12 +1778,12 @@ export default {
           attempts: 'Attempt {current}/{max}',
           unknownTarget: 'No related record identified',
           libraryLabel: 'Library ID',
-          knowledgeLabel: 'Document ID',
+          entryLabel: 'Document ID',
           taskIDLabel: 'Business task ID',
           spaceLabel: 'Workspace ID',
           sourceLibraryLabel: 'Source library',
           targetLibraryLabel: 'Target library',
-          knowledgeCountLabel: 'Documents',
+          entryCountLabel: 'Documents',
           enqueuedAt: 'Enqueued',
           startedAt: 'Started',
           nextProcessAt: 'Next run',
@@ -2391,7 +2391,7 @@ export default {
     noRelations: 'No matching relationships',
     graphIdle: 'Enter an entity name or ID and select a library to find relationships.'
   },
-  knowledgeSearch: {
+  search: {
     imageMatch: 'Image match',
     imageAlt: 'Matching image from {title}',
     previewImage: 'View image: {title}',
@@ -2459,7 +2459,7 @@ export default {
       keyword: 'Keyword'
     },
     quick: {
-      knowledge: 'Open materials',
+      entries: 'Open materials',
       settings: 'Open settings',
       search: 'Open search',
       follows: 'Open follows'

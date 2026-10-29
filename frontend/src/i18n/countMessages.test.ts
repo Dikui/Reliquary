@@ -6,8 +6,8 @@ import enUS from './locales/en-US'
 import zhCN from './locales/zh-CN'
 
 const cases = [
-  ["knowledgeWorkbench.nameEmbeddings.pending","count","Entity name pending rebuild: {count}","Entity names pending rebuild: {count}"],
-  ["knowledgeWorkbench.nameEmbeddings.latest","total","Latest rebuild: {status}, {processed}/{total} entity processed","Latest rebuild: {status}, {processed}/{total} entities processed"],
+  ["workbench.nameEmbeddings.pending","count","Entity name pending rebuild: {count}","Entity names pending rebuild: {count}"],
+  ["workbench.nameEmbeddings.latest","total","Latest rebuild: {status}, {processed}/{total} entity processed","Latest rebuild: {status}, {processed}/{total} entities processed"],
   ["model.editor.contextWindowTokens","count","{count} token","{count} tokens"],
   ["system.globalSettings.runtime.poolInstances","value","{value} instance","{value} instances"],
   ["system.globalSettings.runtime.queueCount","value","{value} queue","{value} queues"],
@@ -15,7 +15,7 @@ const cases = [
   ["system.globalSettings.runtime.tasks.openAria","count","View {count} {state} task in {queue}","View {count} {state} tasks in {queue}"],
   ["system.globalSettings.runtime.tasks.purgeArchivedSuccess","count","Cleared {count} failed task","Cleared {count} failed tasks"],
   ["ollama.daysAgo","days","{days} day ago","{days} days ago"],
-  ["knowledgeEditor.chunking.characters", "$plural", "character", "characters"]] as const
+  ["libraryEditor.chunking.characters", "$plural", "character", "characters"]] as const
 const i18n = createI18n({ legacy: false, locale: 'en-US', messages: { 'en-US': enUS, 'zh-CN': zhCN }, warnHtmlMessage: false })
 for (const [key, selector, singular, plural] of cases) {
   for (const count of [1, 2]) {

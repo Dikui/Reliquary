@@ -3,7 +3,7 @@
     <h1>{{ t('navigation.pageNotFound') }}</h1>
     <p>{{ t('navigation.pageNotFoundDescription') }}</p>
     <Button variant="primary" @click="router.push('/platform/entries')">
-      {{ t('navigation.returnToKnowledge') }}
+      {{ t('navigation.returnToEntries') }}
     </Button>
   </section>
 </template>
