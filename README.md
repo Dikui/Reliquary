@@ -1,44 +1,79 @@
+<div align="center">
+
 # Reliquary
 
-The four core services are PostgreSQL, Redis, Neo4j, and Reliquary. PostgreSQL owns business data and pending operations, Redis schedules tasks, and Neo4j provides a rebuildable graph projection. See [ADR 0014](docs/adr/0014-internal-knowledge-base.md).
+**A local, single-user knowledge repository for your personal AI workspace.**
 
-[简体中文](README_CN.md)
+External AI tools feed it complete Markdown over HTTP or MCP; Reliquary stores, indexes, links and retrieves it.
 
-Reliquary is an internal knowledge repository for a personal AI workspace. It stores and retrieves entries across five system libraries and libraries created from templates. External AI tools use HTTP and MCP for retrieval, analysis, and report writing. Start with the [external integration guide](docs/external-integration.md) for Grok Bot and other callers.
+[![App](https://github.com/Dikui/Reliquary/actions/workflows/app.yml/badge.svg)](https://github.com/Dikui/Reliquary/actions/workflows/app.yml)
+[![Frontend](https://github.com/Dikui/Reliquary/actions/workflows/frontend.yml/badge.svg)](https://github.com/Dikui/Reliquary/actions/workflows/frontend.yml)
+[![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go)](go.mod)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-The source originated from [Tencent WeKnora v0.8.0](https://github.com/Tencent/WeKnora/releases/tag/v0.8.0), commit `1edcd54b43606d9079bb36650efe3f68707a79ea`. See [UPSTREAM.md](UPSTREAM.md) for provenance and retained licensing.
+English | [简体中文](README_CN.md)
+
+</div>
+
+## Table of contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Quick start](#quick-start)
+- [Usage](#usage)
+- [Backup and upgrade](#backup-and-upgrade)
+- [Development](#development)
+- [Documentation](#documentation)
+- [License](#license)
+
+## Overview
+
+Reliquary is the internal library behind a personal AI workspace. It does not crawl or fetch anything: external tools (Grok Bot, agents, collectors) convert sources to Markdown, upload images, and submit them. Reliquary then reviews, stores, deduplicates, extracts entities and relations, and serves ordinary and graph search back to those tools.
+
+A personal space starts with five system libraries, and you can create more from templates:
+
+| Directory | Holds |
+| --- | --- |
+| `official/` | News, announcements, filings, time-sensitive research, policy |
+| `media/` | Commentary, interviews and opinion pieces by people |
+| `references/` | Papers, books, standards, official docs, tutorials |
+| `personal/` | Your own work material, notes and SOPs |
+| `ai-output/` | Analyses and reports written by external AI |
+
+The Web UI is for managing entries and light reading. For everyday reading, open the file library in [Obsidian](https://obsidian.md).
 
 ## Features
 
-| Capability | Current behavior |
+- **Intake only** – complete content arrives through the authenticated HTTP intake API or MCP. Rejected items or items missing a body wait in a pending queue for you to approve, supplement or discard.
+- **Joint processing** – one pass produces summary, content type, entities, topics, relations and image descriptions. Long content is segmented with durable checkpoints.
+- **Full-text storage** – every entry keeps its full Markdown and images, mirrored to a per-library file library with a database-generated header.
+- **Hybrid search** – full-text plus vector retrieval, merged per entry, filterable by content type, entity, topic, publication date, star and library; similar reports can be collapsed.
+- **Graph search** – 1–3 hop neighbourhoods or paths between entities, with source entries and body positions. No model calls.
+- **Your judgement** – star entries, correct content types and topics, merge entities and relation types, and review the operation log.
+- **MCP tools** – search, read entries, ingest, handle pending items, star, look up entities and topics, write AI output.
+- **Evaluation** – question sets, five retrieval metrics, run comparison and model-call price snapshots.
+- **Models** – Ollama (native Metal on Apple Silicon), OpenAI-compatible endpoints and native Anthropic for generation; embeddings and reranking through their supported interfaces.
+
+## Architecture
+
+| Service | Role |
 | --- | --- |
-| Intake | External tools send complete content through the authenticated HTTP intake API or MCP; Reliquary does not fetch source content |
-| Intake review | Submitted content passes intake review; rejected content and missing bodies remain pending until you approve, supplement, or discard them |
-| Entry processing | Joint output includes summary, library content type, entities, topics, relations, and image descriptions; long content uses durable segment checkpoints; AI output only builds indexes |
-| Storage | Every content type retains the full Markdown text and supplied images |
-| File library | Every library has its own English directory: `official/`, `media/`, `references/`, `personal/`, `ai-output/`, or a custom directory. All use the same database-owned header and full Markdown body; images live in `attachments/<entry-id>/` |
-| Search | Hybrid full-text and vector retrieval, merged entry results, filters for content type, entities, topics, publication dates, stars, and library; similar reporting can be collapsed |
-| Personal decisions | Star entries, correct content types and topics, merge entities, and inspect the operation log; new topics can classify historical entry summaries |
-| External AI | MCP supports search, entry reading, collection, pending review, stars, entity/topic lookup, and collecting AI output |
-| Graph search | Query 1 to 3 hops or paths within selected libraries, with source entries and body positions; no model calls |
-| Evaluation and accounting | Question sets, five retrieval metrics, run comparison, and model call price snapshots |
-| Administration | Library, models, file library status, operation log, API integration, and runtime queues |
+| PostgreSQL | Source of truth: business data, indexes, review state, pending operations |
+| Redis | Task scheduling |
+| Neo4j | Rebuildable graph projection |
+| Reliquary | Go backend (HTTP + MCP) and Vue 3 frontend |
 
-Article bodies become final when all missing material is supplied or you accept the missing material. PostgreSQL stores indexes, entity profiles, topics, review state, personal decisions, and operation logs. The database generates all library headers in one direction; refresh and rebuild overwrite manual edits in Obsidian. File names use a title slug and the first eight ID characters, with no monthly subdirectories. See [header fields and replica registration](docs/maintenance-data.md#按库文件与统一表头).
+See [ADR 0014](docs/adr/0014-internal-knowledge-base.md) and [CONTEXT.md](CONTEXT.md) for the domain model.
 
-The Web UI provides entry management and simple reading. Open the file library in Obsidian for regular reading, and use external AI tools for analysis and report writing. Content enters only through external tools using HTTP intake or MCP, as required Markdown text with supplied images. Images are uploaded by the caller. Missing images remain visible as missing material. RSS subscriptions, URL imports, browser uploads, and manual entry are removed. Existing entries and their RSS or Web source labels remain readable. See [ADR 0012](docs/adr/0012-ingest-only-no-collection.md), [CONTEXT.md](CONTEXT.md), and the [intake](docs/ingest-api.md), [ordinary and graph search](docs/search-api.md), [relations](docs/relations-api.md), [evaluation](docs/search-evaluation-api.md), and [model calls](docs/model-calls.md) references.
+## Quick start
 
-## Run from source
-
-For regular use, follow the [source-independent deployment guide](docs/local-deployment.md) to keep runtime configuration and data outside the checkout. The commands below run directly from the source directory.
-
-Requirements: Git, Node.js/npm, a runtime compatible with Docker (such as OrbStack or Docker Desktop), and Docker Compose. Application images are built locally; this repository does not publish installation packages or public application images.
+**Requirements:** Git, Node.js/npm, a Docker-compatible runtime (OrbStack, Docker Desktop) and Docker Compose. Images are built locally; no packages or public images are published.
 
 ```bash
 git clone https://github.com/Dikui/Reliquary.git
 cd Reliquary
-cp .env.example .env
-# Configure database credentials, SYSTEM_AES_KEY, and model endpoints.
+cp .env.example .env   # set DB passwords, SYSTEM_AES_KEY, NEO4J_PASSWORD and model endpoints
 ./scripts/build-frontend-dist.sh
 ./reliquary-admin check-deployment
 docker compose up -d --wait postgres redis neo4j
@@ -46,53 +81,71 @@ docker compose up -d --wait postgres redis neo4j
 docker compose up -d --build
 ```
 
-The frontend build helper installs dependencies with `npm ci` during a normal installation. Compose binds host directories: `RELIQUARY_VAULT_DIR` defaults to `${HOME}/Reliquary/vault`, `RELIQUARY_FILES_DIR` to `${HOME}/Reliquary/files`, and `BACKUP_DIR` to `${HOME}/Backups/Reliquary`. Change them in `.env`. `check-deployment` creates missing directories and rejects unwritable paths, paths inside the source checkout, and data or backup directories that contain one another. The PostgreSQL volume is unchanged. See [the Mac mini deployment guide](docs/personal-use.md#部署在-mac-mini).
+Then open:
 
-Keep the file library, uploaded resources, and backups outside the Desktop and Documents folders.
+- Web UI: <http://localhost>
+- API: <http://localhost:8080>
+- MCP: `http://localhost:8080/mcp`
 
-Open the `vault/` directory itself in Obsidian. Exclude `attachments/` and `.reliquary/` from Obsidian search, and leave generated entry headers and `.reliquary/` unchanged. Reading settings in `.obsidian/` are backed up and ignored during verification and indexing.
+There is no login. Ports bind to `127.0.0.1` only, so the UI works straight away on the same machine; external tools authenticate with API keys ([ADR 0015](docs/adr/0015-no-login-local-only.md)).
 
-By default the Web UI is at `http://localhost`, and the backend API is at `http://localhost:8080`. The first successful registration closes further registration. The single user and valid API keys have full access to the personal space. Deploy on your private network.
+Host directories default to `~/Reliquary/vault`, `~/Reliquary/files` and `~/Backups/Reliquary` (`RELIQUARY_VAULT_DIR`, `RELIQUARY_FILES_DIR`, `BACKUP_DIR` in `.env`). Keep them out of the Desktop and Documents folders. `check-deployment` creates missing directories and rejects unsafe paths.
 
-Apple Silicon model serving can run natively on macOS with Ollama and Metal. Model configuration supports Ollama, OpenAI-compatible endpoints, and native Anthropic generation; embeddings and reranking use their corresponding supported interfaces. See [the personal use guide](docs/personal-use.md) for setup and external integration.
+> [!TIP]
+> For long-term use, follow the [local deployment guide](docs/local-deployment.md) to keep runtime config and data outside the source checkout.
 
-## Backup and migration
+## Usage
 
-Use `./reliquary-admin upgrade` for upgrades. It pauses intake and creates a complete backup of the old code, images, database, file library, and resources. Before migration `000005` drops collection tables, it exports source configuration without credentials and sync logs to `.reliquary/exports/` inside the file library. Export failure stops the upgrade and leaves intake paused. Old backups still restore through the same export and migration steps.
+### Connect an external tool
+
+1. In the Web UI, go to **Settings → API Integration** and create one API key per tool.
+2. Call the HTTP API with `Authorization: Bearer <KEY>`:
+
+   ```bash
+   curl --fail http://127.0.0.1:8080/api/v1/libraries -H "Authorization: Bearer $KEY"
+   ```
+
+3. Or point an MCP client at `http://127.0.0.1:8080/mcp` with the same key.
+
+Entry IDs are `entry_id` (lists: `entry_ids`) across HTTP and MCP; read bodies with `get_entry`. Start with the [external integration guide](docs/external-integration.md), then the [intake](docs/ingest-api.md), [search](docs/search-api.md) and [relations](docs/relations-api.md) references.
+
+### Read in Obsidian
+
+Open the `vault/` directory itself as a vault. Exclude `attachments/` and `.reliquary/` from search, and don't edit entry headers or `.reliquary/` – headers are generated by the database and refresh/rebuild overwrites manual edits. See [maintenance data](docs/maintenance-data.md#按库文件与统一表头).
+
+## Backup and upgrade
 
 ```bash
 ./reliquary-admin backup /path/to/backups
 ./reliquary-admin upgrade
-# Before running development migrations directly:
-./reliquary-admin export-sources
 ```
 
-Backups retain host files and Obsidian reading settings while excluding operational credentials. `unpack` and `restore` require empty or nonexistent host file library and resource directories. Configure model credentials again after restoring. See [the personal use guide](docs/personal-use.md), [migration rules](docs/database-migrations.md), and [maintenance data ownership](docs/maintenance-data.md).
+`upgrade` pauses intake and takes a full backup of the old code, images, database, file library and resources before migrating. Backups exclude credentials; re-enter model credentials after a restore. `restore` requires empty or missing target directories. Details: [personal use guide](docs/personal-use.md), [migration rules](docs/database-migrations.md).
 
-## Development and validation
+## Development
 
 ```bash
-make dev-start
-make dev-app       # Separate terminal
-make dev-frontend  # Separate terminal
+make dev-start      # start PostgreSQL, Redis, Neo4j
+make dev-app        # backend, in another terminal
+make dev-frontend   # frontend, in another terminal
 ```
 
-See [the development guide](./docs/development.md). Issues and specs are local Markdown files under `.scratch/<feature-slug>/`, following [the issue tracker conventions](docs/agents/issue-tracker.md).
+Checks:
 
 ```bash
-go build ./...
-go vet ./...
+go build ./... && go vet ./...
 GOFLAGS=-p=1 go test -count=1 -timeout=40m ./...
-cd frontend
-npm run type-check
-npm run build
-npm test
+cd frontend && npm run type-check && npm run build && npm test
 ```
 
-Integration tests require PostgreSQL, Redis, and Neo4j endpoints documented in the [development guide](docs/development.md#系列联合验证). Format changed Go files with `gofmt` and report baseline or environment failures with the exact command.
+Integration tests need real PostgreSQL, Redis and Neo4j; see the [development guide](docs/development.md#系列联合验证). Issues and specs live as local Markdown under `.scratch/<feature-slug>/` ([conventions](docs/agents/issue-tracker.md)).
+
+## Documentation
+
+All guides are indexed in [docs/index.md](docs/index.md); architecture decisions are in [docs/adr/](docs/adr/). Most docs are in Chinese.
 
 ## License
 
-[MIT](LICENSE). Upstream attribution and third-party licenses remain in the repository.
+[MIT](LICENSE).
 
-Entry IDs use `entry_id` and lists use `entry_ids` across HTTP and MCP. Read content with `get_entry`. Submit generated material through `ingest` and cite sources in its Markdown body; existing report references remain readable. Retired field and tool aliases are not accepted.
+Reliquary is derived from [Tencent WeKnora v0.8.0](https://github.com/Tencent/WeKnora/releases/tag/v0.8.0) (commit `1edcd54b`). Upstream attribution and third-party licenses are retained; see [UPSTREAM.md](UPSTREAM.md).
