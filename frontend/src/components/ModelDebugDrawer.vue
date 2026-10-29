@@ -1,27 +1,7 @@
 <template>
-  <SettingDrawer
-    v-model:visible="drawerVisible"
-    :title="$t('modelSettings.debug.title')"
-    :description="$t('modelSettings.debug.description')"
-    icon="play-circle-stroke"
-    width="560px"
-    :min-width="480"
-    :max-width="900"
-    storage-key="setting-drawer:width:model-debug"
-    :confirm-text="$t('modelSettings.debug.run')"
-    :confirm-loading="running"
-    :confirm-disabled="!canRun"
-    :cancel-text="$t('common.close')"
-    @confirm="runDebug"
-  >
-    <template v-if="result" #footer-left>
-      <t-button variant="outline" @click="copyResult">
-        <template #icon><t-icon name="file-copy" /></template>
-        {{ $t('modelSettings.debug.copyResult') }}
-      </t-button>
-    </template>
+  <Drawer v-model="drawerVisible" :title="$t('modelSettings.debug.title')" :description="$t('modelSettings.debug.description')" content-class="model-debug-drawer">
 
-    <div class="model-debug">
+    <div class="model-debug settings-form">
       <section class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ $t('modelSettings.debug.groupModel') }}</h4>
         <div v-if="availableModelTypes.length > 1" class="form-item">
@@ -36,37 +16,25 @@
               :aria-checked="selectedModelType === option.value"
               @click="selectModelType(option.value)"
             >
-              <t-icon :name="option.icon" class="model-type-option__icon" />
+
               <span class="model-type-option__label">{{ option.label }}</span>
             </button>
           </div>
         </div>
         <div class="form-item">
-          <label class="form-label">{{ $t('modelSettings.debug.model') }}</label>
-          <t-select
+          <label class="form-label" :for="`${formId}-field-1`">{{ $t('modelSettings.debug.model') }}</label>
+          <Select
             v-model="selectedModelId"
-            filterable
             :placeholder="$t('modelSettings.debug.modelPlaceholder')"
             :disabled="filteredModels.length === 0"
-            @change="resetResult"
-          >
-            <t-option
+            @update:model-value="resetResult"
+           :id="`${formId}-field-1`">
+            <option
               v-for="model in filteredModels"
               :key="model.id"
               :value="model.id!"
-              :label="modelLabel(model)"
-            >
-              <div class="model-option">
-                <span class="model-option__name">{{ modelLabel(model) }}</span>
-                <span class="model-option__meta">
-                  {{ vendorLabel(model) }}
-                  <template v-if="modelHasContextWindow(model.type)">
-                    · {{ formatContextWindow(model.parameters?.context_window) }}
-                  </template>
-                </span>
-              </div>
-            </t-option>
-          </t-select>
+            >{{ modelLabel(model) }}</option>
+          </Select>
           <p v-if="filteredModels.length === 0" class="form-desc">
             {{ $t('modelSettings.debug.noModelsForType') }}
           </p>
@@ -77,26 +45,26 @@
         <section class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('modelSettings.debug.groupInput') }}</h4>
           <div class="form-item">
-            <label class="form-label">{{ inputLabel }}</label>
-            <SafeTextarea
+            <label class="form-label" :for="`${formId}-field-2`">{{ inputLabel }}</label>
+            <Textarea
               v-model="input"
               :placeholder="inputPlaceholder"
-              :autosize="{ minRows: 4, maxRows: 8 }"
-            />
+              rows="5"
+            :id="`${formId}-field-2`" />
           </div>
 
           <div v-if="selectedModel.type === 'Rerank'" class="form-item">
-            <label class="form-label">{{ $t('modelSettings.debug.documents') }}</label>
-            <SafeTextarea
+            <label class="form-label" :for="`${formId}-field-3`">{{ $t('modelSettings.debug.documents') }}</label>
+            <Textarea
               v-model="documentsText"
               :placeholder="$t('modelSettings.debug.documentsPlaceholder')"
-              :autosize="{ minRows: 4, maxRows: 8 }"
-            />
+              rows="5"
+            :id="`${formId}-field-3`" />
             <p class="form-desc">{{ $t('modelSettings.debug.documentsHint') }}</p>
           </div>
 
           <div v-if="needsFile" class="form-item">
-            <label class="form-label">{{ fileLabel }}</label>
+            <label class="form-label" :for="`${formId}-field-4`">{{ fileLabel }}</label>
             <div class="file-picker">
               <input
                 ref="fileInputRef"
@@ -105,10 +73,10 @@
                 accept="image/*"
                 @change="onNativeFileChange"
               >
-              <t-button variant="outline" size="small" @click="fileInputRef?.click()">
-                <template #icon><t-icon name="upload" /></template>
+              <Button variant="default" @click="fileInputRef?.click()">
+
                 {{ $t('modelSettings.debug.chooseFile') }}
-              </t-button>
+              </Button>
             </div>
             <p v-if="file" class="form-desc">{{ file.name }} · {{ formatBytes(file.size) }}</p>
           </div>
@@ -119,29 +87,29 @@
           <div class="parameter-grid">
             <div class="form-item">
               <label class="form-label">Temperature</label>
-              <t-input-number v-model="temperature" :min="0" :max="2" :step="0.1" theme="column" />
+              <Input type="number" :model-value="temperature" @update:model-value="temperature = Number($event)" :min="0" :max="2" :step="0.1" :id="`${formId}-field-4`" />
             </div>
             <div class="form-item">
-              <label class="form-label">Top P</label>
-              <t-input-number v-model="topP" :min="0.01" :max="1" :step="0.1" theme="column" />
+              <label class="form-label" :for="`${formId}-field-5`">Top P</label>
+              <Input type="number" :model-value="topP" @update:model-value="topP = Number($event)" :min="0.01" :max="1" :step="0.1" :id="`${formId}-field-5`" />
             </div>
             <div class="form-item">
-              <label class="form-label">Max Tokens</label>
-              <t-input-number v-model="maxTokens" :min="1" :max="8192" :step="128" theme="column" />
+              <label class="form-label" :for="`${formId}-field-6`">Max Tokens</label>
+              <Input type="number" :model-value="maxTokens" @update:model-value="maxTokens = Number($event)" :min="1" :max="8192" :step="128" :id="`${formId}-field-6`" />
             </div>
           </div>
           <div class="form-item">
-            <label class="form-label">{{ $t('modelSettings.debug.systemPrompt') }}</label>
-            <SafeTextarea
+            <label class="form-label" :for="`${formId}-field-7`">{{ $t('modelSettings.debug.systemPrompt') }}</label>
+            <Textarea
               v-model="systemPrompt"
               :placeholder="$t('modelSettings.debug.systemPromptPlaceholder')"
-              :autosize="{ minRows: 2, maxRows: 4 }"
-            />
+              rows="3"
+            :id="`${formId}-field-7`" />
           </div>
           <div v-if="supportsThinking" class="form-item">
-            <label class="form-label">{{ $t('modelSettings.debug.thinking') }}</label>
+            <label class="form-label" :for="`${formId}-field-8`">{{ $t('modelSettings.debug.thinking') }}</label>
             <div class="switch-field">
-              <t-switch v-model="thinking" />
+              <Switch v-model="thinking" :id="`${formId}-field-8`" />
               <span class="form-desc form-desc--inline">{{ $t('modelSettings.debug.thinkingDesc') }}</span>
             </div>
           </div>
@@ -169,7 +137,7 @@
 
           <div v-if="result" class="debug-result">
             <div class="result-banner" :class="result.ok ? 'result-banner--ok' : 'result-banner--error'">
-              <t-icon :name="result.ok ? 'check-circle-filled' : 'close-circle-filled'" />
+
               <div class="result-banner__text">
                 <strong>{{ result.ok ? $t('modelSettings.debug.success') : $t('modelSettings.debug.failed') }}</strong>
                 <span>{{ result.elapsed_ms }} ms</span>
@@ -184,27 +152,23 @@
 
             <p v-if="result.error" class="result-error">{{ result.error }}</p>
 
-            <t-tabs v-model="resultTab" class="result-tabs">
-              <t-tab-panel value="response" :label="$t('modelSettings.debug.rawResponse')" />
-              <t-tab-panel value="request" :label="$t('modelSettings.debug.requestPreview')" />
-            </t-tabs>
+            <div class="result-tabs"><Button v-for="tab in (['response', 'request'] as const)" :key="tab" :aria-pressed="resultTab === tab" :variant="resultTab === tab ? 'primary' : 'default'" @click="resultTab = tab">{{ $t(tab === 'response' ? 'modelSettings.debug.rawResponse' : 'modelSettings.debug.requestPreview') }}</Button></div>
             <pre class="json-output">{{ formattedResult }}</pre>
           </div>
         </section>
       </template>
     </div>
-  </SettingDrawer>
+  <template #footer><div class="settings-actions"><Button v-if="result" @click="copyResult">{{ $t('modelSettings.debug.copyResult') }}</Button><Button @click="drawerVisible = false">{{ $t('common.close') }}</Button><Button variant="primary" :loading="running" :disabled="!canRun" @click="runDebug">{{ $t('modelSettings.debug.run') }}</Button></div></template></Drawer>
 </template>
 
 <script setup lang="ts">
-import SafeTextarea from '@/components/SafeTextarea.vue'
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { Button, Input, Select, Switch, Textarea, Drawer, toast } from '@/components/ui'
+import '@/styles/settings-form.css'
+import { computed, ref, watch, onBeforeUnmount, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { copyWithToast } from '@/utils/clipboard'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import { copyToClipboard } from '@/utils/clipboard'
 import { debugModel, type ModelConfig, type ModelDebugResult } from '@/api/model'
-import { fileSizeVerification } from '@/utils'
+import { fileSizeVerification, MAX_FILE_SIZE_MB } from '@/utils'
 import { modelSupportsThinking } from '@/utils/thinkingControl'
 import {
   formatContextWindow,
@@ -221,6 +185,7 @@ const emit = defineEmits<{
 }>()
 
 const { t, te } = useI18n()
+const formId = useId()
 const drawerVisible = computed({
   get: () => props.visible,
   set: value => emit('update:visible', value),
@@ -390,7 +355,8 @@ const selectModelType = (type: DebugModelType) => {
 const onNativeFileChange = (event: Event) => {
   const target = event.target as HTMLInputElement
   const selectedFile = target.files?.[0] || null
-  if (selectedFile && fileSizeVerification(selectedFile)) {
+  if (selectedFile && fileSizeVerification(selectedFile, true)) {
+    toast.error(t('error.fileSizeExceeded', { size: MAX_FILE_SIZE_MB }))
     target.value = ''
     file.value = null
     resetResult()
@@ -439,7 +405,7 @@ const runDebug = async () => {
     history.value = history.value.slice(0, 6)
     resultTab.value = 'response'
   } catch (error: any) {
-    MessagePlugin.error(error?.message || t('modelSettings.debug.requestFailed'))
+    toast.error(error?.message || t('modelSettings.debug.requestFailed'))
   } finally {
     running.value = false
   }
@@ -447,7 +413,8 @@ const runDebug = async () => {
 
 const copyResult = async () => {
   if (!result.value) return
-  await copyWithToast(JSON.stringify(result.value, null, 2), 'common.copied')
+  if (await copyToClipboard(JSON.stringify(result.value, null, 2))) toast.success(t('common.copied'))
+  else toast.error(t('common.copyFailed'))
 }
 
 onBeforeUnmount(() => {
@@ -457,249 +424,18 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped lang="less">
-.form-item {
-  margin-bottom: 0;
-}
+<style scoped>
+ .setting-drawer__section { padding: var(--space-4) 0; border-top: 2px solid var(--rule); }
+.form-item { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
+.form-label { font-weight: 700; }
+.form-desc { color: var(--muted); font-size: var(--text-sm); }
+.model-type-options, .switch-field, .result-tabs, .metric-list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.model-type-option, .history-item { padding: var(--space-2); color: var(--text); background: var(--bg); border: 1px solid var(--border); font: inherit; cursor: pointer; }
+.model-type-option.is-active, .history-item--active { background: var(--text); color: var(--bg); }
+.model-type-option:focus-visible, .history-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.parameter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); }
+.json-output { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); background: var(--surface-soft); padding: var(--space-3); }
+.result-banner--error, .result-error { color: var(--danger); }
+.file-picker__input { max-width: 100%; }
 
-.form-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-  line-height: 1.4;
-}
-
-.form-desc {
-  margin: 4px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--td-text-color-placeholder);
-
-  &--inline {
-    margin: 0;
-  }
-}
-
-.model-type-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.model-type-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  min-height: 32px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 8px;
-  background: var(--td-bg-color-container);
-  color: var(--td-text-color-secondary);
-  font-size: 13px;
-  line-height: 1.4;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-
-  &__icon {
-    font-size: 15px;
-    flex-shrink: 0;
-  }
-
-  &__label {
-    white-space: nowrap;
-  }
-
-  &:hover:not(.is-active) {
-    border-color: var(--td-brand-color-3, var(--td-brand-color));
-    color: var(--td-text-color-primary);
-  }
-
-  &.is-active {
-    border-color: var(--td-brand-color);
-    background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
-    color: var(--td-brand-color);
-    font-weight: 500;
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--td-brand-color);
-    outline-offset: 2px;
-  }
-}
-
-.model-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-
-  &__name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__meta {
-    flex-shrink: 0;
-    color: var(--td-text-color-placeholder);
-    font-size: 12px;
-  }
-}
-
-.parameter-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-
-  :deep(.t-input-number) {
-    width: 100%;
-  }
-}
-
-.switch-field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-}
-
-.file-picker {
-  position: relative;
-
-  &__input {
-    position: absolute;
-    width: 0;
-    height: 0;
-    opacity: 0;
-    pointer-events: none;
-  }
-}
-
-.history-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.history-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 10px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 6px;
-  background: var(--td-bg-color-container);
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-
-  &__label {
-    color: var(--td-text-color-primary);
-    font-weight: 500;
-  }
-
-  &__meta {
-    color: var(--td-text-color-placeholder);
-  }
-
-  &:hover,
-  &--active {
-    border-color: var(--td-brand-color);
-    background: color-mix(in srgb, var(--td-brand-color) 6%, var(--td-bg-color-container));
-  }
-}
-
-.result-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-
-  &--ok {
-    background: var(--td-success-color-light);
-    color: var(--td-success-color);
-
-    .result-banner__text strong {
-      color: var(--td-text-color-primary);
-    }
-  }
-
-  &--error {
-    background: var(--td-error-color-light);
-    color: var(--td-error-color);
-
-    .result-banner__text strong {
-      color: var(--td-text-color-primary);
-    }
-  }
-
-  &__text {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-
-    span {
-      color: var(--td-text-color-placeholder);
-      font-size: 12px;
-    }
-  }
-}
-
-.metric-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.metric-chip {
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--td-bg-color-secondarycontainer);
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-}
-
-.result-error {
-  margin: 10px 0 0;
-  color: var(--td-error-color);
-  font-size: 13px;
-  white-space: pre-wrap;
-}
-
-.result-tabs {
-  margin-top: 12px;
-
-  :deep(.t-tabs__content) {
-    display: none;
-  }
-}
-
-.json-output {
-  overflow: auto;
-  max-height: 420px;
-  min-height: 140px;
-  margin: 8px 0 0;
-  padding: 12px 14px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 8px;
-  background: var(--td-bg-color-secondarycontainer);
-  color: var(--td-text-color-primary);
-  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-@media (max-width: 640px) {
-  .parameter-grid {
-    grid-template-columns: 1fr;
-  }
-}
 </style>

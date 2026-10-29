@@ -126,6 +126,7 @@ func (h *LibraryHandler) GetLibrary(c *gin.Context) {
 
 // UpdateLibraryRequest defines the request body structure for updating a library
 type UpdateLibraryRequest struct {
+	Color       *int                   `json:"color"`
 	Name        string                 `json:"name"        binding:"required"`
 	Description string                 `json:"description"`
 	Template    *string                `json:"template"`
@@ -163,6 +164,12 @@ func (h *LibraryHandler) UpdateLibrary(c *gin.Context) {
 			req.Config = &types.LibraryConfig{}
 		}
 		req.Config.ModelTiers = req.ModelTiers
+	}
+	if req.Color != nil {
+		if req.Config == nil {
+			req.Config = &types.LibraryConfig{}
+		}
+		req.Config.Color = req.Color
 	}
 
 	logger.Infof(ctx, "Updating library, ID: %s, name: %s",

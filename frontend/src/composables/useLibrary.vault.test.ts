@@ -1,3 +1,4 @@
+import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -12,10 +13,9 @@ function createHook(detailsAPI: (id: string) => Promise<unknown>, list: object[]
   const modules: Record<string, unknown> = {
     pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
     '../utils/index': { formatStringDate: () => '2026-10-11' },
-    'tdesign-vue-next': { MessagePlugin: {} },
     '@/api/library': {
       getEntryDetails: detailsAPI,
-      listEntryFiles: async () => ({ data: list, total: list.length }),
+      listEntryFiles: async () => ({ success: true, data: list, total: list.length }),
       getEntryDetailsCon: async () => ({ success: true, data: [], total: 0 }),
     },
     '@/stores/entry': { entryStore: () => ({}) },
@@ -27,7 +27,7 @@ function createHook(detailsAPI: (id: string) => Promise<unknown>, list: object[]
   }).outputText
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', output)(
-    (name: string) => modules[name] ?? require(name), module, module.exports,
+    (name: string) => modules[name] ?? entryPresentationTestModules[name] ?? require(name), module, module.exports,
   )
   return module.exports.default('library-vault')
 }

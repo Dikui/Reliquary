@@ -1,3 +1,4 @@
+import { settingsTestUi } from '../views/settings/settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
@@ -23,7 +24,8 @@ function actualAPI(get: () => Promise<unknown>, post: (payload: any) => Promise<
 }
 
 async function mount(locale: keyof typeof messages, api: object, props: object = {}) {
-  const component = loadComponent(new URL('./EmbeddingRebuild.vue', import.meta.url), { '@/api/embedding-rebuild': api })
+  let confirmation: any
+  const component = loadComponent(new URL('./EmbeddingRebuild.vue', import.meta.url), { '@/api/embedding-rebuild': api, '@/styles/settings-form.css': {}, '@/components/ui': settingsTestUi({ confirm: (options: unknown) => { confirmation = options; return { destroy() {} } } }) })
   const app = renderer.createApp(component, { modelId: 'model-1', models: [{ id: 'model-1', display_name: 'Multimodal model' }], ...props })
   app.use(createI18n({ legacy: false, locale, messages }))
   registerPrimitives(app)
@@ -34,7 +36,7 @@ async function mount(locale: keyof typeof messages, api: object, props: object =
   const root = element('root')
   app.mount(root)
   await settle()
-  return { root, app, errors, warnings }
+  return { root, app, errors, warnings, confirmation: () => confirmation }
 }
 function button(root: ReturnType<typeof element>, label: string) {
   const target = descendants(root).find(node => node.tag === 'button' && visibleText(node) === label)
@@ -58,10 +60,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const view = await mount(locale, api)
     try {
       assert.ok(visibleText(view.root).includes(copy.noRun))
-      const popconfirm = descendants(view.root).find(node => node.props['data-popconfirm'])!
-      await click(popconfirm)
-      const confirm = descendants(view.root).find(node => node.props['data-confirm'])!
-      await click(confirm)
+      await click(button(view.root, messages[locale].embeddingRebuild.start))
+      assert.equal(view.confirmation().header, copy.start)
+      await view.confirmation().onConfirm(); await settle()
       assert.ok(visibleText(view.root).includes(copy.status.pending))
       await click(button(view.root, copy.pause))
       assert.ok(visibleText(view.root).includes(copy.status.paused))
@@ -115,8 +116,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     try {
       assert.equal(button(view.root, messages[locale].embeddingRebuild.resume).props.disabled, true)
       assert.equal(button(view.root, messages[locale].embeddingRebuild.start).props.disabled, false)
-      await click(descendants(view.root).find(node => node.props['data-popconfirm'])!)
-      await click(descendants(view.root).find(node => node.props['data-confirm'])!)
+      await click(button(view.root, messages[locale].embeddingRebuild.start))
+      await view.confirmation().onConfirm(); await settle()
       assert.deepEqual(requests, [{ action: 'start', runId: undefined }])
     } finally { view.app.unmount() }
   })

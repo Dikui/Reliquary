@@ -39,10 +39,6 @@ func TestMarkdownOnlyCapabilityGuard(t *testing.T) {
 		`deleted: 'Personal document deleted',`,
 		`deleteFailed: 'The personal document was not deleted. Try again.',`,
 		`mineImportedHint: 'Personal documents are imported through the ingest interface. Resubmit through the ingest interface to update the content.',`,
-		// A failed connection can leave the save outcome unknown; this is not a content type.
-		`: !cause?.status ? t('entryEditor.uncertain') : cause?.message || t('entryEditor.saveFailed')`,
-		`uncertain: 'The save result could not be confirmed. Your draft is retained. You can retry; identical content will not be processed twice.',`,
-		`uncertain: '未能确认保存结果，草稿已保留。可以重试，相同正文不会重复处理。',`,
 	}
 	// Frozen historical schema retains names needed by previous installations.
 	historical := map[string]bool{"migrations/versioned/000000_init.up.sql": true}

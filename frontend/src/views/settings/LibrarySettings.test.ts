@@ -1,3 +1,4 @@
+import { settingsTestUi } from './settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -27,7 +28,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests
   const stub = defineComponent({ setup(_, { slots }) { return () => h('div', slots.default?.()) } })
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
-    'tdesign-vue-next': { MessagePlugin: { success() {} }, DialogPlugin: {} },
+    '@/components/ui': settingsTestUi(),
     '@/utils/settingsPatch': { changedSettings },
     '@/utils/modelTiers': { copyModelTiers },
     '@/stores/ui': { useUIStore: () => ({ settingsInitialSubSection: null }) },
@@ -44,7 +45,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests
   function evaluate(code: string) {
     const module = { exports: {} as any }
     const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-    new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? (name.endsWith('.vue') ? { __esModule: true, default: stub } : require(name)), module, module.exports)
+    new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? (name === '@/styles/settings-form.css' ? {} : name.endsWith('.vue') ? { __esModule: true, default: stub } : require(name)), module, module.exports)
     return module.exports
   }
   const { descriptor: rebuildDescriptor } = parse(readFileSync(new URL('../../components/EmbeddingRebuild.vue', import.meta.url), 'utf8'), { filename: 'EmbeddingRebuild.vue' })
@@ -92,9 +93,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 
   test(`${locale}: a failed settings save preserves the edited values and shows an inline error`, async () => {
     const { html, events } = await scenario(locale, async state => {
-      state.formData.value.chunkingConfig.chunkSize = 128
+      state.currentSection.value = 'models'
+      state.formData.value.modelTiers.embedding = 'embedding-edited'
       await state.handleSubmit()
-      assert.equal(state.formData.value.chunkingConfig.chunkSize, 128)
+      assert.equal(state.formData.value.modelTiers.embedding, 'embedding-edited')
       assert.equal(state.dirty.value, true)
       assert.equal(state.error.value, 'Save unavailable')
     }, true)

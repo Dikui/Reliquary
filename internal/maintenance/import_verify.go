@@ -52,6 +52,7 @@ func VerifyImportedReplica(ctx context.Context, db *gorm.DB, root string) error 
 		return err
 	}
 	projectLibraryTemplateSnapshot(original, current.schemaVersion)
+	projectLibraryColorSnapshot(original, current.schemaVersion)
 	if db.Migrator().HasColumn("entries", "source_ref") {
 		projectIngestSnapshot(original)
 	}

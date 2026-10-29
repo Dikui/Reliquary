@@ -140,7 +140,8 @@ func TestContentStorageRetentionDeletionAndAudit(t *testing.T) {
 	ctx := context.Background()
 	store := modelcalls.NewStore(db)
 	require.NoError(t, db.Exec(`INSERT INTO spaces(id,name,business) VALUES(1,'Content','personal');
- INSERT INTO libraries(id,space_id,name,template,directory,embedding_model_id,summary_model_id) VALUES('content-lib',1,'Content','own','content','','');
+ INSERT INTO libraries(id,space_id,name,template,directory,embedding_model_id,summary_model_id)
+ VALUES('content-lib',1,'Content','standard','content','','');
  INSERT INTO entries(id,space_id,library_id,type,title,source) VALUES('content-entry',1,'content-lib','manual','Content','');`).Error)
 	entry := "content-entry"
 	ids := []string{}

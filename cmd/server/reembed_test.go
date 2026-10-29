@@ -58,7 +58,10 @@ func TestReembedHistoricalFailedRunReportsItsOwnStatusAndExitError(t *testing.T)
 	require.NoError(t, db.Create(&types.Library{ID: "cli-library", SpaceID: 1, Name: "CLI", ModelTiers: types.ModelTierConfig{Embedding: "cli-model"}}).Error)
 	require.NoError(t, db.Create(&types.Model{ID: "cli-model", SpaceID: 1, Name: "Fixture model", Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive,
 		Parameters: types.ModelParameters{BaseURL: provider.URL + "/v1", InterfaceType: "openai", EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
-	require.NoError(t, db.Create(&types.Entity{ID: "cli-entity", SpaceID: 1, CanonicalName: "CLI Entity", NormalizedName: "cli entity", EntityType: "product", EmbeddingNeedsRebuild: true}).Error)
+	require.NoError(t, db.Create(&types.Entity{
+		ID: "cli-entity", SpaceID: 1, LibraryID: "cli-library", CanonicalName: "CLI Entity",
+		NormalizedName: "cli entity", EntityType: "product", EmbeddingNeedsRebuild: true,
+	}).Error)
 	var databaseName string
 	require.NoError(t, db.Raw("SELECT current_database()").Scan(&databaseName).Error)
 	dsn, err := url.Parse(os.Getenv(pgtest.DSNEnv))

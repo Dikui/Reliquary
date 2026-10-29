@@ -1,3 +1,4 @@
+import { settingsTestUi } from './settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -37,13 +38,13 @@ async function scenario(locale: keyof typeof messages, getVaultStatus: () => Pro
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
     '@/api/vault': { getVaultStatus, getVaultFileRebuildStatus: async () => ({ success: true, data: { status: 'idle' } }), ...api },
-    'tdesign-vue-next': { DialogPlugin: { confirm: (options: any) => { dialog(options); return { destroy() {} } } } },
+    '@/components/ui': settingsTestUi({ confirm: (options: any) => { dialog(options); return { destroy() {} } } }),
     './MaintenanceStatus.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('section', { 'data-maintenance-status': true }) }) },
   }
   function evaluate(code: string) {
     const module = { exports: {} as any }
     const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-    new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? require(name), module, module.exports)
+    new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? (name === '@/styles/settings-form.css' ? {} : require(name)), module, module.exports)
     return module.exports
   }
   const component = evaluate(script.content).default
@@ -75,7 +76,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   const copy = messages[locale].settings.vault
   test(`${locale}: settings render every library archive, including empty and custom libraries`, async () => {
     const html = await scenario(locale, async () => ({ success: true, data: status }), state => state.load())
-    for (const value of [copy.title, copy.root, copy.rootHint, copy.archiveHint, copy.lastScan, copy.archivedEntries, copy.lastError, copy.notScanned, status.root, 'Cannot read ai-output/example.md']) assert.ok(html.includes(value), value)
+    for (const value of [copy.root, copy.rootHint, copy.archiveHint, copy.lastScan, copy.archivedEntries, copy.lastError, copy.notScanned, status.root, 'Cannot read ai-output/example.md']) assert.ok(html.includes(value), value)
     for (const library of status.libraries) {
       assert.ok(html.includes(library.name), library.name)
       assert.ok(html.includes(`${library.directory}/`), library.directory)
@@ -85,7 +86,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.match(html, /<dd>3<\/dd>/)
     assert.doesNotMatch(html, /<input|<textarea/)
     assert.ok(readFileSync(new URL('./Settings.vue', import.meta.url), 'utf8').includes('currentSection === \'vault\''))
-    assert.ok(readFileSync(new URL('./Settings.vue', import.meta.url), 'utf8').includes('<VaultStatus />'))
+    assert.match(readFileSync(new URL('./Settings.vue', import.meta.url), 'utf8'), /<VaultStatus\b/)
   })
 
   test(`${locale}: a failed refresh preserves the status and offers retry`, async () => {
@@ -165,7 +166,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(state.rebuilding.value, true)
     }, { rebuildVaultFiles: async () => { calls++; return { success: true, data: { status: 'running' } } } })
     assert.ok(html.includes(copy.rebuildRunning))
-    assert.match(html, /<button[^>]*disabled[^>]*>Export library|<button[^>]*disabled[^>]*>导出文件库/)
+    assert.match(html, /<button[^>]*disabled[^>]*>[\s\S]*?Export library|<button[^>]*disabled[^>]*>[\s\S]*?导出文件库/)
   })
 
   test(`${locale}: polling renders completed counts and refreshes directory status`, async () => {
@@ -230,7 +231,7 @@ test('reopening the page discovers a running rebuild and disables its button', a
     await state.pollRebuild()
     assert.equal(state.rebuilding.value, true)
   }, { getVaultFileRebuildStatus: async () => ({ success: true, data: { status: 'running' } }) })
-  assert.match(html, /<button[^>]*disabled[^>]*>Export library/)
+  assert.match(html, /<button[^>]*disabled[^>]*>[\s\S]*?Export library/)
 })
 
 test('refresh during submission cannot cancel observation of the accepted task', async () => {

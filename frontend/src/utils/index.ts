@@ -1,4 +1,4 @@
-import { MessagePlugin } from "tdesign-vue-next";
+import { toast } from '@/components/ui/feedback'
 import i18n from '@/i18n';
 
 // 声明全局运行时配置类型
@@ -36,6 +36,7 @@ export function generateRandomString(length: number) {
 }
 
 export function formatStringDate(date: any) {
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
   let data = new Date(date);
   let year = data.getFullYear();
   let month = String(data.getMonth() + 1).padStart(2, '0');
@@ -51,7 +52,7 @@ export function formatStringDate(date: any) {
 export function fileSizeVerification(file: Pick<File, 'size'>, silent = false) {
   if (file.size <= MAX_FILE_SIZE_BYTES) return false;
   if (!silent) {
-    MessagePlugin.error(i18n.global.t('error.fileSizeExceeded', { size: MAX_FILE_SIZE_MB }));
+    toast.error(i18n.global.t('error.fileSizeExceeded', { size: MAX_FILE_SIZE_MB }));
   }
   return true;
 }

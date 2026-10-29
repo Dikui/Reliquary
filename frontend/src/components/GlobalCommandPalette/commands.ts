@@ -10,8 +10,7 @@ export interface CmdkCommand {
   id: string
   /** Localized display label. */
   label: string
-  /** TDesign icon name rendered on the left. */
-  icon: string
+  kind?: 'navigation' | 'command'
   /** Extra tokens used purely for fuzzy matching (aliases, synonyms). */
   keywords?: string[]
   /** Executed on primary action. Should close the palette itself if needed. */
@@ -23,6 +22,7 @@ export interface CommandContext {
   t: Composer['t']
   /** Closes the palette; typically wires to commandPaletteStore.closePalette. */
   close: () => void
+  toggleTheme?: () => void
 }
 
 /**
@@ -34,8 +34,7 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
   return [
     {
       id: 'open-entry',
-      label: t('commandPalette.quick.knowledge'),
-      icon: 'file',
+      label: t('commandPalette.quick.entries'),
       keywords: ['library', 'entry', 'base', '库', '文档'],
       run: () => {
         close()
@@ -43,15 +42,29 @@ export function buildCommands(ctx: CommandContext): CmdkCommand[] {
       },
     },
     {
+      id: 'open-search', label: t('commandPalette.quick.search'),
+      keywords: ['search', '检索', '搜索'],
+      run: () => { close(); router.push('/platform/search') },
+    },
+    {
+      id: 'open-follows', label: t('commandPalette.quick.follows'),
+      keywords: ['follow', 'feed', '关注', '动态'],
+      run: () => { close(); router.push('/platform/follows') },
+    },
+    {
       id: 'open-settings',
       label: t('commandPalette.quick.settings'),
-      icon: 'setting',
       keywords: ['settings', 'preferences', 'config', '设置', '配置'],
       run: () => {
         close()
         router.push('/platform/settings')
       },
     },
+    ...(ctx.toggleTheme ? [{
+      id: 'toggle-theme', label: t('commandPalette.toggleTheme'), kind: 'command' as const,
+      keywords: ['theme', 'dark', 'light', '主题', '深色', '浅色'],
+      run: () => { ctx.toggleTheme?.(); close() },
+    }] : []),
   ]
 }
 

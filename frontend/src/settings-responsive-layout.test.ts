@@ -22,48 +22,20 @@ async function compiledStyles(path: string) {
   return compiled.rawResult!.root
 }
 
-test('compiled general settings styles keep selectors and previews inside mobile rows', async () => {
-  const css = await compiledStyles('./views/settings/GeneralSettings.vue')
-  const rules: Record<string, Record<string, string>> = {}
-  css.walkRules(rule => {
-    if (rule.parent?.type !== 'atrule' || !('params' in rule.parent) || rule.parent.params !== '(max-width: 640px)') return
-    for (const selector of rule.selectors) {
-      const name = selector.replace(/\[data-v-ui-regression\]/g, '')
-      const declarations: Record<string, string> = {}
-      rule.walkDecls(decl => { declarations[decl.prop] = decl.value })
-      rules[name] = declarations
-    }
-  })
-  assert.equal(rules['.setting-row']['flex-direction'], 'column')
-  for (const selector of ['.setting-info', '.setting-control']) {
-    assert.equal(rules[selector]['min-width'], '0')
-    assert.equal(rules[selector].width, '100%')
-    assert.equal(rules[selector]['max-width'], '100%')
-  }
-  assert.equal(rules['.setting-info']['padding-right'], '0')
-  assert.equal(rules['.setting-control']['align-items'], 'flex-start')
-  for (const selector of ['.setting-select', '.font-preview']) assert.equal(rules[selector].width, '100%')
-  const source = readFileSync(new URL('./views/settings/GeneralSettings.vue', import.meta.url), 'utf8')
-  assert.doesNotMatch(source, /style="width: 280px;"/)
-  assert.equal((source.match(/class="setting-select"/g) || []).length, 4)
+test('shared form styles keep controls and previews inside mobile rows', async () => {
+  const css = readFileSync(new URL('./styles/settings-form.css', import.meta.url), 'utf8')
+  assert.match(css, /@media \(max-width: 640px\)/)
+  assert.match(css, /\.settings-form \.setting-row \{ grid-template-columns: minmax\(0, 1fr\)/)
+  assert.match(css, /\.settings-form \.font-preview \{[^}]*width: 100%/)
+  assert.match(css, /\.settings-form \.setting-control \{[^}]*min-width: 0/)
 })
 
-test('compiled SSRF input styles reserve suffix space and keep tag close icons outside text clipping', async () => {
-  const css = await compiledStyles('./views/system/SystemSettings.vue')
-  const rules: Record<string, Record<string, string>> = {}
-  css.walkRules(rule => {
-    if (!rule.selector.includes('.ssrf-whitelist-input')) return
-    const declarations: Record<string, string> = {}
-    rule.walkDecls(decl => { declarations[decl.prop] = decl.value })
-    rules[rule.selector.replace(/\[data-v-ui-regression\]/g, '')] = declarations
-  })
-  assert.match(rules['.ssrf-whitelist-input .t-input']['padding-right'], /suffix-icon-width, 24px/)
-  assert.equal(rules['.ssrf-whitelist-input .t-input.t-input--prefix > .t-input__prefix']['flex-wrap'], 'wrap')
-  assert.equal(rules['.ssrf-whitelist-input .t-tag']['min-width'], '0')
-  assert.match(rules['.ssrf-whitelist-input .t-tag']['max-width'], /100%/)
-  assert.equal(rules['.ssrf-whitelist-input .t-tag--text']['text-overflow'], 'ellipsis')
-  assert.equal(rules['.ssrf-whitelist-input .t-tag--text'].overflow, 'hidden')
-  assert.equal(rules['.ssrf-whitelist-input .t-tag__icon-close']['flex-shrink'], '0')
+test('SSRF whitelist tags wrap and retain keyboard operable removal buttons', async () => {
   const source = readFileSync(new URL('./views/system/SystemSettings.vue', import.meta.url), 'utf8')
-  assert.match(source, /ssrf-whitelist-input"\s*excess-tags-display-type="break-line"\s*:tag-props="\{ maxWidth: '100%' \}"/)
+  assert.match(source, /<Tag v-for="entry in ssrfWhitelistModelValue\(\)"/)
+  assert.match(source, /<Button[^>]*:aria-label="`\$\{t\('common.delete'\)\} \$\{entry\}`/)
+  const css = await compiledStyles('./views/system/SystemSettings.vue')
+  let found = false
+  css.walkRules(rule => { if (rule.selector.includes('.ssrf-whitelist-input')) found = true })
+  assert.ok(found)
 })

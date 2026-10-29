@@ -2,101 +2,29 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../../utils/sfcStyleTestHelpers'
 
-const fullSectionWidths: Record<number, number> = {
-  1440: 804,
-  1280: 804,
-  1024: 728,
-  900: 636,
-  768: 504,
+for (const inner of [804, 728, 636, 504, 358]) {
+  test(`settings form controls fit ${inner}px content without forcing horizontal page scroll`, async () => {
+    const rules = await compiledSFCStyleRules(new URL('../../styles/settings-form.css', import.meta.url))
+    const style = (selector: string) => styleDeclarationsAtWidth(rules, selector, 1440, { 'settings-content': inner })
+    assert.equal(style('.settings-form .setting-row')['grid-template-columns'], inner <= 720 ? 'minmax(0, 1fr)' : '224px minmax(0, 1fr)')
+    assert.equal(style('.settings-form .setting-control')['min-width'], '0')
+  })
 }
 
-test('system settings respond to the available settings content width', async () => {
-  const rules = await compiledSFCStyleRules(new URL('./SystemSettings.vue', import.meta.url))
-  for (const viewport of [900, 768]) {
-    const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, viewport, {
-      'settings-content': fullSectionWidths[viewport],
-    })
-    assert.equal(styles('.runtime-table-header').display, 'none')
-    assert.equal(styles('.settings-group--runtime .setting-row').display, 'flex')
-    assert.equal(styles('.settings-group--runtime .setting-row')['flex-direction'], 'column')
-    assert.equal(styles('.setting-info')['min-width'], '0')
-    assert.equal(styles('.setting-info')['max-width'], '100%')
-    assert.equal(styles('.setting-control')['min-width'], '0')
-    assert.equal(styles('.setting-control')['max-width'], '100%')
-    assert.equal(styles('.setting-control-row')['flex-wrap'], 'wrap')
-    assert.equal(styles('.setting-input')['min-width'], '0')
-    assert.equal(styles('.setting-input')['max-width'], '100%')
-  }
-  for (const viewport of [1440, 1280, 1024]) {
-    const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, viewport, {
-      'settings-content': fullSectionWidths[viewport],
-    })
-    assert.equal(styles('.runtime-table-header').display, 'grid')
-    assert.equal(styles('.settings-group--runtime .setting-row')['grid-template-columns'], 'minmax(0, 1fr) 280px')
-    assert.equal(styles('.setting-control')['min-width'], '280px')
-    assert.equal(styles('.setting-input--wide').width, '320px')
-  }
-})
-
-test('runtime cards reflow and tables scroll within the narrow settings content', async () => {
+test('runtime metrics wrap and wide tables scroll within their own shared container', async () => {
   const rules = await compiledSFCStyleRules(new URL('./RuntimeQueues.vue', import.meta.url))
-  for (const viewport of [900, 768]) {
-    const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, viewport, {
-      'settings-content': fullSectionWidths[viewport],
-    })
-    assert.equal(styles('.rq-header')['flex-direction'], 'column')
-    assert.equal(styles('.rq-actions')['flex-wrap'], 'wrap')
-    assert.equal(styles('.rq-overview')['flex-direction'], 'column')
-    assert.equal(styles('.rq-overview-metrics')['grid-template-columns'], 'repeat(2, minmax(0, 1fr))')
-    assert.equal(styles('.rq-pool-grid')['grid-template-columns'], 'repeat(2, minmax(0, 1fr))')
-    assert.equal(styles('.rq-metric-label')['white-space'], 'normal')
-    assert.equal(styles('.data-table-shell.rq-table-shell')['overflow-x'], 'auto')
-    assert.equal(styles('.data-table-shell.rq-table-shell')['max-width'], '100%')
-    assert.equal(styles('.rq-table-shell table')['min-width'], '794px')
-    assert.equal(styles('.rq-models .rq-table-shell table')['min-width'], '698px')
-  }
-  for (const viewport of [1440, 1280, 1024]) {
-    const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, viewport, {
-      'settings-content': fullSectionWidths[viewport],
-    })
-    assert.equal(styles('.rq-pool-grid')['grid-template-columns'], 'repeat(4, minmax(0, 1fr))')
-    assert.equal(styles('.rq-header')['flex-direction'], undefined)
-    assert.equal(styles('.rq-pool-name')['min-width'], '0')
-    assert.equal(styles('.rq-pool-name')['overflow-wrap'], 'anywhere')
-  }
+  const style = (selector: string) => styleDeclarationsAtWidth(rules, selector, 390)
+  assert.equal(style('.rq-overview-metrics')['grid-template-columns'], 'repeat(auto-fit, minmax(140px, 1fr))')
+  assert.equal(style('.rq-pool-grid')['grid-template-columns'], 'repeat(auto-fit, minmax(140px, 1fr))')
+  assert.equal(style('.rq-table-shell')['min-width'], '0')
+  assert.equal(style('.rq-table-shell .rq-table')['min-width'], '820px')
+  assert.equal(style('.rq-models .rq-table')['min-width'], '640px')
 })
 
-test('API settings keep controls and paginated tables inside the narrow content', async () => {
-  const rules = await compiledSFCStyleRules(new URL('../integrations/ApiIntegrationSettings.vue', import.meta.url))
-  for (const viewport of [900, 768]) {
-    const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, viewport, {
-      'settings-content': fullSectionWidths[viewport],
-    })
-    assert.equal(styles('.setting-row')['flex-direction'], 'column')
-    assert.equal(styles('.setting-info')['min-width'], '0')
-    assert.equal(styles('.setting-control')['min-width'], '0')
-    assert.equal(styles('.setting-control')['max-width'], '100%')
-    assert.equal(styles('.api-table-shell .t-table__content')['overflow-x'], 'auto')
-    assert.equal(styles('.api-table-shell table')['min-width'], '640px')
-    assert.equal(styles('.api-table-shell .t-pagination')['flex-wrap'], 'wrap')
-  }
-  for (const viewport of [1440, 1280, 1024]) {
-    const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, viewport, {
-      'settings-content': fullSectionWidths[viewport],
-    })
-    assert.equal(styles('.setting-row')['flex-direction'], undefined)
-    assert.equal(styles('.api-table-shell table')['min-width'], undefined)
-  }
-})
-
-test('teleported runtime task drawer handles narrow content without the settings container', async () => {
-  const rules = await compiledSFCStyleRules(new URL('./RuntimeQueues.vue', import.meta.url))
-  for (const viewport of [1440, 1280, 1024, 900, 768]) {
-    const styles = (selector: string) => styleDeclarationsAtWidth(rules, selector, viewport)
-    assert.equal(styles('.rq-task-state-filter')['overflow-x'], 'auto')
-    assert.equal(styles('.rq-task-state-option')['min-width'], '104px')
-    assert.equal(styles('.rq-failed-section-head')['flex-wrap'], 'wrap')
-    assert.equal(styles('.rq-failed-section-actions')['flex-wrap'], 'wrap')
-    assert.equal(styles('.rq-failed-section-actions')['max-width'], '100%')
-  }
+test('API key tables and task drawer controls retain narrow screen access', async () => {
+  const api = await compiledSFCStyleRules(new URL('../integrations/ApiIntegrationSettings.vue', import.meta.url))
+  assert.equal(styleDeclarationsAtWidth(api, '.api-settings .rq-table', 390)['min-width'], '640px')
+  const queues = await compiledSFCStyleRules(new URL('./RuntimeQueues.vue', import.meta.url))
+  assert.equal(styleDeclarationsAtWidth(queues, '.rq-task-state-filter', 390)['flex-wrap'], 'wrap')
+  assert.equal(styleDeclarationsAtWidth(queues, '.rq-failed-section-actions', 390)['flex-wrap'], 'wrap')
 })

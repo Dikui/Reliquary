@@ -1,27 +1,9 @@
 <template>
 
-  <div class="system-settings">
+  <div class="system-settings settings-form">
     <div class="section-header">
       <div class="section-header__titlewrap">
-        <h2>{{ t('system.globalSettings.title') }}</h2>
-        <t-popup v-model:visible="priorityHintVisible" placement="bottom-start" trigger="click" :overlay-inner-style="{ maxWidth: '420px' }">
-          <button type="button" class="hint-trigger"
-            :aria-label="t('system.globalSettings.priorityHint.disclosure')"
-            :aria-expanded="priorityHintVisible"
-            @keydown.esc="closePriorityHint">
-            <t-icon name="info-circle" size="16px" />
-          </button>
-          <template #content>
-            <div class="hint-popover">
-              <p class="hint-popover__title">{{ t('system.globalSettings.priorityHint.disclosure') }}</p>
-              <ul class="hint-popover__list">
-                <li>{{ t('system.globalSettings.priorityHint.tier1') }}</li>
-                <li>{{ t('system.globalSettings.priorityHint.tier2') }}</li>
-                <li>{{ t('system.globalSettings.priorityHint.tier3') }}</li>
-              </ul>
-            </div>
-          </template>
-        </t-popup>
+        <details class="settings-priority-hint"><summary>{{ t('system.globalSettings.priorityHint.disclosure') }}</summary><ul><li>{{ t('system.globalSettings.priorityHint.tier1') }}</li><li>{{ t('system.globalSettings.priorityHint.tier2') }}</li><li>{{ t('system.globalSettings.priorityHint.tier3') }}</li></ul></details>
       </div>
       <p class="section-description">
         {{ t('system.globalSettings.description') }}
@@ -31,24 +13,16 @@
     <QueueConnectionNotice poll />
 
     <div v-if="loading && settings.length === 0" class="loading-state">
-      <t-loading :text="t('system.globalSettings.loading')" />
+      <p role="status">{{ t('common.loading') }}</p>
     </div>
 
     <div v-else-if="settings.length === 0" class="empty-state">
-      <t-icon name="info-circle" size="24px" />
+
       <span>{{ t('system.globalSettings.empty') }}</span>
     </div>
 
     <template v-else>
-      <t-tabs v-model="activeSettingsSection" class="settings-section-tabs">
-        <t-tab-panel value="runtime" :label="sectionTabLabel('runtime')" />
-        <t-tab-panel value="security" :label="sectionTabLabel('security')" />
-        <t-tab-panel
-          v-if="hasUnknownSettings"
-          value="other"
-          :label="sectionTabLabel('other')"
-        />
-      </t-tabs>
+      <nav class="settings-section-tabs" :aria-label="t('system.globalSettings.title')"><Button v-for="section in (hasUnknownSettings ? ['runtime', 'security', 'other'] : ['runtime', 'security'])" :key="section" :variant="activeSettingsSection === section ? 'primary' : 'default'" :aria-pressed="activeSettingsSection === section" @click="activeSettingsSection = section as SettingsSection">{{ sectionTabLabel(section as SettingsSection) }}</Button></nav>
 
       <section class="settings-section-panel" :aria-label="activeSectionTitle">
         <div
@@ -56,18 +30,9 @@
           :class="{ 'settings-section-intro--runtime': activeSettingsSection === 'runtime' }"
         >
           <p>{{ activeSectionDescription }}</p>
-          <t-tag v-if="activeSettingsSection === 'runtime'" theme="warning" variant="light" size="small">
+          <Tag v-if="activeSettingsSection === 'runtime'" variant="plain">
             {{ t('system.globalSettings.sections.runtime.restartHint') }}
-          </t-tag>
-        </div>
-
-        <div
-          v-if="activeSettingsSection === 'runtime'"
-          class="runtime-table-header"
-          aria-hidden="true"
-        >
-          <span>{{ t('system.globalSettings.runtimeTable.setting') }}</span>
-          <span>{{ t('system.globalSettings.runtimeTable.value') }}</span>
+          </Tag>
         </div>
 
         <div
@@ -83,35 +48,27 @@
         <div class="setting-info">
               <div class="setting-label">
             <span>{{ keyLabel(item.key) }}</span>
-            <t-tag
+            <Tag
               v-if="item.requires_restart"
-              theme="warning"
-              variant="light"
-              size="small"
+              variant="plain"
               class="setting-badge"
-            >{{ t('system.globalSettings.badgeRequiresRestart') }}</t-tag>
-            <t-tag
+            >{{ t('system.globalSettings.badgeRequiresRestart') }}</Tag>
+            <Tag
               v-if="item.is_secret"
-              theme="primary"
-              variant="light"
-              size="small"
+              variant="plain"
               class="setting-badge"
-            >{{ t('system.globalSettings.badgeSecret') }}</t-tag>
-            <t-tag
+            >{{ t('system.globalSettings.badgeSecret') }}</Tag>
+            <Tag
                   v-if="isHighImpactKey(item.key)"
-                  theme="danger"
-                  variant="light"
-                  size="small"
+                  variant="plain"
                   class="setting-badge"
-                >{{ t('system.globalSettings.badgeHighRisk') }}</t-tag>
-                <t-tag
+                >{{ t('system.globalSettings.badgeHighRisk') }}</Tag>
+                <Tag
               v-if="hasOverride(item)"
-              theme="success"
-              variant="light"
-              size="small"
+              variant="plain"
               class="setting-badge"
               :title="t('system.globalSettings.badgeOverrideTooltip')"
-            >{{ t('system.globalSettings.badgeOverride') }}</t-tag>
+            >{{ t('system.globalSettings.badgeOverride') }}</Tag>
               </div>
           <p v-if="settingDescription(item)" class="desc">{{ settingDescription(item) }}</p>
           <div v-if="modifiedMeta(item)" class="setting-meta">
@@ -123,77 +80,45 @@
 
           <div class="setting-control-row">
 
-          <t-select
+          <Select
             v-if="hasEnum(item)"
-            v-model="editValues[item.key]"
-            :options="enumOptions(item)"
+            :model-value="String(editValues[item.key] ?? '')" @update:model-value="editValues[item.key] = $event; onChange(item)"
                 :aria-label="keyLabel(item.key)"
             :disabled="savingKey === item.key"
             class="setting-input"
-            @change="onChange(item)"
-          />
+          ><option v-for="option in enumOptions(item)" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
 
-          <t-switch
+          <Switch
             v-else-if="item.value_type === 'bool'"
-            v-model="editValues[item.key]"
-                :aria-label="keyLabel(item.key)"
-            :disabled="savingKey === item.key"
-            @change="onChange(item)"
+            :model-value="Boolean(editValues[item.key])" @update:model-value="editValues[item.key] = $event; onChange(item)" :aria-label="keyLabel(item.key)" :disabled="savingKey === item.key"
           />
-          <t-input-number
+          <Input type="number"
             v-else-if="item.value_type === 'int'"
-            v-model="editValues[item.key]"
+            :model-value="String(editValues[item.key] ?? '')" @update:model-value="editValues[item.key] = Number($event)"
             :placeholder="placeholderFor(item)"
                 :aria-label="keyLabel(item.key)"
             :disabled="savingKey === item.key"
-            theme="normal"
             :step="1"
             :min="minimumFor(item)"
             class="setting-input"
             @blur="onChange(item)"
           />
-          <t-popconfirm
-            v-else-if="item.value_type === 'string_list' && item.key === 'ssrf.whitelist'"
-            v-model:visible="ssrfPopconfirm.visible"
-            :content="ssrfPopconfirm.content"
-            :theme="ssrfPopconfirm.theme"
-            :confirm-btn="ssrfPopconfirm.confirmBtn"
-            :cancel-btn="t('system.globalSettings.confirm.cancelBtn')"
-            :popup-props="PROGRAMMATIC_POPCONFIRM_PROPS"
-            placement="left"
-            @confirm="ssrfPopconfirm.finish(true)"
-            @cancel="ssrfPopconfirm.finish(false)"
-            @visible-change="ssrfPopconfirm.onVisibleChange"
-          >
-            <div class="setting-control-anchor">
-              <t-tag-input
-                :key="`ssrf-tag-${ssrfTagInputKey()}`"
-                :model-value="ssrfWhitelistModelValue()"
-                :placeholder="emptyListPlaceholder"
-                    :aria-label="keyLabel(item.key)"
-                :disabled="savingKey === item.key"
-                class="setting-input setting-input--wide ssrf-whitelist-input"
-                excess-tags-display-type="break-line"
-                :tag-props="{ maxWidth: '100%' }"
-                clearable
-                @update:model-value="onSsrfWhitelistModelUpdate"
-              />
-            </div>
-          </t-popconfirm>
-          <t-input
+          <div v-else-if="item.value_type === 'string_list' && item.key === 'ssrf.whitelist'" class="ssrf-whitelist-input">
+            <div class="settings-actions"><Tag v-for="entry in ssrfWhitelistModelValue()" :key="entry">{{ entry }} <Button variant="ghost" :aria-label="`${t('common.delete')} ${entry}`" :disabled="savingKey === item.key || Boolean(listConfirmBusyKey)" @click="onSsrfWhitelistModelUpdate(ssrfWhitelistModelValue().filter(value => value !== entry))">×</Button></Tag></div>
+            <div class="settings-actions"><Button v-if="ssrfWhitelistModelValue().length" variant="ghost" :disabled="Boolean(listConfirmBusyKey)" @click="onSsrfWhitelistModelUpdate([])">{{ t('common.clear') }}</Button><Input v-model="newWhitelistEntry" :placeholder="emptyListPlaceholder" :aria-label="keyLabel(item.key)" :disabled="savingKey === item.key || Boolean(listConfirmBusyKey)" @keydown.enter.prevent="!$event.isComposing && addWhitelistEntry()" /><Button :disabled="!newWhitelistEntry.trim() || Boolean(listConfirmBusyKey)" @click="addWhitelistEntry">{{ t('common.add') }}</Button></div>
+          </div>
+          <Input
             v-else
-            v-model="editValues[item.key]"
+            :model-value="String(editValues[item.key] ?? '')" @update:model-value="editValues[item.key] = $event"
             :placeholder="placeholderFor(item)"
                 :aria-label="keyLabel(item.key)"
             :disabled="savingKey === item.key"
             class="setting-input"
-            clearable
             @blur="onChange(item)"
           />
 
-
               <div v-if="savingKey === item.key" class="setting-save-state" role="status">
-                <t-loading size="small" />
+                <p role="status">{{ t('common.loading') }}</p>
                 <span>{{ t('system.globalSettings.saving') }}</span>
               </div>
               <div
@@ -201,37 +126,28 @@
                 class="setting-save-state setting-save-state--success"
                 role="status"
               >
-                <t-icon name="check-circle-filled" />
+
                 <span>{{ t('system.globalSettings.saved') }}</span>
               </div>
           </div>
-
 
           <div
             v-if="hasOverride(item)"
             class="setting-control-actions"
           >
 
+            <template v-if="hasOverride(item)">
+              <Button @click="confirmAction(t('system.globalSettings.reset.confirmBody', { label: keyLabel(item.key) }), () => resetSetting(item))"
+                variant="ghost"
 
-            <t-popconfirm
-              v-if="hasOverride(item)"
-              :content="t('system.globalSettings.reset.confirmBody', { label: keyLabel(item.key) })"
-              :confirm-btn="{ content: t('system.globalSettings.reset.confirmBtn'), theme: 'warning' }"
-              :cancel-btn="{ content: t('system.globalSettings.confirm.cancelBtn') }"
-              placement="left"
-              @confirm="resetSetting(item)"
-            >
-              <t-button
-                variant="text"
-                size="small"
                 :disabled="savingKey === item.key"
                 :title="t('system.globalSettings.reset.tooltip')"
                 class="setting-reset-btn"
               >
-                <template #icon><t-icon name="refresh" /></template>
+
                 {{ t('system.globalSettings.reset.label') }}
-              </t-button>
-            </t-popconfirm>
+              </Button>
+            </template>
           </div>
         </div>
       </div>
@@ -244,10 +160,11 @@
 </template>
 
 <script setup lang="ts">
+import { Button, Input, Select, Switch, Tag, toast, useConfirm } from '@/components/ui'
+import '@/styles/settings-form.css'
 import QueueConnectionNotice from './QueueConnectionNotice.vue'
 import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessagePlugin } from 'tdesign-vue-next'
 import {
   listSystemSettings,
   getQueueConnectionStatus,
@@ -260,6 +177,7 @@ import { isSettingValueDirty, resolveCurrentSetting } from './systemSettingsEdit
 
 const deploymentCapabilities = useDeploymentCapabilitiesStore()
 
+const confirm = useConfirm()
 const { t, tm, te, locale } = useI18n()
 
 // Friendly labels per key live in i18n (system.globalSettings.keyLabels.*).
@@ -286,76 +204,18 @@ function isHighImpactKey(key: string): boolean {
   return HIGH_IMPACT_KEYS.has(key)
 }
 
-type PopconfirmBtn = { content: string; theme?: 'primary' | 'danger' | 'warning' }
-
-// TDesign popconfirm defaults to trigger:click on its inner Popup. Inputs
-// wrapped for programmatic confirm must override that, otherwise focus /
-// click on the field opens an empty bubble before the user commits a change.
-const PROGRAMMATIC_POPCONFIRM_PROPS = { trigger: 'context-menu' as const }
-
-// Shared inline t-popconfirm controller (anchored to the control row,
-// same interaction model as Reset / bulk-apply). Replaces modal dialogs.
-// State must be reactive (not nested refs) so template bindings unwrap.
-function createInlinePopconfirm() {
-  const state = reactive({
-    visible: false,
-    content: '',
-    theme: 'warning' as 'default' | 'warning' | 'danger',
-    confirmBtn: { content: '', theme: 'primary' } as PopconfirmBtn,
-  })
-  let resolver: ((ok: boolean) => void) | null = null
-  let settled = false
-
-  function ask(opts: {
-    content: string
-    theme?: 'default' | 'warning' | 'danger'
-    confirmBtn: PopconfirmBtn
-  }): Promise<boolean> {
-    state.content = opts.content
-    state.theme = opts.theme ?? 'warning'
-    state.confirmBtn = opts.confirmBtn
-    settled = false
-    return new Promise((resolve) => {
-      resolver = resolve
-      state.visible = true
-    })
-  }
-
-  function finish(ok: boolean) {
-    if (settled) return
-    settled = true
-    state.visible = false
-    const r = resolver
-    resolver = null
-    r?.(ok)
-  }
-
-  function onVisibleChange(v: boolean) {
-    if (!v && resolver) finish(false)
-  }
-
-  return Object.assign(state, { ask, finish, onVisibleChange })
+function confirmAction(body: string, action: () => unknown) {
+  confirm({ header: t('common.confirm'), body, confirmBtn: t('common.confirm'), cancelBtn: t('common.cancel'), onConfirm: async () => { await action() } })
 }
-
-const ssrfPopconfirm = createInlinePopconfirm()
-
-// Friendly labels for enum options live in i18n
-// (system.globalSettings.enumLabels.<key>.<value>). Falls back to the
-// raw enum value when no translation exists.
-function enumLabel(itemKey: string, optionValue: string): string {
-  const path = `system.globalSettings.enumLabels.${itemKey}.${optionValue}`
-  return te(path) ? (t(path) as string) : optionValue
+const newWhitelistEntry = ref('')
+function addWhitelistEntry() {
+  const entry = newWhitelistEntry.value.trim()
+  if (!entry || listConfirmBusyKey.value) return
+  onSsrfWhitelistModelUpdate([...ssrfWhitelistModelValue(), entry])
+  newWhitelistEntry.value = ''
 }
 
 const emptyListPlaceholder = computed(() => t('system.globalSettings.tagInputPlaceholder'))
-
-const priorityHintVisible = ref(false)
-
-function closePriorityHint(event: KeyboardEvent) {
-  if (!priorityHintVisible.value) return
-  priorityHintVisible.value = false
-  event.stopPropagation()
-}
 
 const settings = ref<SystemSettingItem[]>([])
 const loading = ref(false)
@@ -407,7 +267,6 @@ const activeSectionDescription = computed(() =>
   t(`system.globalSettings.sections.${activeSettingsSection.value}.description`),
 )
 
-
 function sectionTabLabel(section: SettingsSection): string {
   const count = section === 'other'
     ? unknownSettings.value.length
@@ -430,13 +289,6 @@ function markSettingSaved(item: SystemSettingItem) {
 // Guards ssrf.whitelist while an async confirm roundtrip is in flight.
 const listConfirmBusyKey = ref<string | null>(null)
 
-// Bumped when the SSRF tag-input is snapped back to the saved list so
-// Vue remounts the control and clears TDesign's internal tag state.
-const ssrfTagInputKeys = reactive<Record<string, number>>({})
-
-// Briefly blocks model updates while the SSRF tag-input remount settles.
-const ssrfSnapLocked = ref(false)
-
 // Reactive map of in-progress edits, keyed by setting key. We don't
 // mutate the canonical `settings` array directly so a failed save
 // leaves the original value visible until the user retries or refreshes.
@@ -450,7 +302,7 @@ function hasEnum(item: SystemSettingItem): boolean {
 
 function enumOptions(item: SystemSettingItem): { label: string; value: string }[] {
   const opts = item.enum ?? []
-  return opts.map((v) => ({ label: enumLabel(item.key, v), value: v }))
+  return opts.map((v) => ({ label: v, value: v }))
 }
 
 // hasOverride reports whether the row carries a real DB override (vs a
@@ -487,14 +339,6 @@ function ssrfWhitelistModelValue(): string[] {
   return Array.isArray(v) ? (v as string[]) : []
 }
 
-function ssrfTagInputKey(): number {
-  return ssrfTagInputKeys[SSRF_WHITELIST_KEY] ?? 0
-}
-
-function resetSsrfTagInput() {
-  ssrfTagInputKeys[SSRF_WHITELIST_KEY] = (ssrfTagInputKeys[SSRF_WHITELIST_KEY] ?? 0) + 1
-}
-
 function globalSettingsText(path: string, params?: Record<string, string>): string {
   if (!te(path)) return path
   const msg = params ? t(path, params) : t(path)
@@ -504,7 +348,7 @@ function globalSettingsText(path: string, params?: Record<string, string>): stri
 // Controlled SSRF tag-input: we commit editValues so a declined delta
 // can be rolled back without the component re-applying a removal.
 function onSsrfWhitelistModelUpdate(next: string[]) {
-  if (listConfirmBusyKey.value === SSRF_WHITELIST_KEY || ssrfSnapLocked.value) return
+  if (listConfirmBusyKey.value === SSRF_WHITELIST_KEY) return
   editValues[SSRF_WHITELIST_KEY] = next
   void onSsrfWhitelistChange()
 }
@@ -519,11 +363,7 @@ async function onSsrfWhitelistChange() {
 async function snapSsrfWhitelistToSaved(item: SystemSettingItem) {
   const saved = Array.isArray(item.value) ? (item.value as string[]) : []
   editValues[SSRF_WHITELIST_KEY] = [...saved]
-  resetSsrfTagInput()
-  ssrfSnapLocked.value = true
   await nextTick()
-  await nextTick()
-  ssrfSnapLocked.value = false
 }
 
 function isDirty(item: SystemSettingItem): boolean {
@@ -576,7 +416,7 @@ async function loadSettings() {
     }
   } catch (err: any) {
     const msg = err?.message || t('system.globalSettings.messages.loadFailed')
-    MessagePlugin.error(msg)
+    toast.error(msg)
   } finally {
     loading.value = false
   }
@@ -603,14 +443,13 @@ function confirmSsrfListEntryChange(
   entry: string,
 ): Promise<boolean> {
   const base = `system.globalSettings.listConfirm.${SSRF_WHITELIST_KEY}.${action}`
-  return ssrfPopconfirm.ask({
-    content: globalSettingsText(`${base}.body`, { entry }),
-    theme: action === 'add' ? 'danger' : 'warning',
-    confirmBtn: {
-      content: globalSettingsText(`${base}.confirmBtn`),
-      theme: action === 'add' ? 'danger' : 'primary',
-    },
-  })
+  return confirm({
+    header: t('common.confirm'),
+    body: globalSettingsText(`${base}.body`, { entry }),
+    theme: action === 'add' ? 'danger' : 'default',
+    confirmBtn: globalSettingsText(`${base}.confirmBtn`),
+    cancelBtn: t('common.cancel'),
+  }).result
 }
 
 // handleSSRFListChange reconciles the current edit against the saved
@@ -696,11 +535,11 @@ async function resetSetting(item: SystemSettingItem) {
     await resetSystemSetting(item.key)
     await loadSettings()
     markSettingSaved(item)
-    MessagePlugin.success(t('system.globalSettings.reset.success'))
+    toast.success(t('system.globalSettings.reset.success'))
   } catch (err: any) {
     const msg = err?.message || t('system.globalSettings.reset.failed')
     saveAnnouncement.value = msg
-    MessagePlugin.error(msg)
+    toast.error(msg)
   } finally {
     savingKey.value = null
   }
@@ -722,11 +561,11 @@ async function persistSetting(item: SystemSettingItem) {
       ? [...(updated.value as unknown[])]
       : updated.value
     markSettingSaved(updated)
-    MessagePlugin.success(t('system.globalSettings.messages.saveSuccess'))
+    toast.success(t('system.globalSettings.messages.saveSuccess'))
   } catch (err: any) {
     const msg = err?.message || t('system.globalSettings.messages.saveFailed')
     saveAnnouncement.value = msg
-    MessagePlugin.error(msg)
+    toast.error(msg)
     // Roll the input back to the canonical value on failure. Without
     // this an invalid edit (e.g. SSRF whitelist with a malformed CIDR
     // that the backend 400'd) would stay rendered as if accepted, and
@@ -753,593 +592,20 @@ onUnmounted(() => {
 })
 </script>
 
-<style lang="less" scoped>
-@import '../../assets/settings-layout.less';
+<style scoped>
+ .settings-section-tabs, .setting-control-row, .setting-control-actions, .setting-label { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.settings-section-tabs { margin-bottom: var(--space-4); }
+.setting-control-row { flex: 1; min-width: 0; width: 100%; }
+.setting-label { font-weight: 800; }
+.setting-meta, .settings-section-intro { color: var(--muted); font-size: var(--text-sm); }
+.ssrf-whitelist-input { display: grid; gap: var(--space-3); width: 100%; min-width: 0; }
+.ssrf-whitelist-input .rq-control { flex: 1; min-width: 160px; }
+.setting-save-state { display: flex; gap: var(--space-2); font-size: var(--text-sm); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
-.system-settings {
-  width: 100%;
-}
-
-.section-header {
-  margin-bottom: 24px;
-
-  h2 {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--td-text-color-primary);
-    margin: 0;
-  }
-
-  .section-description {
-    font-size: 14px;
-    color: var(--td-text-color-secondary);
-    margin: 8px 0 0;
-    line-height: 1.5;
-  }
-}
-
-.section-header__titlewrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.hint-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--td-text-color-placeholder);
-  cursor: pointer;
-  line-height: 1;
-
-  &:hover,
-  &:focus-visible {
-    color: var(--td-brand-color);
-  }
-}
-
-.hint-popover {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.hint-popover__title {
-  margin: 0;
-  color: var(--td-text-color-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.hint-popover__list {
-  margin: 0;
-  padding: 0 0 0 18px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--td-text-color-secondary);
-  list-style: disc;
-
-  li + li {
-    margin-top: 4px;
-  }
-}
-
-.settings-section-tabs {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  margin: 0 0 18px;
-  background: var(--td-bg-color-container);
-  box-shadow: 0 1px 0 var(--td-component-stroke);
-
-  &:deep(.t-tabs__nav-item) {
-    font-weight: 500;
-  }
-}
-
-.settings-section-panel {
-  min-width: 0;
-}
-
-.settings-section-intro {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 0 12px;
-  border-bottom: 1px solid var(--td-component-stroke);
-
-  p {
-    margin: 0;
-    font-size: 13px;
-    line-height: 1.5;
-    color: var(--td-text-color-secondary);
-  }
-}
-
-.settings-section-intro--runtime {
-  border-bottom: none;
-}
-
-.runtime-table-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 24px;
-  padding: 10px 16px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--td-text-color-secondary);
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1px solid var(--td-component-stroke);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-
-  span:last-child {
-    text-align: right;
-  }
-}
-
-.settings-group--runtime {
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 0 0 8px 8px;
-  overflow: hidden;
-
-  .setting-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 280px;
-    gap: 24px;
-    padding: 14px 16px;
-  }
-
-  .setting-info {
-    max-width: none;
-    padding-right: 0;
-  }
-
-  .setting-label {
-    font-size: 14px;
-  }
-
-  .desc {
-    max-width: 620px;
-    font-size: 12px;
-  }
-
-  .setting-control {
-    min-width: 0;
-  }
-
-  .setting-input {
-    width: 210px;
-  }
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.setting-save-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-  min-width: 52px;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-}
-
-.setting-save-state--success {
-  color: var(--td-success-color);
-}
-
-.setting-reset-btn {
-  // Sit flush with the input on the right; size="small" gives it the
-  // right footprint to read as secondary action next to the primary
-  // edit control.
-  flex-shrink: 0;
-}
-
-// Anchor wrapper for inline t-popconfirm on inputs (SSRF / admins /
-// high-risk select). Popconfirm attaches to this box so the bubble
-// appears beside the control, not a full-screen modal.
-.setting-control-anchor {
-  flex: 1;
-  min-width: 0;
-}
-
-.loading-state,
-.empty-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 60px 0;
-  color: var(--td-text-color-placeholder);
-  font-size: 13px;
-}
-
-// Skeleton mirrors GeneralSettings.vue 1:1 so the two panes feel like
-// they came from the same hand. Values that diverge intentionally:
-//   - .setting-label is a flex container (vs General's plain <label>)
-//     because we render badges inline with the title; identical font /
-//     spacing otherwise.
-//   - .desc has a max-width so long backend descriptions don't push
-//     the control off the canvas in narrow viewports.
-.settings-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.setting-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 20px 0;
-  border-bottom: 1px solid var(--td-component-stroke);
-
-  &:last-child {
-    border-bottom: none;
-  }
-}
-
-.setting-info {
-  flex: 1;
-  max-width: 65%;
-  padding-right: 24px;
-}
-
-.setting-label {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-  margin-bottom: 4px;
-  line-height: 1.4;
-}
-
-.setting-badge {
-  vertical-align: middle;
-}
-
-.desc {
-  font-size: 13px;
-  color: var(--td-text-color-secondary);
-  margin: 0;
-  line-height: 1.5;
-  max-width: 480px;
-}
-
-.setting-meta {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-}
-
-.setting-control {
-  flex-shrink: 0;
-  min-width: 280px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.setting-control-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.setting-control-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.setting-saving {
-  // Pin width so the row layout doesn't reflow when the spinner
-  // appears / disappears mid-save.
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-
-.setting-input {
-  width: 240px;
-}
-
-.setting-input--wide {
-  width: 320px;
-}
-
-.password-reset-trigger {
-  min-width: 112px;
-  height: 32px;
-  padding: 0 12px;
-  color: var(--td-error-color);
-  background: var(--td-error-color-light);
-  border: 1px solid transparent;
-  border-radius: 6px;
-
-  &:hover {
-    color: var(--td-error-color-hover);
-    background: var(--td-error-color-light-hover);
-    border-color: var(--td-error-color-focus);
-  }
-
-  &:active {
-    color: var(--td-error-color-active);
-    background: var(--td-error-color-focus);
-  }
-}
-
-.password-reset-warning {
-  margin-bottom: 20px;
-}
-
-@media (max-width: 860px) {
-  .settings-section-intro {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .runtime-table-header {
-    display: none;
-  }
-
-  .settings-group--runtime {
-    border-radius: 8px;
-
-    .setting-row {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .setting-input {
-      width: 100%;
-    }
-  }
-
-  .setting-row {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .setting-info {
-    width: 100%;
-    max-width: none;
-    padding-right: 0;
-  }
-
-  .setting-control {
-    width: 100%;
-    align-items: flex-start;
-  }
-
-  .setting-control-row {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .setting-control-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .setting-input,
-  .setting-input--wide {
-    width: 100%;
-    flex: 1;
-  }
-
-  .desc {
-    max-width: none;
-  }
-}
-
-@container settings-content (max-width: @settings-narrow-width) {
-  .settings-section-intro {
-    flex-direction: column;
-    min-width: 0;
-
-    :deep(.t-tag) {
-      max-width: 100%;
-      height: auto;
-      white-space: normal;
-    }
-  }
-
-  .runtime-table-header {
-    display: none;
-  }
-
-  .settings-group--runtime {
-    border-radius: 8px;
-
-    .setting-row {
-      display: flex;
-      .settings-stack-row();
-    }
-
-    .setting-input {
-      width: 100%;
-    }
-  }
-
-  .setting-row {
-    .settings-stack-row();
-  }
-
-  .setting-info {
-    .settings-stack-info();
-  }
-
-  .setting-control {
-    .settings-stack-control();
-  }
-
-  .setting-control-row {
-    min-width: 0;
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
-
-  .setting-control-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .setting-input,
-  .setting-input--wide {
-    min-width: 0;
-    width: 100%;
-    max-width: 100%;
-    flex: 1 1 240px;
-  }
-
-  .desc {
-    max-width: none;
-  }
-}
-.ssrf-whitelist-input {
-  :deep(.t-input) {
-    padding-right: calc(var(--td-comp-paddingLR-s) + var(--t-tag-input-suffix-width, 0px) + var(--t-tag-input-suffix-icon-width, 24px));
-  }
-
-  :deep(.t-input.t-input--prefix > .t-input__prefix) {
-    display: flex;
-    flex-wrap: wrap;
-    min-width: 0;
-    max-width: 100%;
-    white-space: normal;
-  }
-
-  :deep(.t-tag) {
-    min-width: 0;
-    max-width: calc(100% - var(--td-comp-margin-xs));
-  }
-
-  :deep(.t-tag--text) {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  :deep(.t-tag__icon-close) {
-    flex-shrink: 0;
-  }
-}
 </style>
 
-<style lang="less">
-/* The dialog is teleported to body, so its visual shell cannot be
-   styled from the scoped block above. Keep this class specific to the
-   password-reset flow instead of changing every TDesign dialog. */
-.password-reset-dialog {
-  padding: 0;
-  overflow: hidden;
-  border-color: var(--td-component-stroke);
-  border-radius: 12px;
-  box-shadow:
-    0 12px 32px rgba(15, 23, 42, 0.12),
-    0 2px 8px rgba(15, 23, 42, 0.08);
-
-  .t-dialog__header {
-    min-height: 64px;
-    padding: 0 24px;
-    font-size: 18px;
-    line-height: 26px;
-    border-bottom: 1px solid var(--td-component-stroke);
-  }
-
-  .t-dialog__close {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    justify-content: center;
-    border-radius: 6px;
-  }
-
-  .t-dialog__body {
-    padding: 20px 24px 4px;
-  }
-
-  .password-reset-warning {
-    padding: 12px 14px;
-    border-radius: 8px;
-
-    .t-alert__content {
-      font-size: 13px;
-      line-height: 20px;
-    }
-  }
-
-  .password-reset-form {
-    .t-form__item {
-      margin-bottom: 16px;
-    }
-
-    .t-form__label--top {
-      min-height: 28px;
-      padding: 0;
-      font-size: 14px;
-      line-height: 22px;
-    }
-
-    .t-input {
-      border-radius: 6px;
-    }
-  }
-
-  .t-dialog__footer {
-    box-sizing: border-box;
-    padding: 16px 24px 20px;
-    border-top: 1px solid var(--td-component-stroke);
-
-    .t-button {
-      min-width: 88px;
-      border-radius: 6px;
-    }
-  }
-}
-
-@media (max-width: 480px) {
-  .password-reset-dialog {
-    width: calc(100vw - 24px) !important;
-
-    .t-dialog__header {
-      min-height: 56px;
-      padding: 0 20px;
-      font-size: 17px;
-    }
-
-    .t-dialog__body {
-      padding: 16px 20px 4px;
-    }
-
-    .t-dialog__footer {
-      padding: 14px 20px 18px;
-    }
-  }
-}
-
+<style scoped>
+.ssrf-whitelist-input .rq-tag { display: inline-flex; align-items: center; gap: var(--space-2); }
+.ssrf-whitelist-input .rq-tag .rq-button { min-height: 24px; padding: 0 6px; }
 </style>

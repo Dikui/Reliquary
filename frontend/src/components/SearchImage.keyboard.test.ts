@@ -11,11 +11,9 @@ const skipBrowser = !browserTestsEnabled && 'Skipped: browser tests launch a vis
 const clientSource = `
 import { createApp, defineComponent, h, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
-import { Button, ImageViewer, Tag } from 'tdesign-vue-next'
-import 'tdesign-vue-next/es/style/index.css'
-import SearchEntry from '/src/components/SearchEntry.vue'
+import '/src/styles/tokens.css'
+import SearchEntry from '/src/views/library/SearchResult.vue'
 import SearchImage from '/src/components/SearchImage.vue'
-import PicturePreview from '/src/components/PicturePreview.vue'
 import zh from '/src/i18n/locales/zh-CN.ts'
 import en from '/src/i18n/locales/en-US.ts'
 
@@ -34,15 +32,10 @@ const Root = defineComponent({
       removeResults: () => articleVisible.value = false,
       changeArticle: () => articleID.value = 'keyboard-new-article',
     }
-    return () => fixture === 'picture'
-      ? h('div', [
-        h('button', { id: 'picture-trigger', type: 'button', onClick: () => visible.value = true }, 'Preview'),
-        visible.value ? h(PicturePreview, { reviewImg: visible.value, reviewUrl: image, onClosePreImg: () => visible.value = false }) : null,
-      ])
-      : fixture === 'compact'
+    return () => fixture === 'compact'
         ? h(SearchImage, { articleId: 'keyboard-article', path: '../../attachments/compact.svg', title: 'Compact evidence', compact: true })
       : articleVisible.value ? h(SearchEntry, {
-        query: 'figure',
+        query: 'figure', libraries: [],
         article: {
           entry_id: articleID.value, title: 'Visual evidence', source: 'article',
           score: 0.9, published_at: null, processing_mode: 'full',
@@ -57,9 +50,6 @@ const Root = defineComponent({
 const app = createApp(Root)
 app.config.errorHandler = error => { throw error }
 app.use(createI18n({ legacy: false, locale: params.get('locale') || 'zh-CN', messages: { 'zh-CN': zh, 'en-US': en } }))
-app.component('t-button', Button)
-app.component('t-tag', Tag)
-app.component('t-image-viewer', ImageViewer)
 app.mount('#app')
 window.__fixtureReady = true
 `
@@ -79,7 +69,7 @@ before(async () => {
 after(async () => { await harness?.close() })
 
 const viewerProbe = `(() => {
-  const viewer = [...document.querySelectorAll('.t-image-viewer')].find(element => getComputedStyle(element).display !== 'none')
+  const viewer = [...document.querySelectorAll('.rq-dialog')].find(element => getComputedStyle(element).display !== 'none')
   const active = document.activeElement
   return {
     viewerVisible: !!viewer,
@@ -97,7 +87,7 @@ async function waitFor(page: BrowserPage, expression: string, description: strin
   }
 }
 
-const thumbnailSelector = '.article-snippet:nth-child(3) .search-image-open'
+const thumbnailSelector = '.result-snippet:nth-child(2) .search-image-open'
 async function searchPage(query = '') {
   const page = await harness.page(query)
   await waitFor(page, `window.__fixtureReady && document.querySelectorAll('.search-image-open img').length === 2
@@ -107,7 +97,7 @@ async function searchPage(query = '') {
 }
 async function openSearchPreview(page: BrowserPage) {
   await page.click(thumbnailSelector)
-  await waitFor(page, `(${viewerProbe}).viewerVisible`, 'visible real TDesign image viewer')
+  await waitFor(page, `(${viewerProbe}).viewerVisible`, 'visible image dialog')
   await delay(250)
 }
 async function waitForClosedPreview(page: BrowserPage, restoreFocus = true) {
@@ -132,9 +122,9 @@ for (const locale of ['zh-CN', 'en-US']) {
     const opened = await page.evaluate(viewerProbe)
     const imageSource = await page.evaluate(`window.__previewTrigger.querySelector('img').src`)
     assert.match(imageSource, /^blob:/)
-    assert.equal(await page.evaluate(`[...document.querySelectorAll('.t-image-viewer')].find(element => getComputedStyle(element).display !== 'none')?.querySelector('.t-image-viewer__modal-image')?.src`), imageSource)
+    assert.equal(await page.evaluate(`[...document.querySelectorAll('.rq-dialog')].find(element => getComputedStyle(element).display !== 'none')?.querySelector('.search-image-full')?.src`), imageSource)
     assert.deepEqual(await page.evaluate(`(() => {
-      const image = [...document.querySelectorAll('.t-image-viewer')].find(element => getComputedStyle(element).display !== 'none').querySelector('.t-image-viewer__modal-image')
+      const image = [...document.querySelectorAll('.rq-dialog')].find(element => getComputedStyle(element).display !== 'none').querySelector('.search-image-full')
       return { width: image.naturalWidth, height: image.naturalHeight, fit: getComputedStyle(image).objectFit }
     })()`), { width: 40, height: 20, fit: 'contain' }, 'the viewer displays the complete original image')
     await saveEvidence(page, `search-${locale}-${theme}-open`, opened)
@@ -178,11 +168,11 @@ test('actual preview close button and overlay both retain close behavior and res
   for (const closeMethod of ['button', 'overlay']) {
     await openSearchPreview(page)
     assert.equal((await page.evaluate(viewerProbe)).focusInViewer, true)
-    if (closeMethod === 'button') await page.click('.t-image-viewer__modal-close-bt')
+    if (closeMethod === 'button') await page.click('.rq-dialog .rq-icon-button')
     else {
-      const box = await page.locator('.t-image-viewer__modal-mask').boundingBox()
+      const box = await page.locator('.rq-overlay').boundingBox()
       assert.ok(box, 'overlay')
-      await page.click('.t-image-viewer__modal-mask', { position: { x: box.width * 0.01, y: box.height * 0.5 } })
+      await page.click('.rq-overlay', { position: { x: box.width * 0.01, y: box.height * 0.5 } })
     }
     await waitForClosedPreview(page)
     assert.equal((await page.evaluate(viewerProbe)).viewerVisible, false, closeMethod)
@@ -230,25 +220,5 @@ test('compact search image stays a thumbnail without a viewer trigger', {
   await page.click('.search-image.compact img')
   await page.keyboard.press('Escape')
   assert.equal((await page.evaluate(viewerProbe)).viewerVisible, false)
-  assert.deepEqual(page.errors, [])
-})
-
-test('actual shared picture preview mounted open closes on Escape and returns focus to its trigger', {
-  skip: skipBrowser,
-}, async t => {
-  const page = await harness.page('?fixture=picture')
-  await waitFor(page, `window.__fixtureReady && !!document.querySelector('#picture-trigger')`, 'picture preview trigger')
-  await page.click('#picture-trigger')
-  await waitFor(page, `!!document.querySelector('.t-image-viewer')`, 'real shared picture viewer')
-  await delay(250)
-  const opened = await page.evaluate(viewerProbe)
-  await page.keyboard.press('Escape')
-  await waitFor(page, `!(${viewerProbe}).viewerVisible && document.activeElement === document.querySelector('#picture-trigger')`, 'closed picture preview and returned focus')
-  const closed = await page.evaluate(viewerProbe)
-  const focusRestored = await page.evaluate(`document.activeElement === document.querySelector('#picture-trigger')`)
-  t.diagnostic(JSON.stringify({ fixture: 'picture', opened, closed, focusRestored }))
-  assert.deepEqual({ focusEnteredPreview: opened.focusInViewer, escaped: !closed.viewerVisible, focusRestored }, {
-    focusEnteredPreview: true, escaped: true, focusRestored: true,
-  })
   assert.deepEqual(page.errors, [])
 })

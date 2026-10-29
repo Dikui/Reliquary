@@ -27,6 +27,10 @@ func TestVaultLibraryDirectoryMigrationPreservesFilesAndResumes(t *testing.T) {
 	migration, err := migrate.New("file://"+directory, h.db.Dialector.(*postgres.Dialector).DSN)
 	require.NoError(t, err)
 	t.Cleanup(func() { a, b := migration.Close(); require.NoError(t, a); require.NoError(t, b) })
+	// Offline migrations reconnect before querying a changed table shape.
+	pool, err := h.db.DB()
+	require.NoError(t, err)
+	pool.SetMaxIdleConns(0)
 	require.NoError(t, migration.Migrate(26))
 	snapshot, err := maintenance.Capture(h.ctx, h.db)
 	require.NoError(t, err)

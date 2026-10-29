@@ -64,7 +64,7 @@ const SIZE_KEY = 'font_size'
 
 export const SANS_STACKS: Record<FontKey, string> = {
   system:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+    'var(--font)',
   // Mac
   pingfang:
     '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", -apple-system, BlinkMacSystemFont, sans-serif',
@@ -85,8 +85,7 @@ export const SANS_STACKS: Record<FontKey, string> = {
 }
 
 export const MONO_STACKS: Record<MonoFontKey, string> = {
-  system:
-    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+  system: 'var(--mono)',
   // Mac
   menlo: 'Menlo, Monaco, Consolas, "Courier New", monospace',
   monaco: 'Monaco, Menlo, Consolas, "Courier New", monospace',
@@ -228,7 +227,7 @@ function applyFont() {
     // element — including the ~1000+ hard-coded `font-size: NNpx` rules
     // scattered across the frontend. The previous approach set
     // `--app-font-scale` and relied on `calc(NNpx * var(--app-font-scale))`,
-    // but calc() only runs where the variable is consumed (a few TDesign
+    // but calc() only runs where the variable is consumed (a few historical
     // tokens plus the body reset), so users saw only parts of the UI
     // resize. Zoom composites the whole document at the requested factor
     // and is supported in all Chromium, WebKit, and modern Firefox (126+).

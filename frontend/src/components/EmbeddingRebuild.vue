@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { Button, useConfirm } from '@/components/ui'
+import '@/styles/settings-form.css'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { controlEmbeddingRebuild, getEmbeddingRebuild, type EmbeddingRebuildAction, type EmbeddingRebuildData } from '@/api/embedding-rebuild'
 import type { ModelConfig } from '@/api/model'
 
+function confirmStart() { confirm({ header: t('embeddingRebuild.start'), body: t('embeddingRebuild.confirm', { name: modelName.value }), confirmBtn: t('embeddingRebuild.start'), onConfirm: () => control('start') }) }
 const props = withDefaults(defineProps<{ modelId: string; models?: ModelConfig[]; disabled?: boolean }>(), { models: () => [], disabled: false })
+const confirm = useConfirm()
 const { t, locale } = useI18n()
 const data = ref<EmbeddingRebuildData | null>(null)
 const loading = ref(false), acting = ref(false), error = ref('')
@@ -68,12 +72,12 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(pollTimer) }
   <section class="embedding-rebuild" :aria-label="t('embeddingRebuild.title')" :aria-busy="loading || acting">
     <div class="embedding-rebuild-heading">
       <div><h3>{{ t('embeddingRebuild.title') }}</h3><p>{{ t('embeddingRebuild.description') }}</p></div>
-      <t-button variant="text" size="small" :disabled="loading || acting" :loading="loading" @click="load">{{ t(error ? 'common.retry' : 'common.refresh') }}</t-button>
+      <Button variant="ghost" :disabled="loading || acting" :loading="loading" @click="load">{{ t(error ? 'common.retry' : 'common.refresh') }}</Button>
     </div>
     <p class="rebuild-model">{{ t('embeddingRebuild.currentModel', { name: modelName }) }}</p>
     <p v-if="disabled" class="rebuild-hint">{{ t('embeddingRebuild.saveFirst') }}</p>
     <p v-else-if="!modelId" class="rebuild-hint">{{ t('embeddingRebuild.configureFirst') }}</p>
-    <t-alert v-if="error" theme="error" :message="error" role="alert" />
+    <p v-if="error" role="alert"  class="settings-error">{{ error }}</p>
     <p v-if="loading && !data" role="status">{{ t('common.loading') }}</p>
     <div v-if="run" class="rebuild-progress" role="status" aria-live="polite">
       <p>{{ t('embeddingRebuild.runModel', { name: run.model_name || run.model_id, dimension: run.dimension }) }}</p>
@@ -85,12 +89,10 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(pollTimer) }
     </div>
     <p v-else-if="data" class="rebuild-hint">{{ t('embeddingRebuild.noRun') }}</p>
     <div class="rebuild-actions">
-      <t-popconfirm v-if="canStart" :content="t('embeddingRebuild.confirm', { name: modelName })" :confirm-btn="{ content: t('embeddingRebuild.start'), theme: 'primary' }" :cancel-btn="{ content: t('common.cancel') }" :disabled="disabled || !modelId || loading || acting || !data" @confirm="control('start')">
-        <t-button theme="primary" variant="outline" :disabled="disabled || !modelId || loading || acting || !data" :loading="acting">{{ t('embeddingRebuild.start') }}</t-button>
-      </t-popconfirm>
-      <t-button v-if="active" variant="outline" :disabled="acting" :loading="acting" @click="control('pause')">{{ t('embeddingRebuild.pause') }}</t-button>
-      <t-button v-if="canResume" theme="primary" variant="outline" :disabled="acting || disabled || !runModelMatches" :loading="acting" @click="control('resume')">{{ t('embeddingRebuild.resume') }}</t-button>
-      <t-button v-if="run && run.failed_count > 0 && !active" variant="outline" :disabled="acting || disabled || !runModelMatches" :loading="acting" @click="control('retry_failed')">{{ t('embeddingRebuild.retryFailed') }}</t-button>
+      <Button v-if="canStart" variant="primary" :disabled="disabled || !modelId || loading || acting || !data" :loading="acting" @click="confirmStart">{{ t('embeddingRebuild.start') }}</Button>
+      <Button v-if="active" variant="default" :disabled="acting" :loading="acting" @click="control('pause')">{{ t('embeddingRebuild.pause') }}</Button>
+      <Button v-if="canResume" variant="default" :disabled="acting || disabled || !runModelMatches" :loading="acting" @click="control('resume')">{{ t('embeddingRebuild.resume') }}</Button>
+      <Button v-if="run && run.failed_count > 0 && !active" variant="default" :disabled="acting || disabled || !runModelMatches" :loading="acting" @click="control('retry_failed')">{{ t('embeddingRebuild.retryFailed') }}</Button>
     </div>
     <p class="rebuild-hint">{{ t('embeddingRebuild.searchHint') }}</p>
     <details v-if="data?.failed_items.length" class="rebuild-failures">
@@ -101,25 +103,27 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(pollTimer) }
   </section>
 </template>
 
-<style scoped lang="less">
-.embedding-rebuild { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--td-component-stroke); color: var(--td-text-color-primary); }
+<style scoped>
+
+.embedding-rebuild { margin-top: 24px; padding-top: 24px; border-top: 2px solid var(--rule); color: var(--text); }
 .embedding-rebuild-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 h3 { margin: 0 0 8px; font-size: 16px; }
 p { margin: 6px 0; line-height: 1.6; overflow-wrap: anywhere; }
-.embedding-rebuild-heading p, .rebuild-hint { font-size: 13px; color: var(--td-text-color-secondary); }
+.embedding-rebuild-heading p, .rebuild-hint { font-size: 13px; color: var(--muted); }
 .rebuild-model, .rebuild-progress { font-size: 13px; margin-top: 16px; }
-progress { display: block; width: 100%; height: 10px; margin: 12px 0; accent-color: var(--td-brand-color); }
+progress { display: block; width: 100%; height: 10px; margin: 12px 0; accent-color: var(--text); }
 .rebuild-counts { display: flex; flex-wrap: wrap; gap: 16px 36px; margin: 12px 0; }
-dt { color: var(--td-text-color-secondary); }
+dt { color: var(--muted); }
 dd { margin: 4px 0 0; font-variant-numeric: tabular-nums; }
 .rebuild-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
-.rebuild-error { color: var(--td-error-color); }
+.rebuild-error { color: var(--danger); }
 .rebuild-failures { margin-top: 16px; font-size: 13px; }
-summary { cursor: pointer; color: var(--td-brand-color); border-radius: var(--td-radius-small); }
+summary { cursor: pointer; color: var(--muted); border-radius: 0; }
 summary:hover { text-decoration: underline; }
-summary:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 3px; }
+summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 ul { padding-left: 20px; max-height: 320px; overflow: auto; scrollbar-gutter: stable; }
 li { margin: 12px 0; overflow-wrap: anywhere; }
-small { color: var(--td-text-color-secondary); }
+small { color: var(--muted); }
 @container settings-content (max-width: 720px) { .embedding-rebuild-heading { flex-wrap: wrap; } }
+
 </style>

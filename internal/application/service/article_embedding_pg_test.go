@@ -196,13 +196,14 @@ func TestImportedDocumentHasSummaryVectorsAndReportsKeepChunkPrefixes(t *testing
 	for _, pair := range []struct {
 		entry          *types.Entry
 		label          string
+		prefix         string
 		summaryVectors int64
-	}{{mine, "本人", 1}, {report.Entry, "整理结果", 0}} {
+	}{{mine, "本人", "Personal notebook\n", 1}, {report.Entry, "整理结果", "Synthesis · 整理结果\n", 0}} {
 		var chunks []types.Chunk
 		require.NoError(t, h.db.Where("entry_id=?", pair.entry.ID).Find(&chunks).Error)
 		require.NotEmpty(t, chunks)
 		for _, chunk := range chunks {
-			require.Contains(t, e.recorded(), pair.entry.Title+" · "+pair.label+"\n"+chunk.Content)
+			require.Contains(t, e.recorded(), pair.prefix+chunk.Content)
 			require.NotContains(t, chunk.Content, pair.label)
 		}
 		var count int64

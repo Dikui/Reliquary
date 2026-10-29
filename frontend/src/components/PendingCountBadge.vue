@@ -3,13 +3,13 @@ import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePendingCountsStore } from '@/stores/pendingCounts'
 
-const { t } = useI18n()
+const { t, n } = useI18n()
 const store = usePendingCountsStore()
 onMounted(() => { void store.refresh() })
 </script>
 
 <template>
-  <span v-if="store.total !== null" class="pending-count" :aria-label="t('ingestStatus.navCount', { count: store.total })">{{ store.total }}</span>
+  <span v-if="store.total !== null" class="pending-count" :aria-label="t('ingestStatus.navCount', { count: store.total })">{{ n(store.total) }}</span>
 </template>
 
 <style scoped lang="less">
@@ -17,12 +17,8 @@ onMounted(() => { void store.refresh() })
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 18px;
-  padding-inline: 4px;
-  border-radius: var(--td-radius-small);
-  background: var(--td-bg-color-secondarycontainer);
-  font-size: 12px;
-  line-height: 18px;
-  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  font: var(--text-xs)/var(--leading) var(--mono);
+  opacity: 0.65;
 }
 </style>

@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
-import { parseStatusToTimelineStatus } from '../utils/entryProcessingStatus.ts'
-import { CHUNKING_SAMPLES } from '../views/library/settings/chunkingSamples.ts'
+import { entryProcessingState, parseStatusToTimelineStatus } from '../utils/entryProcessingStatus.ts'
 import { KNOWN_MODEL_USAGE_BINDINGS, modelUsageBindingI18nKey } from '../api/model-usage.ts'
 import { before, test } from 'node:test'
 
@@ -142,13 +141,8 @@ test('dynamic translation prefixes and mapped keys exist in both locales', () =>
   assert.deepEqual(failures, [], failures.map(({ file, line, key, locale }) => `${file}:${line}: ${key} missing in ${locale}`).join('\n'))
 })
 
-test('indirect translation helpers and relative sample label maps resolve in both locales', () => {
-  const sampleCall = translationCalls.find(call => call.file.endsWith('/LibraryChunkingDebug.vue') && call.expression.includes('p.labelKey'))
-  assert.ok(sampleCall?.prefix)
-  const keys = [
-    ...CHUNKING_SAMPLES.map(sample => `${sampleCall.prefix}${sample.labelKey}`),
-    ...[...KNOWN_MODEL_USAGE_BINDINGS, 'unknown'].map(modelUsageBindingI18nKey),
-  ]
+test('indirect model usage bindings resolve in both locales', () => {
+  const keys = [...KNOWN_MODEL_USAGE_BINDINGS, 'unknown'].map(modelUsageBindingI18nKey)
   assert.deepEqual(findUsedKeysMissingInLocales(keys, localeKeysByName), [])
 })
 
@@ -231,14 +225,14 @@ test('current backend parsing statuses and error codes are localized and retaine
   const timelineStatuses = new Set([...spanStatuses, ...parseStatuses, 'draft'].map(parseStatusToTimelineStatus))
 
   const keys = [
-    ...parsingCodes.flatMap(code => [`knowledgeStages.errorCode.${code}`, `knowledgeStages.errorCode.${code}_SUGGESTION`]),
-    ...[...timelineStatuses].map(status => `knowledgeStages.status.${status}`),
+    ...parsingCodes.flatMap(code => [`processingStages.errorCode.${code}`, `processingStages.errorCode.${code}_SUGGESTION`]),
+    ...[...timelineStatuses].map(status => `processingStages.status.${status}`),
   ]
   assert.deepEqual(findUsedKeysMissingInLocales(keys, localeKeysByName), [])
   for (const [localeName, localeKeys] of Object.entries(localeKeysByName)) {
     for (const code of parsingCodes) {
       for (const suffix of ['', '_SUGGESTION']) {
-        const key = `knowledgeStages.errorCode.${code}${suffix}`
+        const key = `processingStages.errorCode.${code}${suffix}`
         const caseVariants = [...localeKeys].filter(candidate => candidate.toLowerCase() === key.toLowerCase())
         assert.deepEqual(caseVariants, [key], `${localeName}: preserve the backend error code casing without duplicate keys`)
       }
@@ -258,4 +252,19 @@ test('locale messages compile with vue-i18n syntax rules', () => {
     (failure) => `${failure.path}: ${failure.message}\n  ${failure.value}`,
   )
   assert.deepEqual(summary, [], summary.slice(0, 20).join('\n'))
+})
+
+
+test('material processing labels survive pruning when selected by the shared state helper', () => {
+  const usage = collectI18nUsageFromSources()
+  for (const locale of Object.keys(LOCALE_BUNDLES) as LocaleName[]) {
+    const retained = collectReferencedLocaleKeys(LOCALE_BUNDLES[locale], usage)
+    for (const parse_status of ['pending', 'processing', 'finalizing', 'completed', 'failed', 'cancelled', 'deleting', 'unknown']) {
+      for (const summary_status of ['pending', 'processing', 'completed', 'failed', 'none', 'skipped', 'unknown']) {
+        const { label } = entryProcessingState({ parse_status, summary_status })
+        assert.ok(localeKeysByName[locale].has(label), `${locale}: ${label}`)
+        assert.ok(retained.has(label), `Pruning must retain ${label}`)
+      }
+    }
+  }
 })

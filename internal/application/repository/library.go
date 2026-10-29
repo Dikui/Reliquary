@@ -27,7 +27,25 @@ func NewLibraryRepository(db *gorm.DB) interfaces.LibraryRepository {
 
 // CreateLibrary creates a new library
 func (r *libraryRepository) CreateLibrary(ctx context.Context, library *types.Library) error {
-	return r.db.WithContext(ctx).Create(library).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Serialize the count and insert even when the space has no libraries yet.
+		key := fmt.Sprintf("reliquary:library-color:%d", library.SpaceID)
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", key).Error; err != nil {
+			return err
+		}
+		if library.Color == 0 {
+			var count int64
+			if err := tx.Model(&types.Library{}).
+				Where("space_id = ?", library.SpaceID).Count(&count).Error; err != nil {
+				return err
+			}
+			library.Color = int(count%8) + 1
+		}
+		if err := types.ValidateLibraryColor(library.Color); err != nil {
+			return err
+		}
+		return tx.Create(library).Error
+	})
 }
 
 // GetLibraryByID gets a library by id within the personal space
@@ -269,13 +287,40 @@ func EnsureSystemLibraries(ctx context.Context, db *gorm.DB, spaceID uint64, cre
 
 func (r *libraryRepository) ListLibraries(ctx context.Context, spaceID uint64) ([]*types.Library, error) {
 	libraries := []*types.Library{}
-	err := r.db.WithContext(ctx).Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Preload("RelationTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).Where("space_id=?", spaceID).Order("created_at,id").Find(&libraries).Error
+	err := r.db.WithContext(ctx).
+		Preload("ContentTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).
+		Preload("RelationTypes", func(db *gorm.DB) *gorm.DB { return db.Order("position") }).
+		Where("space_id=?", spaceID).Order("created_at,id").Find(&libraries).Error
+	if err != nil || len(libraries) == 0 {
+		return libraries, err
+	}
+	type libraryCounts struct {
+		LibraryID       string
+		EntryCount      int64
+		ProcessingCount int64
+	}
+	var counts []libraryCounts
+	err = r.db.WithContext(ctx).Model(&types.Entry{}).
+		Select("library_id, COUNT(*) AS entry_count, COUNT(*) FILTER (WHERE parse_status IN ?) AS processing_count",
+			[]string{types.ParseStatusPending, types.ParseStatusProcessing}).
+		Where("space_id = ?", spaceID).Group("library_id").Scan(&counts).Error
+	if err != nil {
+		return nil, err
+	}
+	countsByLibrary := make(map[string]libraryCounts, len(counts))
+	for _, count := range counts {
+		countsByLibrary[count.LibraryID] = count
+	}
 	for _, library := range libraries {
 		if err := r.hydrate(ctx, library); err != nil {
 			return nil, err
 		}
+		count := countsByLibrary[library.ID]
+		library.EntryCount = count.EntryCount
+		library.ProcessingCount = count.ProcessingCount
+		library.IsProcessing = count.ProcessingCount > 0
 	}
-	return libraries, err
+	return libraries, nil
 }
 
 // EmbeddingModelID in library payloads is a compatibility projection. Space is authoritative.
