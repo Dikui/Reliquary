@@ -361,7 +361,7 @@ progress { width: 100%; accent-color: var(--text); }
 .model-list-container { display: grid; gap: var(--space-2); min-width: 0; }
 .model-card { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
 .model-name { font-family: var(--mono); overflow-wrap: anywhere; }
-.model-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
+.model-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--muted); font-size: var(--type-note-size); }
 .loading-state { display: flex; gap: var(--space-2); align-items: center; }
 .category-header h3, .category-header p { margin-top: 0; }
 </style>

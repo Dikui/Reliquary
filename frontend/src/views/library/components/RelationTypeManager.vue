@@ -121,14 +121,14 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
 .relation-type-manager { display: grid; gap: var(--space-4); }
 .relation-type-manager fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: var(--space-3); justify-items: start; }
 .relation-type-library, .relation-type-pair label { display: grid; gap: var(--space-1); font-size: var(--text-sm); }
-.relation-type-hint { color: var(--muted); font-size: var(--text-sm); line-height: var(--leading); margin: 0; }
+.relation-type-hint { color: var(--muted); font-size: var(--type-note-size); line-height: var(--leading); margin: 0; }
 .relation-type-error { color: var(--danger); margin: 0; }
 .relation-type-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); width: 100%; }
 .relation-type-row > input { flex: 1 1 160px; min-width: 0; }
 .relation-type-check { display: flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); }
 .relation-type-actions { display: flex; gap: var(--space-2); }
 .relation-type-merge { display: grid; justify-items: start; gap: var(--space-3); width: 100%; padding-top: var(--space-3); border-top: 1px solid var(--border); }
-.relation-type-merge h3 { font-size: var(--text-md); margin: 0; }
+.relation-type-merge h3 { font-size: var(--type-subsection-size); font-weight: var(--type-subsection-weight); margin: 0; }
 .relation-type-pair { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: var(--space-3); }
 </style>
 

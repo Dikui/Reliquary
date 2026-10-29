@@ -208,7 +208,7 @@ onBeforeUnmount(() => { stopQuery(); resizeObserver?.disconnect(); themeObserver
 .graph-canvas { width: 100%; height: 440px; font-family: var(--font); }
 .graph-tools { padding: var(--space-3); border-top: 1px solid var(--border); }
 .graph-detail { padding: var(--space-3) var(--space-4); border-top: 2px solid var(--rule); background: var(--surface-soft); overflow-wrap: anywhere; }
-.graph-detail h3 { font-size: var(--text-md); }
+.graph-detail h3 { font-size: var(--type-subsection-size); font-weight: var(--type-subsection-weight); }
 .graph-verb { background: var(--select); color: var(--on-select); padding: 0 0.3em; }
 .graph-source { padding-block: var(--space-2); border-top: 1px solid var(--border); }
 .entity-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; text-decoration: underline; cursor: pointer; overflow-wrap: anywhere; }

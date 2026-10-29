@@ -132,7 +132,7 @@ defineExpose({ confirmLeave })
 .entry-editor__heading, .entry-editor__tabs, .entry-editor__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .entry-editor__heading { justify-content: space-between; }
 .entry-editor__heading h3 { margin: 0; overflow-wrap: anywhere; }
-.entry-editor__heading span, .entry-editor__hint { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.entry-editor__heading span, .entry-editor__hint { color: var(--muted); font-size: var(--type-note-size); line-height: 1.7; }
 .entry-editor__hint { margin: 0; }
 .entry-editor__tabs [aria-pressed="true"] { background: var(--text); color: var(--bg); }
 .entry-editor__input { display: grid; gap: 8px; }

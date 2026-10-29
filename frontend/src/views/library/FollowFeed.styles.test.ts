@@ -51,7 +51,7 @@ function computed(path: string[], property: string) {
 
 test('follows use design columns, token typography and compact empty states', () => {
   assert.equal(computed(['main.follow-feed-page'], 'grid-template-columns'), 'minmax(0, 1fr) 288px')
-  assert.equal(computed(['main.follow-feed-page', 'section.feed-main', 'header.feed-heading', 'h1'], 'font-size'), 'var(--text-3xl)')
+  assert.equal(computed(['main.follow-feed-page', 'section.feed-main', 'header.feed-heading', 'h1'], 'font-size'), 'var(--type-page-size)')
   assert.equal(computed(['li.feed-item', 'div.feed-item-body', 'h3.feed-item-title'], 'font-size'), 'var(--text-md)')
   assert.equal(computed(['li.feed-item', 'div.feed-item-body', 'h3.feed-item-title'], 'margin'), '0')
   assert.equal(computed(['main.follow-feed-page', 'section.feed-results', 'section.rq-empty'], 'padding'), 'var(--space-5) 0')

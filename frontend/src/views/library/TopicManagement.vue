@@ -312,8 +312,8 @@ onUnmounted(() => { disposed = true; generation++; entryGeneration++; catalogGen
 .topic-sidebar { min-width: 0; border-right: 2px solid var(--rule); }
 .is-empty .topic-sidebar { border-right: 0; }
 .topic-list-head { display: grid; gap: var(--space-3); padding: var(--space-5) var(--space-4) var(--space-4); }
-h1, h2 { margin: 0; font-size: var(--text-3xl); font-weight: 800; line-height: 1.05; letter-spacing: -0.035em; overflow-wrap: anywhere; }
-h3 { margin: 0; font-size: var(--text-md); }
+h1, h2 { margin: 0; font-size: var(--type-page-size); font-weight: var(--type-page-weight); line-height: 1.05; letter-spacing: -0.035em; overflow-wrap: anywhere; }
+h3 { margin: 0; font-size: var(--type-subsection-size); font-weight: var(--type-subsection-weight); }
 .topic-list, .topic-failures { list-style: none; padding: 0; margin: 0; }
 .topic-list { border-top: 2px solid var(--rule); }
 .topic-list button { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-2); text-align: left; padding: var(--space-3) var(--space-4); border: 0; border-bottom: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; cursor: pointer; overflow-wrap: anywhere; }

@@ -965,7 +965,7 @@ onUnmounted(() => {
 .rq-overview-metrics, .rq-pool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-4); }
 .rq-metric { display: grid; gap: var(--space-2); }
 .rq-metric-value { font-family: var(--mono); font-size: var(--text-2xl); }
-.rq-metric-label, .rq-queue-meta, .rq-pool-desc, .rq-footnote, .rq-details-header p, .rq-pools-header p, .rq-failed-guide-desc { color: var(--muted); font-size: var(--text-sm); }
+.rq-metric-label, .rq-queue-meta, .rq-pool-desc, .rq-footnote, .rq-details-header p, .rq-pools-header p, .rq-failed-guide-desc { color: var(--muted); font-size: var(--type-note-size); }
 .rq-queue-name, .rq-queue-meta { overflow-wrap: anywhere; }
 .rq-number, .rq-latency, .rq-pool-value { font-family: var(--mono); }
 .rq-status { white-space: nowrap; }

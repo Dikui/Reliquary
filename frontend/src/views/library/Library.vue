@@ -816,9 +816,9 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 .entity-workbench-area { min-height: 0; overflow: auto; flex: 1; }
 .entries-head { padding: 24px 24px 16px; }
 .entries-eyebrow, .entries-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-.entries-eyebrow { justify-content: flex-start; font-size: var(--text-xs); font-weight: 700; }
+.entries-eyebrow { justify-content: flex-start; font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); }
 .entries-eyebrow a { margin-left: auto; color: inherit; text-decoration: underline; }
-.entries-heading h1 { margin: 8px 0 0; font-size: var(--text-3xl); line-height: 1.02; letter-spacing: -0.04em; font-weight: 800; overflow-wrap: anywhere; }
+.entries-heading h1 { margin: 8px 0 0; font-size: var(--type-page-size); font-weight: var(--type-page-weight); line-height: 1.02; letter-spacing: -0.04em; overflow-wrap: anywhere; }
 .entries-heading p { font-family: var(--mono); }
 .entries-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 24px; border-top: 2px solid var(--rule); border-bottom: 1px solid var(--rule); }
 .entries-toolbar > .rq-select { width: auto; max-width: 100%; }
@@ -840,5 +840,5 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 .entries-more { padding: 16px 24px; }
 .doc-marquee-box { position: absolute; pointer-events: none; z-index: 2; border: 1px solid var(--text); background: var(--surface-soft); opacity: 0.4; }
 @media (max-width: 900px) { .entries-split { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 640px) { .entries-head, .entries-toolbar, .entries-search-row { padding-left: 16px; padding-right: 16px; } .entries-heading h1 { font-size: var(--text-2xl); } .entries-filters { padding-inline: 16px; } }
+@media (max-width: 640px) { .entries-head, .entries-toolbar, .entries-search-row { padding-left: 16px; padding-right: 16px; } .entries-filters { padding-inline: 16px; } }
 </style>

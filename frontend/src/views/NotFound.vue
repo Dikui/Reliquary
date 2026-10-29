@@ -33,5 +33,6 @@ const router = useRouter()
   overflow-wrap: anywhere;
 }
 h1, p { margin: 0; }
+h1 { font-size: var(--type-page-size); font-weight: var(--type-page-weight); }
 p { color: var(--muted); line-height: 1.6; }
 </style>

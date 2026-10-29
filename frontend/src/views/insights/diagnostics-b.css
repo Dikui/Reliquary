@@ -1,8 +1,8 @@
 .analytics-wrap { max-width: 1280px; }
-.analytics-page .muted, .analytics-dialog .muted { color: var(--muted); font-size: var(--text-sm); }
+.analytics-page .muted, .analytics-dialog .muted { color: var(--muted); font-size: var(--type-note-size); }
 .analytics-page .toolbar, .analytics-dialog .toolbar, .analytics-page .actions, .analytics-dialog .actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); }
 .analytics-page .fields, .analytics-dialog .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: var(--space-3); align-items: end; }
-.analytics-page .field, .analytics-dialog .field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; font-size: var(--text-sm); font-weight: 700; }
+.analytics-page .field, .analytics-dialog .field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; font-size: var(--type-label-size); font-weight: var(--type-label-weight); }
 .analytics-page .field .rq-control, .analytics-dialog .field .rq-control { font-weight: 400; }
 .analytics-page textarea, .analytics-dialog textarea { width: 100%; min-height: 96px; resize: vertical; }
 .analytics-page .panel { padding: var(--space-4); background: var(--surface-soft); display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
@@ -43,7 +43,7 @@
 .analytics-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 2px solid var(--rule); border-bottom: 2px solid var(--rule); }
 .analytics-metric { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-4); min-width: 0; overflow-wrap: anywhere; }
 .analytics-metric + .analytics-metric { border-left: 1px solid var(--border); }
-.metric-label { font-size: var(--text-xs); font-weight: 700; color: var(--muted); }
+.metric-label { font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); color: var(--muted); }
 .metric-value { font: 700 var(--text-2xl)/1.1 var(--mono); font-variant-numeric: tabular-nums; }
 .metric-delta, .metric-cost { font: 700 var(--text-md)/var(--leading) var(--mono); font-variant-numeric: tabular-nums; }
 .metric-cost { font-size: var(--text-lg); }
@@ -59,8 +59,8 @@
 .analytics-dialog.rq-dialog { width: min(100%, 720px); }
 .analytics-dialog.call-drawer { width: min(100%, 576px); }
 .analytics-dialog { color: var(--text); font: var(--text-sm)/var(--leading) var(--font); overflow-wrap: anywhere; }
-.analytics-dialog h2 { margin: 0; color: var(--text); font-size: var(--text-lg); }
-.analytics-dialog h3 { margin: 0; color: var(--text); font-size: var(--text-md); }
+.analytics-dialog h2 { margin: 0; color: var(--text); font-size: var(--type-section-size); font-weight: var(--type-section-weight); }
+.analytics-dialog h3 { margin: 0; color: var(--text); font-size: var(--type-subsection-size); font-weight: var(--type-subsection-weight); }
 .analytics-dialog p { margin: 0; }
 .analytics-dialog a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 .analytics-dialog a:hover { color: var(--accent); }

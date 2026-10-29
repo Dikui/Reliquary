@@ -427,8 +427,8 @@ onBeforeUnmount(() => {
 <style scoped>
  .setting-drawer__section { padding: var(--space-4) 0; border-top: 2px solid var(--rule); }
 .form-item { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
-.form-label { font-weight: 700; }
-.form-desc { color: var(--muted); font-size: var(--text-sm); }
+.form-label { font-size: var(--type-label-size); font-weight: var(--type-label-weight); }
+.form-desc { color: var(--muted); font-size: var(--type-note-size); }
 .model-type-options, .switch-field, .result-tabs, .metric-list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .model-type-option, .history-item { padding: var(--space-2); color: var(--text); background: var(--bg); border: 1px solid var(--border); font: inherit; cursor: pointer; }
 .model-type-option.is-active, .history-item--active { background: var(--text); color: var(--bg); }

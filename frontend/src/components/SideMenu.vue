@@ -182,7 +182,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.rq-sidebar { display: flex; flex-direction: column; flex: 0 0 var(--sidebar); width: var(--sidebar); min-width: 0; height: 100%; padding: var(--space-5) var(--space-3); box-sizing: border-box; border-right: 2px solid var(--rule); background: var(--surface); color: var(--text); font: var(--text-md)/var(--leading) var(--font); }
+.rq-sidebar { display: flex; flex-direction: column; flex: 0 0 var(--sidebar); width: var(--sidebar); min-width: 0; height: 100%; padding: var(--space-5) var(--space-3); box-sizing: border-box; border-right: 2px solid var(--rule); background: var(--surface); color: var(--text); font: var(--type-body-weight) var(--type-body-size)/var(--leading) var(--font); }
 .rq-sidebar__brand-row { display: flex; align-items: center; gap: var(--space-1); margin-bottom: var(--space-3); }
 .rq-sidebar__brand { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding-left: var(--space-2); color: var(--text); text-decoration: none; font-size: 22.4px; font-weight: 800; letter-spacing: -0.035em; }
 .rq-sidebar__brand-mark { width: 14.4px; height: 14.4px; flex-shrink: 0; background: var(--accent); }
@@ -202,7 +202,7 @@ onUnmounted(() => {
 .rq-sidenav__count--bad { color: var(--danger); opacity: 1; font-weight: 700; }
 .rq-sidenav__link[aria-current="page"] .rq-sidenav__count--bad { color: inherit; }
 .rq-sidenav__link :deep(.pending-count) { margin-left: auto; }
-.rq-sidebar__group { margin: var(--space-3) 0 0; padding: var(--space-2) var(--space-2) var(--space-1); border-top: 2px solid var(--rule); font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.04em; }
+.rq-sidebar__group { margin: var(--space-3) 0 0; padding: var(--space-2) var(--space-2) var(--space-1); border-top: 2px solid var(--rule); font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); letter-spacing: 0.04em; }
 .rq-sidebar__status { margin: var(--space-2); color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .rq-sidebar__status button { border: 0; padding: var(--space-1); background: transparent; color: var(--text); text-decoration: underline; }
 .rq-sidebar__status button:hover { color: var(--accent); }

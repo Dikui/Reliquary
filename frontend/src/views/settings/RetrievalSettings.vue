@@ -137,10 +137,10 @@ onMounted(async () => {
 
 <style scoped>
 .rq-retrieval-settings { color: var(--text); }
-.rq-retrieval-settings .rq-retrieval-description { margin: 0 0 var(--space-4); color: var(--muted); font-size: var(--text-sm); }
+.rq-retrieval-settings .rq-retrieval-description { margin: 0 0 var(--space-4); color: var(--muted); font-size: var(--type-note-size); }
 .rq-retrieval-settings .rq-retrieval-field { padding-block: var(--space-4); border-bottom: 1px solid var(--border); }
-.rq-retrieval-settings .rq-retrieval-field label { font-size: var(--text-sm); font-weight: 700; }
-.rq-retrieval-settings .rq-retrieval-field p { color: var(--muted); font-size: var(--text-xs); }
+.rq-retrieval-settings .rq-retrieval-field label { font-size: var(--type-label-size); font-weight: var(--type-label-weight); }
+.rq-retrieval-settings .rq-retrieval-field p { color: var(--muted); font-size: var(--type-note-size); }
 .rq-retrieval-settings .rq-retrieval-control { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
 .rq-retrieval-settings .rq-retrieval-control input { min-width: 0; width: 100%; border-radius: 0; accent-color: var(--text); }
 .rq-retrieval-settings .rq-retrieval-control input[type="range"] { flex: 1 1 0; width: 0; min-width: 0; }

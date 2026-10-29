@@ -1428,8 +1428,8 @@ const handleCancel = () => {
 .form-item { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: var(--space-2) var(--space-4); margin-bottom: var(--space-4); min-width: 0; }
 .form-item > :not(.form-label) { grid-column: 2; }
 .form-item > .custom-headers-header { grid-column: 1 / -1; }
-.form-label { font-weight: 700; font-size: var(--text-sm); }
-.form-desc, .dimension-hint { font-size: var(--text-sm); color: var(--muted); margin: 0; overflow-wrap: anywhere; }
+.form-label { font-weight: var(--type-label-weight); font-size: var(--type-label-size); }
+.form-desc, .dimension-hint { font-size: var(--type-note-size); color: var(--muted); margin: 0; overflow-wrap: anywhere; }
 .model-type-options, .source-options, .vision-toggle, .model-select-row, .dimension-control, .custom-headers-header { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .model-type-option, .source-option { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; cursor: pointer; }
 .model-type-option.is-active, .source-option.is-active { background: var(--text); color: var(--bg); }
