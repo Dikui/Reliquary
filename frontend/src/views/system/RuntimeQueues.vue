@@ -1,17 +1,15 @@
 <template>
-  <div class="runtime-queues">
+  <div class="runtime-queues settings-form">
     <header class="section-header rq-header">
       <div class="rq-title-block">
-        <h2>{{ t('system.globalSettings.runtime.title') }}</h2>
         <p class="section-description">{{ t('system.globalSettings.runtime.description') }}</p>
       </div>
       <div class="rq-actions">
         <label class="rq-auto-refresh">
           <span class="rq-live-dot" :class="{ 'rq-live-dot--active': autoRefresh }" />
           <span>{{ t('system.globalSettings.runtime.autoRefresh') }}</span>
-          <t-switch
+          <Switch
             v-model="autoRefresh"
-            size="small"
             :aria-label="t('system.globalSettings.runtime.autoRefresh')"
           />
         </label>
@@ -23,10 +21,7 @@
           :aria-label="t('system.globalSettings.runtime.refresh')"
           @click="reload"
         >
-          <t-icon
-            :name="loading ? 'loading' : 'refresh'"
-            :class="{ 'rq-refresh-spin': loading }"
-          />
+          {{ t('system.globalSettings.runtime.refresh') }}
         </button>
       </div>
     </header>
@@ -37,42 +32,29 @@
 
     <div v-if="chatgptError && !chatgptPolicy" class="rq-state rq-state--error" role="alert">
       <div class="rq-state-copy"><strong>{{ t('chatgpt.loadFailed') }}</strong><span>{{ chatgptError }}</span></div>
-      <t-button size="small" variant="outline" @click="loadChatGPTStatus">{{ t('system.globalSettings.runtime.retry') }}</t-button>
+      <Button variant="default" @click="loadChatGPTStatus">{{ t('system.globalSettings.runtime.retry') }}</Button>
     </div>
 
     <div v-if="loading && !loadedOnce" class="rq-loading" aria-live="polite">
       <div class="rq-loading-metrics">
-        <t-skeleton
-          v-for="n in 4"
-          :key="n"
-          animation="gradient"
-          :row-col="[{ width: '42%', height: '28px' }, { width: '66%', height: '14px' }]"
-        />
+        <Skeleton :label="t('common.loading')" />
       </div>
-      <t-skeleton
-        animation="gradient"
-        :row-col="[
-          { width: '100%', height: '42px' },
-          { width: '100%', height: '48px' },
-          { width: '100%', height: '48px' },
-          { width: '100%', height: '48px' },
-        ]"
-      />
+      <Skeleton :label="t('common.loading')" />
     </div>
 
     <div v-else-if="error" class="rq-state rq-state--error" role="alert">
-      <div class="rq-state-icon"><t-icon name="error-circle" size="24px" /></div>
+      <div class="rq-state-icon"></div>
       <div class="rq-state-copy">
         <strong>{{ t('system.globalSettings.runtime.errors.generic') }}</strong>
         <span>{{ error }}</span>
       </div>
-      <t-button size="small" variant="outline" @click="reload">
+      <Button variant="default" @click="reload">
         {{ t('system.globalSettings.runtime.retry') }}
-      </t-button>
+      </Button>
     </div>
 
     <div v-else-if="!available && !modelLimiterAvailable" class="rq-state">
-      <div class="rq-state-icon"><t-icon name="info-circle" size="24px" /></div>
+      <div class="rq-state-icon"></div>
       <div class="rq-state-copy">
         <strong>{{ t('system.globalSettings.runtime.unavailableTitle') }}</strong>
         <span>{{ t('system.globalSettings.runtime.unavailable') }}</span>
@@ -83,7 +65,7 @@
       <template v-if="available">
       <section class="rq-overview" :aria-label="t('system.globalSettings.runtime.summary.title')">
         <div class="rq-overview-title">
-          <span class="rq-overview-mark"><t-icon name="chart-line" /></span>
+          <span class="rq-overview-mark"></span>
           <span>{{ t('system.globalSettings.runtime.summary.title') }}</span>
         </div>
         <div class="rq-overview-metrics">
@@ -144,14 +126,14 @@
             <p>{{ t('system.globalSettings.runtime.detailsDescription') }}</p>
           </div>
           <span v-if="updatedAt" class="rq-updated-at">
-            <t-icon name="time" />
+
             {{ t('system.globalSettings.runtime.updatedAt', { value: updatedAt }) }}
           </span>
         </div>
 
         <div v-if="totalArchived > 0" class="rq-failed-notice" role="status">
           <span class="rq-failed-notice__icon" aria-hidden="true">
-            <t-icon name="error-circle" />
+
           </span>
           <div class="rq-failed-notice__text">
             <p class="rq-failed-notice__title">
@@ -164,109 +146,106 @@
         </div>
 
         <div v-if="queues.length === 0" class="rq-empty">
-          <t-icon name="queue" size="28px" />
+
           <span>{{ t('system.globalSettings.runtime.empty') }}</span>
         </div>
 
         <div v-else class="data-table-shell rq-table-shell">
-          <t-table
+          <DataTable
             row-key="name"
-            :data="queues"
+            :rows="queues" v-model:focused="focusedQueue" :label="t('system.globalSettings.runtime.detailsTitle')"
             :columns="columns"
-            size="medium"
             hover
           >
-            <template #name="{ row }">
+            <template #cell-name="{ row }">
               <div class="rq-queue-cell">
                 <span class="rq-queue-name">{{ queueLabel(row.name) }}</span>
                 <span class="rq-queue-meta">{{ queueMeta(row) }}</span>
               </div>
             </template>
-            <template #active="{ row }">
-              <t-button
+            <template #cell-active="{ row }">
+              <Button
                 v-if="row.active > 0"
-                variant="text"
-                size="small"
+                variant="ghost"
+
                 class="rq-task-count rq-task-count--active"
                 @click="openRuntimeTasks(row, 'active')"
               >
-                {{ row.active }}<t-icon name="chevron-right" />
-              </t-button>
+                {{ row.active }}
+              </Button>
               <span v-else class="rq-number">0</span>
             </template>
-            <template #pending="{ row }">
+            <template #cell-pending="{ row }">
               <div class="rq-backlog">
-                <t-button
+                <Button
                   v-if="row.pending > 0"
-                  variant="text"
-                  size="small"
+                  variant="ghost"
+
                   class="rq-task-count"
                   @click="openRuntimeTasks(row, 'pending')"
-                >{{ row.pending }}<t-icon name="chevron-right" /></t-button>
+                >{{ row.pending }}</Button>
                 <span v-else class="rq-number">0</span>
-                <t-button
+                <Button
                   v-if="row.scheduled > 0"
-                  variant="text"
-                  size="small"
+                  variant="ghost"
+
                   class="rq-scheduled-count"
                   @click="openRuntimeTasks(row, 'scheduled')"
-                >+{{ row.scheduled }} {{ t('system.globalSettings.runtime.columns.scheduled') }}</t-button>
+                >+{{ row.scheduled }} {{ t('system.globalSettings.runtime.columns.scheduled') }}</Button>
               </div>
             </template>
-            <template #retry="{ row }">
-              <t-button
+            <template #cell-retry="{ row }">
+              <Button
                 v-if="row.retry > 0"
-                variant="text"
-                theme="warning"
-                size="small"
+                variant="ghost"
+
                 class="rq-task-count"
                 @click="openRuntimeTasks(row, 'retry')"
-              >{{ row.retry }}<t-icon name="chevron-right" /></t-button>
+              >{{ row.retry }}</Button>
               <span v-else class="rq-number">0</span>
             </template>
-            <template #archived="{ row }">
-              <t-button
+            <template #cell-archived="{ row }">
+              <Button
                 v-if="row.archived > 0"
-                variant="text"
-                theme="danger"
-                size="small"
+                variant="ghost"
+
                 class="rq-task-count rq-failed-count"
                 :aria-label="t('system.globalSettings.runtime.tasks.openAria', { state: taskStateLabel('archived'), queue: queueLabel(row.name), count: row.archived })"
                 @click="openRuntimeTasks(row, 'archived')"
               >
-                {{ row.archived }}<t-icon name="chevron-right" />
-              </t-button>
+                {{ row.archived }}
+              </Button>
               <span v-else class="rq-number">0</span>
             </template>
-            <template #completed="{ row }">
-              <t-button
+            <template #cell-completed="{ row }">
+              <Button
                 v-if="row.completed > 0"
-                variant="text"
-                size="small"
+                variant="ghost"
+
                 class="rq-task-count rq-task-count--completed"
                 @click="openRuntimeTasks(row, 'completed')"
-              >{{ row.completed }}<t-icon name="chevron-right" /></t-button>
+              >{{ row.completed }}</Button>
               <span v-else class="rq-number">0</span>
             </template>
-            <template #cancelled="{ row }">
-              <t-button
-                v-if="row.cancelled > 0"
-                variant="text"
-                size="small"
+            <template #cell-cancelled="{ row }">
+              <Button
+                v-if="(row.cancelled || 0) > 0"
+                variant="ghost"
+
                 class="rq-task-count"
                 @click="openRuntimeTasks(row, 'cancelled')"
-              >{{ row.cancelled }}<t-icon name="chevron-right" /></t-button>
+              >{{ row.cancelled }}</Button>
               <span v-else class="rq-number">0</span>
             </template>
-            <template #latency_ms="{ row }">
+            <template #cell-latency_ms="{ row }">
               <span class="rq-latency">{{ formatLatency(row.latency_ms) }}</span>
             </template>
-            <template #status="{ row }">
+            <template #cell-status="{ row }">
               <span class="rq-status" :class="`rq-status--${queueState(row).tone}`">
                 <i />{{ queueState(row).label }}
               </span>
             </template>
-          </t-table>
+          </DataTable>
         </div>
       </section>
       </template>
@@ -280,51 +259,40 @@
           <span class="rq-pools-note">{{ t('system.globalSettings.runtime.models.scope') }}</span>
         </div>
         <div v-if="!modelLimiterAvailable" class="rq-empty">
-          <t-icon name="info-circle" size="28px" />
+
           <span>{{ t('system.globalSettings.runtime.models.disabled') }}</span>
         </div>
         <div v-else-if="models.length === 0" class="rq-empty">
-          <t-icon name="server" size="28px" />
+
           <span>{{ t('system.globalSettings.runtime.models.empty') }}</span>
         </div>
         <div v-else class="data-table-shell rq-table-shell">
-          <t-table row-key="model_id" :data="models" :columns="modelColumns" size="medium" hover>
-            <template #model_id="{ row }">
+          <DataTable row-key="model_id" :rows="models" v-model:focused="focusedModel" :label="t('system.globalSettings.runtime.models.title')" :columns="modelColumns" hover>
+            <template #cell-model_id="{ row }">
               <div class="rq-queue-cell">
                 <span class="rq-queue-name">{{ row.name || row.model_id }}</span>
-                <span class="rq-queue-meta">{{ row.name ? row.model_id : t('system.globalSettings.runtime.models.backgroundOnly') }}</span>
+                <span class="rq-queue-meta" :title="row.model_id">{{ row.name ? row.model_id.slice(0, 8) : t('system.globalSettings.runtime.models.backgroundOnly') }}</span>
               </div>
             </template>
-            <template #active="{ row }"><span class="rq-number" :class="{ 'rq-number--active': row.active > 0 }">{{ row.active }}</span></template>
-            <template #waiting="{ row }"><span class="rq-number" :class="{ 'rq-number--warning': row.waiting > 0 }">{{ row.waiting }}</span></template>
-            <template #usage="{ row }">
+            <template #cell-active="{ row }"><span class="rq-number" :class="{ 'rq-number--active': row.active > 0 }">{{ row.active }}</span></template>
+            <template #cell-waiting="{ row }"><span class="rq-number" :class="{ 'rq-number--warning': row.waiting > 0 }">{{ row.waiting }}</span></template>
+            <template #cell-usage="{ row }">
               <div class="rq-model-usage">
-                <t-progress :percentage="modelUsage(row)" size="small" :label="false" />
+                <progress :value="modelUsage(row)" max="100" :aria-label="t('system.globalSettings.runtime.models.columns.usage')" />
                 <span>{{ row.active }} / {{ row.limit }}</span>
               </div>
             </template>
-            <template #status="{ row }">
+            <template #cell-status="{ row }">
               <span class="rq-status" :class="`rq-status--${modelState(row).tone}`"><i />{{ modelState(row).label }}</span>
             </template>
-          </t-table>
+          </DataTable>
         </div>
       </section>
 
       <p class="rq-footnote">{{ t('system.globalSettings.runtime.footnote') }}</p>
     </template>
 
-    <SettingDrawer
-      v-model:visible="taskDrawerVisible"
-      class="rq-failed-drawer"
-      :title="t('system.globalSettings.runtime.tasks.title', { queue: taskQueueLabel })"
-      :description="t('system.globalSettings.runtime.tasks.description')"
-      icon="queue"
-      width="720px"
-      :min-width="520"
-      :max-width="1040"
-      storage-key="setting-drawer:width:runtime-tasks"
-      hide-footer
-    >
+    <Drawer v-model="taskDrawerVisible" :title="t('system.globalSettings.runtime.tasks.title', { queue: taskQueueLabel })" :description="t('system.globalSettings.runtime.tasks.description')" content-class="runtime-task-drawer">
       <section class="setting-drawer__section">
         <div
           class="rq-task-state-filter"
@@ -359,49 +327,40 @@
             {{ t('system.globalSettings.runtime.tasks.listTitle', { state: taskStateLabel(taskState) }) }}
           </h4>
           <div class="rq-failed-section-actions">
-            <t-popconfirm
-              v-if="taskState === 'archived' && tasks.length > 0"
-              theme="danger"
-              :content="formatCountCopy(t, 'system.globalSettings.runtime.tasks.purgeArchivedConfirm', { count: taskStateCount(taskQueue, 'archived') })"
-              @confirm="purgeArchivedTasks"
-            >
-              <t-button
-                variant="text"
-                size="small"
-                theme="danger"
+            <template v-if="taskState === 'archived' && tasks.length > 0">
+              <Button variant="danger" @click="confirmAction(formatCountCopy(t, 'system.globalSettings.runtime.tasks.purgeArchivedConfirm', { count: taskStateCount(taskQueue, 'archived') }), () => purgeArchivedTasks())"
+
                 :loading="purging"
                 :disabled="Boolean(taskActionID)"
               >
-                <template #icon><t-icon name="clear" /></template>
+
                 {{ t('system.globalSettings.runtime.tasks.purgeArchived') }}
-              </t-button>
-            </t-popconfirm>
-            <t-button
-              variant="text"
-              size="small"
+              </Button>
+            </template>
+            <Button
+              variant="ghost"
               :loading="tasksLoading && !tasksLoadingMore"
               @click="reloadRuntimeTasks"
             >
-              <template #icon><t-icon name="refresh" /></template>
+
               {{ t('system.globalSettings.runtime.refresh') }}
-            </t-button>
+            </Button>
           </div>
         </div>
 
         <div v-if="tasksLoading && tasks.length === 0" class="rq-failed-loading">
-          <t-loading size="small" />
+          <p role="status">{{ t('common.loading') }}</p>
           <span>{{ t('system.globalSettings.runtime.loading') }}</span>
         </div>
         <div v-else-if="tasksError" class="rq-failed-error-state">
           <span>{{ tasksError }}</span>
-          <t-button size="small" variant="outline" @click="reloadRuntimeTasks">
+          <Button variant="default" @click="reloadRuntimeTasks">
             {{ t('system.globalSettings.runtime.retry') }}
-          </t-button>
+          </Button>
         </div>
-        <t-empty
+        <p
           v-else-if="tasks.length === 0"
-          :description="t('system.globalSettings.runtime.tasks.empty', { state: taskStateLabel(taskState) })"
-        />
+         role="status">{{ t('system.globalSettings.runtime.tasks.empty', { state: taskStateLabel(taskState) }) }}</p>
         <div v-else class="rq-failed-list-panel">
           <article
             v-for="task in tasks"
@@ -424,7 +383,7 @@
               <dl v-if="runtimeTaskMeta(task).length > 0" class="rq-failed-row-refs">
                 <div v-for="ref in runtimeTaskMeta(task)" :key="ref.key" class="rq-failed-ref">
                   <dt>{{ ref.label }}</dt>
-                  <dd :title="ref.value">{{ ref.value }}</dd>
+                  <dd :title="ref.value">{{ ref.value.length > 36 ? ref.value.slice(0, 12) + '…' : ref.value }}</dd>
                 </div>
               </dl>
               <p v-else class="rq-failed-row-unknown">
@@ -439,63 +398,38 @@
             </div>
 
             <div v-if="task.allowed_actions.length > 0" class="rq-failed-row-actions">
-              <t-popconfirm
-                v-if="task.allowed_actions.includes('cancel')"
-                theme="danger"
-                :content="t('system.globalSettings.runtime.tasks.cancelConfirm')"
-                @confirm="runTaskAction(task, 'cancel')"
-              >
-                <t-button
-                  shape="square"
-                  variant="text"
-                  size="small"
-                  theme="danger"
-                  class="rq-failed-icon-btn"
+              <template v-if="task.allowed_actions.includes('cancel')">
+                <Button variant="danger" @click="confirmAction(t('system.globalSettings.runtime.tasks.cancelConfirm'), () => runTaskAction(task, 'cancel'))"
+
+                  class="rq-task-action"
                   :title="t('system.globalSettings.runtime.tasks.cancel')"
                   :aria-label="t('system.globalSettings.runtime.tasks.cancel')"
                   :loading="taskActionID === task.id && taskAction === 'cancel'"
                   :disabled="Boolean(taskActionID)"
-                ><t-icon name="close-circle" /></t-button>
-              </t-popconfirm>
-              <t-popconfirm
-                v-if="task.allowed_actions.includes('run_now')"
-                theme="warning"
-                :content="t('system.globalSettings.runtime.tasks.runNowConfirm')"
-                @confirm="runTaskAction(task, 'run_now')"
-              >
-                <t-button
-                  shape="square"
-                  variant="text"
-                  size="small"
-                  class="rq-failed-icon-btn"
+                >{{ t('common.cancel') }}</Button>
+              </template>
+              <template v-if="task.allowed_actions.includes('run_now')">
+                <Button @click="confirmAction(t('system.globalSettings.runtime.tasks.runNowConfirm'), () => runTaskAction(task, 'run_now'))"
+
+                  variant="ghost"
+
+                  class="rq-task-action"
                   :title="t('system.globalSettings.runtime.tasks.runNow')"
                   :aria-label="t('system.globalSettings.runtime.tasks.runNow')"
                   :loading="taskActionID === task.id && taskAction === 'run_now'"
                   :disabled="Boolean(taskActionID)"
-                >
-                  <t-icon name="refresh" />
-                </t-button>
-              </t-popconfirm>
-              <t-popconfirm
-                v-if="task.allowed_actions.includes('delete')"
-                theme="danger"
-                :content="t(task.state === 'cancelled' ? 'system.globalSettings.runtime.tasks.deleteCancelledConfirm' : 'system.globalSettings.runtime.tasks.deleteConfirm')"
-                @confirm="runTaskAction(task, 'delete')"
-              >
-                <t-button
-                  shape="square"
-                  variant="text"
-                  size="small"
-                  theme="danger"
-                  class="rq-failed-icon-btn"
+                >{{ t('system.globalSettings.runtime.tasks.runNow') }}</Button>
+              </template>
+              <template v-if="task.allowed_actions.includes('delete')">
+                <Button variant="danger" @click="confirmAction(t(task.state === 'cancelled' ? 'system.globalSettings.runtime.tasks.deleteCancelledConfirm' : 'system.globalSettings.runtime.tasks.deleteConfirm'), () => runTaskAction(task, 'delete'))"
+
+                  class="rq-task-action"
                   :title="t('system.globalSettings.runtime.tasks.deleteRecord')"
                   :aria-label="t('system.globalSettings.runtime.tasks.deleteRecord')"
                   :loading="taskActionID === task.id && taskAction === 'delete'"
                   :disabled="Boolean(taskActionID)"
-                >
-                  <t-icon name="delete" />
-                </t-button>
-              </t-popconfirm>
+                >{{ t('common.delete') }}</Button>
+              </template>
             </div>
           </article>
 
@@ -513,30 +447,30 @@
                 {{ t('system.globalSettings.runtime.tasks.loadedSummary', { count: tasks.length }) }}
               </template>
             </span>
-            <t-button
+            <Button
               v-if="tasksHasMore"
-              variant="outline"
+              variant="default"
               block
               :loading="tasksLoadingMore"
               @click="loadMoreRuntimeTasks"
             >
               {{ t('system.globalSettings.runtime.tasks.loadMore') }}
-            </t-button>
+            </Button>
           </div>
         </div>
       </section>
-    </SettingDrawer>
+    </Drawer>
   </div>
 </template>
 
 <script setup lang="ts">
+import { Button, Switch, Drawer, DataTable, Skeleton, toast, useConfirm } from '@/components/ui'
+import '@/styles/settings-form.css'
 import QueueConnectionNotice from './QueueConnectionNotice.vue'
 import type { QueueConnectionStatus } from '@/api/system'
 import { formatCountCopy } from '@/i18n/countCopy'
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MessagePlugin } from 'tdesign-vue-next'
-import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import ChatGPTUsageStatus from '@/components/ChatGPTUsageStatus.vue'
 import { getChatGPTAccounts, getChatGPTPolicy, resumeChatGPT, type ChatGPTAccount, type ChatGPTPolicy } from '@/api/chatgpt'
 import { mergeRuntimeTaskPage } from './runtimeTaskPagination'
@@ -554,6 +488,7 @@ import {
   type RuntimeWorkerPool,
 } from '@/api/system'
 
+const confirm = useConfirm()
 const { t, te, locale } = useI18n()
 
 const chatgptPolicy = ref<ChatGPTPolicy | null>(null), chatgptAccounts = ref<ChatGPTAccount[]>([])
@@ -621,23 +556,27 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 let tasksScrollObserver: IntersectionObserver | null = null
 let tasksRequestID = 0
 
+function confirmAction(body: string, action: () => unknown) {
+  confirm({ header: t('common.confirm'), body, confirmBtn: t('common.confirm'), cancelBtn: t('common.cancel'), theme: 'danger', onConfirm: async () => { await action() } })
+}
+const focusedQueue = ref(''), focusedModel = ref('')
 const columns = computed(() => [
-  { colKey: 'name', title: t('system.globalSettings.runtime.columns.queue'), minWidth: 188 },
-  { colKey: 'active', title: t('system.globalSettings.runtime.columns.active'), width: 74, align: 'center' as const },
-  { colKey: 'pending', title: t('system.globalSettings.runtime.columns.pending'), width: 84, align: 'center' as const },
-  { colKey: 'retry', title: t('system.globalSettings.runtime.columns.retry'), width: 68, align: 'center' as const },
-  { colKey: 'archived', title: t('system.globalSettings.runtime.columns.archived'), width: 96, align: 'center' as const },
-  { colKey: 'completed', title: t('system.globalSettings.runtime.columns.completed'), width: 84, align: 'center' as const },
-  { colKey: 'cancelled', title: t('system.globalSettings.runtime.tasks.states.cancelled'), width: 84, align: 'center' as const },
-  { colKey: 'latency_ms', title: t('system.globalSettings.runtime.columns.latency'), width: 104, align: 'center' as const },
-  { colKey: 'status', title: t('system.globalSettings.runtime.columns.status'), width: 96 },
+  { key: 'name', label: t('system.globalSettings.runtime.columns.queue'), minWidth: 188 },
+  { key: 'active', label: t('system.globalSettings.runtime.columns.active'), width: 74, align: 'center' as const },
+  { key: 'pending', label: t('system.globalSettings.runtime.columns.pending'), width: 84, align: 'center' as const },
+  { key: 'retry', label: t('system.globalSettings.runtime.columns.retry'), width: 68, align: 'center' as const },
+  { key: 'archived', label: t('system.globalSettings.runtime.columns.archived'), width: 96, align: 'center' as const },
+  { key: 'completed', label: t('system.globalSettings.runtime.columns.completed'), width: 84, align: 'center' as const },
+  { key: 'cancelled', label: t('system.globalSettings.runtime.tasks.states.cancelled'), width: 84, align: 'center' as const },
+  { key: 'latency_ms', label: t('system.globalSettings.runtime.columns.latency'), width: 104, align: 'center' as const },
+  { key: 'status', label: t('system.globalSettings.runtime.columns.status'), width: 96 },
 ])
 const modelColumns = computed(() => [
-  { colKey: 'model_id', title: t('system.globalSettings.runtime.models.columns.model'), minWidth: 240 },
-  { colKey: 'active', title: t('system.globalSettings.runtime.models.columns.active'), width: 86, align: 'center' as const },
-  { colKey: 'waiting', title: t('system.globalSettings.runtime.models.columns.waiting'), width: 86, align: 'center' as const },
-  { colKey: 'usage', title: t('system.globalSettings.runtime.models.columns.usage'), width: 190 },
-  { colKey: 'status', title: t('system.globalSettings.runtime.columns.status'), width: 96 },
+  { key: 'model_id', label: t('system.globalSettings.runtime.models.columns.model'), minWidth: 240 },
+  { key: 'active', label: t('system.globalSettings.runtime.models.columns.active'), width: 86, align: 'center' as const },
+  { key: 'waiting', label: t('system.globalSettings.runtime.models.columns.waiting'), width: 86, align: 'center' as const },
+  { key: 'usage', label: t('system.globalSettings.runtime.models.columns.usage'), width: 190 },
+  { key: 'status', label: t('system.globalSettings.runtime.columns.status'), width: 96 },
 ])
 
 function modelUsage(row: ModelRuntimeStat): number {
@@ -728,7 +667,7 @@ function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
   if (task.entry_id) {
     refs.push({
       key: 'entry',
-      label: t('system.globalSettings.runtime.tasks.knowledgeLabel'),
+      label: t('system.globalSettings.runtime.tasks.entryLabel'),
       value: task.entry_id,
     })
   }
@@ -742,7 +681,7 @@ function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
   if (task.source_library_id) refs.push({ key: 'source-library', label: t('system.globalSettings.runtime.tasks.sourceLibraryLabel'), value: task.source_library_id })
   if (task.target_library_id) refs.push({ key: 'target-library', label: t('system.globalSettings.runtime.tasks.targetLibraryLabel'), value: task.target_library_id })
   if (task.entry_count) {
-    refs.push({ key: 'entry-count', label: t('system.globalSettings.runtime.tasks.knowledgeCountLabel'), value: String(task.entry_count) })
+    refs.push({ key: 'entry-count', label: t('system.globalSettings.runtime.tasks.entryCountLabel'), value: String(task.entry_count) })
   }
   if (task.space_id) {
     refs.push({
@@ -865,7 +804,7 @@ function attachTasksScrollObserver() {
   detachTasksScrollObserver()
   const sentinel = tasksSentinelRef.value
   if (!sentinel || !taskDrawerVisible.value || !tasksHasMore.value) return
-  const root = sentinel.closest('.t-drawer__body') as HTMLElement | null
+  const root = sentinel.closest('.rq-dialog__body') as HTMLElement | null
   if (!root) return
   tasksScrollObserver = new IntersectionObserver(
     (entries) => {
@@ -907,11 +846,11 @@ async function runTaskAction(task: RuntimeTask, action: RuntimeTaskAction) {
   taskAction.value = action
   try {
     await mutateRuntimeTask(queue, task.id, action)
-    MessagePlugin.success(t(`system.globalSettings.runtime.tasks.actionSuccess.${action}`))
+    toast.success(t(`system.globalSettings.runtime.tasks.actionSuccess.${action}`))
     await Promise.all([reloadRuntimeTasks(), load(false)])
     taskQueue.value = queues.value.find((item) => item.name === queue) ?? taskQueue.value
   } catch (err: any) {
-    MessagePlugin.error(err?.message || t(`system.globalSettings.runtime.tasks.actionError.${action}`))
+    toast.error(err?.message || t(`system.globalSettings.runtime.tasks.actionError.${action}`))
   } finally {
     taskActionID.value = ''
     taskAction.value = ''
@@ -924,11 +863,11 @@ async function purgeArchivedTasks() {
   purging.value = true
   try {
     const { deleted } = await purgeArchivedRuntimeTasks(queue)
-    MessagePlugin.success(t('system.globalSettings.runtime.tasks.purgeArchivedSuccess', { count: deleted }))
+    toast.success(t('system.globalSettings.runtime.tasks.purgeArchivedSuccess', { count: deleted }))
     await Promise.all([reloadRuntimeTasks(), load(false)])
     taskQueue.value = queues.value.find((item) => item.name === queue) ?? taskQueue.value
   } catch (err: any) {
-    MessagePlugin.error(err?.message || t('system.globalSettings.runtime.tasks.purgeArchivedError'))
+    toast.error(err?.message || t('system.globalSettings.runtime.tasks.purgeArchivedError'))
   } finally {
     purging.value = false
   }
@@ -1013,1094 +952,38 @@ onUnmounted(() => {
 })
 </script>
 
-<style lang="less" scoped>
-@import '../../assets/settings-layout.less';
+<style scoped>
+ .rq-header, .rq-actions, .rq-auto-refresh, .rq-details-header, .rq-pools-header, .rq-pool-topline, .rq-failed-section-head, .rq-failed-section-actions, .rq-failed-row-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.rq-auto-refresh, .rq-actions { justify-content: flex-start; }
+.rq-refresh, .rq-task-state-option { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; cursor: pointer; }
+.rq-task-state-option.is-active { background: var(--text); color: var(--bg); }
+.rq-refresh:focus-visible, .rq-task-state-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rq-state { display: flex; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-4) 0; border-top: 2px solid var(--rule); }
+.rq-state-copy, .rq-queue-cell { display: grid; gap: var(--space-1); }
+.rq-state--error, .rq-failed-row-error { color: var(--danger); }
+.rq-overview, .rq-pools, .rq-details { padding: var(--space-4) 0; border-top: 2px solid var(--rule); }
+.rq-overview-metrics, .rq-pool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-4); }
+.rq-metric { display: grid; gap: var(--space-2); }
+.rq-metric-value { font-family: var(--mono); font-size: var(--text-2xl); }
+.rq-metric-label, .rq-queue-meta, .rq-pool-desc, .rq-footnote, .rq-details-header p, .rq-pools-header p, .rq-failed-guide-desc { color: var(--muted); font-size: var(--text-sm); }
+.rq-queue-name, .rq-queue-meta { overflow-wrap: anywhere; }
+.rq-number, .rq-latency, .rq-pool-value { font-family: var(--mono); }
+.rq-status { white-space: nowrap; }
+.rq-failed-notice { border-top: 2px solid var(--danger); padding: var(--space-3); background: var(--danger-soft); }
+.rq-table-shell { min-width: 0; }
+.rq-table-shell :deep(.rq-table) { min-width: 820px; }
+.rq-models :deep(.rq-table) { min-width: 640px; }
+.rq-table-shell :deep(th), .rq-table-shell :deep(td) { min-width: 76px; }
+.rq-model-usage progress { width: 100%; accent-color: var(--text); }
+.rq-task-state-filter { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.rq-failed-row { border-top: 2px solid var(--rule); padding: var(--space-4) 0; }
+.rq-task-action { min-height: 28px; padding: 4px 8px; font-size: var(--text-sm); }
+.rq-failed-row-summary { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.rq-failed-row-refs { display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); gap: 4px 8px; }
+.rq-failed-ref { display: contents; }
+.rq-failed-ref dt { white-space: normal; overflow-wrap: anywhere; }
+.rq-failed-ref dd { overflow: hidden; text-overflow: ellipsis; }
+.rq-failed-row-refs dd { margin: var(--space-1) 0; font-family: var(--mono); overflow-wrap: anywhere; }
+.rq-failed-list-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); }
 
-.runtime-queues {
-  color: var(--td-text-color-primary);
-}
-
-.rq-models {
-  margin-top: 40px;
-  padding-top: 32px;
-}
-
-.rq-model-usage {
-  display: grid;
-  grid-template-columns: minmax(72px, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  color: var(--td-text-color-secondary);
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-}
-
-.rq-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 24px;
-
-  h2 {
-    margin: 0 0 8px;
-    color: var(--td-text-color-primary);
-    font-size: 20px;
-    font-weight: 600;
-    line-height: 1.3;
-    letter-spacing: -0.01em;
-  }
-
-  .section-description {
-    max-width: 560px;
-    margin: 0;
-    color: var(--td-text-color-secondary);
-    font-size: 14px;
-    line-height: 1.6;
-    text-wrap: pretty;
-  }
-}
-
-.rq-actions {
-  padding-right: 48px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.rq-title-block {
-  min-width: 0;
-}
-
-.rq-refresh {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--td-text-color-placeholder);
-  cursor: pointer;
-  transition: color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-
-  :deep(.t-icon) {
-    font-size: 12px;
-  }
-
-  &:hover:not(:disabled) {
-    color: var(--td-brand-color);
-    background: var(--td-bg-color-secondarycontainer);
-  }
-
-  &:active:not(:disabled) {
-    background: var(--td-bg-color-secondarycontainer);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.7;
-  }
-}
-
-.rq-refresh-spin {
-  animation: rq-refresh-rotate 0.8s linear infinite;
-}
-
-@keyframes rq-refresh-rotate {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.rq-auto-refresh {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 32px;
-  color: var(--td-text-color-secondary);
-  font-size: 13px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.rq-live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--td-text-color-placeholder);
-  transition: background-color 0.2s ease, box-shadow 0.2s ease;
-
-  &--active {
-    background: var(--td-success-color);
-    box-shadow: 0 0 0 3px var(--td-success-color-1);
-  }
-}
-
-.rq-loading {
-  display: grid;
-  gap: 22px;
-  padding-top: 4px;
-}
-
-.rq-loading-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 10px;
-  background: var(--td-component-stroke);
-
-  :deep(.t-skeleton) {
-    padding: 18px;
-    background: var(--td-bg-color-container);
-  }
-}
-
-.rq-state {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  min-height: 112px;
-  padding: 20px 22px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 10px;
-  background: var(--td-bg-color-secondarycontainer);
-}
-
-.rq-state-icon {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  border-radius: 8px;
-  color: var(--td-text-color-secondary);
-  background: var(--td-bg-color-container);
-}
-
-.rq-state-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-
-  strong {
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  span {
-    max-width: 560px;
-    color: var(--td-text-color-secondary);
-    font-size: 14px;
-    line-height: 1.55;
-  }
-}
-
-.rq-state--error .rq-state-icon {
-  color: var(--td-error-color);
-  background: var(--td-error-color-1);
-}
-
-.rq-overview {
-  display: flex;
-  min-height: 64px;
-  align-items: center;
-  gap: 28px;
-  margin-bottom: 30px;
-  padding: 13px 16px;
-  border-radius: 8px;
-  background: var(--td-bg-color-secondarycontainer);
-}
-
-.rq-overview-title {
-  display: inline-flex;
-  min-width: 112px;
-  align-items: center;
-  gap: 9px;
-  color: var(--td-text-color-primary);
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.rq-overview-mark {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 6px;
-  color: var(--td-brand-color);
-  background: var(--td-bg-color-container);
-  font-size: 15px;
-}
-
-.rq-overview-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(64px, 1fr));
-  align-items: stretch;
-  gap: 24px;
-  flex: 1;
-}
-
-.rq-metric {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-}
-
-.rq-metric-value {
-  color: var(--td-text-color-primary);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-.rq-metric-label {
-  color: var(--td-text-color-secondary);
-  font-size: 13px;
-  line-height: 1.35;
-  white-space: nowrap;
-}
-
-.rq-metric--warning .rq-metric-value {
-  color: var(--td-warning-color);
-}
-
-.rq-metric--danger .rq-metric-value {
-  color: var(--td-error-color);
-}
-
-.rq-pools {
-  margin-bottom: 30px;
-}
-
-.rq-section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 6px;
-  color: var(--td-text-color-primary);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.35;
-  user-select: none;
-
-  &::before {
-    content: '';
-    flex-shrink: 0;
-    width: 3px;
-    height: 15px;
-    border-radius: 2px;
-    background: var(--td-brand-color);
-  }
-}
-
-.rq-pools-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 14px;
-
-  p {
-    margin: 0;
-    color: var(--td-text-color-secondary);
-    font-size: 13px;
-    line-height: 1.55;
-  }
-}
-
-.rq-pools-note {
-  flex-shrink: 0;
-  margin-top: 2px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-  line-height: 1.4;
-  white-space: nowrap;
-  background: var(--td-bg-color-secondarycontainer);
-}
-
-.rq-pool-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.rq-pool-card {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px 18px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 10px;
-  background: var(--td-bg-color-container);
-}
-
-.rq-pool-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.rq-pool-name {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: var(--td-text-color-primary);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.35;
-}
-
-.rq-pool-value {
-  flex-shrink: 0;
-  color: var(--td-brand-color);
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-.rq-pool-desc {
-  margin: 0;
-  color: var(--td-text-color-secondary);
-  font-size: 13px;
-  line-height: 1.55;
-  text-wrap: pretty;
-}
-
-.rq-pool-meta {
-  display: block;
-  margin-top: 4px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.rq-details {
-  margin-top: 2px;
-}
-
-.rq-details-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 14px;
-
-  p {
-    margin: 0;
-    color: var(--td-text-color-secondary);
-    font-size: 13px;
-    line-height: 1.55;
-  }
-}
-
-.rq-updated-at {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.rq-failed-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 14px;
-  padding: 12px 14px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 10px;
-  background: var(--td-bg-color-container);
-}
-
-.rq-failed-notice__icon {
-  display: grid;
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 8px;
-  color: var(--td-error-color);
-  font-size: 16px;
-  background: color-mix(in srgb, var(--td-error-color) 10%, transparent);
-}
-
-.rq-failed-notice__text {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.rq-failed-notice__title {
-  margin: 0;
-  color: var(--td-text-color-primary);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.45;
-  font-variant-numeric: tabular-nums;
-}
-
-.rq-failed-notice__desc {
-  margin: 0;
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.rq-failed-guide-desc {
-  margin: 0;
-  color: var(--td-text-color-secondary);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.rq-task-state-filter {
-  display: flex;
-  overflow-x: auto;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--td-component-stroke);
-}
-
-.rq-task-state-option {
-  position: relative;
-  display: inline-flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-width: 104px;
-  padding: 10px 6px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.2;
-  white-space: nowrap;
-  transition: color 0.15s ease;
-
-  &:hover:not(.is-active) {
-    color: var(--td-text-color-primary);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--td-brand-color);
-    outline-offset: -2px;
-  }
-
-  &.is-active {
-    color: var(--td-brand-color);
-    font-weight: 600;
-
-    &::after {
-      content: '';
-      position: absolute;
-      left: 8px;
-      right: 8px;
-      bottom: -1px;
-      height: 2px;
-      border-radius: 2px 2px 0 0;
-      background: var(--td-brand-color);
-    }
-  }
-}
-
-.rq-task-state-option__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rq-task-state-option__count {
-  flex-shrink: 0;
-  color: var(--td-text-color-placeholder);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-
-  &.has-value {
-    color: var(--td-text-color-secondary);
-  }
-
-  .rq-task-state-option.is-active & {
-    color: var(--td-brand-color);
-    font-weight: 600;
-  }
-}
-
-.rq-failed-section-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 4px;
-
-  .setting-drawer__section-title {
-    margin-bottom: 0;
-  }
-}
-
-.rq-failed-section-actions {
-  display: inline-flex;
-  flex-wrap: wrap;
-  max-width: 100%;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-.rq-failed-loading {
-  display: flex;
-  min-height: 180px;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: var(--td-text-color-secondary);
-  font-size: 13px;
-}
-
-.rq-failed-error-state {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 10px;
-  color: var(--td-text-color-secondary);
-  font-size: 13px;
-  line-height: 1.55;
-  background: var(--td-bg-color-container);
-}
-
-.rq-empty {
-  display: flex;
-  min-height: 180px;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 10px;
-  border: 1px dashed var(--td-component-stroke);
-  border-radius: 10px;
-  color: var(--td-text-color-placeholder);
-  font-size: 13px;
-}
-
-.rq-queue-cell {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.rq-queue-name {
-  overflow: hidden;
-  color: var(--td-text-color-primary);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rq-queue-meta {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.rq-number,
-.rq-latency {
-  color: var(--td-text-color-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-.rq-number--active {
-  color: var(--td-brand-color);
-  font-weight: 600;
-}
-
-.rq-number--warning {
-  color: var(--td-warning-color);
-  font-weight: 600;
-}
-
-.rq-number--danger {
-  color: var(--td-error-color);
-  font-weight: 600;
-}
-
-.rq-task-count {
-  min-width: 0;
-  height: 28px;
-  padding: 0 2px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-
-  :deep(.t-button__text) {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-  }
-}
-
-.rq-task-count--active {
-  color: var(--td-brand-color);
-}
-
-.rq-task-count--completed {
-  color: var(--td-success-color);
-}
-
-.rq-scheduled-count {
-  min-width: 0;
-  height: 18px;
-  padding: 0;
-  color: var(--td-text-color-placeholder);
-  font-size: 11px;
-}
-
-.rq-backlog {
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  gap: 1px;
-
-  small {
-    color: var(--td-text-color-placeholder);
-    font-size: 11px;
-    white-space: nowrap;
-  }
-}
-
-.rq-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-  white-space: nowrap;
-
-  i {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--td-text-color-placeholder);
-  }
-
-  &--working i {
-    background: var(--td-brand-color);
-  }
-
-  &--attention i,
-  &--paused i {
-    background: var(--td-warning-color);
-  }
-
-  &--attention,
-  &--paused {
-    color: var(--td-warning-color);
-  }
-
-  &--danger {
-    color: var(--td-error-color);
-  }
-
-  &--danger i {
-    background: var(--td-error-color);
-  }
-}
-
-.data-table-shell.rq-table-shell {
-  min-width: 0;
-  max-width: 100%;
-  overflow-x: auto;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 10px;
-  background-color: var(--td-bg-color-container);
-
-  &:deep(thead th) {
-    height: 40px;
-    color: var(--td-text-color-secondary);
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-    background-color: var(--td-bg-color-secondarycontainer) !important;
-  }
-
-  &:deep(.t-table td) {
-    height: 56px;
-    padding-top: 10px;
-    padding-bottom: 10px;
-    font-size: 14px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Metric columns: center short numbers under multi-char headers. */
-  &:deep(.t-table th.t-align-center),
-  &:deep(.t-table td.t-align-center) {
-    text-align: center;
-  }
-
-  &:deep(td.t-align-center .rq-task-count) {
-    margin-inline: auto;
-  }
-
-  &:deep(.t-table__body tr:last-child td) {
-    border-bottom: 0;
-  }
-}
-
-.rq-footnote {
-  margin: 12px 0 0;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.rq-failed-list-panel {
-  overflow: hidden;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 10px;
-  background: var(--td-bg-color-container);
-}
-
-.rq-failed-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 12px 12px 12px 16px;
-  border-bottom: 1px solid var(--td-component-stroke);
-
-  &:last-of-type {
-    border-bottom: 0;
-  }
-}
-
-.rq-failed-row-content {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.rq-failed-row-summary {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-width: 0;
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.rq-failed-row-type {
-  color: var(--td-text-color-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.rq-task-state-pill {
-  padding: 1px 6px;
-  border-radius: 999px;
-  color: var(--td-text-color-secondary);
-  font-size: 11px;
-  background: var(--td-bg-color-secondarycontainer);
-
-  &--active {
-    color: var(--td-brand-color);
-    background: var(--td-brand-color-light);
-  }
-
-  &--retry,
-  &--scheduled {
-    color: var(--td-warning-color);
-    background: var(--td-warning-color-1);
-  }
-
-  &--archived {
-    color: var(--td-error-color);
-    background: var(--td-error-color-1);
-  }
-
-  &--completed {
-    color: var(--td-success-color);
-    background: var(--td-success-color-1);
-  }
-}
-
-.rq-failed-row-sep {
-  color: var(--td-text-color-placeholder);
-}
-
-.rq-failed-row-stat,
-.rq-failed-row-summary time {
-  font-variant-numeric: tabular-nums;
-}
-
-.rq-failed-row-refs {
-  display: grid;
-  grid-template-columns: fit-content(40%) minmax(0, 1fr);
-  gap: 4px 8px;
-  align-items: baseline;
-  margin: 2px 0 0;
-}
-
-.rq-failed-ref {
-  display: contents;
-  margin: 0;
-
-  dt {
-    margin: 0;
-    color: var(--td-text-color-placeholder);
-    font-size: 12px;
-    line-height: 1.45;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
-  dd {
-    margin: 0;
-    overflow: hidden;
-    color: var(--td-text-color-secondary);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 11px;
-    line-height: 1.45;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-.rq-failed-row-unknown {
-  margin: 2px 0 0;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.rq-failed-row-error {
-  margin: 8px 0 0;
-  padding: 8px 10px;
-  border-radius: 6px;
-  color: var(--td-text-color-primary);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  background: var(--td-bg-color-secondarycontainer);
-}
-
-.rq-failed-row-actions {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0;
-  margin-top: -2px;
-}
-
-.rq-failed-icon-btn {
-  width: 28px;
-  height: 28px;
-}
-
-.rq-failed-load-sentinel {
-  height: 1px;
-}
-
-.rq-failed-list-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 16px 14px;
-  border-top: 1px solid var(--td-component-stroke);
-  background: var(--td-bg-color-secondarycontainer);
-}
-
-.rq-failed-list-status {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  line-height: 1.5;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 860px) {
-  .rq-header,
-  .rq-details-header,
-  .rq-pools-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .rq-loading-metrics {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .rq-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .rq-overview {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .rq-overview-metrics {
-    width: 100%;
-    grid-template-columns: repeat(4, minmax(64px, 1fr));
-  }
-
-  .rq-pool-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container settings-content (max-width: @settings-narrow-width) {
-  .rq-header,
-  .rq-details-header,
-  .rq-pools-header {
-    min-width: 0;
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .rq-actions {
-    max-width: 100%;
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: space-between;
-  }
-
-  .rq-pools-note,
-  .rq-updated-at {
-    max-width: 100%;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
-  .rq-overview {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .rq-overview-metrics,
-  .rq-loading-metrics,
-  .rq-pool-grid {
-    width: 100%;
-    min-width: 0;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .rq-metric-label {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
-  .rq-pool-topline {
-    flex-wrap: wrap;
-  }
-
-  .rq-table-shell :deep(table) {
-    min-width: 794px;
-  }
-
-  .rq-models .rq-table-shell :deep(table) {
-    min-width: 698px;
-  }
-
-  .rq-state {
-    grid-template-columns: auto minmax(0, 1fr);
-
-    .t-button {
-      grid-column: 2;
-      justify-self: start;
-    }
-  }
-}
-
-@media (max-width: 620px) {
-  .rq-task-state-filter {
-    overflow-x: auto;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
-
-  .rq-task-state-option {
-    flex: 0 0 auto;
-    min-width: 72px;
-    padding: 10px 10px;
-  }
-
-  .rq-loading-metrics {
-    grid-template-columns: 1fr;
-  }
-
-  .rq-overview-metrics {
-    width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-  }
-
-  .rq-pool-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .rq-state {
-    grid-template-columns: auto minmax(0, 1fr);
-
-    .t-button {
-      grid-column: 2;
-      justify-self: start;
-    }
-  }
-
-  .rq-failed-row {
-    padding: 12px;
-  }
-
-  .rq-failed-row-summary {
-    gap: 4px;
-  }
-}
 </style>

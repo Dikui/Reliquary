@@ -1,23 +1,25 @@
 <template>
-  <section class="model-tier-editor" :aria-label="t('modelTiers.title')">
-    <div class="model-tier-heading"><div><h3>{{ t('modelTiers.title') }}</h3><p>{{ t(scope === 'space' ? 'modelTiers.scopeHint.space' : 'modelTiers.scopeHint.library') }}</p></div><t-button variant="text" :loading="loading" :disabled="disabled" @click="refresh">{{ t('common.refresh') }}</t-button></div>
-    <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" @click="refresh">{{ t('modelTiers.retry') }}</t-button></template></t-alert>
+  <section class="model-tier-editor settings-form" :aria-label="t('modelTiers.title')">
+    <div class="model-tier-heading"><div><h3 v-if="!hideTitle">{{ t('modelTiers.title') }}</h3><p>{{ t(scope === 'space' ? 'modelTiers.scopeHint.space' : 'modelTiers.scopeHint.library') }}</p></div><Button variant="ghost" :loading="loading" :disabled="disabled" @click="refresh">{{ t('common.refresh') }}</Button></div>
+    <div v-if="error" role="alert" class="settings-error">{{ error }}<div class="settings-actions"><Button variant="ghost" @click="refresh">{{ t('modelTiers.retry') }}</Button></div></div>
     <div v-for="tier in tiers" :key="tier" class="model-tier-row">
       <div class="model-tier-info"><label :id="`${id}-${tier}`">{{ t(`modelTiers.names.${tier}`) }}</label><p>{{ t(`modelTiers.uses.${tier}`) }}</p></div>
       <div class="model-tier-control">
         <ModelSelector :model-type="modelTypeForTier(tier)" :selected-model-id="modelValue[tier] || ''" :all-models="models"
-          :disabled="disabled || loading || (tier === 'embedding' && embeddingLocked)" clearable :aria-label="t(`modelTiers.names.${tier}`)"
+          :disabled="disabled || loading || (tier === 'embedding' && embeddingLocked)" :aria-label="t(`modelTiers.names.${tier}`)"
           :placeholder="t('modelTiers.useDefault')"
           @update:selected-model-id="value => setTier(tier, value)" @add-model="openModels(tier)" />
         <p v-if="loading" class="model-tier-current" role="status">{{ t('common.loading') }}</p>
         <p v-else-if="!error" class="model-tier-current">{{ t('modelTiers.effective', { model: modelName(resolved[tier]?.model_id), source: sourceName(resolved[tier]?.source) }) }}</p>
-        <p v-if="tier === 'embedding' && embeddingLocked" class="model-tier-current">{{ t('knowledgeEditor.models.embeddingLocked') }}</p>
+        <p v-if="tier === 'embedding' && embeddingLocked" class="model-tier-current">{{ t('libraryEditor.models.embeddingLocked') }}</p>
       </div>
     </div>
     <p v-if="scope === 'library' && (tiers.includes('light') || tiers.includes('entity_resolution'))" class="model-tier-footnote">{{ t('modelTiers.explicitChoice') }}</p>
   </section>
 </template>
 <script setup lang="ts">
+import { Button } from '@/components/ui'
+import '@/styles/settings-form.css'
 import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MODEL_TIERS, type ModelTier, type ModelTierConfig, type ResolvedModelTiers } from '@/api/model-tiers'
@@ -26,7 +28,7 @@ import { modelTypeForTier, previewModelTiers } from '@/utils/modelTiers'
 import { useResourcesStore } from '@/stores/resources'
 import { useUIStore } from '@/stores/ui'
 import ModelSelector from './ModelSelector.vue'
-const props = withDefaults(defineProps<{ modelValue: ModelTierConfig; allModels?: ModelConfig[]; beforeNavigate?: () => Promise<boolean>; disabled?: boolean; embeddingLocked?: boolean; tiers?: readonly ModelTier[]; scope?: 'library' | 'space' }>(), { disabled: false, embeddingLocked: false, tiers: () => MODEL_TIERS, scope: 'library' })
+const props = withDefaults(defineProps<{ modelValue: ModelTierConfig; allModels?: ModelConfig[]; hideTitle?: boolean; beforeNavigate?: () => Promise<boolean>; disabled?: boolean; embeddingLocked?: boolean; tiers?: readonly ModelTier[]; scope?: 'library' | 'space' }>(), { disabled: false, embeddingLocked: false, tiers: () => MODEL_TIERS, scope: 'library' })
 const emit = defineEmits<{ 'update:modelValue': [value: ModelTierConfig]; resolved: [value: ResolvedModelTiers]; refresh: [] }>()
 const { t, te } = useI18n()
 const resources = useResourcesStore()
@@ -52,21 +54,13 @@ async function refresh() {
   finally { loading.value = false }
 }
 </script>
-<style scoped lang="less">
-@import '../assets/settings-layout.less';
 
-.model-tier-editor { color: var(--td-text-color-primary); }
-.model-tier-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-.model-tier-heading h3 { font-size: 16px; margin: 0 0 6px; }
-.model-tier-heading p, .model-tier-info p, .model-tier-footnote { color: var(--td-text-color-secondary); line-height: 1.6; font-size: 13px; margin: 0; }
-.model-tier-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 24px; border-bottom: 1px solid var(--td-component-stroke); padding: 16px 0; }
-.model-tier-info label { display: block; font-weight: 500; margin-bottom: 4px; }
-.model-tier-current { font-size: 12px; color: var(--td-text-color-secondary); min-height: 20px; margin: 6px 0 0; overflow-wrap: anywhere; }
+<style scoped>
+ .model-tier-heading { display: flex; gap: var(--space-3); justify-content: space-between; }
+.model-tier-heading p, .model-tier-info p, .model-tier-current, .model-tier-footnote { color: var(--muted); font-size: var(--text-sm); }
+.model-tier-row { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: var(--space-6); padding: var(--space-4) 0; border-top: 2px solid var(--rule); }
 .model-tier-control { min-width: 0; }
-.model-tier-footnote { margin-top: 12px; }
-@container settings-content (max-width: @settings-narrow-width) {
-  .model-tier-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .model-tier-heading { flex-wrap: wrap; }
-}
-@media (max-width: 600px) { .model-tier-row { grid-template-columns: 1fr; gap: 8px; } }
+.model-tier-info label { font-weight: 800; }
+@container settings-content (max-width: 720px) { .model-tier-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }
+@media (max-width: 640px) { .model-tier-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }
 </style>

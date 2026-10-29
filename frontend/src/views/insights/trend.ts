@@ -1,9 +1,9 @@
 import type { CallSummary } from '../../api/insights'
 export type TrendMetric = 'calls' | 'tokens' | 'cost'
-export interface TrendPoint { date: string; value: number | null; unknown: number; notApplicable: number }
+export interface TrendPoint { date: string; value: number | null; unknown: number; notApplicable: number; failures?: number }
 export function trendValue(row: CallSummary, metric: TrendMetric): TrendPoint {
   const value = metric === 'calls' ? row.calls : metric === 'cost' ? row.cost : row.input_tokens == null && row.output_tokens == null ? null : (row.input_tokens || 0) + (row.output_tokens || 0)
-  return { date: row.period.slice(0, 10), value, unknown: metric === 'cost' ? row.unknown_cost_calls : metric === 'tokens' ? row.unknown_input_calls + row.unknown_output_calls : 0, notApplicable: metric === 'cost' ? row.not_applicable_cost_calls : 0 }
+  return { date: row.period.slice(0, 10), value, failures: metric === 'calls' ? row.failures : 0, unknown: metric === 'cost' ? row.unknown_cost_calls : metric === 'tokens' ? row.unknown_input_calls + row.unknown_output_calls : 0, notApplicable: metric === 'cost' ? row.not_applicable_cost_calls : 0 }
 }
 export function mapTrend(rows: CallSummary[], metric: TrendMetric) {
   const dates = [...new Set(rows.map(row => row.period.slice(0, 10)))].sort()
@@ -22,12 +22,20 @@ export function mapTrend(rows: CallSummary[], metric: TrendMetric) {
   }) }))
 }
 export function chartGeometry(points: TrendPoint[], maximum: number) {
-  const x = (index: number) => 54 + index * 650 / Math.max(1, points.length - 1)
-  const y = (value: number) => 210 - value * 175 / Math.max(1e-12, maximum)
-  const segments: string[] = []
-  let segment: string[] = []
-  const flush = () => { if (segment.length) segments.push(segment.join(' ')); segment = [] }
-  points.forEach((point, index) => { if (point.value == null) flush(); else segment.push(`${x(index)},${y(point.value)}`) })
-  flush()
-  return { segments, points: points.map((point, index) => ({ ...point, x: x(index), y: point.value == null ? null : y(point.value) })) }
+  const baseline = 210, height = 175, left = 70, width = 634
+  const domain = maximum > 0 ? maximum : 1
+  const scale = height / domain
+  const step = width / Math.max(1, points.length)
+  const barWidth = Math.min(32, step * .65)
+  return {
+    ticks: [0, .25, .5, .75, 1].map(fraction => ({ value: domain * fraction, y: baseline - height * fraction })),
+    bars: points.map((point, index) => {
+      const total = Math.max(0, point.value ?? 0)
+      const failed = Math.max(0, Math.min(total, point.failures ?? 0))
+      return { ...point, x: left + step * (index + .5) - barWidth / 2, width: barWidth,
+        y: point.value === null ? null : baseline - total * scale,
+        successY: baseline - (total - failed) * scale, successHeight: (total - failed) * scale,
+        failureY: baseline - total * scale, failureHeight: failed * scale }
+    }),
+  }
 }

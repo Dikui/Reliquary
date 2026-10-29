@@ -1,5 +1,5 @@
+import { settingsTestUi } from './settings/settingsTestUi'
 import assert from 'node:assert/strict'
-import { safeTextareaTestModule } from '../components/__tests__/safeTextareaStub'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -27,8 +27,7 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
   const template = compileTemplate({ id: 'personal-fix-test', filename, source: descriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: script.bindings } })
   assert.deepEqual(template.errors, [])
   const t = translator(locale)
-  const mocks: Record<string, unknown> = {
-    '@/components/SafeTextarea.vue': safeTextareaTestModule,
+  const mocks: Record<string, unknown> = { '@/components/ui': settingsTestUi(),
     '@/components/SearchFilters.vue': { default: stub, __esModule: true },
     '@/utils/search': searchHelpers,
     '@/api/search': { getSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
@@ -72,7 +71,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: API Key blank expiry creates a permanent key without sending epoch zero`, async () => {
     const requests: any[] = []
     const { state } = await componentScenario('./integrations/ApiIntegrationSettings.vue', locale, {
-      'tdesign-vue-next': { MessagePlugin: { success() {} } },
       '@/api/library': { listLibraries: async () => ({ success: true, data: [] }) },
       '@/api/space': {
         createAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'test-key' } } },
@@ -80,7 +78,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       },
     }, async state => {
       state.openCreate()
-      state.formRef.value = { validate: async () => true }
       state.form.name = 'Personal automation'
       await state.save()
       assert.equal(state.formError.value, '')
@@ -88,7 +85,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(state.editingVisible.value, false)
     })
     assert.deepEqual(requests, [{ payload: { name: 'Personal automation' } }])
-    assert.equal(state.columns.value.at(-1).title, locale === 'zh-CN' ? '操作' : 'Actions')
+    assert.equal(state.columns.value.at(-1).label, locale === 'zh-CN' ? '操作' : 'Actions')
     const t = translator(locale)
     assert.equal(personalError.apiKeyErrorMessage({ message: 'expires_at_unix must be in the future' }, t, 'integrations.api.createApiKeyFailed'), t('integrations.api.apiKeyExpiresAtInvalid'))
     assert.equal(personalError.apiKeyErrorMessage({ message: 'internal backend error' }, t, 'integrations.api.createApiKeyFailed'), t('integrations.api.createApiKeyFailed'))
@@ -100,7 +97,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: space info shows used storage above the former limit without a quota or percentage`, async () => {
     const { html, state } = await componentScenario('./settings/SpaceInfo.vue', locale, {
       './GlobalModelTierSettings.vue': { default: stub, __esModule: true },
-      'tdesign-vue-next': { MessagePlugin: { success() {} } },
       '@/api/space': { getSpaceInfo: async () => ({ success: true, data: { id: 1, name: 'Personal space', storage_used: 11 * 1024 ** 3, created_at: '2026-10-09T00:00:00Z' } }) },
     }, async state => { await state.loadInfo() })
     assert.equal(state.error.value, '')
@@ -114,7 +110,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: default space copy is localized while unchanged edits retain server values`, async () => {
     const updates: unknown[] = []
     const { html, state } = await componentScenario('./settings/SpaceInfo.vue', locale, {
-      'tdesign-vue-next': { MessagePlugin: { success() {} } },
       '@/api/space': {
         getSpaceInfo: async () => ({ success: true, data: { id: 1, name: 'Personal workspace', description: 'Personal knowledge' } }),
         updateSpace: async (input: unknown) => { updates.push(input); return { success: true } },

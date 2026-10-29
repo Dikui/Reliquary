@@ -1,3 +1,4 @@
+import { settingsTestUi } from './settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync, appendFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -19,7 +20,7 @@ const initialPolicy = { daily_limit: 5, daily_used: 5, day: '2026-10-11', paused
 function evaluate(code: string, modules: Record<string, unknown>) {
   const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as any }
-  new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports)
+  new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? (name === '@/styles/settings-form.css' ? {} : require(name)), module, module.exports)
   return module.exports
 }
 function component(url: URL, modules: Record<string, unknown>) {
@@ -56,7 +57,7 @@ async function mount(locale: 'zh-CN' | 'en-US', options: { encryption?: boolean;
   }
   const modules: Record<string, unknown> = {
     '@/utils/request': request, '@/api/model': {},
-    'tdesign-vue-next': { MessagePlugin: { success() {} } },
+    '@/components/ui': settingsTestUi(),
     '@/assets/img/chatgpt-logo-white.svg': moduleOf('official-logo.svg'),
   }
   modules['@/api/chatgpt'] = evaluate(readFileSync(new URL('../../api/chatgpt.ts', import.meta.url), 'utf8'), modules)
@@ -169,7 +170,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         if (path.endsWith('/policy')) return { success: true, data: { ...policy } }
         assert.equal(path, '/api/v1/system/runtime/queues'); return { available: true, queues: [], pools: [], models: [] }
       }, post: async (path: string) => { calls.push(path); policy.paused = false; return { success: true, data: { ...policy } } } },
-      'tdesign-vue-next': { MessagePlugin: {} },
+      '@/components/ui': settingsTestUi(),
       '@/i18n/countCopy': require('../../i18n/countCopy'),
       './runtimeTaskPagination': require('../system/runtimeTaskPagination'),
       '@/components/settings/SettingDrawer.vue': moduleOf(defineComponent({ setup: () => () => null })),

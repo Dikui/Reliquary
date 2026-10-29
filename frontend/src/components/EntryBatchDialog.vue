@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import type { ConfirmHandle } from '@/components/ui/feedback'
+import { Button, Checkbox, Dialog, Select, confirm } from '@/components/ui'
 import { useI18n } from 'vue-i18n'
 import { previewEntryBatch, submitEntryBatch, getEntryBatch, retryFailedEntryBatch, type EntryBatchAction, type EntryBatchSelection, type EntryBatchRequest, type EntryBatchPreview, type EntryBatch } from '@/api/entry-batches'
 import { listTopics, type Topic } from '@/api/topics'
@@ -8,6 +10,8 @@ import { entryChannelLabel, entryFileFormatLabel } from '@/utils/entrySourceLabe
 const props = defineProps<{ visible: boolean; batchId?: string; ids?: string[]; selection?: EntryBatchSelection; scopeLabel?: string; libraries: LibraryCatalogItem[]; selectedLibraryIds?: string[]; initialAction?: EntryBatchAction; entityOptions?: { value: string; label: string }[]; topicOptions?: { value: string; label: string }[] }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean]; changed: []; created: [id: string] }>()
 const { t } = useI18n()
+const confirmPending = ref(false)
+let pendingConfirmation: ConfirmHandle | undefined
 const ready = ref(false), closeButton = ref<{ $el?: HTMLElement } | null>(null)
 let trigger: HTMLElement | null = null
 onMounted(() => { ready.value = true })
@@ -76,7 +80,7 @@ const filterSummary = computed(() => {
   if (f.starred !== undefined) add(t('articleJudgments.starLabel'), t(f.starred ? 'articleJudgments.starredOnly' : 'articleJudgments.unstarredOnly'))
   const statuses: Record<string, string> = { pending: t('library.parseStatusPending'), processing: t('library.parseStatusProcessing'), finalizing: t('library.parseStatusFinalizing'), completed: t('library.parseStatusCompleted'), failed: t('library.parseStatusFailed'), cancelled: t('library.parseStatusCancelled'), draft: t('library.parseStatusDraft'), rejected: t('library.intakeWaiting') }
   if (f.parse_status) add(t('library.parseStatusFilter'), statuses[f.parse_status] || f.parse_status)
-  const sources: Record<string, string> = { article: t('knowledgeSearch.sources.article'), mine: t('knowledgeSearch.sources.mine'), report: t('knowledgeSearch.sources.report') }
+  const sources: Record<string, string> = { article: t('search.sources.article'), mine: t('search.sources.mine'), report: t('search.sources.report') }
   if (f.source_kind) add(t('library.materialCategory'), sources[f.source_kind] || f.source_kind)
   if (f.source) add(t('library.channelLabel'), entryChannelLabel({ channel: f.source }, t))
   if (f.file_type) add(t('library.fileTypeFilter'), entryFileFormatLabel({ file_type: f.file_type }, t))
@@ -94,7 +98,7 @@ async function changeStep(value: 'scope' | 'action') {
   await nextTick(); stepTitle.value?.focus?.({ preventScroll: true })
 }
 function stop() { clearTimeout(timer); timer = undefined }
-function close() { if (!busy.value) { stop(); generation++; emit('update:visible', false) } }
+function close() { if (!busy.value && !confirmPending.value) { stop(); generation++; emit('update:visible', false) } }
 function fail(cause: unknown) { error.value = typeof (cause as { message?: unknown })?.message === 'string' ? (cause as { message: string }).message : t('entryBatch.failed') }
 function receive(value: EntryBatch) { batch.value = value; if (!['pending', 'running'].includes(value.status)) emit('changed') }
 async function refresh() {
@@ -127,6 +131,13 @@ async function submit(retry = false) {
   } catch (cause) { if (current === generation && !disposed) fail(cause) }
   finally { if (current === generation && !disposed) { busy.value = false; if (active.value) timer = setTimeout(refresh, 1000) } }
 }
+function confirmSubmit() {
+  if (!preview.value || !confirmed.value || busy.value || confirmPending.value) return
+  confirmPending.value = true
+  const dialog = confirm({ header: t('entryBatch.confirm'), body: t('entryBatch.confirmScope', { scope: scopeText.value, count: preview.value.eligible }), theme: action.value === 'delete' ? 'danger' : 'default', onConfirm: () => submit() })
+  pendingConfirmation = dialog
+  void dialog.result.finally(() => { confirmPending.value = false; pendingConfirmation = undefined })
+}
 watch(request, () => { if (!batch.value) { generation++; busy.value = false; preview.value = undefined; confirmed.value = false } }, { deep: true })
 watch(() => [props.visible, props.batchId] as const, async ([visible, batchId]) => {
   if (visible && batchId && batch.value?.batch_id === batchId) return
@@ -143,21 +154,21 @@ watch([() => props.visible, () => props.batchId, selection], ([visible, batchId]
   if (visible && !batchId) void loadScope()
 }, { immediate: true, deep: true })
 watch(page, () => { if (props.visible && batch.value) void refresh() })
-onUnmounted(() => { disposed = true; trigger = null; generation++; readGeneration++; scopeGeneration++; stop() })
+onUnmounted(() => { pendingConfirmation?.destroy(); disposed = true; trigger = null; generation++; readGeneration++; scopeGeneration++; stop() })
 </script>
 <template>
-  <t-dialog :visible="visible && ready" :header="t('entryBatch.title')" width="min(760px, 95vw)" top="16px" :dialog-style="{ maxHeight: 'calc(100dvh - 32px)', overflow: 'auto' }" :footer="false" :close-on-overlay-click="false" :close-on-esc-keydown="!busy" :close-btn="!busy" @opened="focusClose" @close="close">
-    <div class="entry-batch" role="dialog" aria-modal="true" :aria-label="t('entryBatch.title')">
+  <Dialog :model-value="visible && ready" :title="t('entryBatch.title')" content-class="entries-batch-dialog" :close-on-overlay-click="false" :close-on-esc-keydown="!busy && !confirmPending" :closable="!busy && !confirmPending" @open-auto-focus="focusClose" @update:model-value="!$event && close()">
+    <div class="entry-batch" :aria-label="t('entryBatch.title')">
       <div class="entry-batch-content">
       <p v-if="batch || batchId">{{ scopeText }}</p>
       <p v-if="batchId && !batch && !error" role="status">{{ t('common.loading') }}</p>
       <template v-if="!batch && !batchId">
         <h3 ref="stepTitle" tabindex="-1" class="batch-step-title">{{ t(scopeLabel ? 'entryBatch.action' : step === 'scope' ? 'entryBatch.scopeStep' : 'entryBatch.actionStep') }}</h3>
-        <label v-if="step === 'scope'"><span>{{ t('entryBatch.scope') }}</span><t-select v-model="scope" :disabled="busy" :aria-label="t('entryBatch.scope')" :options="[{ value: 'selected', label: t('entryBatch.selectedScope', { count: ids?.length || 0 }), disabled: !ids?.length }, { value: 'matched', label: t('entryBatch.matchedScope') }]" /></label>
+        <label v-if="step === 'scope'"><span>{{ t('entryBatch.scope') }}</span><Select v-model="scope" :disabled="busy" :aria-label="t('entryBatch.scope')"><option v-for="option in [{ value: 'selected', label: t('entryBatch.selectedScope', { count: ids?.length || 0 }), disabled: !ids?.length }, { value: 'matched', label: t('entryBatch.matchedScope') }]" :key="String(option.value)" :value="String(option.value)" :disabled="'disabled' in option && !!option.disabled">{{ option.label }}</option></Select></label>
         <section class="batch-scope-summary" :aria-label="t('entryBatch.scopeSummary')">
           <strong>{{ scopeText }}</strong>
           <p v-if="scopeLoading" role="status">{{ t('entryBatch.countLoading') }}</p>
-          <p v-else-if="scopeError" role="alert">{{ scopeError }} <t-button variant="text" :loading="scopeLoading" @click="loadScope">{{ t('entryBatch.retryCount') }}</t-button></p>
+          <p v-else-if="scopeError" role="alert">{{ scopeError }} <Button variant="ghost" :loading="scopeLoading" @click="loadScope">{{ t('entryBatch.retryCount') }}</Button></p>
           <p v-else-if="scopeCount" class="batch-scope-count" role="status">{{ selection.ids ? t('entryBatch.selectedCount', { selected: scopeCount.matched, found: scopeCount.matched - scopeCount.unavailable, unavailable: scopeCount.unavailable }) : t('entryBatch.matchedCount', { count: scopeCount.matched }) }}</p>
           <p v-if="selection.ids">{{ t('entryBatch.checkedHint') }}</p>
           <strong>{{ t(selection.ids ? 'entryBatch.checkedFilters' : 'entryBatch.currentFilters') }}</strong>
@@ -166,27 +177,27 @@ onUnmounted(() => { disposed = true; trigger = null; generation++; readGeneratio
         </section>
         <template v-if="step === 'scope'">
           <p v-if="scope !== 'selected'">{{ t('entryBatch.filterScopeHint') }}</p>
-          <t-button theme="primary" :disabled="!scopeValid || !scopeKnown" @click="changeStep('action')">{{ t('entryBatch.nextAction') }}</t-button>
+          <Button variant="primary" :disabled="!scopeValid || !scopeKnown" @click="changeStep('action')">{{ t('entryBatch.nextAction') }}</Button>
         </template>
         <template v-else>
-        <t-button v-if="!scopeLabel" variant="text" :disabled="busy" @click="changeStep('scope')">{{ t('entryBatch.changeScope') }}</t-button>
-        <label><span>{{ t('entryBatch.action') }}</span><t-select v-model="action" :disabled="busy || !!scopeLabel" :aria-label="t('entryBatch.action')" :options="actions.map(value => ({ value, label: t(`entryBatch.actions.${value}`) }))" /></label>
-        <label v-if="action === 'star'"><span>{{ t('entryBatch.actions.star') }}</span><t-select v-model="starred" :disabled="busy" :aria-label="t('entryBatch.actions.star')" :options="[{ value: true, label: t('entryBatch.star') }, { value: false, label: t('entryBatch.unstar') }]" /></label>
-        <label v-if="action === 'content_type'"><span>{{ t('entryBatch.actions.content_type') }}</span><t-select v-model="contentType" :disabled="busy" :aria-label="t('entryBatch.actions.content_type')" :options="contentTypes" /><small v-if="!singleLibrary">{{ t('entryBatch.singleLibrary') }}</small></label>
-        <template v-if="action === 'topics'"><label><span>{{ t('entryBatch.topicMode') }}</span><t-select v-model="topicMode" :disabled="busy" :aria-label="t('entryBatch.topicMode')" :options="[{ value: 'add', label: t('entryBatch.addTopics') }, { value: 'remove', label: t('entryBatch.removeTopics') }]" /></label><label><span>{{ t('entryBatch.actions.topics') }}</span><t-select v-model="topicIds" multiple filterable :loading="topicsLoading" :disabled="busy || !singleLibrary" :aria-label="t('entryBatch.actions.topics')" :options="topics.map(topic => ({ value: topic.id, label: topic.name }))" /></label><small v-if="!singleLibrary">{{ t('entryBatch.singleLibrary') }}</small></template>
-        <p v-if="action === 'topics' && topicsError" role="alert">{{ topicsError }} <t-button variant="text" :loading="topicsLoading" @click="loadTopics">{{ t('common.retry') }}</t-button></p>
-        <t-alert v-if="action === 'delete'" theme="warning" :message="t('entryBatch.deleteHint')" />
-        <t-alert v-if="action === 'reprocess'" theme="warning" :message="t('entryBatch.reprocessHint')" />
-        <t-button :loading="busy" :disabled="busy || !valid" @click="showPreview">{{ t('entryBatch.preview') }}</t-button>
-        <section v-if="preview" aria-live="polite"><p>{{ t('entryBatch.previewCounts', { ...preview }) }}</p><ul><li v-for="reason in preview.reasons" :key="reason.code">{{ t('entryBatch.reasonCount', { reason: t(`entryBatch.reasons.${reason.code}`, reason.code), count: reason.count }) }}</li></ul><p>{{ t('entryBatch.samples') }}</p><ul><li v-for="item in preview.samples" :key="item.id">{{ item.title || item.id }} · {{ libraries.find(lib => lib.id === item.library_id)?.display_name || item.library_id }}</li></ul><t-checkbox v-model="confirmed" :disabled="busy || !preview.eligible">{{ t('entryBatch.confirmScope', { scope: scopeText, count: preview.eligible }) }}</t-checkbox><div><t-button :theme="action === 'delete' ? 'danger' : 'primary'" :disabled="busy || !confirmed || !preview.eligible || preview.blocked > 0" :loading="busy" @click="submit()">{{ t('entryBatch.confirm') }}</t-button></div></section>
+        <Button v-if="!scopeLabel" variant="ghost" :disabled="busy" @click="changeStep('scope')">{{ t('entryBatch.changeScope') }}</Button>
+        <label><span>{{ t('entryBatch.action') }}</span><Select v-model="action" :disabled="busy || !!scopeLabel" :aria-label="t('entryBatch.action')"><option v-for="value in actions" :key="value" :value="value">{{ t(`entryBatch.actions.${value}`) }}</option></Select></label>
+        <label v-if="action === 'star'"><span>{{ t('entryBatch.actions.star') }}</span><Select :model-value="String(starred)" @update:model-value="starred = $event === 'true'" :disabled="busy" :aria-label="t('entryBatch.actions.star')"><option v-for="option in [{ value: true, label: t('entryBatch.star') }, { value: false, label: t('entryBatch.unstar') }]" :key="String(option.value)" :value="String(option.value)" :disabled="'disabled' in option && !!option.disabled">{{ option.label }}</option></Select></label>
+        <label v-if="action === 'content_type'"><span>{{ t('entryBatch.actions.content_type') }}</span><Select v-model="contentType" :disabled="busy" :aria-label="t('entryBatch.actions.content_type')"><option v-for="option in contentTypes" :key="String(option.value)" :value="String(option.value)" :disabled="'disabled' in option && !!option.disabled">{{ option.label }}</option></Select><small v-if="!singleLibrary">{{ t('entryBatch.singleLibrary') }}</small></label>
+        <template v-if="action === 'topics'"><label><span>{{ t('entryBatch.topicMode') }}</span><Select v-model="topicMode" :disabled="busy" :aria-label="t('entryBatch.topicMode')"><option v-for="option in [{ value: 'add', label: t('entryBatch.addTopics') }, { value: 'remove', label: t('entryBatch.removeTopics') }]" :key="String(option.value)" :value="String(option.value)" :disabled="'disabled' in option && !!option.disabled">{{ option.label }}</option></Select></label><label><span>{{ t('entryBatch.actions.topics') }}</span><select class="rq-control" :value="topicIds" multiple :disabled="busy || !singleLibrary || topicsLoading" :aria-label="t('entryBatch.actions.topics')" @change="topicIds = Array.from(($event.target as HTMLSelectElement).selectedOptions, option => option.value)"><option v-for="topic in topics" :key="topic.id" :value="topic.id">{{ topic.name }}</option></select></label><small v-if="!singleLibrary">{{ t('entryBatch.singleLibrary') }}</small></template>
+        <p v-if="action === 'topics' && topicsError" role="alert">{{ topicsError }} <Button variant="ghost" :loading="topicsLoading" @click="loadTopics">{{ t('common.retry') }}</Button></p>
+        <p v-if="action === 'delete'" class="batch-warning">{{ t('entryBatch.deleteHint') }}</p>
+        <p v-if="action === 'reprocess'" class="batch-warning">{{ t('entryBatch.reprocessHint') }}</p>
+        <Button :loading="busy" :disabled="busy || !valid" @click="showPreview">{{ t('entryBatch.preview') }}</Button>
+        <section v-if="preview" aria-live="polite"><p>{{ t('entryBatch.previewCounts', { ...preview }) }}</p><ul><li v-for="reason in preview.reasons" :key="reason.code">{{ t('entryBatch.reasonCount', { reason: t(`entryBatch.reasons.${reason.code}`, reason.code), count: reason.count }) }}</li></ul><p>{{ t('entryBatch.samples') }}</p><ul><li v-for="item in preview.samples" :key="item.id">{{ item.title || item.id }} · {{ libraries.find(lib => lib.id === item.library_id)?.display_name || item.library_id }}</li></ul><label class="batch-confirm-scope"><Checkbox v-model="confirmed" :disabled="busy || confirmPending || !preview.eligible" :aria-label="t('entryBatch.confirmScope', { scope: scopeText, count: preview.eligible })" /><span>{{ t('entryBatch.confirmScope', { scope: scopeText, count: preview.eligible }) }}</span></label><div><Button :variant="action === 'delete' ? 'danger' : 'primary'" :disabled="busy || !confirmed || !preview.eligible || preview.blocked > 0" :loading="busy" @click="confirmSubmit">{{ t('entryBatch.confirm') }}</Button></div></section>
         </template>
       </template>
-      <section v-else-if="batch" aria-live="polite"><p><strong>{{ t(`entryBatch.actions.${batch.action}`) }}</strong> · {{ t(`entryBatch.status.${batch.status}`) }} · {{ t('entryBatch.resultCounts', { ...batch }) }}</p><a class="batch-id" :href="`/platform/entries?batch_id=${encodeURIComponent(batch.batch_id)}`">{{ t('entryBatch.resultLink') }} · {{ batch.batch_id }}</a><p v-if="active">{{ t('entryBatch.runningHint') }}</p><p v-if="batch.warnings">{{ t('entryBatch.warningCount', { count: batch.warnings }) }}</p><ul class="batch-results"><li v-for="item in batch.items" :key="item.entry_id"><strong>{{ item.title || item.entry_id }}</strong><span>{{ t(`entryBatch.status.${item.status}`) }}</span><p v-if="item.message || item.warning">{{ item.message || item.warning }}</p><small v-if="item.task_id">{{ item.task_id }}</small></li></ul><t-pagination v-if="batch.total > 20" v-model:current="page" :total="batch.total" :page-size="20" :show-page-size="false" size="small" /><t-button v-if="!active && batch.failed > 0" :loading="busy" :disabled="busy" @click="submit(true)">{{ t('entryBatch.retryFailed') }}</t-button></section>
-      <t-alert v-if="error" theme="error" :message="error" role="alert" /><t-button v-if="(batch || batchId) && error" variant="outline" :disabled="busy" @click="refresh">{{ t('entryBatch.refreshStatus') }}</t-button>
+      <section v-else-if="batch" aria-live="polite"><p><strong>{{ t(`entryBatch.actions.${batch.action}`) }}</strong> · {{ t(`entryBatch.status.${batch.status}`) }} · {{ t('entryBatch.resultCounts', { ...batch }) }}</p><a class="batch-id" :href="`/platform/entries?batch_id=${encodeURIComponent(batch.batch_id)}`">{{ t('entryBatch.resultLink') }} · {{ batch.batch_id }}</a><p v-if="active">{{ t('entryBatch.runningHint') }}</p><p v-if="batch.warnings">{{ t('entryBatch.warningCount', { count: batch.warnings }) }}</p><ul class="batch-results"><li v-for="item in batch.items" :key="item.entry_id"><strong>{{ item.title || item.entry_id }}</strong><span>{{ t(`entryBatch.status.${item.status}`) }}</span><p v-if="item.message || item.warning">{{ item.message || item.warning }}</p><small v-if="item.task_id">{{ item.task_id }}</small></li></ul><nav v-if="batch.total > 20" class="batch-pagination" :aria-label="t('entries.pagination')"><Button :disabled="page <= 1 || busy" @click="page--">{{ t('entries.previous') }}</Button><span>{{ page }} / {{ Math.ceil(batch.total / 20) }}</span><Button :disabled="page * 20 >= batch.total || busy" @click="page++">{{ t('entries.next') }}</Button></nav><Button v-if="!active && batch.failed > 0" :loading="busy" :disabled="busy" @click="submit(true)">{{ t('entryBatch.retryFailed') }}</Button></section>
+      <p v-if="error" class="batch-error" role="alert">{{ error }}</p><Button v-if="(batch || batchId) && error" variant="default" :disabled="busy" @click="refresh">{{ t('entryBatch.refreshStatus') }}</Button>
       </div>
-      <div class="batch-footer"><t-button ref="closeButton" variant="outline" :disabled="busy" @click="close">{{ t('common.close') }}</t-button></div>
+      <div class="batch-footer"><Button ref="closeButton" variant="default" :disabled="busy" @click="close">{{ t('common.close') }}</Button></div>
     </div>
-  </t-dialog>
+  </Dialog>
 </template>
 <style scoped>
 .entry-batch { display: flex; flex-direction: column; gap: 12px; min-width: 0; max-height: calc(100dvh - 144px); }
@@ -195,18 +206,25 @@ onUnmounted(() => { disposed = true; trigger = null; generation++; readGeneratio
 .batch-step-title { margin: 0; font-size: 16px; font-weight: 600; }
 .entry-batch p { margin: 0; overflow-wrap: anywhere; }
 .entry-batch label { display: flex; flex-direction: column; gap: 6px; }
-.entry-batch small, .batch-id { color: var(--td-text-color-secondary); overflow-wrap: anywhere; }
+.entry-batch small, .batch-id { color: var(--muted); overflow-wrap: anywhere; }
 .entry-batch section { display: flex; flex-direction: column; gap: 12px; }
 .entry-batch ul { margin: 0; padding-left: 20px; overflow-wrap: anywhere; }
 .batch-results { max-height: 320px; overflow: auto; }
-.batch-results li { padding: 8px 0; border-bottom: 1px solid var(--td-component-stroke); }
+.batch-results li { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .batch-results span { margin-left: 12px; }
-.batch-scope-summary { padding: 12px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-medium); background: var(--td-bg-color-secondarycontainer); }
+.batch-scope-summary { padding: 12px; border: 1px solid var(--border); border-radius: 0; background: var(--surface-soft); }
 .batch-scope-count { font-weight: 600; }
 .batch-scope-summary dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 0; }
 .batch-scope-summary dl > div { min-width: 0; }
-.batch-scope-summary dt { color: var(--td-text-color-secondary); font-size: 12px; }
+.batch-scope-summary dt { color: var(--muted); font-size: 12px; }
 .batch-scope-summary dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 @media (max-width: 560px) { .batch-scope-summary dl { grid-template-columns: minmax(0, 1fr); } }
+.batch-warning { border-left: 3px solid var(--warning); padding-left: 12px; }
+.batch-error { color: var(--danger); }
+.batch-pagination { display: flex; align-items: center; gap: 12px; }
 .batch-footer { display: flex; justify-content: flex-end; flex-shrink: 0; }
+</style>
+
+<style>
+.entries-batch-dialog { width: min(760px, calc(100vw - 32px)); }
 </style>

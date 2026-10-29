@@ -1,6 +1,0 @@
-html[lang^="en"] .t-popup__content,
-html[lang^="en"] .t-message,
-html[lang^="en"] .t-notification__content {
-  word-break: normal;
-  overflow-wrap: break-word;
-}

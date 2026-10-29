@@ -3,22 +3,14 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import App from "./App.vue";
 import router from "./router/index";
-import "./assets/fonts.css";
-import TDesign from "tdesign-vue-next";
-// 引入组件库的少量全局样式变量
-import "tdesign-vue-next/dist/tdesign.css";
-import "./assets/popup-word-wrapping.css";
-import "@/assets/theme/theme.css";
-import "@/assets/dropdown-menu.less";
+import "./styles/tokens.css";
+import "./styles/global.css";
 import "@/components/css/highlight.less";
 import i18n from "./i18n/index";
 import { initTheme } from "@/composables/useTheme";
 import { initFont } from "@/composables/useFont";
-import { installTDesignIconOfflineGuard } from "@/utils/tdesign-icon-offline";
 import { installAutofillGuard } from "@/utils/disable-autofill";
 
-// 必须在 Vue 组件挂载之前执行，避免 tdesign-icons 运行时请求 tdesign.gtimg.com
-installTDesignIconOfflineGuard();
 
 initTheme();
 initFont();
@@ -31,7 +23,6 @@ async function bootstrap() {
     console.error("[Reliquary] Unhandled Vue error:", err, "\nComponent:", instance, "\nInfo:", info);
   };
 
-  app.use(TDesign);
   const pinia = createPinia();
   app.use(pinia);
 

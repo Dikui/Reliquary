@@ -2,6 +2,7 @@ package maintenance
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -42,6 +43,17 @@ func TestLibraryIntakeMigrationPreservesHistoricalRows(t *testing.T) {
 			continue
 		}
 		actual := preservedBeforeVectorDefaults(t, table, rows, after.Tables[table])
+		if table == "libraries" {
+			for _, row := range actual {
+				require.Equal(t, json.Number("1"), row["color"])
+				delete(row, "color")
+				require.Equal(t, "standard", row["template"])
+				require.Equal(t, "", row["source_evidence_rule"])
+				// Migration 34 intentionally replaces the historical template and source rule.
+				row["template"] = "external_timely"
+				row["source_evidence_rule"] = "link_required"
+			}
+		}
 		if table == "ingest_discards" {
 			for _, row := range actual {
 				require.Len(t, row["fingerprint"], 64)

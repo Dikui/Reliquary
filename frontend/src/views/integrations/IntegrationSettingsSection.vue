@@ -3,13 +3,10 @@
     <div class="integrations-settings__body" >
       <div v-if="tab === 'api'" class="section">
         <div class="section-header">
-          <h2>{{ $t('integrations.api.title') }}</h2>
           <p class="section-description">{{ $t('integrations.api.subtitle') }}</p>
         </div>
         <ApiIntegrationSettings />
       </div>
-
-
 
     </div>
   </div>
@@ -45,7 +42,7 @@ const props = defineProps<{
 
   h2 {
     margin: 0 0 6px;
-    color: var(--td-text-color-primary);
+    color: var(--text);
     font-size: 18px;
     font-weight: 600;
     line-height: 1.35;
@@ -54,7 +51,7 @@ const props = defineProps<{
 
 .section-description {
   margin: 0;
-  color: var(--td-text-color-secondary);
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -64,7 +61,7 @@ const props = defineProps<{
   align-items: center;
   gap: 3px;
   margin-left: 6px;
-  color: var(--td-brand-color);
+  color: var(--text);
   text-decoration: none;
 
   &:hover {

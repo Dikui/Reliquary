@@ -93,6 +93,7 @@ type LibraryRelationType struct {
 // LibraryPatch intentionally includes immutable fields so attempts to write
 // them are rejected instead of silently ignored by JSON decoding.
 type LibraryPatch struct {
+	Color              *int                   `json:"color"`
 	Name               *string                `json:"name"`
 	Description        *string                `json:"description"`
 	ReviewCriteria     *string                `json:"review_criteria"`
@@ -154,6 +155,7 @@ func (l *Library) ProcessingModelTiers() []ModelTier {
 }
 
 type CreateLibraryRequest struct {
+	Color       *int   `json:"color"`
 	Template    string `json:"template"`
 	Directory   string `json:"directory"`
 	Name        string `json:"name"`
@@ -161,6 +163,14 @@ type CreateLibraryRequest struct {
 }
 
 var libraryDirectoryPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+
+// ValidateLibraryColor checks that a color belongs to the library palette.
+func ValidateLibraryColor(color int) error {
+	if color < 1 || color > 8 {
+		return fmt.Errorf("library color must be an integer between 1 and 8")
+	}
+	return nil
+}
 
 func ValidateLibrary(l *Library) error {
 	if l.Template != TemplateStandard {

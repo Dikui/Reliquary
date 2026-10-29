@@ -12,6 +12,20 @@ import (
 	"reliquary/internal/types"
 )
 
+func closeMergedEntitySuggestions(tx *gorm.DB, spaceID uint64, keepID, mergedID string) error {
+	// Only the chosen pair was accepted. Other suggestions for the absorbed
+	// identity are obsolete; suggestions for the retained identity remain usable.
+	return tx.Model(&types.EntityMergeSuggestion{}).
+		Where("space_id = ? AND status = 'pending'", spaceID).
+		Where("new_entity_id = ? OR candidate_entity_id = ?", mergedID, mergedID).
+		Updates(map[string]any{
+			"status": gorm.Expr(
+				"CASE WHEN new_entity_id = ? OR candidate_entity_id = ? THEN 'accepted' ELSE 'rejected' END",
+				keepID, keepID),
+			"decided_at": time.Now(),
+		}).Error
+}
+
 func (s *EntityService) ListMergeSuggestions(ctx context.Context, q types.EntityQuery, status string) ([]types.EntityMergeSuggestion, error) {
 	spaceID, libraryID, err := s.resolveLibrary(ctx, q.LibraryID)
 	if err != nil {

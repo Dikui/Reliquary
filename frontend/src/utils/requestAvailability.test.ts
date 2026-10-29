@@ -1,3 +1,4 @@
+import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -15,7 +16,7 @@ const require = createRequire(import.meta.url)
 function evaluate(path: string, modules: Record<string, any>) {
  const code = ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
  const value = { exports: {} as any }
- new Function('require', 'module', 'exports', code)((name: string) => modules[name] ?? require(name), value, value.exports)
+ new Function('require', 'module', 'exports', code)((name: string) => modules[name] ?? entryPresentationTestModules[name] ?? require(name), value, value.exports)
  return value.exports
 }
 function fixture(t: TestContext, locale: 'zh-CN' | 'en-US' = 'zh-CN', previousCache = false) {
@@ -136,8 +137,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   const api=evaluate('../api/library.ts',f.modules)
   const storeModule=evaluate('../stores/entry.ts',f.modules)
   const modules={...f.modules,pinia:require('pinia'),'@/api/library':api,'@/stores/entry':storeModule,
-    '../utils/index': { formatStringDate:()=> '2026-10-01' },
-    'tdesign-vue-next':{MessagePlugin:{}},'vue-i18n':{useI18n:()=>({t:f.i18n.global.t})},
+    '../utils/index': { formatStringDate:()=> '2026-10-01' },'vue-i18n':{useI18n:()=>({t:f.i18n.global.t})},
     }
   const hook=evaluate('../composables/useLibrary.ts',modules).default('library-entries')
   await hook.loadEntries()

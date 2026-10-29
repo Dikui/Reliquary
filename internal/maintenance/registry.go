@@ -54,8 +54,10 @@ var PersistentTables = map[string]PersistentTable{
 		File:    "data/embedding_rebuild_items.json", After: []string{"embedding_rebuild_runs"}, Since: 0,
 	},
 	"libraries": {
-		Columns: Rule{Configuration: "system_role template directory review_criteria source_evidence_rule feed_enabled model_tiers id name description space_id chunking_config embedding_model_id summary_model_id created_at updated_at deleted_at type indexing_strategy creator_id"},
-		File:    "config/libraries.json", After: []string{"spaces", "users"}, Since: 0,
+		Columns: Rule{Configuration: "system_role template directory review_criteria source_evidence_rule " +
+			"feed_enabled model_tiers id name description space_id chunking_config embedding_model_id " +
+			"summary_model_id created_at updated_at deleted_at type indexing_strategy creator_id color"},
+		File: "config/libraries.json", After: []string{"spaces", "users"}, Since: 0,
 	},
 	"library_content_types": {
 		Columns: Rule{Configuration: "library_id name position enabled extract_graph"},

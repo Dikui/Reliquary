@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui'
+import '@/styles/settings-form.css'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getMaintenanceStatus, type MaintenanceStatus, type MaintenanceResult } from '@/api/maintenance'
@@ -51,15 +53,15 @@ onBeforeUnmount(() => { generation++ })
 </script>
 
 <template>
-  <section class="maintenance-status" :aria-label="t('settings.maintenance.title')" :aria-busy="loading">
+  <section class="maintenance-status settings-form" :aria-label="t('settings.maintenance.title')" :aria-busy="loading">
     <div class="maintenance-heading">
       <h3>{{ t('settings.maintenance.title') }}</h3>
-      <t-button variant="text" size="small" :loading="loading" :disabled="loading" @click="load">{{ t(error ? 'common.retry' : 'common.refresh') }}</t-button>
+      <Button variant="ghost" :loading="loading" :disabled="loading" @click="load">{{ t(error ? 'common.retry' : 'common.refresh') }}</Button>
     </div>
-    <t-alert v-if="error" theme="error" :message="error" role="alert" />
+    <p v-if="error" class="settings-error" role="alert">{{ error }}</p>
     <p v-if="loading && !status" role="status">{{ t('common.loading') }}</p>
     <template v-if="status">
-      <t-alert v-if="status.paused" theme="info" :message="t('settings.maintenance.paused')" />
+      <p v-if="status.paused"  class="settings-error" role="alert">{{ t('settings.maintenance.paused') }}</p>
       <dl class="maintenance-config">
         <dt>{{ t('settings.maintenance.directory') }}</dt>
         <dd><code>{{ status.backup_directory }}</code></dd>
@@ -94,20 +96,12 @@ onBeforeUnmount(() => { generation++ })
   </section>
 </template>
 
-<style scoped lang="less">
-.maintenance-status { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--td-component-stroke); color: var(--td-text-color-primary); }
-.maintenance-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; }
-h3 { margin: 0; font-size: 18px; }
-.maintenance-config { margin: 20px 0 0; }
-dt { color: var(--td-text-color-secondary); font-size: 13px; }
-dd { margin: 6px 0 16px; overflow-wrap: anywhere; }
-dd span { margin-left: 8px; color: var(--td-text-color-secondary); }
-code { font-size: 12px; }
-.maintenance-hint { color: var(--td-text-color-secondary); font-size: 13px; line-height: 1.6; }
-.maintenance-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-.maintenance-result { min-width: 0; }
-h4 { font-size: 14px; margin: 16px 0; }
-.maintenance-error { color: var(--td-error-color); }
-@container settings-content (max-width: 720px) { .maintenance-results { grid-template-columns: minmax(0, 1fr); gap: 0; } }
-@media (max-width: 640px) { .maintenance-results { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+<style scoped>
+.maintenance-status { margin-top: var(--space-5); }
+.maintenance-heading { display: flex; gap: var(--space-3); justify-content: space-between; flex-wrap: wrap; border-top: 2px solid var(--rule); }
+.maintenance-results { display: grid; gap: var(--space-4); }
+.maintenance-result { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: var(--space-6); border-top: 2px solid var(--rule); min-width: 0; }
+.maintenance-error { color: var(--danger); }
+@container settings-content (max-width: 720px) { .maintenance-result { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }
+@media (max-width: 640px) { .maintenance-result { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }
 </style>

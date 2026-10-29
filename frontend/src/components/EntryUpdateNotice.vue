@@ -6,13 +6,13 @@ const { t } = useI18n()
 
 <template>
   <span v-if="hasUpdate" class="entry-update-notice">
-    <a v-if="latestEntryId" :href="`/platform/entries?entry_id=${encodeURIComponent(latestEntryId)}`" @click.stop @keydown.enter.stop @keydown.space.stop>{{ t('ikb18.hasUpdate') }}</a>
+    <a v-if="latestEntryId" :href="`/platform/entries/${encodeURIComponent(latestEntryId)}`" @click.stop @keydown.enter.stop @keydown.space.stop>{{ t('ikb18.hasUpdate') }}</a>
     <span v-else>{{ t('ikb18.hasUpdate') }}</span>
   </span>
 </template>
 
 <style scoped>
-.entry-update-notice { display: inline-block; flex-shrink: 0; font-size: 12px; color: var(--td-warning-color); }
+.entry-update-notice { display: inline-block; flex-shrink: 0; font-size: 12px; color: var(--warning); }
 a { color: inherit; text-decoration: underline; }
-a:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>

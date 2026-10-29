@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { Button, useConfirm } from '@/components/ui'
+import '@/styles/settings-form.css'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { DialogPlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { getVaultStatus, rebuildVaultFiles, getVaultFileRebuildStatus, type VaultStatus, type VaultFileRebuildStatus } from '@/api/vault'
 import MaintenanceStatus from './MaintenanceStatus.vue'
 
+const confirm = useConfirm()
 const { t, locale } = useI18n()
 const status = ref<VaultStatus | null>(null)
 const loading = ref(false)
@@ -17,7 +19,7 @@ const confirming = ref(false)
 let disposed = false
 let rebuildGeneration = 0
 let pollTimer: ReturnType<typeof setTimeout> | undefined
-let confirmation: ReturnType<typeof DialogPlugin.confirm> | undefined
+let confirmation: ReturnType<typeof confirm> | undefined
 
 function applyRebuild(state: VaultFileRebuildStatus) {
   clearTimeout(pollTimer)
@@ -71,7 +73,7 @@ function confirmRebuild() {
   if (rebuilding.value || confirming.value) return
   confirming.value = true
   const close = () => { confirmation?.destroy(); confirmation = undefined; confirming.value = false }
-  confirmation = DialogPlugin.confirm({
+  confirmation = confirm({
     header: t('settings.vault.rebuild'),
     body: t('settings.vault.rebuildConfirm'),
     confirmBtn: t('settings.vault.rebuild'),
@@ -119,21 +121,20 @@ onBeforeUnmount(() => { generation++; disposed = true; clearTimeout(pollTimer); 
 </script>
 
 <template>
-  <section class="vault-status" :aria-label="t('settings.vault.title')" :aria-busy="loading">
+  <section class="vault-status settings-form" :aria-label="t('settings.vault.title')" :aria-busy="loading">
     <div class="vault-status-heading">
-      <h3>{{ t('settings.vault.title') }}</h3>
       <div class="vault-status-actions">
-        <t-button :loading="rebuilding" :disabled="rebuilding || confirming" @click="confirmRebuild">{{ t('settings.vault.rebuild') }}</t-button>
-        <t-button variant="text" size="small" :loading="loading" :disabled="loading" @click="refresh">{{ t(error ? 'common.retry' : 'common.refresh') }}</t-button>
+        <Button :loading="rebuilding" :disabled="rebuilding || confirming" @click="confirmRebuild">{{ t('settings.vault.rebuild') }}</Button>
+        <Button variant="ghost" :loading="loading" :disabled="loading" @click="refresh">{{ t(error ? 'common.retry' : 'common.refresh') }}</Button>
       </div>
     </div>
     <p v-if="rebuilding" role="status">{{ t('settings.vault.rebuildRunning') }}</p>
-    <t-alert v-if="rebuildError" theme="error" :message="rebuildError" role="alert" />
+    <p v-if="rebuildError" class="settings-error" role="alert">{{ rebuildError }}</p>
     <div v-if="rebuild.result" role="status">
       <p>{{ t(rebuild.status === 'success' ? 'settings.vault.rebuildComplete' : 'settings.vault.rebuildFailed') }}</p>
       <p>{{ t('settings.vault.rebuildCounts', { written: rebuild.result.written, skipped: rebuild.result.skipped, failed: rebuild.result.failed }) }}</p>
     </div>
-    <t-alert v-if="error" theme="error" :message="error" role="alert" />
+    <p v-if="error" class="settings-error" role="alert">{{ error }}</p>
     <p v-if="loading && !status" role="status">{{ t('common.loading') }}</p>
     <template v-if="status">
       <dl class="vault-root">
@@ -163,21 +164,11 @@ onBeforeUnmount(() => { generation++; disposed = true; clearTimeout(pollTimer); 
   <MaintenanceStatus />
 </template>
 
-<style scoped lang="less">
-.vault-status { color: var(--td-text-color-primary); }
-.vault-status-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.vault-status-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-h3 { margin: 0; font-size: 18px; }
-.vault-root { margin: 20px 0 0; }
-dt { color: var(--td-text-color-secondary); font-size: 13px; }
-dd { margin: 6px 0 16px; overflow-wrap: anywhere; }
-code { font-size: 12px; }
-.vault-readonly-hint { margin-top: -6px; color: var(--td-text-color-secondary); font-size: 13px; line-height: 1.6; }
-.vault-directories { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-.vault-directory { min-width: 0; }
-h4 { font-size: 14px; margin: 16px 0; }
-h4 code { margin-left: 6px; color: var(--td-text-color-secondary); font-weight: 400; }
-.vault-scan-error { color: var(--td-error-color); }
-@container settings-content (max-width: 720px) { .vault-directories { grid-template-columns: minmax(0, 1fr); gap: 0; } }
-@media (max-width: 640px) { .vault-directories { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+<style scoped>
+.vault-status-heading, .vault-status-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.vault-directories { display: grid; gap: var(--space-4); }
+.vault-directory { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: var(--space-6); border-top: 2px solid var(--rule); min-width: 0; }
+.vault-scan-error { color: var(--danger); }
+@container settings-content (max-width: 720px) { .vault-directory { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }
+@media (max-width: 640px) { .vault-directory { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } }
 </style>

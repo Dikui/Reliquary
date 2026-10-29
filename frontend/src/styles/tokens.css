@@ -1,0 +1,68 @@
+/* Swiss UI tokens use the 16px design baseline independently of the legacy root font.
+ * Theme is resolved by useTheme via theme-mode. */
+:root {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-soft: #f2f2f2;
+  --text: #111111;
+  --muted: #5a5a5a;
+  --border: #cfcfcf;
+  --rule: #111111;
+  --accent: #e2231a;
+  --accent-hover: #b81a13;
+  --on-accent: #ffffff;
+  --blue: #0050b5;
+  --on-blue: #ffffff;
+  --select: #ffcc00;
+  --on-select: #111111;
+  --danger: #e2231a;
+  --danger-soft: #fde8e7;
+  --success: #17803a;
+  --success-soft: #e5f3e9;
+  --warning: #b07800;
+  --lib-1: #e2231a;
+  --lib-2: #0050b5;
+  --lib-3: #ffcc00;
+  --lib-4: #111111;
+  --lib-5: #00843d;
+  --lib-6: #ff6a13;
+  --lib-7: #6d2c91;
+  --lib-8: #8a8a8a;
+  --overlay: #11111166;
+  --clear: transparent;
+  --tool-bg: #111111;
+  --tool-text: #ffffff;
+  --tool-border: #5a5a5a;
+  --font: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --text-2xl: 36px;
+  --text-3xl: 44px;
+  --leading: 1.55;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --radius-sm: 0;
+  --radius: 0;
+  --radius-pill: 0;
+  --shadow: none;
+  --shadow-float: 0 12px 40px #11111133;
+  --content: 1216px;
+  --sidebar: 224px;
+  --control: 40px;
+  --switcher-height: 48px;
+}
+:root[theme-mode="dark"] {
+  --bg: #0d0d0d; --surface: #141414; --surface-soft: #1f1f1f; --text: #f2f2f2; --muted: #a3a3a3; --border: #353535; --rule: #f2f2f2;
+  --accent: #ff3b30; --accent-hover: #ff6259; --blue: #4d8eff; --on-blue: #0d0d0d; --danger: #ff3b30; --danger-soft: #3a1513;
+  --success: #4fc46e; --success-soft: #12301b; --warning: #ffcc00; --lib-1: #ff3b30; --lib-2: #4d8eff; --lib-4: #f2f2f2; --lib-5: #2fb36b; --lib-6: #ff8a3d; --lib-7: #a970d6;
+  --overlay: #000000aa; --tool-bg: #f2f2f2; --tool-text: #0d0d0d; --tool-border: #a3a3a3;
+}

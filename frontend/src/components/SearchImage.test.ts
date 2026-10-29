@@ -1,3 +1,5 @@
+import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
+import { loadUiComponent } from './ui/uiTestLoader'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { defineComponent } from 'vue'
@@ -20,18 +22,16 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       fetch: async (url: string, options: RequestInit) => { requests.push({ url, options }); return { ok: requests.length > 1, status: 503, blob: async () => new Blob(['fixture'], { type: 'image/png' }) } },
     })) { previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key)); Object.defineProperty(globalThis, key, { configurable: true, value }) }
     URL.revokeObjectURL = value => { revoked.push(value); originalRevoke(value) }
-    const preview = loadComponent(new URL('./ImagePreview.vue', import.meta.url), {
-      'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
-    })
     const component = loadComponent(new URL('./SearchImage.vue', import.meta.url), {
-      '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': { __esModule: true, default: preview },
+      '@/components/ui': { ...entryPresentationTestModules['@/components/ui'] as object, Dialog: loadUiComponent('Dialog') },
+      '@/utils/protectedFileAccess': protectedAccess,
     })
     const app = renderer.createApp(component, { articleId: 'search-image-1', path: relative, title: 'Image evidence' })
     app.use(createI18n({ legacy: false, locale, messages })); registerPrimitives(app)
     const root = element('root')
     try {
       app.mount(root); await settle()
-      assert.ok(visibleText(root).includes(messages[locale].knowledgeSearch.imageLoadFailed))
+      assert.ok(visibleText(root).includes(messages[locale].search.imageLoadFailed))
       await click(descendants(root).find(node => node.tag === 'button')!)
       const image = descendants(root).find(node => node.tag === 'img')!
       assert.match(image.props.src, /^blob:/)

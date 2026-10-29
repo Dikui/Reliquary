@@ -1,71 +1,17 @@
 <template>
-  <div class="model-selector">
-    <t-select
-      :value="selectedModelId"
-      :aria-label="ariaLabel"
-      @change="handleModelChange"
-      :placeholder="placeholderText"
-      :disabled="disabled"
-      :loading="loading"
-      :status="status"
-      :clearable="clearable"
-      filterable
-      style="width: 100%;"
-    >
-      <template v-if="selectedModel && showContextWindow" #valueDisplay>
-        <span class="selected-model">
-          <span class="selected-model__name">{{ modelDisplayName(selectedModel) }}</span>
-          <span
-            class="model-ctx"
-            :class="{ 'model-ctx--default': isDefaultContextWindow(selectedModel.parameters?.context_window) }"
-            :title="contextWindowTitle(selectedModel.parameters?.context_window)"
-          >{{ formatContextWindow(selectedModel.parameters?.context_window) }}</span>
-        </span>
-      </template>
-      <!-- 已有的模型选项 -->
-      <t-option
-        v-for="model in models"
-        :key="model.id"
-        :value="model.id"
-        :label="modelDisplayName(model)"
-      >
-        <div class="model-option">
-          <t-icon name="check-circle-filled" class="model-icon" />
-          <span class="model-name">{{ modelDisplayName(model) }}</span>
-          <t-tag v-if="model.source === 'chatgpt'" size="small">{{ $t('chatgpt.usingPlan') }}</t-tag>
-          <span v-if="model.display_name" class="model-raw-name">{{ model.name }}</span>
-          <t-tag v-if="model.is_builtin" size="small" theme="primary">{{ $t('model.builtinTag') }}</t-tag>
-          <t-tag v-if="model.is_default" size="small" theme="success">{{ $t('model.defaultTag') }}</t-tag>
-          <span
-            v-if="showContextWindow"
-            class="model-ctx"
-            :class="{ 'model-ctx--default': isDefaultContextWindow(model.parameters?.context_window) }"
-            :title="contextWindowTitle(model.parameters?.context_window)"
-          >{{ formatContextWindow(model.parameters?.context_window) }}</span>
-        </div>
-      </t-option>
-
-      <!-- 添加模型选项（在底部） -->
-      <t-option
-        v-if="!disabled"
-        value="__add_model__"
-        class="add-model-option"
-      >
-        <div class="model-option add">
-          <t-icon name="add" class="add-icon" />
-          <span class="model-name">{{ $t('model.addModelInSettings') }}</span>
-        </div>
-      </t-option>
-    </t-select>
+  <div class="model-selector settings-form">
+    <Combobox :clearable="clearable" :model-value="selectedModelId" :options="options" :aria-label="ariaLabel || placeholderText" :placeholder="placeholderText" :disabled="disabled || loading" :aria-invalid="status === 'error' || undefined" @update:model-value="handleModelChange" />
+    <p v-if="selectedModel && showContextWindow" class="model-context" :title="contextWindowTitle(selectedModel.parameters?.context_window)">{{ formatContextWindow(selectedModel.parameters?.context_window) }}</p>
     <p v-if="selectedModel?.source === 'chatgpt'" class="model-plan-usage">{{ $t('chatgpt.usingPlan') }} · <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">{{ $t('chatgpt.manageUsage') }}</a></p>
   </div>
 </template>
 
 <script setup lang="ts">
+import { Combobox, toast } from '@/components/ui'
+import '@/styles/settings-form.css'
 import { ref, computed, watch, onMounted } from 'vue'
 import { type ModelConfig } from '@/api/model'
 import { useResourcesStore } from '@/stores/resources'
-import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { filterModelsByType } from './modelSelectorFilter'
 import {
@@ -132,6 +78,10 @@ watch(
   { immediate: true },
 )
 
+const options = computed(() => [
+  ...models.value.map(model => ({ value: model.id!, label: [modelDisplayName(model), model.display_name ? model.name : '', model.is_builtin ? t('model.builtinTag') : '', model.is_default ? t('model.defaultTag') : '', model.source === 'chatgpt' ? t('chatgpt.usingPlan') : '', showContextWindow.value ? formatContextWindow(model.parameters?.context_window) : ''].filter(Boolean).join(' · ') })),
+  ...(!props.disabled ? [{ value: '__add_model__', label: t('model.addModelInSettings') }] : []),
+])
 const selectedModel = computed(() => {
   if (!props.selectedModelId) return null
   return models.value.find(m => m.id === props.selectedModelId)
@@ -149,7 +99,7 @@ const loadModels = async () => {
     models.value = filterModelsByType(resources.allModels, props.modelType)
   } catch (error) {
     console.error(t('model.loadFailed'), error)
-    MessagePlugin.error(t('model.loadFailed'))
+    toast.error(t('model.loadFailed'))
     models.value = []
   } finally {
     loading.value = false
@@ -179,91 +129,8 @@ onMounted(() => {
 })
 </script>
 
-<style lang="less" scoped>
-.model-selector {
-  width: 100%;
-}
-
-.model-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  .model-icon {
-    font-size: 14px;
-    color: var(--td-brand-color);
-  }
-
-  .add-icon {
-    font-size: 14px;
-    color: var(--td-brand-color);
-  }
-
-  .model-name {
-    flex: 0 1 auto;
-    min-width: 0;
-    font-size: 13px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .model-raw-name {
-    flex: 1;
-    min-width: 0;
-    font-size: 12px;
-    color: var(--td-text-color-placeholder);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .model-ctx {
-    margin-left: auto;
-  }
-
-  &.add {
-    .model-name {
-      color: var(--td-brand-color);
-      font-weight: 500;
-    }
-  }
-}
-
-.model-ctx {
-  flex-shrink: 0;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--td-text-color-secondary);
-  background: var(--td-bg-color-secondarycontainer);
-  padding: 0 6px;
-  border-radius: 4px;
-  line-height: 18px;
-
-  &--default {
-    color: var(--td-text-color-placeholder);
-  }
-}
-
-.selected-model {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  max-width: 100%;
-
-  &__name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-</style>
-
 <style scoped>
-.model-plan-usage { margin: 6px 0 0; font-size: 12px; color: var(--td-text-color-secondary); line-height: 1.5; }
-.model-plan-usage a { color: var(--td-brand-color); text-decoration: none; }
-.model-plan-usage a:hover { text-decoration: underline; }
-.model-plan-usage a:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 3px; }
+ .model-selector { width: 100%; min-width: 0; }
+.model-context, .model-plan-usage { color: var(--muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+
 </style>

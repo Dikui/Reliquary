@@ -7,7 +7,7 @@ const libraryList = () => import('../views/library/LibraryList.vue')
 const entryLocation = (path: string, to: { query: Record<string, any>; hash: string }) => ({ path, query: { ...to.query }, hash: to.hash })
 const notFound = () => import('../views/NotFound.vue')
 
-// Settings is owned by the platform layout. Its route supplies only the background.
+// Settings is an independent page inside the platform shell.
 export function createApplicationRoutes(development = false): RouteRecordRaw[] {
   return [
     {
@@ -34,7 +34,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         {
           path: "settings",
           name: "settings",
-          component: libraryList,
+          component: () => import("../views/settings/Settings.vue"),
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
@@ -51,8 +51,39 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         {
           path: "entries",
           name: "entries",
+          beforeEnter: to => {
+            if (to.query.tab === 'reviews' || (to.query.tab === 'entities' && to.query.section === 'merges')) {
+              const { tab, section, ...query } = to.query
+              return { path: '/platform/pending', query: { ...query, tab: tab === 'reviews' ? 'reviews' : 'merges' }, hash: to.hash, replace: true }
+            }
+            if (to.query.tab === 'entities') {
+              const { tab, ...query } = to.query
+              return { path: '/platform/entities', query, hash: to.hash, replace: true }
+            }
+            if (typeof to.query.entry_id !== 'string' || !to.query.entry_id) return
+            const { entry_id: id, ...query } = to.query
+            return { name: 'entryDetail', params: { id }, query, hash: to.hash, replace: true }
+          },
           component: libraryPage,
           meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: 'pending',
+          name: 'pending',
+          component: () => import('../views/library/PendingPage.vue'),
+          meta: { requiresInit: true, requiresAuth: true },
+        },
+        {
+          path: 'entities',
+          name: 'entities',
+          component: () => import('../views/library/EntitiesPage.vue'),
+          meta: { requiresInit: true, requiresAuth: true },
+        },
+        {
+          path: 'entries/:id',
+          name: 'entryDetail',
+          component: () => import('../views/library/EntryDetail.vue'),
+          meta: { requiresInit: true, requiresAuth: true },
         },
         { path: 'content-checks', name: 'contentChecks', component: () => import('../views/insights/ContentChecksPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
         { path: 'diagnostics', name: 'diagnostics', component: () => import('../views/insights/IngestFailuresPage.vue'), meta: { requiresInit: true, requiresAuth: true } },
@@ -101,7 +132,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         },
         // Compatibility redirects for /platform/system/* URLs. System
         // administration surfaces live as dedicated sections inside the
-        // standard Settings modal; keep stable URLs for bookmarks and
+        // standard Settings page; keep stable URLs for bookmarks and
         // external links.
         {
           path: "system",

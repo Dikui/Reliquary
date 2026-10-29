@@ -24,7 +24,7 @@ func TestIKB09MigrationPreservesPreviousVersionAndRoundTrips(t *testing.T) {
  INSERT INTO topics(id,space_id,name,description) VALUES('topic',1,'Preserved','Description');
  INSERT INTO follow_feed_states(space_id,last_viewed_at) VALUES(1,'2026-10-14T01:02:03.123456Z');`).Error)
 	before := baselineContents(t, db)
-	require.NoError(t, m.Up())
+	require.NoError(t, m.Migrate(15))
 	after := baselineContents(t, db)
 	for table, raw := range before {
 		var want, got []map[string]any

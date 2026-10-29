@@ -1,3 +1,4 @@
+import { settingsTestUi } from '../settings/settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -46,7 +47,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       './QueueConnectionNotice.vue': moduleOf(loadComponent(new URL('./QueueConnectionNotice.vue', import.meta.url), { '@/api/system': api.exports })),
       '@/api/system': api.exports, '@/api/chatgpt': { getChatGPTAccounts: async () => ({ accounts: [] }), getChatGPTPolicy: async () => ({ paused: false }) }, '@/components/ChatGPTUsageStatus.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/components/settings/SettingDrawer.vue': moduleOf(drawer),
       '@/i18n/countCopy': countCopy, './runtimeTaskPagination': pagination,
-      'tdesign-vue-next': { MessagePlugin: {} },
+      '@/components/ui': settingsTestUi(), '@/styles/settings-form.css': {},
     })
     const app = renderer.createApp(component)
     app.use(createI18n({ legacy: false, locale, messages })); registerPrimitives(app)
@@ -77,10 +78,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const taskType = descendants(dialog).find(node => hasClass(node, 'rq-failed-row-type'))!
       assert.equal(visibleText(taskType), runtime.tasks.taskTypes[kind])
       assert.doesNotMatch(visibleText(dialog), /knowledge:embedding_rebuild|topic:backfill/)
-      for (const [label, value] of [[runtime.tasks.libraryLabel, 'library-12345678-1234-1234-1234-123456789012'], [runtime.tasks.knowledgeLabel, 'article-12345678-1234-1234-1234-123456789012']]) {
+      for (const [label, value] of [[runtime.tasks.libraryLabel, 'library-12345678-1234-1234-1234-123456789012'], [runtime.tasks.entryLabel, 'article-12345678-1234-1234-1234-123456789012']]) {
         const reference: ReturnType<typeof descendants>[number] | undefined = descendants(dialog).find(node => hasClass(node, 'rq-failed-ref') && descendants(node).some(child => child.tag === 'dt' && visibleText(child) === label))
         assert.ok(reference, label)
-        assert.equal(visibleText(descendants(reference).find(child => child.tag === 'dd')!), value)
+        assert.equal(visibleText(descendants(reference).find(child => child.tag === 'dd')!), value.length > 36 ? value.slice(0, 12) + '…' : value)
         assert.equal(descendants(reference).find(child => child.tag === 'dd')!.props.title, value)
       }
       if (kind === 'topicBackfill') {
@@ -115,6 +116,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     test(`${locale}: durable failed task ${action} uses the HTTP API and reloads queue counts and details`, async () => {
       const calls: { method: string; url: string; state?: string }[] = []
       const notices: string[] = []
+      let confirmation: any
       const runtime = messages[locale].system.globalSettings.runtime
       let job: any = {
         id: 'postgres-job-14', queue: 'default', type: 'document:process', state: 'archived',
@@ -151,7 +153,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         '@/components/ChatGPTUsageStatus.vue': moduleOf(defineComponent({ setup: () => () => null })),
         '@/components/settings/SettingDrawer.vue': moduleOf(drawer), '@/i18n/countCopy': countCopy,
         './runtimeTaskPagination': pagination,
-        'tdesign-vue-next': { MessagePlugin: { success: (message: string) => notices.push(message), error: (message: string) => assert.fail(message) } },
+        '@/components/ui': settingsTestUi({ toast: { success: (message: string) => notices.push(message), error: (message: string) => assert.fail(message) }, confirm: (options: unknown) => { confirmation = options; return { destroy() {} } } }), '@/styles/settings-form.css': {},
       })
       const app = renderer.createApp(component)
       app.use(createI18n({ legacy: false, locale, messages })); registerPrimitives(app)
@@ -177,13 +179,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         const actionLabel = action === 'delete' ? runtime.tasks.deleteRecord : runtime.tasks.runNow
         const button = descendants(dialog).find(node => node.tag === 'button' && node.props['aria-label'] === actionLabel)
         assert.ok(button)
-        const confirmation = button.parent
-        assert.ok(confirmation?.props['data-popconfirm'])
-        await click(confirmation)
-        assert.ok(visibleText(dialog).includes(action === 'delete' ? runtime.tasks.deleteConfirm : runtime.tasks.runNowConfirm))
-        const confirm = descendants(dialog).find(node => node.props['data-confirm'])
-        assert.ok(confirm)
-        await click(confirm); await settle()
+        await click(button)
+        assert.equal(confirmation.body, action === 'delete' ? runtime.tasks.deleteConfirm : runtime.tasks.runNowConfirm)
+        await confirmation.onConfirm(); await settle()
         assert.deepEqual(notices, [runtime.tasks.actionSuccess[action]])
         assert.ok(!visibleText(dialog).includes('fixture model unavailable'))
         assert.equal(descendants(root).find(node => hasClass(node, 'rq-failed-count')), undefined)

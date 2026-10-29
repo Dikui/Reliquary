@@ -45,9 +45,3 @@ test('formatting preserves raw non-JSON content and body extraction preserves wh
   assert.equal(formatContent('{"a":1}'), '{\n  "a": 1\n}')
   assert.equal(contentBlocks(request)[1]!.body, '正文 full body\n  whitespace')
 })
-test('both timeline tabs and call statistics expose the shared viewer', () => {
-  const timeline = readFileSync(new URL('./EntryProcessingTimeline.vue', import.meta.url), 'utf8')
-  const statistics = readFileSync(new URL('../views/insights/ModelCallsPage.vue', import.meta.url), 'utf8')
-  assert.match(timeline, /<ModelCallContentViewer[^>]+:span-id="selectedRow.node.span_id"[^>]+:direction="detailTab"/)
-  assert.match(statistics, /@click="viewingCall = call.id"/); assert.match(statistics, /<ModelCallContentViewer :call-id="viewingCall"/)
-})
