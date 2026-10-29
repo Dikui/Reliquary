@@ -25,12 +25,6 @@ func (s *libraryService) CreateLibrary(ctx context.Context, request types.Create
 		return nil, apperrors.NewBadRequestError("template must be standard")
 	}
 	library := &types.Library{ID: uuid.NewString(), SpaceID: types.MustSpaceIDFromContext(ctx), Name: request.Name, Description: request.Description, Template: request.Template, Directory: request.Directory, CreatedAt: time.Now(), UpdatedAt: time.Now(), ContentTypes: []types.LibraryContentType{}, RelationTypes: []types.LibraryRelationType{}}
-	if request.Color != nil {
-		if err := types.ValidateLibraryColor(*request.Color); err != nil {
-			return nil, apperrors.NewBadRequestError(err.Error())
-		}
-		library.Color = *request.Color
-	}
 
 	library.EnsureDefaults()
 	library.ReviewCriteria = library.DefaultReviewCriteria()
@@ -54,11 +48,6 @@ func libraryWriteError(err error) error {
 }
 
 func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch types.LibraryPatch) (*types.Library, error) {
-	if patch.Color != nil {
-		if err := types.ValidateLibraryColor(*patch.Color); err != nil {
-			return nil, apperrors.NewBadRequestError(err.Error())
-		}
-	}
 	if patch.Template != nil || patch.Directory != nil || patch.SystemRole != nil {
 		return nil, apperrors.NewBadRequestError("template, directory and system_role are immutable")
 	}
@@ -81,9 +70,6 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 		}
 		if patch.Description != nil {
 			library.Description = *patch.Description
-		}
-		if patch.Color != nil {
-			library.Color = *patch.Color
 		}
 		if patch.ModelTiers != nil {
 			if patch.ModelTiers.ModelID(types.ModelTierEmbedding) != library.ModelTiers.ModelID(types.ModelTierEmbedding) {

@@ -6,16 +6,24 @@ import enUS from './locales/en-US'
 import zhCN from './locales/zh-CN'
 
 const cases = [
-  ["workbench.nameEmbeddings.pending","count","Entity name pending rebuild: {count}","Entity names pending rebuild: {count}"],
-  ["workbench.nameEmbeddings.latest","total","Latest rebuild: {status}, {processed}/{total} entity processed","Latest rebuild: {status}, {processed}/{total} entities processed"],
+  ["knowledgeWorkbench.sourceTime.excluded","count","Source excluded because publication time is missing: {count}","Sources excluded because publication time is missing: {count}"],
+  ["knowledgeWorkbench.nameEmbeddings.pending","count","Entity name pending rebuild: {count}","Entity names pending rebuild: {count}"],
+  ["knowledgeWorkbench.nameEmbeddings.latest","total","Latest rebuild: {status}, {processed}/{total} entity processed","Latest rebuild: {status}, {processed}/{total} entities processed"],
+  ["library.batchDeleteSuccess","count","Deleted {count} material","Deleted {count} materials"],
+  ["library.batchReparseSuccess","count","Submitted {count} rebuild task","Submitted {count} rebuild tasks"],
   ["model.editor.contextWindowTokens","count","{count} token","{count} tokens"],
+  ["library.chunkCount","count","Total {count} segment","Total {count} segments"],
+  ["library.confirmBatchDeleteDocument","count","Delete {count} selected material? This action cannot be undone.","Delete {count} selected materials? This action cannot be undone."],
+  ["library.confirmBatchReparseDocument","count","Reprocess {count} selected material? Preserve the body and update processing results and index. AI reports are only reindexed.","Reprocess {count} selected materials? Preserve their bodies and update processing results and indexes. AI reports are only reindexed."],
+  ["library.batchReparseSkippedInFlight","count","Skipped {count} material still being processed","Skipped {count} materials still being processed"],
   ["system.globalSettings.runtime.poolInstances","value","{value} instance","{value} instances"],
   ["system.globalSettings.runtime.queueCount","value","{value} queue","{value} queues"],
   ["system.globalSettings.runtime.failedNotice.title","count","{count} failed task needs attention","{count} failed tasks need attention"],
   ["system.globalSettings.runtime.tasks.openAria","count","View {count} {state} task in {queue}","View {count} {state} tasks in {queue}"],
   ["system.globalSettings.runtime.tasks.purgeArchivedSuccess","count","Cleared {count} failed task","Cleared {count} failed tasks"],
   ["ollama.daysAgo","days","{days} day ago","{days} days ago"],
-  ["libraryEditor.chunking.characters", "$plural", "character", "characters"]] as const
+  ["library.characters","$plural","character","characters"],
+  ["knowledgeEditor.chunking.characters", "$plural", "character", "characters"],["knowledgeEditor.chunking.debug.stats.chunks", "$plural", "chunk", "chunks"]] as const
 const i18n = createI18n({ legacy: false, locale: 'en-US', messages: { 'en-US': enUS, 'zh-CN': zhCN }, warnHtmlMessage: false })
 for (const [key, selector, singular, plural] of cases) {
   for (const count of [1, 2]) {

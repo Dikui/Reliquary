@@ -1,30 +1,37 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, reactive, computed } from "vue";
-import { Button, Input, Select, Chip, LibMark, Skeleton, EmptyState, ErrorState, confirm, toast } from '@/components/ui';
+import { ref, onMounted, onUnmounted, watch, reactive, computed, nextTick } from "vue";
+import { MessagePlugin } from "tdesign-vue-next";
 import LibraryScopeSelect from '@/components/LibraryScopeSelect.vue';
 import { useLibraryScope } from '@/composables/useLibraryScope';
-import { entryDetailLocation, parseReference } from '@/utils/bodyReference';
+import { parseReference } from '@/utils/bodyReference';
 import type { SourceLocation } from '@/types/search';
+import DocContent from "@/components/DocContent.vue";
 import useLibrary from '@/composables/useLibrary';
 import { useRoute, useRouter } from 'vue-router';
-
+import EmptyEntry from '@/components/EmptyEntry.vue';
 import { useResourcesStore } from '@/stores/resources';
-
+import { useEditorResourcesStore } from '@/stores/editorResources';
+const resources = useResourcesStore();
+const editorResources = useEditorResourcesStore();
+const router = useRouter();
 import {
   batchQueryEntry,
   reparseEntry,
   cancelEntryParse,
-  deleteDocument,
+  getEntrySpans,
   getEntryDetails,
+
 } from "@/api/library";
+import { entrySpansPayloadHasTrace } from '@/utils/entryTrace';
 import DocumentListView from './components/DocumentListView.vue';
-import EntryPreview from './components/EntryPreview.vue';
+import DocumentCardView from './components/DocumentCardView.vue';
 import EntryBatchDialog from '@/components/EntryBatchDialog.vue';
 import type { EntryBatchSelection } from '@/api/entry-batches';
 import { listEntities, type Entity } from '@/api/entities';
 import { listTopics, type Topic } from '@/api/topics';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import EntryWorkbench from './components/EntryWorkbench.vue';
+import PendingReviews from './components/PendingReviews.vue';
 import { usePendingCountsStore } from '@/stores/pendingCounts';
 import type { LibraryContentType } from '@/api/library';
 import { SEARCH_SOURCES } from '@/types/search';
@@ -35,6 +42,7 @@ import {
   documentListFiltersEqual,
   type DocumentListFilters,
 } from './documentListFilters';
+import type { EntryJudgment } from '@/api/entry-judgments';
 import type { EntryProcessOverrides } from '@/types/entryProcess';
 import { useReparseConfirmStore } from '@/stores/reparseConfirm';
 import {
@@ -42,8 +50,6 @@ import {
 } from './entryStatusPolling';
 import { useI18n } from 'vue-i18n';
 import { useMarqueeSelect } from '@/composables/useMarqueeSelect';
-const resources = useResourcesStore();
-const router = useRouter();
 const route = useRoute();
 const { t } = useI18n();
 const pendingCounts = usePendingCountsStore();
@@ -58,67 +64,88 @@ const libraryCatalog = ref<import('@/api/library').LibraryCatalogItem[]>([]);
 const currentLibraryLabel = computed(() => {
   const selected = libraryCatalog.value.find(item => item.id === libraryScope.value[0]);
   return libraryScope.value.length === 1 && selected
-    ? selected.display_name || selected.name : t('libraryEditor.document.title');
+    ? selected.display_name || selected.name : t('knowledgeEditor.document.title');
 });
+const referencedEntryId = ref(typeof route.query.entry_id === 'string' ? route.query.entry_id : '');
+const activeReference = ref<SourceLocation | undefined>(parseReference(route.query.reference));
 const libraryLoading = ref(false);
-const libraryError = ref('');
 const docListLoading = ref(true);
 const validTabs = ['documents', 'reviews', 'entities'] as const
 type KbTab = typeof validTabs[number]
 const initTab = validTabs.includes(route.query.tab as any) ? (route.query.tab as KbTab) : 'documents'
 const activeLibraryTab = ref<KbTab>(initTab);
 
-let { cardList, total, listError, loadEntries, delEntry } = useLibrary(libraryId.value)
+let { cardList, total, moreIndex, details, loadEntries, delEntry, openMore, onVisibleChange: _onVisibleChange, getCardDetails, clearCardDetails, getfDetails } = useLibrary(libraryId.value)
 
-let disposed = false;
-let pollGeneration = 0;
+/** Per-entry cache: whether /spans has a real trace (see entrySpansPayloadHasTrace). */
+const traceAvailableById = reactive<Record<string, boolean>>({});
+const traceProbeInflight = new Set<string>();
+
+function clearTraceAvailabilityCache() {
+  for (const key of Object.keys(traceAvailableById)) {
+    delete traceAvailableById[key];
+  }
+  traceProbeInflight.clear();
+}
+
+function isTraceMenuVisible(item: EntryCard): boolean {
+  if (!item?.id) return false;
+  if (entryNeedsStatusPolling(item)) {
+    return true;
+  }
+  return traceAvailableById[item.id] === true;
+}
+
+async function probeTraceAvailable(item: EntryCard) {
+  const id = item.id;
+  if (!id || traceProbeInflight.has(id)) return;
+  if (entryNeedsStatusPolling(item)) {
+    traceAvailableById[id] = true;
+    return;
+  }
+  if (Object.prototype.hasOwnProperty.call(traceAvailableById, id)) return;
+  traceProbeInflight.add(id);
+  try {
+    const res: any = await getEntrySpans(id);
+    traceAvailableById[id] = !!(res?.success && entrySpansPayloadHasTrace(res.data));
+  } catch {
+    traceAvailableById[id] = false;
+  } finally {
+    traceProbeInflight.delete(id);
+  }
+}
+
+const onCardMoreVisibleChange = (visible: boolean, item: EntryCard) => {
+  _onVisibleChange(visible);
+  if (visible) {
+    probeTraceAvailable(item);
+  }
+};
+let isCardDetails = ref(false);
 let timeout: ReturnType<typeof setTimeout> | null = null;
 let entryScroll = ref()
 let page = 1;
 let pageSize = 35;
-const scrollLoading = ref(false);
-let listGeneration = 0;
-let loadingGeneration = 0;
-const resetPage = () => { listGeneration++; page = 1; scrollLoading.value = false; };
+let scrollLoading = false;
+const resetPage = () => { page = 1; scrollLoading = false; };
 
-// List and table preference is persisted per browser.
-type DocViewMode = 'list' | 'table';
+// View mode (grid / list) — persisted per browser
+type DocViewMode = 'grid' | 'list';
 const VIEW_MODE_KEY = 'reliquary.library.docs.viewMode';
 const initViewMode = (): DocViewMode => {
   try {
-    return localStorage.getItem(VIEW_MODE_KEY) === 'table' ? 'table' : 'list';
-  } catch { return 'list'; }
+    return localStorage.getItem(VIEW_MODE_KEY) === 'list' ? 'list' : 'grid';
+  } catch { return 'grid'; }
 };
 const viewMode = ref<DocViewMode>(initViewMode());
-const focusedId = ref('');
-const focusedEntry = computed(() => cardList.value.find((item: EntryCard) => item.id === focusedId.value));
-const currentLibrary = computed(() => libraryScope.value.length === 1 ? libraryCatalog.value.find(item => item.id === libraryScope.value[0]) : undefined);
-const libraryNumber = computed(() => currentLibrary.value ? String(libraryCatalog.value.indexOf(currentLibrary.value) + 1).padStart(2, '0') : '');
-const searchInput = ref<InstanceType<typeof Input>>();
-const batchInitialAction = ref<import('@/api/entry-batches').EntryBatchAction>('star');
-const composingSearch = ref(false);
-function submitSearch(event?: KeyboardEvent) {
-  if (composingSearch.value || event?.isComposing) return;
-  if (docSearchDebounce !== null) { window.clearTimeout(docSearchDebounce); docSearchDebounce = null; }
-  resetPage(); void loadEntryFiles(libraryId.value);
-}
-function clearSearch() { docSearchKeyword.value = ''; searchInput.value?.focus(); }
-const today = new Date();
-const latestFilterDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-function updateDate(range: 'published' | 'updated', index: number, event: Event) {
-  const target = range === 'published' ? publishedRange : updatedTimeRange;
-  const values = [...target.value]; values[index] = (event.target as HTMLInputElement).value;
-  target.value = values.some(Boolean) ? values : [];
-}
-function updateSelectedOptions(event: Event): string[] { return Array.from((event.target as HTMLSelectElement).selectedOptions, option => option.value); }
-watch(cardList, items => { if (!items.some(item => item.id === focusedId.value)) focusedId.value = items[0]?.id || ''; });
 watch(viewMode, (v) => {
   try { localStorage.setItem(VIEW_MODE_KEY, v); } catch { /* ignore */ }
 });
 
-// Checked IDs are independent from the focused entry.
+// Multi-select state — shared between grid and list views.
 // Vue 3.5 tracks Set#add/delete natively, so direct mutation is reactive.
 const selectedIds = ref<Set<string>>(new Set());
+let lastSelectedIndex = -1;
 let docSearchDebounce: number | null = null;
 const initialDocumentFilters = documentListFiltersFromQuery(route.query);
 const docSearchKeyword = ref(initialDocumentFilters.keyword);
@@ -169,7 +196,7 @@ const contentTypeOptions = computed(() => {
 });
 const selectedEntityId = ref('');
 watch(() => route.query.entity_id, id => { if (typeof id === 'string') selectedEntityId.value = id; }, { immediate: true });
-const openArticleEntity = (id: string) => { void router.push({ path: '/platform/entities', query: { entity_id: id } }); };
+const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeLibraryTab.value = 'entities'; closeDoc(); };
 const fileTypeOptions = computed(() => [
   { label: t('library.allFileTypes'), value: '' },
   { label: 'PDF', value: 'pdf' },
@@ -202,7 +229,7 @@ const selectedSource = ref(initialDocumentFilters.source);
 const selectedSourceKind = ref(initialDocumentFilters.sourceKind);
 const sourceKindOptions = computed(() => [
   { label: t('library.allMaterialCategories'), value: '' },
-  ...SEARCH_SOURCES.map(value => ({ value, label: t(`search.sources.${value}`) })),
+  ...SEARCH_SOURCES.map(value => ({ value, label: t(`knowledgeSearch.sources.${value}`) })),
 ]);
 // Submission channels are independent of file format and material category.
 const sourceOptions = computed(() => [
@@ -212,7 +239,7 @@ const sourceOptions = computed(() => [
   { label: t('library.channelRSS'), value: 'rss' },
   { label: t('library.channelBrowserExtension'), value: 'browser_extension' },
 ]);
-// Keep date ranges in the existing URL-compatible YYYY-MM-DD format.
+// Date range as [start, end] in "YYYY-MM-DD" form (t-date-range-picker default).
 const updatedTimeRange = ref<string[]>(
   initialDocumentFilters.startDate || initialDocumentFilters.endDate
     ? [initialDocumentFilters.startDate, initialDocumentFilters.endDate] : [],
@@ -229,7 +256,10 @@ const documentFilters = computed<DocumentListFilters>(() => ({
   endDate: updatedTimeRange.value?.[1] || '',
   entityIds: selectedEntityIds.value, topicIds: selectedTopicIds.value, publishedFrom: publishedRange.value?.[0] || '', publishedTo: publishedRange.value?.[1] || '',
 }));
+// Disable any date after today so users cannot filter into the future.
 const hasAdvancedFilters = computed(() => !!(selectedStarred.value || selectedSourceKind.value || selectedSource.value || selectedFileType.value || selectedEntityIds.value || selectedTopicIds.value || publishedRange.value.length || updatedTimeRange.value.length));
+
+const disableFutureDate = { after: new Date(new Date().setHours(23, 59, 59, 999)) };
 
 const filterParams = computed(() => {
   const [start, end] = updatedTimeRange.value || [];
@@ -259,8 +289,7 @@ getPageSize()
 const loadEntryFiles = (libraryIdValue: string): Promise<void> => {
   if (!libraryIdValue) return Promise.resolve();
 
-  const request = ++loadingGeneration;
-  docListLoading.value = true;
+    docListLoading.value = true;
 
   return loadEntries(
     {
@@ -270,7 +299,7 @@ const loadEntryFiles = (libraryIdValue: string): Promise<void> => {
     },
     libraryIdValue,
   ).finally(() => {
-    if (request === loadingGeneration && isCurrentLibrary(libraryIdValue)) {
+    if (isCurrentLibrary(libraryIdValue)) {
       docListLoading.value = false;
     }
   });
@@ -286,7 +315,6 @@ const loadLibraryInfo = async (targetLibraryId: string, force = false) => {
     return;
   }
   libraryLoading.value = true;
-  libraryError.value = '';
   try {
     const data = await resources.fetchLibrary(force);
     if (!isCurrentLibrary(targetLibraryId)) return;
@@ -298,7 +326,7 @@ const loadLibraryInfo = async (targetLibraryId: string, force = false) => {
   } catch (error) {
     if (!isCurrentLibrary(targetLibraryId)) return;
 
-    libraryError.value = t('entries.loadFailed');
+    console.error('Failed to load library info:', error);
     libraryInfo.value = null;
     cardList.value = [];
     total.value = 0;
@@ -311,17 +339,7 @@ const loadLibraryInfo = async (targetLibraryId: string, force = false) => {
 
 // 唯一库加载后获取文章内容
 // Sync activeLibraryTab to URL query so it survives page refresh
-watch(() => [route.query.tab, route.query.section], ([tab]) => {
-  if (tab === 'reviews' || (tab === 'entities' && route.query.section === 'merges')) {
-    const { tab: _tab, section: _section, ...query } = route.query
-    void router.replace({ path: '/platform/pending', query: { ...query, tab: tab === 'reviews' ? 'reviews' : 'merges' }, hash: route.hash })
-    return
-  }
-  if (tab === 'entities') {
-    const { tab: _tab, ...query } = route.query
-    void router.replace({ path: '/platform/entities', query, hash: route.hash })
-    return
-  }
+watch(() => route.query.tab, (tab) => {
   activeLibraryTab.value = tab === 'entities' ? 'entities' : tab === 'reviews' ? 'reviews' : 'documents'
 })
 watch(activeLibraryTab, (tab) => {
@@ -346,6 +364,7 @@ watch(() => libraryId.value, (newLibraryId, oldLibraryId) => {
   if (newLibraryId === oldLibraryId && libraryInfo.value) return;
 
   if (newLibraryId !== oldLibraryId) {
+    clearTraceAvailabilityCache();
     cardList.value = [];
     total.value = 0;
     docListLoading.value = true;
@@ -404,7 +423,6 @@ watch(documentFilters, (filters, previous) => {
   }
   resetPage();
   if (!libraryId.value) return;
-  if (composingSearch.value) return;
   const keywordOnly = documentListFiltersEqual({ ...filters, keyword: previous.keyword }, previous);
   if (keywordOnly && filters.keyword && !restoredFromRoute) {
     docSearchDebounce = window.setTimeout(() => {
@@ -416,16 +434,44 @@ watch(documentFilters, (filters, previous) => {
   }
 });
 
-// Preserve old material links when query parameters change on the list route.
+// Auto-open document detail when navigated with ?entry_id=xxx.
+// Note: this runs both when the Library page mounts with a query param AND when a
+// subsequent in-page navigation (e.g. from the global command palette) only
+// changes the query without re-mounting the component; the internal ID is
+// stable and cardList may already be populated, so relying solely on the
+// cardList watcher misses the trigger.
 const pendingEntryId = ref<string | null>(
   (route.query.entry_id as string) || null
 );
 
+let autoOpenRequest = 0;
+
 const tryAutoOpenDocument = async () => {
   if (!pendingEntryId.value) return;
-  const id = pendingEntryId.value;
+  activeReference.value = parseReference(route.query.reference);
+  const targetId = pendingEntryId.value;
+  referencedEntryId.value = targetId;
   pendingEntryId.value = null;
-  await router.replace(entryDetailLocation(id, parseReference(route.query.reference)));
+  const request = ++autoOpenRequest;
+  const card = cardList.value.find((c: EntryCard) => c.id === targetId);
+
+  let target = card || ({ id: targetId } as EntryCard);
+  try {
+    const response: any = await getEntryDetails(targetId);
+    if (request !== autoOpenRequest) return;
+    const detail = response?.data || response;
+    if (detail && typeof detail === 'object') {
+      target = { ...target, ...detail, id: targetId } as EntryCard;
+    }
+  } catch (error) {
+    // Keep the previous ID-only fallback: getCardDetails will surface the
+    // normal detail loading error, while links to root-level files still work.
+    console.error('Failed to load referenced material', error);
+  }
+
+  if (request !== autoOpenRequest) return;
+  await nextTick();
+  openCardDetails(target);
 };
 
 // React to later ?entry_id= changes on the same Library route (no remount).
@@ -438,14 +484,20 @@ watch(
   },
 );
 
-// Compatibility for extensions still dispatching the old material-open event.
+// Dispatched by the global command palette when the user picks a chunk that
+// lives in the Library they are already viewing — vue-router dedupes identical
+// navigations, so we rely on this event instead of a URL change.
 const handleOpenEntryEvent = async (e: Event) => {
-  const detail = (e as CustomEvent<{ entryId: string; location?: SourceLocation }>).detail;
-  if (detail?.entryId) await router.push(entryDetailLocation(detail.entryId, detail.location));
+  const detail = (e as CustomEvent<{ libraryId: string; entryId: string; location?: SourceLocation }>).detail;
+  if (!detail || !detail.entryId) return;
+  activeReference.value = detail.location;
+  pendingEntryId.value = detail.entryId;
+  await router.replace({ query: { ...route.query, entry_id: detail.entryId, reference: detail.location ? JSON.stringify(detail.location) : undefined } });
+  tryAutoOpenDocument();
 };
 
 onMounted(() => {
-  void resources.fetchLibrary().catch(() => { libraryError.value = t('entries.loadFailed'); }).finally(() => {
+  void resources.fetchLibrary().catch(() => {}).finally(() => {
     if (!libraryId.value) docListLoading.value = false;
   });
 
@@ -453,7 +505,6 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  disposed = true;
   if (docSearchDebounce !== null) {
     window.clearTimeout(docSearchDebounce);
     docSearchDebounce = null;
@@ -473,7 +524,6 @@ watch(() => cardList.value, (newValue) => {
     tryAutoOpenDocument();
   }
 
-  pollGeneration++;
   let analyzeList = [];
   // Filter articles whose processing is still active.
   analyzeList = newValue.filter(needsStatusPolling);
@@ -492,7 +542,7 @@ type EntryCard = {
   source_kind?: string;
   vault_path?: string;
   library_id?: string;
-  parse_status?: string;
+  parse_status: string;
   summary_status?: string;
   description?: string;
   file_name?: string;
@@ -512,8 +562,6 @@ const needsStatusPolling = (item: EntryCard) => {
 };
 
 const updateStatus = (analyzeList: EntryCard[]) => {
-  if (disposed) return;
-  const request = ++pollGeneration;
   if (timeout !== null) {
     clearTimeout(timeout);
     timeout = null;
@@ -526,7 +574,6 @@ const updateStatus = (analyzeList: EntryCard[]) => {
   }
   timeout = setTimeout(() => {
     batchQueryEntry(query).then((result: any) => {
-      if (disposed || request !== pollGeneration) return;
       let hasChanges = false;
       if (result.success && result.data) {
         (result.data as EntryCard[]).forEach((item: EntryCard) => {
@@ -544,6 +591,7 @@ const updateStatus = (analyzeList: EntryCard[]) => {
             // Always update the card data
             cardList.value[index].parse_status = parseStatus;
             Object.assign(cardList.value[index], item, { parse_status: parseStatus });
+            delete traceAvailableById[item.id];
             hasChanges = true;
           }
         });
@@ -556,7 +604,6 @@ const updateStatus = (analyzeList: EntryCard[]) => {
         updateStatus(stillPending);
       }
     }).catch((_err) => {
-      if (disposed || request !== pollGeneration) return;
       // 错误处理
       const stillPending = cardList.value.filter(needsStatusPolling);
       if (stillPending.length > 0) {
@@ -566,24 +613,41 @@ const updateStatus = (analyzeList: EntryCard[]) => {
   }, 1500);
 };
 
+// 恢复文档处理状态（用于刷新后恢复）
+
+const closeDoc = () => {
+  isCardDetails.value = false;
+  clearCardDetails();
+};
 const openCardDetails = (item: EntryCard) => {
-  void router.push(entryDetailLocation(item.id));
+  isCardDetails.value = true;
+  getCardDetails(item);
 };
 
+// Open source document preview
 const openSourceDoc = (entryId: string, location?: SourceLocation) => {
-  void router.push(entryDetailLocation(entryId, location));
+  activeReference.value = location;
+  referencedEntryId.value = entryId;
+  isCardDetails.value = true;
+  getCardDetails({ id: entryId });
 };
 
-const confirmDeleteEntry = async (index: number, item: EntryCard) => {
-  if (item.source_kind === 'mine') {
-    const result = await deleteDocument(item.id);
-    if (!result.success) throw new Error(result.message || t('personalDocument.deleteFailed'));
-    toast.success(t('personalDocument.deleted'));
-    await handlePersonalDocumentDeleted(item.id);
-    return true;
+const openReportTopic = (topicId: string) => {
+  closeDoc();
+  void router.push({ path: '/platform/topics', query: { topic_id: topicId } });
+};
+
+const closeCardMoreMenu = (index: number) => {
+  if (cardList.value?.[index]) {
+    cardList.value[index].isMore = false;
   }
+  moreIndex.value = -1;
+};
+
+const confirmDeleteEntry = (index: number, item: EntryCard) => {
   const deletedId = item?.id;
   return delEntry(index, item, async () => {
+    closeCardMoreMenu(index);
     resetPage();
     const maxPolls = 30;
     const delayMs = 400;
@@ -597,6 +661,12 @@ const confirmDeleteEntry = async (index: number, item: EntryCard) => {
   });
 };
 
+const onReparseMenuClick = (index: number, item: EntryCard) => {
+  if (entryNeedsStatusPolling(item)) {
+    MessagePlugin.info(t('library.rebuildInProgress'));
+  }
+};
+
 const reparseConfirmStore = useReparseConfirmStore();
 
 const batchResultId = ref('');
@@ -606,27 +676,45 @@ const batchSelectedIds = ref<string[]>([]);
 const batchLibraryIds = computed(() => [...new Set(cardList.value.filter((item: EntryCard) => batchSelectedIds.value.includes(item.id)).map((item: EntryCard) => item.library_id))].filter(Boolean) as string[]);
 function batchCreated(id: string) { batchResultId.value = id; void router.replace({ query: { ...route.query, batch_id: id } }); }
 watch(() => route.query.batch_id, id => { if (typeof id === 'string' && id && id !== batchResultId.value) { batchResultId.value = id; batchDialogVisible.value = true; } }, { immediate: true });
-function openBatch(action: import('@/api/entry-batches').EntryBatchAction = 'star') {
-  batchInitialAction.value = action;
+function openBatch() {
   batchResultId.value = '';
   batchSelectedIds.value = [...selectedIds.value]; batchSelection.value = { filters: JSON.parse(JSON.stringify(filterParams.value)) };
   batchDialogVisible.value = true;
 }
-async function batchChanged() { clearSelection(); resetPage(); await Promise.all([loadEntryFiles(libraryId.value), pendingCounts.refresh()]); }
+async function batchChanged() { clearSelection(); resetPage(); await handlePendingChanged(); }
 
-const handleViewTrace = (_index: number, item: EntryCard) => {
-  void router.push({ ...entryDetailLocation(item.id), query: { tab: 'processing' } });
+// Opens ONLY the trace drawer for this card — does NOT pop the
+// document detail drawer behind it. The trace drawer attaches to
+// body so it renders independent of its host's visibility; we just
+// need `details` populated so the timeline component knows which
+// entry_id to fetch. getCardDetails resets details synchronously
+// then fills asynchronously, so we re-stamp the id/parse_status
+// right after the call to avoid the brief empty-id window that
+// would otherwise prevent the drawer from mounting.
+const docContentRef = ref<any>(null);
+const handleViewTrace = (index: number, item: EntryCard) => {
+  if (cardList.value[index]) {
+    cardList.value[index].isMore = false;
+  }
+  moreIndex.value = -1;
+  getCardDetails(item);
+  details.id = item.id;
+  details.parse_status = item.parse_status;
+  nextTick(() => {
+    docContentRef.value?.openTimeline?.();
+  });
 };
 
 const confirmRebuildEntry = async (index: number, item: EntryCard) => {
   if (!item?.id) {
-    toast.warning(t('libraryEditor.messages.missingId'));
+    MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
     return;
   }
   if (entryNeedsStatusPolling(item)) {
-    toast.info(t('library.rebuildInProgress'));
+    MessagePlugin.info(t('library.rebuildInProgress'));
     return;
   }
+  closeCardMoreMenu(index);
 
   // No Library context to seed the dialog defaults — fall back to a direct reparse
   // that reuses the overrides stored at upload time.
@@ -664,28 +752,125 @@ const confirmRebuildEntry = async (index: number, item: EntryCard) => {
 const submitReparse = async (id: string, processConfig?: EntryProcessOverrides) => {
   try {
     await reparseEntry(id, processConfig ? { process_config: processConfig } : undefined);
-    toast.success(t('library.rebuildSubmitted'));
+    delete traceAvailableById[id];
+    traceAvailableById[id] = true;
+    MessagePlugin.success(t('library.rebuildSubmitted'));
     resetPage();
     loadEntryFiles(libraryId.value);
   } catch (error: any) {
-    toast.error(error?.message || t('library.rebuildFailed'));
+    MessagePlugin.error(error?.message || t('library.rebuildFailed'));
   }
 };
 
-async function loadMoreEntries() {
-  if (docListLoading.value || scrollLoading.value || cardList.value.length >= total.value || !libraryId.value) return;
-  const currentLibraryId = libraryId.value;
-  const request = listGeneration;
-  const nextPage = page + 1;
-  scrollLoading.value = true;
-  try { await loadEntries({ page: nextPage, page_size: pageSize, ...filterParams.value }, currentLibraryId); if (request === listGeneration && !listError.value && isCurrentLibrary(currentLibraryId)) page = nextPage; }
-  finally { if (request === listGeneration) scrollLoading.value = false; }
-}
 const handleScroll = () => {
+
+  if (docListLoading.value) return;
+  if (scrollLoading) return;
+  const currentLibraryId = libraryId.value;
+  if (!currentLibraryId) return;
   const element = entryScroll.value;
-  if (element && element.scrollTop + element.clientHeight >= element.scrollHeight - 10) void loadMoreEntries();
+  if (element) {
+    let pageNum = Math.ceil(total.value / pageSize)
+    const { scrollTop, scrollHeight, clientHeight } = element;
+    if (scrollTop + clientHeight >= scrollHeight - 10) {
+      if (cardList.value.length < total.value && page < pageNum) {
+        page++;
+        scrollLoading = true;
+        loadEntries({ page, page_size: pageSize, ...filterParams.value }, currentLibraryId).finally(() => {
+          if (isCurrentLibrary(currentLibraryId)) {
+            scrollLoading = false;
+          }
+        });
+      }
+    }
+  }
 };
-const clearSelection = () => { selectedIds.value.clear(); };
+const getDoc = (page: number) => {
+  getfDetails(details.id, page || 1)
+};
+
+const syncDocumentProcessingState = (state: { id?: string; [key: string]: unknown }) => {
+  if (!state?.id) return;
+  const card = cardList.value.find((item: EntryCard) => item.id === state.id);
+  if (card) Object.assign(card, state);
+  if (details.id === state.id) Object.assign(details, state);
+  if (selectedStarred.value !== '' && typeof state.starred === 'boolean' && String(state.starred) !== selectedStarred.value) {
+    selectedIds.value.delete(state.id);
+    resetPage();
+    void loadEntryFiles(libraryId.value);
+  }
+};
+const syncEntryJudgment = (state: EntryJudgment) => {
+  syncDocumentProcessingState({ ...state });
+  if (details.id === state.id) Object.assign(details, state);
+  void pendingCounts.refresh();
+};
+
+const toggleSelectRow = (id: string, checked: boolean, shiftKey?: boolean) => {
+  const items = cardList.value || [];
+  const idx = items.findIndex((i: EntryCard) => i.id === id);
+  if (shiftKey && lastSelectedIndex >= 0 && idx >= 0) {
+    const [s, e] = idx < lastSelectedIndex
+      ? [idx, lastSelectedIndex]
+      : [lastSelectedIndex, idx];
+    for (let i = s; i <= e; i++) {
+      if (checked) selectedIds.value.add(items[i].id);
+      else selectedIds.value.delete(items[i].id);
+    }
+  } else {
+    if (checked) selectedIds.value.add(id);
+    else selectedIds.value.delete(id);
+  }
+  lastSelectedIndex = idx;
+};
+
+const onCardGridCheckboxChange = (id: string, checked: boolean, ctx?: { e?: Event }) => {
+  if (!ctx?.e && shouldSuppressDocClick()) return;
+  const me = ctx?.e as MouseEvent | undefined;
+  toggleSelectRow(id, checked, !!me?.shiftKey);
+};
+
+const toggleSelectAll = (checked: boolean) => {
+  if (checked) {
+    for (const item of cardList.value || []) selectedIds.value.add(item.id);
+  } else {
+    for (const item of cardList.value || []) selectedIds.value.delete(item.id);
+  }
+};
+
+const clearSelection = () => {
+  selectedIds.value.clear();
+  lastSelectedIndex = -1;
+};
+
+// Batch selection keeps checkboxes hidden while off,
+// no checkbox is rendered so the title doesn't jitter on hover; while on,
+// checkboxes are persistent and clicking a card toggles its selection.
+const batchMode = ref(false);
+const toggleBatchMode = () => {
+  batchMode.value = !batchMode.value;
+  if (!batchMode.value) clearSelection();
+};
+// "取消选择" / 退出批量管理：清空选择，并退出 grid 视图下的批量模式。
+const handleBatchCancel = () => {
+  clearSelection();
+  batchMode.value = false;
+};
+// 切到卡片视图时，如果列表视图里已经勾选过文档，需要自动开启批量管理模式，
+// 否则卡片视图默认不渲染 checkbox，会看不到勾选态。
+watch(viewMode, (mode) => {
+  if (mode === 'grid' && selectedIds.value.size > 0) {
+    batchMode.value = true;
+  }
+});
+// Triggered from a card / row "..." menu. Use the batch selection flow where
+// the menu item simply opens batch mode (no auto-selection).
+const handleEnterBatchFromCard = (item: any) => {
+  if (item) item.isMore = false;
+  moreIndex.value = -1;
+  clearSelection();
+  batchMode.value = true;
+};
 const {
   onContainerMouseDown: onDocMarqueeMouseDown,
   marqueeVisible: docMarqueeVisible,
@@ -694,11 +879,13 @@ const {
   shouldSuppressClick: shouldSuppressDocClick,
 } = useMarqueeSelect({
   containerRef: entryScroll,
-  itemSelector: '.rq-table__row[data-select-id]',
+  itemSelector: '.entry-card[data-select-id], .doc-list-row[data-select-id]',
   selectedIds,
   getItemId: (el) => el.dataset.selectId || null,
-  enabled: computed(() => cardList.value.length > 0 && viewMode.value === 'table'),
-
+  enabled: computed(() => cardList.value.length > 0),
+  onSelectionStart: () => {
+    batchMode.value = true;
+  },
 });
 
 const openEntryItem = (item: EntryCard) => {
@@ -706,34 +893,60 @@ const openEntryItem = (item: EntryCard) => {
   openCardDetails(item);
 };
 
+const pendingReviewsRef = ref<InstanceType<typeof PendingReviews>>();
+const handlePendingChanged = async () => {
+  await Promise.all([loadEntryFiles(libraryId.value), pendingCounts.refresh()]);
+};
+const handleReviewChanged = async (_value: unknown, removed: boolean) => {
+  if (removed) { closeDoc(); resetPage(); }
+  else if (details.id) getCardDetails({ id: details.id });
+  await Promise.all([loadEntryFiles(libraryId.value), pendingReviewsRef.value?.refresh(), pendingCounts.refresh()]);
+};
 const handlePersonalDocumentDeleted = async (id: string) => {
+  if (details.id === id) closeDoc();
   selectedIds.value.delete(id);
   resetPage();
-  await Promise.all([loadEntryFiles(libraryId.value), pendingCounts.refresh()]);
+  await Promise.all([loadEntryFiles(libraryId.value), pendingReviewsRef.value?.refresh(), pendingCounts.refresh()]);
 };
 
 const confirmCancelParseEntry = async (item: EntryCard) => {
   if (!item?.id) return;
   try {
     await cancelEntryParse(item.id);
-    toast.success(t('library.cancelParseSubmitted'));
+    MessagePlugin.success(t('library.cancelParseSubmitted'));
     loadEntryFiles(libraryId.value);
   } catch (error: any) {
-    toast.error(error?.message || t('library.cancelParseFailed'));
-    throw error;
+    MessagePlugin.error(error?.message || t('library.cancelParseFailed'));
   }
 };
 
-const handleListAction = (action: 'reparse' | 'cancel-parse' | 'delete' | 'view-trace', item: EntryCard) => {
-  const index = cardList.value.findIndex((entry: EntryCard) => entry.id === item.id);
+// Bridge card-view actions back to existing per-card handlers.
+const handleCardAction = (
+  action: 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
+  item: EntryCard,
+) => {
+  const idx = (cardList.value || []).findIndex((i: EntryCard) => i.id === item.id);
   if (action === 'reparse') {
-    const confirmation = confirm({ header: t('library.reprocess'), body: t('library.rebuildConfirm', { fileName: item.file_name || item.title || item.id }) });
-    void confirmation.result.then(accepted => { if (accepted && !disposed) void confirmRebuildEntry(index, item); });
-    return confirmation;
+    if (entryNeedsStatusPolling(item)) return onReparseMenuClick(idx, item);
+    return confirmRebuildEntry(idx, item);
   }
-  if (action === 'cancel-parse') return confirm({ header: t('library.cancelParse'), body: t('library.cancelParseConfirmBody', { title: item.file_name || item.title || item.id }), theme: 'danger', onConfirm: () => confirmCancelParseEntry(item) });
-  if (action === 'delete') return confirm({ header: t('library.deleteDocument'), body: t('library.confirmDeleteDocument', { fileName: item.file_name || item.title || item.id }), theme: 'danger', onConfirm: async () => { if (!await confirmDeleteEntry(index, item)) throw new Error(t('library.deleteFailed')); } });
-  return handleViewTrace(index, item);
+  if (action === 'cancel-parse') return confirmCancelParseEntry(item);
+  if (action === 'delete') return confirmDeleteEntry(idx, item);
+  if (action === 'view-trace') return handleViewTrace(idx, item);
+  if (action === 'batch-manage') return handleEnterBatchFromCard(item);
+};
+
+// Bridge list-view actions back to existing per-card handlers.
+const handleListAction = (
+  action: 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
+  item: EntryCard,
+) => {
+  const idx = (cardList.value || []).findIndex((i: EntryCard) => i.id === item.id);
+  if (action === 'reparse') return confirmRebuildEntry(idx, item);
+  if (action === 'cancel-parse') return confirmCancelParseEntry(item);
+  if (action === 'delete') return confirmDeleteEntry(idx, item);
+  if (action === 'view-trace') return handleViewTrace(idx, item);
+  if (action === 'batch-manage') return handleEnterBatchFromCard(item);
 };
 
 // Clear selection on filter/library change to avoid acting on hidden items.
@@ -744,101 +957,1281 @@ watch(
   },
 );
 
-// Drop checked IDs that are no longer in the loaded result.
-watch(cardList, items => {
-  const visible = new Set(items.map((item: EntryCard) => item.id));
-  for (const id of selectedIds.value) if (!visible.has(id)) selectedIds.value.delete(id);
-});
+// After cardList reloads: stable keys rely on correct indices for shift-range; clamp anchor index.
+watch(cardList, () => {
+  const items = cardList.value || [];
+  const n = items.length;
+  if (lastSelectedIndex >= n) {
+    lastSelectedIndex = n > 0 ? n - 1 : -1;
+  }
+  if (moreIndex.value >= n) {
+    moreIndex.value = -1;
+  }
+  if (selectedIds.value.size === 0) return;
+  const visible = new Set(items.map((i: EntryCard) => i.id));
+  for (const id of selectedIds.value) {
+    if (!visible.has(id)) selectedIds.value.delete(id);
+  }
+}, { deep: false });
 
 // 处理库编辑成功后的回调
 onMounted(() => window.addEventListener('reliquary:library-settings-saved', refreshLibrarySettings));
 onUnmounted(() => window.removeEventListener('reliquary:library-settings-saved', refreshLibrarySettings));
-const retryEntries = async () => {
-  libraryError.value = '';
-  try { await resources.fetchLibrary(true); await loadLibraryInfo(libraryId.value, true); }
-  catch { libraryError.value = t('entries.loadFailed'); }
-};
 const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo(libraryId.value, true); };
 </script>
 
 <template>
-  <div class="entry-layout" :class="{ 'entries-page': activeLibraryTab === 'documents' }">
-    <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area"><EntryWorkbench :library-id="libraryScope[0] || libraryId" :initial-entity-id="selectedEntityId" @open-source="openSourceDoc" /></div>
-    <template v-if="activeLibraryTab === 'documents'">
-      <header class="entries-head">
-        <div class="entries-eyebrow"><LibMark v-if="currentLibrary" :color="currentLibrary.color" /><span>{{ currentLibrary ? t('entries.libraryNumber', { number: libraryNumber }) : t('menu.materials') }}</span><router-link to="/platform/libraries">{{ t('menu.library') }}</router-link></div>
-        <div class="entries-heading"><h1>{{ currentLibraryLabel }}</h1><p v-if="!docListLoading && !libraryError && !listError">{{ t('entries.count', { count: total }) }}</p></div>
-      </header>
-      <div class="entries-toolbar">
-        <div class="entries-chips" :aria-label="t('library.contentTypeFilter')"><Chip :model-value="!selectedContentType" @click="selectedContentType = ''">{{ t('entries.all') }}</Chip><Chip v-for="option in contentTypeOptions" :key="option.value" :model-value="selectedContentType === option.value" @click="selectedContentType = option.value">{{ option.label }}</Chip><Chip v-if="selectedContentType && !contentTypeOptions.some((option: any) => option.value === selectedContentType)" :model-value="true" @click="selectedContentType = ''">{{ selectedContentType }}</Chip></div>
-        <Select v-model="selectedParseStatus" :aria-label="t('library.parseStatusFilter')"><option v-for="option in parseStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
-        <Select model-value="newest" :aria-label="t('entries.sort')"><option value="newest">{{ t('entries.newest') }}</option></Select>
-        <div class="entries-views" role="group" :aria-label="t('library.viewModeToggle')"><Button :aria-pressed="viewMode === 'list'" @click="viewMode = 'list'">{{ t('entries.list') }}</Button><Button :aria-pressed="viewMode === 'table'" @click="viewMode = 'table'">{{ t('entries.table') }}</Button></div>
+  <div class="entry-layout">
+      <div v-if="activeLibraryTab === 'documents'" class="document-header">
+        <h2 class="document-breadcrumb">
+          <router-link class="breadcrumb-link" to="/platform/libraries">{{ t('menu.library') }}</router-link>
+          <t-icon name="chevron-right" class="breadcrumb-separator" />
+          <span class="breadcrumb-current">{{ currentLibraryLabel }}</span>
+        </h2>
       </div>
-      <div class="entries-search-row"><div class="entries-search"><Input ref="searchInput" v-model="docSearchKeyword" class="doc-search-input" :aria-label="t('library.docSearchPlaceholder')" :placeholder="t('library.docSearchPlaceholder')" @compositionstart="composingSearch = true" @compositionend="composingSearch = false" @keydown.enter="submitSearch" /><Button v-if="docSearchKeyword" :aria-label="t('entries.clearSearch')" @click="clearSearch">×</Button></div><Button @click="openBatch()">{{ t('entryBatch.title') }}</Button></div>
-      <details class="entries-filters" :open="hasAdvancedFilters"><summary>{{ t('ikb18.moreFilters') }}</summary><div class="entries-filters__grid">
-        <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
-        <Select v-model="selectedStarred" :aria-label="t('articleJudgments.starLabel')"><option v-for="option in starredOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
-        <Select v-model="selectedSourceKind" :aria-label="t('library.materialCategory')"><option v-for="option in sourceKindOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
-        <Select v-model="selectedSource" :aria-label="t('library.channelLabel')"><option v-for="option in sourceOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
-        <Select v-model="selectedFileType" :aria-label="t('library.fileTypeFilter')"><option v-for="option in fileTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
-        <label>{{ t('entryBatch.entities') }}<select class="rq-control" multiple :value="entityFilterValues" :aria-label="t('entryBatch.entities')" @change="entityFilterValues = updateSelectedOptions($event)"><option v-for="option in entityFilterOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select><Button v-if="moreEntityChoices" :loading="choicesLoading" @click="loadFilterChoices(true)">{{ t('workbench.loadMore') }}</Button></label>
-        <label>{{ t('entryBatch.topics') }}<select class="rq-control" multiple :value="topicFilterValues" :aria-label="t('entryBatch.topics')" @change="topicFilterValues = updateSelectedOptions($event)"><option v-for="option in topicFilterOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
-        <fieldset><legend>{{ t('entryBatch.publishedDates') }}</legend><label>{{ t('entryBatch.publishedFrom') }}<input type="date" class="rq-control" :aria-label="t('entryBatch.publishedFrom')" :value="publishedRange[0] || ''" @change="updateDate('published', 0, $event)" /></label><label>{{ t('entryBatch.publishedTo') }}<input type="date" class="rq-control" :aria-label="t('entryBatch.publishedTo')" :value="publishedRange[1] || ''" @change="updateDate('published', 1, $event)" /></label><small v-if="publishedRange.length">{{ t('entryBatch.publishedHint') }}</small></fieldset>
-        <fieldset><legend>{{ t('entryBatch.updatedDates') }}</legend><label>{{ t('entryBatch.updatedFrom') }}<input type="date" class="rq-control" :aria-label="t('entryBatch.updatedFrom')" :max="updatedTimeRange[1] || latestFilterDate" :value="updatedTimeRange[0] || ''" @change="updateDate('updated', 0, $event)" /></label><label>{{ t('entryBatch.updatedTo') }}<input type="date" class="rq-control" :aria-label="t('entryBatch.updatedTo')" :min="updatedTimeRange[0] || undefined" :max="latestFilterDate" :value="updatedTimeRange[1] || ''" @change="updateDate('updated', 1, $event)" /></label></fieldset>
-        <ErrorState v-if="choicesError" :title="choicesError"><Button @click="loadFilterChoices()">{{ t('common.retry') }}</Button></ErrorState>
-      </div></details>
-      <div ref="entryScroll" class="doc-scroll-container" :aria-busy="docListLoading" @scroll="handleScroll" @mousedown="onDocMarqueeMouseDown">
-        <div v-if="docMarqueeVisible" class="doc-marquee-box" :style="docMarqueeBoxStyle" aria-hidden="true" />
-        <div v-if="docListLoading && !cardList.length" class="entries-loading"><Skeleton v-for="n in 6" :key="n" :label="t('common.loading')" /></div>
-        <ErrorState v-else-if="libraryError || listError" :title="t('entries.loadFailed')" :description="libraryError || listError"><Button @click="retryEntries">{{ t('common.retry') }}</Button></ErrorState>
-        <div v-else-if="cardList.length" :class="{ 'entries-split': viewMode === 'list' }">
-          <DocumentListView :items="cardList" :mode="viewMode" :focused="focusedId" :selected-ids="selectedIds" @update:focused="focusedId = $event" @update:selected="selectedIds = new Set($event)" @open="openEntryItem" />
-          <EntryPreview v-if="viewMode === 'list' && focusedEntry" :entry="focusedEntry" :libraries="libraryCatalog" @open="openEntryItem(focusedEntry)" @open-entity="openArticleEntity" @action="handleListAction" />
-        </div>
-        <EmptyState v-else :title="t('library.emptyArticles')" :description="t('entries.emptyHint')" />
-        <div v-if="cardList.length < total && !listError" class="entries-more"><Button :loading="docListLoading || scrollLoading" @click="loadMoreEntries">{{ t('workbench.loadMore') }}</Button></div>
-      </div>
-      <DocumentBatchBar v-if="selectedIds.size" :count="selectedIds.size" @cancel="clearSelection" @manage="openBatch()" @action="openBatch" />
-    </template>
-      <!-- Batch management -->
-      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" :initial-action="batchInitialAction" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" :entity-options="entityFilterOptions" :topic-options="topicFilterOptions" @changed="batchChanged" />
 
+      <div v-if="activeLibraryTab === 'entities'" class="entity-workbench-area">
+        <EntryWorkbench :library-id="libraryScope[0] || libraryId" :initial-entity-id="selectedEntityId"
+          @open-source="openSourceDoc" />
+      </div>
+
+      <PendingReviews v-if="activeLibraryTab === 'reviews' && libraryId" ref="pendingReviewsRef" @open-source="openSourceDoc" @changed="handlePendingChanged" @refreshed="pendingCounts.refresh()" />
+
+      <template v-if="activeLibraryTab === 'documents'">
+        <div class="entry-main">
+
+          <div class="documents-content">
+            <div class="doc-card-area">
+
+              <div class="doc-filter-bar">
+                <t-input v-model.trim="docSearchKeyword" :placeholder="$t('library.docSearchPlaceholder')"
+                  clearable class="doc-search-input" @clear="loadEntryFiles(libraryId)"
+                  @enter="loadEntryFiles(libraryId)">
+                  <template #prefix-icon>
+                    <t-icon name="search" size="16px" />
+                  </template>
+                </t-input>
+                <div class="doc-filter-bar__filters">
+                <LibraryScopeSelect v-model="libraryScope" @loaded="libraryCatalog = $event" />
+
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedParseStatus" :options="parseStatusOptions"
+                    :placeholder="$t('library.parseStatusFilter')" class="doc-type-select doc-filter-field__control"
+                    clearable>
+                    <template #prefixIcon>
+                      <t-icon name="check-circle" size="16px" />
+                    </template>
+                  </t-select>
+                </div>
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedContentType" :options="contentTypeOptions" clearable :placeholder="$t('library.contentTypeFilter')" :aria-label="$t('library.contentTypeFilter')" class="doc-type-select doc-filter-field__control" />
+                </div>
+                <details class="doc-more-filters" :open="hasAdvancedFilters">
+                  <summary>{{ t('ikb18.moreFilters') }}</summary>
+                  <div class="doc-filter-bar__filters">
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedStarred" :options="starredOptions" :aria-label="$t('articleJudgments.starLabel')" class="doc-type-select doc-filter-field__control" />
+                </div>
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedSourceKind" :options="sourceKindOptions"
+                    :placeholder="$t('library.materialCategory')" :aria-label="$t('library.materialCategory')"
+                    class="doc-type-select doc-filter-field__control" clearable />
+                </div>
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedSource" :options="sourceOptions"
+                    :placeholder="$t('library.channelLabel')" :aria-label="$t('library.channelLabel')" class="doc-type-select doc-filter-field__control"
+                    clearable>
+                    <template #prefixIcon>
+                      <t-icon name="link" size="16px" />
+                    </template>
+                  </t-select>
+                </div>
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedFileType" :options="fileTypeOptions"
+                    :placeholder="$t('library.fileTypeFilter')" :aria-label="$t('library.fileTypeFilter')" class="doc-type-select doc-filter-field__control"
+                    clearable>
+                    <template #prefixIcon>
+                      <t-icon name="file" size="16px" />
+                    </template>
+                  </t-select>
+                </div>
+                <div class="doc-filter-field doc-filter-field--wide">
+                  <t-select v-model="entityFilterValues" multiple filterable clearable :options="entityFilterOptions" :loading="choicesLoading" :placeholder="t('entryBatch.entities')" :aria-label="t('entryBatch.entities')" class="doc-filter-field__control">
+                    <template v-if="moreEntityChoices" #panelBottomContent>
+                      <t-button block size="small" variant="text" :loading="choicesLoading" @click.stop="loadFilterChoices(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
+                    </template>
+                  </t-select>
+                </div>
+                <div class="doc-filter-field doc-filter-field--wide"><t-select v-model="topicFilterValues" multiple filterable clearable :options="topicFilterOptions" :placeholder="t('entryBatch.topics')" :aria-label="t('entryBatch.topics')" class="doc-filter-field__control" /></div>
+                <div class="doc-filter-field doc-filter-field--wide"><t-date-range-picker v-model="publishedRange" allow-input clearable :placeholder="[t('entryBatch.publishedFrom'), t('entryBatch.publishedTo')]" :aria-label="t('entryBatch.publishedDates')" class="doc-date-range doc-filter-field__control" /><small v-if="publishedRange.length">{{ t('entryBatch.publishedHint') }}</small></div>
+                <p v-if="choicesError" class="doc-filter-error" role="alert">{{ choicesError }} <t-button variant="text" @click="loadFilterChoices()">{{ t('common.retry') }}</t-button></p>
+                <div class="doc-filter-field doc-filter-field--wide">
+                  <t-date-range-picker v-model="updatedTimeRange"
+                    :placeholder="[t('entryBatch.updatedFrom'), t('entryBatch.updatedTo')]" :aria-label="t('entryBatch.updatedDates')"
+                    :disable-date="disableFutureDate" class="doc-date-range doc-date-range--updated doc-filter-field__control" clearable
+                    allow-input>
+                    <template #prefixIcon>
+                      <t-icon name="time" size="16px" />
+                    </template>
+                  </t-date-range-picker>
+                </div>
+                  </div>
+                </details>
+                </div>
+                <div class="doc-filter-bar__trailing">
+                  <t-button theme="primary" size="small" @click="openBatch">{{ t('entryBatch.title') }}</t-button>
+                  <div class="doc-view-toggle" role="group" :aria-label="$t('library.viewModeToggle')">
+                    <t-tooltip :content="$t('library.viewModeGrid')" placement="top">
+                      <button type="button" class="doc-view-toggle-btn" :class="{ active: viewMode === 'grid' }"
+                        @click="viewMode = 'grid'" :aria-pressed="viewMode === 'grid'">
+                        <t-icon name="view-module" size="16px" />
+                      </button>
+                    </t-tooltip>
+                    <t-tooltip :content="$t('library.viewModeList')" placement="top">
+                      <button type="button" class="doc-view-toggle-btn" :class="{ active: viewMode === 'list' }"
+                        @click="viewMode = 'list'" :aria-pressed="viewMode === 'list'">
+                        <t-icon name="view-list" size="16px" />
+                      </button>
+                    </t-tooltip>
+                  </div>
+                </div>
+              </div>
+              <div class="doc-scroll-container"
+                :class="{
+                  'is-empty': !cardList.length && !docListLoading,
+                  'is-marquee-active': docMarqueeVisible,
+                }"
+                ref="entryScroll" @scroll="handleScroll" @mousedown="onDocMarqueeMouseDown">
+                <div v-if="docMarqueeVisible" class="doc-marquee-box"
+                  :class="{ 'is-add': docMarqueeMode === 'add', 'is-subtract': docMarqueeMode === 'subtract' }"
+                  :style="docMarqueeBoxStyle" aria-hidden="true" />
+                <!-- 文档骨架屏 -->
+                <div v-if="docListLoading && cardList.length === 0" class="doc-card-list doc-card-list-animated">
+                  <div v-for="n in 8" :key="'doc-skel-' + n" class="entry-card entry-card-skeleton">
+                    <div class="card-content">
+                      <div class="card-content-nav">
+                        <t-skeleton animation="gradient" :row-col="[{ width: '70%', height: '18px' }]" />
+                      </div>
+                      <t-skeleton animation="gradient"
+                        :row-col="[{ width: '100%', height: '14px' }, { width: '60%', height: '14px' }]" />
+                    </div>
+                    <div class="card-bottom">
+                      <t-skeleton animation="gradient"
+                        :row-col="[[{ width: '80px', height: '14px' }, { width: '40px', height: '18px', type: 'rect' }]]" />
+                    </div>
+                  </div>
+                </div>
+                <template v-else-if="cardList.length && viewMode === 'grid' && selectedParseStatus !== 'rejected'">
+                  <DocumentCardView
+                    :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncEntryJudgment" @processing-updated="syncDocumentProcessingState"
+
+                    :selected-ids="selectedIds"
+                    :batch-mode="batchMode"
+
+                    :trace-available-by-id="traceAvailableById"
+
+                    @open="(item: any) => openEntryItem(item)"
+
+                    @toggle-checkbox="onCardGridCheckboxChange"
+                    @menu-visible-change="(visible: boolean, item: any) => onCardMoreVisibleChange(visible, item)"
+                    @action="(action: any, item: any) => handleCardAction(action, item)"
+                    :delete-entry="(item: any) => confirmDeleteEntry(cardList.findIndex((card: any) => card.id === item.id), item)"
+                    @deleted="handlePersonalDocumentDeleted"
+
+                  />
+                </template>
+                <template v-else-if="cardList.length && (viewMode === 'list' || selectedParseStatus === 'rejected')">
+                  <DocumentListView :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncEntryJudgment" @processing-updated="syncDocumentProcessingState"
+                    :selected-ids="selectedIds"
+
+                    :trace-visible-ids="traceAvailableById"
+
+                    @open="(item: any) => openEntryItem(item)" @toggle-row="toggleSelectRow"
+                    @toggle-all="toggleSelectAll" @action="(action: any, item: any) => handleListAction(action, item)"
+                    @probe-trace="(item: any) => probeTraceAvailable(item)"
+                    :delete-entry="(item: any) => confirmDeleteEntry(cardList.findIndex((card: any) => card.id === item.id), item)"
+                    @deleted="handlePersonalDocumentDeleted"
+
+                     />
+                </template>
+                <template v-else-if="!docListLoading">
+                  <div class="doc-empty-state">
+
+                    <EmptyEntry />
+                  </div>
+                </template>
+              </div>
+              <div class="doc-batch-bar-anchor" v-show="batchMode || selectedIds.size > 0">
+                <DocumentBatchBar :count="selectedIds.size" :visible="batchMode || selectedIds.size > 0" @cancel="handleBatchCancel" @manage="openBatch" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Document content drawer -->
+      <EntryBatchDialog v-model:visible="batchDialogVisible" :batch-id="batchResultId" @created="batchCreated" :ids="batchSelectedIds" :selection="batchSelection" :libraries="libraryCatalog" :selected-library-ids="batchLibraryIds" :entity-options="entityFilterOptions" :topic-options="topicFilterOptions" @changed="batchChanged" />
+    <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :reference="details.id === referencedEntryId ? activeReference : undefined"
+        :libraryId="libraryId"
+        @openEntry="openSourceDoc" @openEntity="openArticleEntity" @openTopic="openReportTopic"
+        @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @review-changed="handleReviewChanged">
+      </DocContent>
     </div>
 
   <!-- 库编辑器（创建/编辑统一组件） -->
 
 </template>
+<style scoped lang="less">
+.entry-layout {
+  display: flex;
+  flex-direction: column;
+  margin: 0 16px 0 4px;
+  gap: 20px;
+  height: 100%;
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  padding: 24px 32px 0px;
+  box-sizing: border-box;
+}
+
+// 与列表页一致：浅灰底圆角区，左侧筛选为白底卡片
+.entry-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+  border: none;
+}
+
+.entity-workbench-area {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.documents-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+  background: transparent;
+}
+
+.doc-card-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  container-type: inline-size;
+  container-name: doc-card-area;
+  /* 作为批量工具栏悬浮的定位上下文 */
+}
+
+// 目录树选中路径的面包屑：与顶部库面包屑同一套视觉语言，只是更轻量。
+
+.doc-filter-bar__filters > .library-scope { width: 100%; max-width: none; min-width: 0; }
+
+.doc-filter-bar {
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+  background: var(--td-bg-color-container);
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  grid-template-areas:
+    'search trailing'
+    'filters filters';
+  gap: 12px;
+  align-items: center;
+
+  .doc-search-input {
+    grid-area: search;
+    min-width: 0;
+    width: 100%;
+  }
+
+  &__filters {
+    grid-area: filters;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: start;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  &__trailing {
+    grid-area: trailing;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  @container doc-card-area (max-width: 760px) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'search' 'trailing' 'filters';
+
+    &__trailing { justify-content: flex-start; }
+    &__filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  .doc-filter-error { grid-column: 1 / -1; margin: 0; }
+
+  .doc-filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+
+    &--wide {
+      grid-column: span 2;
+    }
+
+    &__control {
+      width: 100%;
+    }
+  }
+
+  .doc-type-select {
+    width: 100%;
+  }
+
+  .doc-date-range {
+    width: 100%;
+
+    // TDesign focuses both the outer popup reference and inner inputs, which
+    // visually stacks into a "double border" — drop the inner shadow.
+    :deep(.t-input--focused),
+    :deep(.t-is-focused) {
+      box-shadow: none;
+    }
+  }
+
+  .doc-view-toggle {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    background: var(--td-bg-color-secondarycontainer);
+    border-radius: 6px;
+    gap: 0;
+
+    .doc-view-toggle-btn {
+      width: 28px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      background: transparent;
+      border-radius: 4px;
+      color: var(--td-text-color-secondary, #888);
+      cursor: pointer;
+      transition: background-color 0.12s ease, color 0.12s ease;
+
+      &:hover {
+        color: var(--td-text-color-primary, #232323);
+      }
+
+      &.active {
+        background: var(--td-bg-color-container, #fff);
+        color: var(--td-brand-color, #0052d9);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      }
+    }
+  }
+
+  .doc-filter-actions {
+    flex-shrink: 0;
+
+    :deep(.content-bar-icon-btn) {
+      color: var(--td-text-color-secondary);
+      background: transparent;
+      border: none;
+
+      &:hover {
+        color: var(--td-brand-color);
+        background: var(--td-bg-color-secondarycontainer);
+      }
+    }
+  }
+
+  :deep(.t-input) {
+    font-size: 13px;
+    background-color: var(--td-bg-color-secondarycontainer);
+    border-color: transparent;
+    border-radius: 6px;
+    box-shadow: none !important;
+
+    &:hover,
+    &:focus,
+    &.t-is-focused {
+      border-color: var(--td-brand-color);
+      background-color: var(--td-bg-color-container);
+      box-shadow: none !important;
+    }
+  }
+
+  :deep(.t-select) {
+    .t-input {
+      font-size: 13px;
+      background-color: var(--td-bg-color-secondarycontainer);
+      border-color: transparent;
+      border-radius: 6px;
+      box-shadow: none !important;
+
+      &:hover,
+      &.t-is-focused {
+        border-color: var(--td-brand-color);
+        background-color: var(--td-bg-color-container);
+        box-shadow: none !important;
+      }
+    }
+  }
+}
+
+.doc-scroll-container {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+
+  &.is-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-y: hidden;
+  }
+
+  &.is-marquee-active {
+    cursor: crosshair;
+  }
+}
+
+.doc-marquee-box {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  border: 1px solid var(--td-brand-color);
+  background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
+  border-radius: 2px;
+
+  &.is-add {
+    border-color: var(--td-brand-color);
+    background: color-mix(in srgb, var(--td-brand-color) 14%, transparent);
+  }
+
+  &.is-subtract {
+    border-color: var(--td-error-color-6);
+    background: color-mix(in srgb, var(--td-error-color-6) 12%, transparent);
+  }
+}
+
+/* 批量条悬浮在滚动区底部，不挤占列表高度 */
+.doc-batch-bar-anchor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  z-index: 6;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px;
+  pointer-events: none;
+
+  &>* {
+    pointer-events: auto;
+  }
+}
+
+// Header 样式（无底部分割线，留更多空间给下方内容区）
+.document-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  flex-shrink: 0;
+
+  .document-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+  }
+
+  .breadcrumb-link {
+    border: none;
+    background: transparent;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    font: inherit;
+    color: var(--td-text-color-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 6px;
+    transition: all 0.12s ease;
+
+    &:hover:not(:disabled) {
+      color: var(--td-success-color);
+      background: var(--td-bg-color-container);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      color: var(--td-text-color-placeholder);
+    }
+
+    &.dropdown {
+      padding-right: 6px;
+
+      :deep(.t-icon) {
+        font-size: 14px;
+        transition: transform 0.12s ease;
+      }
+
+      &:hover:not(:disabled) {
+        :deep(.t-icon) {
+          transform: translateY(1px);
+        }
+      }
+    }
+  }
+
+  .breadcrumb-separator {
+    font-size: 14px;
+    color: var(--td-text-color-placeholder);
+  }
+
+  .breadcrumb-current {
+    color: var(--td-text-color-primary);
+    font-weight: 600;
+  }
+
+  h2 {
+    margin: 0;
+    color: var(--td-text-color-primary);
+    font-family: var(--app-font-family);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 32px;
+  }
+
+  .entry-header-hint__action {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--td-brand-color);
+      outline-offset: 2px;
+    }
+  }
+
+  .storage-engine-warning {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 2px 0 0;
+    color: var(--td-warning-color);
+    font-size: 12px;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: color 0.15s ease;
+
+    &:hover {
+      color: var(--td-warning-color-active);
+
+      .warning-link {
+        text-decoration: underline;
+      }
+    }
+
+    .warning-icon {
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .warning-link {
+      color: var(--td-brand-color);
+      margin-left: 2px;
+      white-space: nowrap;
+    }
+  }
+}
+
+.card-bottom-right {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  overflow: hidden;
+}
+
+@media (max-width: 1250px) and (min-width: 1045px) {
+  .answers-input {
+    transform: translateX(-329px);
+  }
+
+  :deep(.t-textarea__inner) {
+    width: 654px !important;
+  }
+}
+
+@media (max-width: 1045px) {
+  .answers-input {
+    transform: translateX(-250px);
+  }
+
+  :deep(.t-textarea__inner) {
+    width: 500px !important;
+  }
+}
+
+@media (max-width: 750px) {
+  .answers-input {
+    transform: translateX(-182px);
+  }
+
+  :deep(.t-textarea__inner) {
+    width: 340px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .answers-input {
+    transform: translateX(-164px);
+  }
+
+  :deep(.t-textarea__inner) {
+    width: 300px !important;
+  }
+}
+
+@keyframes contentFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.doc-card-list {
+  box-sizing: border-box;
+  display: grid;
+  // 文档卡片信息量较大（标题 + 摘要 + 类型），保持稍宽的最小列宽，避免一行塞太多导致内容拥挤。
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  align-content: flex-start;
+  width: 100%;
+
+  &.doc-card-list-animated {
+    animation: contentFadeIn 0.32s ease-out;
+  }
+}
+
+.entry-card-skeleton {
+  cursor: default;
+
+  .card-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 10px 14px 8px;
+  }
+
+  .card-content-nav {
+    margin-bottom: 8px;
+  }
+
+  .card-bottom {
+    flex-shrink: 0;
+    margin-top: auto;
+    width: 100%;
+    padding: 0 14px;
+    box-sizing: border-box;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--td-component-stroke);
+  }
+}
+
+.doc-empty-state {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  min-height: 100%;
+}
+
+.card-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  gap: 1px;
+}
+
+.card-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: var(--td-text-color-primary);
+  transition: all 0.15s cubic-bezier(0.2, 0, 0, 1);
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 20px;
+
+  &:hover {
+    background: var(--td-bg-color-container-hover);
+  }
+
+  &:active {
+    background: var(--td-bg-color-container-active);
+    transform: scale(0.98);
+  }
+
+  .icon {
+    font-size: 16px;
+    color: var(--td-text-color-secondary);
+    transition: all 0.15s cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  &:hover .icon {
+    color: var(--td-text-color-primary);
+  }
+
+  &.danger {
+    color: var(--td-error-color-6);
+    margin-top: 4px;
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: -3px;
+      left: 8px;
+      right: 8px;
+      height: 1px;
+      background: var(--td-component-stroke);
+    }
+
+    .icon {
+      color: var(--td-error-color-6);
+    }
+
+    &:hover {
+      background: var(--td-error-color-1);
+      color: var(--td-error-color-6);
+
+      .icon {
+        color: var(--td-error-color-6);
+      }
+    }
+
+    &:active {
+      background: var(--td-error-color-2);
+    }
+  }
+}
+
+.card-draft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  flex-shrink: 0;
+}
+
+.card-draft-tip {
+  color: var(--td-warning-color);
+  font-size: 11px;
+}
+
+.entry-card {
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--td-component-border);
+  height: 136px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-sizing: border-box;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  background: var(--td-bg-color-container);
+  position: relative;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+
+  /* 仅在批量管理模式下渲染 checkbox，常态下不占位，避免标题在 hover 时右滑 */
+  .card-nav-check {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 29px;
+    margin-right: 8px;
+    cursor: pointer;
+
+    .card-select-checkbox {
+      margin: 0;
+      line-height: 0;
+
+      :deep(.t-checkbox) {
+        align-items: center;
+      }
+
+      :deep(.t-checkbox__label) {
+        display: none !important;
+        width: 0 !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      :deep(.t-checkbox__input) {
+        margin: 0;
+      }
+
+      :deep(.t-checkbox__input-wrapper) {
+        margin: 0;
+      }
+    }
+  }
+
+  .card-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 10px 14px 8px;
+  }
+
+  .card-analyze {
+    flex-shrink: 0;
+    height: 52px;
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .card-analyze-loading {
+    display: block;
+    color: var(--td-brand-color);
+    font-size: 14px;
+    margin-top: 2px;
+  }
+
+  .card-analyze-txt {
+    color: var(--td-brand-color);
+    font-family: var(--app-font-family);
+    font-size: 11px;
+    margin-left: 8px;
+  }
+
+  // In-flight / failed: only status text + trace icon open the drawer.
+  .card-analyze-trace {
+    height: auto;
+    min-height: 0;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .card-analyze-trace-link {
+    cursor: pointer;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  .card-analyze-trace-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 2px;
+    border: none;
+    background: transparent;
+    color: var(--td-brand-color);
+    cursor: pointer;
+    line-height: 1;
+    border-radius: 4px;
+
+    :deep(.t-icon) {
+      font-size: 14px;
+    }
+
+    &:hover {
+      background: var(--td-bg-color-component-hover);
+    }
+  }
+
+  .card-analyze.failure .card-analyze-trace-btn {
+    color: var(--td-error-color);
+  }
+
+  .failure {
+    color: var(--td-error-color);
+  }
+
+  .card-content-nav {
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    margin-bottom: 6px;
+  }
+
+  .card-content-title {
+    flex: 1;
+    min-width: 0;
+    height: 24px;
+    line-height: 24px;
+    display: inline-block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--td-text-color-primary);
+    font-family: var(--app-font-family);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    margin-right: 8px;
+  }
+
+  .more-wrap {
+    flex-shrink: 0;
+    display: flex;
+    width: 25px;
+    height: 25px;
+    justify-content: center;
+    align-items: center;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  .more-wrap:hover {
+    background: var(--td-component-stroke);
+  }
+
+  .more-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .active-more {
+    background: var(--td-component-stroke);
+  }
+
+  .card-content-txt {
+    flex: 1;
+    min-height: 0;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    color: var(--td-text-color-secondary);
+    font-family: var(--app-font-family);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 19px;
+  }
+
+  .card-bottom {
+    flex-shrink: 0;
+    margin-top: auto;
+    padding: 0 14px;
+    box-sizing: border-box;
+    height: 32px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--td-bg-color-container);
+    border-top: 1px solid var(--td-component-stroke);
+  }
+
+  .card-time {
+    flex-shrink: 0;
+    color: var(--td-text-color-secondary);
+    font-family: var(--app-font-family);
+    font-size: 12px;
+    font-weight: 400;
+    white-space: nowrap;
+  }
+
+  .card-type {
+    flex-shrink: 0;
+    color: var(--td-text-color-placeholder);
+    font-family: var(--app-font-family);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 0;
+    background: transparent;
+    letter-spacing: 0.02em;
+  }
+}
+
+.card-bottom-right {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.entry-card:hover {
+  border-color: color-mix(in srgb, var(--td-component-stroke) 55%, var(--td-brand-color));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+}
+
+/* 悬停知识卡片时跟随鼠标的详情气泡 */
+.entry-card-hover-popover {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  min-width: 220px;
+  max-width: 360px;
+  padding: 12px 14px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-family: var(--app-font-family);
+  transition: opacity 0.15s ease;
+  will-change: transform;
+
+  /* 防止气泡内容抖动 */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+
+  .card-popover-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .card-popover-status {
+    font-size: 12px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    &.parsing {
+      color: var(--td-brand-color);
+    }
+
+    &.failure {
+      color: var(--td-error-color);
+    }
+
+    &.draft {
+      color: var(--td-warning-color);
+    }
+  }
+
+  .card-popover-desc {
+    font-size: 12px;
+    color: var(--td-text-color-secondary);
+    line-height: 1.5;
+    margin-bottom: 8px;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 5;
+    line-clamp: 5;
+    overflow: hidden;
+  }
+
+  .card-popover-error-msg {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--td-error-color);
+    opacity: 0.95;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 280px;
+  }
+
+  .card-popover-source {
+    font-size: 11px;
+    color: var(--td-brand-color);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  .card-popover-extra {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--td-text-color-secondary);
+    margin-bottom: 6px;
+  }
+
+  .card-popover-created,
+  .card-popover-size {
+    flex-shrink: 0;
+  }
+
+  .card-popover-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--td-text-color-secondary);
+  }
+
+  .card-popover-channel {
+    padding: 1px 6px;
+    background: var(--td-warning-color-light);
+    color: var(--td-warning-color);
+    border-radius: 4px;
+  }
+
+  .card-popover-type {
+    padding: 1px 6px;
+    background: var(--td-bg-color-secondarycontainer);
+    color: var(--td-text-color-secondary);
+    border-radius: 4px;
+  }
+
+  .card-popover-hint {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--td-component-stroke);
+    font-size: 11px;
+    color: var(--td-text-color-secondary);
+  }
+}
+
+.del-card {
+  vertical-align: middle;
+}
+@media (max-width: 640px) {
+  .entry-layout {
+    margin: 0;
+    padding: 16px 12px 0;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  .document-header {
+    min-width: 0;
+
+    .document-header-title,
+    .document-title-row {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .document-breadcrumb {
+      flex-wrap: wrap;
+      min-width: 0;
+      font-size: 16px;
+      overflow-wrap: anywhere;
+    }
+
+    .breadcrumb-link {
+      max-width: 100%;
+      white-space: normal;
+      text-align: left;
+    }
+
+    .entry-header-hint {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      min-width: 0;
+      max-width: 100%;
+
+      .entry-header-hint__action {
+        grid-column: 2;
+        justify-self: start;
+        margin-left: 0;
+        max-width: 100%;
+        white-space: normal;
+      }
+    }
+
+    .entry-header-hint__text {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      white-space: normal;
+    }
+
+  }
+}
+
+@container doc-card-area (max-width: 420px) {
+  .doc-filter-bar__filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .doc-filter-bar__filters > .library-scope { grid-column: span 2; }
+}
+</style>
+
 <style scoped>
-.entry-layout { display: flex; flex-direction: column; min-height: 0; min-width: 0; height: 100%; flex: 1; padding: 24px 32px; }
-.entries-page { overflow-y: auto; padding: 0; color: var(--text); background: var(--bg); font-family: var(--font); }
-.entries-page > :not(.doc-scroll-container) { flex-shrink: 0; }
-.entity-workbench-area { min-height: 0; overflow: auto; flex: 1; }
-.entries-head { padding: 24px 24px 16px; }
-.entries-eyebrow, .entries-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-.entries-eyebrow { justify-content: flex-start; font-size: var(--text-xs); font-weight: 700; }
-.entries-eyebrow a { margin-left: auto; color: inherit; text-decoration: underline; }
-.entries-heading h1 { margin: 8px 0 0; font-size: var(--text-3xl); line-height: 1.02; letter-spacing: -0.04em; font-weight: 800; overflow-wrap: anywhere; }
-.entries-heading p { font-family: var(--mono); }
-.entries-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 24px; border-top: 2px solid var(--rule); border-bottom: 1px solid var(--rule); }
-.entries-toolbar > .rq-select { width: auto; max-width: 100%; }
-.entries-chips, .entries-views, .entries-search-row, .entries-search { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.entries-views { margin-left: auto; }
-.entries-views [aria-pressed="true"] { background: var(--text); color: var(--bg); }
-.entries-search-row { padding: 12px 24px; }
-.entries-search { flex: 1; flex-wrap: nowrap; min-width: 160px; }
-.entries-search .rq-input, .entries-search input { min-width: 0; flex: 1; }
-.entries-filters { padding: 0 24px 12px; }
-.entries-filters summary { cursor: pointer; font-size: var(--text-sm); }
-.entries-filters__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; padding: 12px 0; }
-.entries-filters label { display: grid; gap: 4px; font-size: var(--text-sm); }
-.entries-filters fieldset { min-width: 0; border: 1px solid var(--border); }
-.doc-scroll-container { overflow: auto; min-height: 240px; flex: 1 0 240px; position: relative; scrollbar-gutter: stable; }
-.entries-split { display: grid; grid-template-columns: minmax(288px, 384px) minmax(0, 1fr); min-height: 100%; align-items: start; }
-.entries-loading { display: grid; gap: 16px; padding: 24px; }
-.entries-loading :deep(.rq-skeleton) { min-height: 80px; }
-.entries-more { padding: 16px 24px; }
-.doc-marquee-box { position: absolute; pointer-events: none; z-index: 2; border: 1px solid var(--text); background: var(--surface-soft); opacity: 0.4; }
-@media (max-width: 900px) { .entries-split { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 640px) { .entries-head, .entries-toolbar, .entries-search-row { padding-left: 16px; padding-right: 16px; } .entries-heading h1 { font-size: var(--text-2xl); } .entries-filters { padding-inline: 16px; } }
+.doc-more-filters { grid-column: 1 / -1; min-width: 0; }
+.doc-more-filters > summary { width: fit-content; cursor: pointer; color: var(--td-text-color-secondary); padding: 4px 0; }
+.doc-more-filters > summary:hover { color: var(--td-brand-color); }
+.doc-more-filters > summary:focus-visible, .breadcrumb-link:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+.doc-more-filters[open] > .doc-filter-bar__filters { margin-top: 10px; }
+.breadcrumb-link { text-decoration: none; }
 </style>

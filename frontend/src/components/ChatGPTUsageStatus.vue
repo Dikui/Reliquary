@@ -12,14 +12,12 @@
     </div>
     <div class="chatgpt-usage__actions">
       <a class="chatgpt-usage__manage" href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">{{ t('chatgpt.manageUsage') }}</a>
-      <Button v-if="policy?.paused" variant="default" :loading="busy" :disabled="busy" @click="$emit('resume')">{{ t('chatgpt.resume') }}</Button>
+      <t-button v-if="policy?.paused" variant="outline" size="small" :loading="busy" :disabled="busy" @click="$emit('resume')">{{ t('chatgpt.resume') }}</t-button>
       <a v-if="reconnectAccounts.length && settingsLink" href="/platform/settings?section=models">{{ t('chatgpt.openSettings') }}</a>
     </div>
   </section>
 </template>
 <script setup lang="ts">
-import { Button } from '@/components/ui'
-import '@/styles/settings-form.css'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { chatGPTAccountLabel, type ChatGPTAccount, type ChatGPTPolicy } from '@/api/chatgpt'
@@ -34,15 +32,16 @@ const pauseReason = computed(() => {
 })
 const formatTime = (value: string) => new Date(value).toLocaleString(locale.value)
 </script>
-
-<style scoped>
- .chatgpt-usage { display: flex; flex-wrap: wrap; align-items: start; gap: var(--space-4); padding: var(--space-4); border-top: 2px solid var(--rule); background: var(--surface-soft); color: var(--text); }
-.chatgpt-usage--paused { border-top-color: var(--danger); }
+<style scoped lang="less">
+.chatgpt-usage { display: flex; flex-wrap: wrap; gap: 16px; align-items: start; padding: 16px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-default); background: var(--td-bg-color-container); }
+.chatgpt-usage--paused { border-color: var(--td-warning-color); background: var(--td-warning-color-light); }
 .chatgpt-usage__copy { flex: 1; min-width: min(100%, 220px); }
-.chatgpt-usage p { margin: var(--space-2) 0 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
-.chatgpt-usage__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
-.chatgpt-usage a { color: var(--text); text-decoration: underline; }
-.chatgpt-usage a:hover { color: var(--accent); }
-.chatgpt-usage__error { color: var(--danger); }
-
+.chatgpt-usage p { margin: 6px 0 0; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.chatgpt-usage__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.chatgpt-usage a { color: var(--td-brand-color); text-decoration: none; cursor: pointer; }
+.chatgpt-usage a:hover { text-decoration: underline; }
+.chatgpt-usage a:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 3px; }
+.chatgpt-usage .chatgpt-usage__manage { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 12px; font-weight: 600; color: var(--td-text-color-anti); background: var(--td-brand-color); border-radius: var(--td-radius-default); }
+.chatgpt-usage .chatgpt-usage__manage:hover { background: var(--td-brand-color-hover); text-decoration: none; }
+.chatgpt-usage__error { color: var(--td-error-color); }
 </style>

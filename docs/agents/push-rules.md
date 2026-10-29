@@ -28,9 +28,6 @@
 
 以下规则仅豁免已核实的本地 httptest 合成认证值：限定在 Aliyun 重排器测试文件中，且必须匹配 APIKey 的测试值格式和同一行 CustomHeaders 字段。它不放行其他文件或真实服务凭据。
 
-另一条豁免模型编辑弹窗中 API Key 输入框的模板行：该行只绑定表单的密钥变量并切换输入框的明文/掩码类型，不含任何密钥值。限定在该文件，且必须匹配完整的输入框模板写法。
-
 ```safe-push-allow
 internal/models/rerank/aliyun_reranker_test.go ^[[:space:]]*APIKey:[[:space:]]*"test-[a-z]{3}",[[:space:]]*CustomHeaders:
-frontend/src/components/ModelEditorDialog.vue ^[[:space:]]*<Input v-else v-model="formData\.api[K]ey" :aria-label="\$t\('model\.editor\.api[K]eyOptional'\)" :type="showApi[K]ey \? 'text' : 'pass[w]ord'"$
 ```

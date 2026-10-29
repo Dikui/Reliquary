@@ -35,17 +35,17 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 	for _, library := range libraries {
 		body := "# " + library.Name + "\n\n完整正文首段。\n\n![图](" + image + ")\n\n正文末段，不能替换为摘要。"
 		var entry *types.Entry
-		// Vary optional metadata explicitly; every library now uses the standard template.
-		if library.Directory == "ai-output" {
+		if library.Template == types.TemplateGenerated {
 			result, err := h.documents.createReport(h.ctx, &library, "测试 / "+library.Name, body, nil, nil)
 			require.NoError(t, err)
 			entry = result.Entry
 		} else {
 			entry = &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: library.ID, Title: "测试 / " + library.Name, SourceKind: "article", Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted, Acquisition: "verbatim", ContentType: "other", CreatedAt: time.Now().UTC()}
-			if library.Directory == "personal" || library.ID == custom.ID {
+			if library.Template == types.TemplateOwn {
+				entry.SourceKind = "mine"
 				entry.SourceRef = "project/source"
 			}
-			if library.Directory == "references" {
+			if library.Template == types.TemplateExternalDurable {
 				entry.Identifier = "doi:10.7/example"
 			}
 			if library.Directory == "official" {
@@ -101,16 +101,18 @@ func TestIKB07LibrariesShareHeadersAndRebuild(t *testing.T) {
 		bodies[entry.ID] = string(full)
 	}
 	require.NotNil(t, old)
-	data, err := os.ReadFile(filepath.Join(h.root, old.VaultPath))
-	require.NoError(t, err)
-	header, _, err := ParseVaultArticle(data)
-	require.NoError(t, err)
-	require.False(t, header.HasUpdate, "current source identity does not create a version chain")
-	require.Equal(t, old.ID, header.LatestEntryID)
+	newer := &types.Entry{ID: uuid.NewString(), SpaceID: 1, LibraryID: old.LibraryID, Title: old.Title, SourceKind: "mine", SourceRef: old.SourceRef, Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted, CreatedAt: time.Now().UTC().Add(time.Second)}
+	require.NoError(t, h.db.Create(newer).Error)
+	require.NoError(t, v.WriteArticle(h.ctx, newer, "新记录的完整正文", nil))
+	require.NoError(t, v.RefreshHeader(h.ctx, old.ID))
+	require.Eventually(t, func() bool {
+		data, _ := os.ReadFile(filepath.Join(h.root, old.VaultPath))
+		return strings.Contains(string(data), "has_update: true") && strings.Contains(string(data), newer.ID)
+	}, time.Second*3, time.Millisecond*10)
 	require.NoError(t, v.Flush(h.ctx))
 	before := vaultFileHashes(t, h.root)
 	path := filepath.Join(h.root, old.VaultPath)
-	data, err = os.ReadFile(path)
+	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, []byte(strings.Replace(string(data), "title:", "edited_title:", 1)), 0600))
 	require.NoError(t, v.RebuildFiles(h.ctx))

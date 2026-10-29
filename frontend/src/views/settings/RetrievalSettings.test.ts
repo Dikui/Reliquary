@@ -1,4 +1,3 @@
-import { settingsTestUi } from './settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -8,26 +7,25 @@ import { renderToString } from '@vue/server-renderer'
 import { createSSRApp, defineComponent, h, onServerPrefetch } from 'vue'
 import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
-import { loadUiComponent } from '../../components/ui/uiTestLoader'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zh, 'en-US': en }
-async function scenario(locale: keyof typeof messages, stored: object, action: (state: any, requests: any[]) => Promise<void>, swiss = false) {
+async function scenario(locale: keyof typeof messages, stored: object, action: (state: any, requests: any[]) => Promise<void>) {
   const requests: any[] = []
   const { descriptor } = parse(readFileSync(new URL('./RetrievalSettings.vue', import.meta.url), 'utf8'), { filename: 'RetrievalSettings.vue' })
   const script = compileScript(descriptor, { id: 'retrieval-test' })
   const template = compileTemplate({ id: 'retrieval-test', filename: 'RetrievalSettings.vue', source: descriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: script.bindings } })
   assert.deepEqual(template.errors, [])
   const modules: Record<string, unknown> = {
-    '@/components/ui': { Button: loadUiComponent('Button'), toast: { success() {}, error() {} } },
     '@/api/retrieval': { getSpaceRetrievalConfig: async () => ({ data: stored }), updateSpaceRetrievalConfig: async (payload: object) => { requests.push(payload); return { data: payload } } },
+    'tdesign-vue-next': { MessagePlugin: { success() {} } },
   }
   function evaluate(code: string) {
     const module = { exports: {} as any }
     const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-    new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? (name === '@/styles/settings-form.css' ? {} : require(name)), module, module.exports)
+    new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports)
     return module.exports
   }
   const component = evaluate(script.content).default
@@ -38,7 +36,7 @@ async function scenario(locale: keyof typeof messages, stored: object, action: (
     onServerPrefetch(async () => { await state.loadConfig(); await action(state, requests) })
     return state
   }
-  const app = createSSRApp(component, { swiss })
+  const app = createSSRApp(component)
   app.use(createI18n({ legacy: false, locale, messages }))
   const stub = defineComponent({ setup: (_props, { attrs }) => () => h('div', attrs) })
   app.component('t-slider', stub); app.component('t-input-number', stub)
@@ -89,12 +87,3 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.match(messages[locale].retrievalSettings.imageWeightHint, locale === 'zh-CN' ? /0 时使用默认权重 0\.2/ : /0 uses the default weight of 0\.2/)
   })
 }
-
-for (const locale of ['zh-CN', 'en-US'] as const) test(`${locale}: Swiss retrieval retains all eight parameters with named native inputs`, async () => {
-  const result = await scenario(locale, {}, async () => {}, true)
-  assert.equal((result.html.match(/<input /g) || []).length, 8)
-  assert.equal((result.html.match(/<label /g) || []).length, 8)
-  assert.match(result.html, /cmdk-retrieval-rrf_image_weight/)
-  assert.match(result.html, /cmdk-retrieval-similar_reports_window_days/)
-  assert.doesNotMatch(result.html, /<h2/)
-})

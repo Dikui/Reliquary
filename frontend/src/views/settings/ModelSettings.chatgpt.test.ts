@@ -1,4 +1,3 @@
-import { settingsTestUi } from './settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -29,7 +28,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '../utils/request': request,
       '@/i18n': { __esModule: true, default: i18n },
       './model-usage': { ModelInUseError: class extends Error {} },
-    '@/components/ui': settingsTestUi(),
+      'tdesign-vue-next': { MessagePlugin: { success() {}, error() {}, warning() {} } },
       'vue-router': { useRouter: () => ({ push: async () => {} }) },
       '@/stores/resources': { useResourcesStore: () => ({ replaceModels() {} }) },
       '@/stores/ui': { useUIStore: () => ({ settingsInitialSubSection: 'chat' }) },
@@ -38,7 +37,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     function evaluate(code: string) {
       const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
       const module = { exports: {} as any }
-      new Function('require', 'module', 'exports', output)((name: string) => name.endsWith('.vue') ? { __esModule: true, default: stub } : modules[name] ?? (name === '@/styles/settings-form.css' ? {} : require(name)), module, module.exports)
+      new Function('require', 'module', 'exports', output)((name: string) => name.endsWith('.vue') ? { __esModule: true, default: stub } : modules[name] ?? require(name), module, module.exports)
       return module.exports
     }
     modules['@/api/model'] = evaluate(readFileSync(new URL('../../api/model.ts', import.meta.url), 'utf8'))

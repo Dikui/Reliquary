@@ -1,4 +1,3 @@
-import { settingsTestUi } from '../views/settings/settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -33,9 +32,9 @@ async function mountEditor(locale: 'zh-CN' | 'en-US', edit: boolean, noAccounts 
   const wrapper = defineComponent({ props: ['visible'], setup: (props, { slots }) => () => props.visible ? h('section', slots.default?.()) : null })
   const modules: Record<string, unknown> = {
     '@/utils/request': request,
-    '@/styles/settings-form.css': {}, '@/api/initialization': { checkOllamaStatus: async () => ({ available: true }), listModelProviders: async () => [], listOllamaModels: async () => [] },
+    '@/api/initialization': { checkOllamaStatus: async () => ({ available: true }), listModelProviders: async () => [], listOllamaModels: async () => [] },
     '@/api/model': {},
-    '@/components/ui': settingsTestUi(),
+    'tdesign-vue-next': { MessagePlugin: { warning() {}, error() {} }, DialogPlugin: {} },
     '@/stores/ui': { useUIStore: () => ({}) },
     '@/utils/contextWindow': { DEFAULT_MODEL_CONTEXT_WINDOW },
     '@/utils/thinkingControl': { defaultThinkingControl, resolveThinkingControl },
@@ -45,7 +44,7 @@ async function mountEditor(locale: 'zh-CN' | 'en-US', edit: boolean, noAccounts 
   }
   const module = { exports: {} as any }
   const api = ts.transpileModule(readFileSync(new URL('../api/chatgpt.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-  new Function('require', 'module', 'exports', api)((name: string) => modules[name] ?? (name === '@/styles/settings-form.css' ? {} : require(name)), module, module.exports)
+  new Function('require', 'module', 'exports', api)((name: string) => modules[name] ?? require(name), module, module.exports)
   modules['@/api/chatgpt'] = module.exports
   const view = loadComponent(new URL('./ModelEditorDialog.vue', import.meta.url), modules)
   const visible = ref(false)
@@ -88,11 +87,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         assert.equal(view.calls.length, count + 1)
         assert.equal(view.calls.at(-1), `/api/v1/chatgpt/accounts/${edit ? 'account-b' : 'account-a'}/models`)
         assert.equal(view.refresh().props.disabled, true)
-        assert.equal(view.refresh().props['aria-busy'], true)
+        assert.equal(view.refresh().props['data-loading'], true)
         assert.ok(visibleText(view.refresh()).includes(messages[locale].common.loading))
         await view.finish()
         assert.equal(view.refresh().props.disabled, false)
-        assert.notEqual(view.refresh().props['aria-busy'], true)
+        assert.equal(view.refresh().props['data-loading'], false)
         assert.ok(descendants(view.root).some(node => node.tag === 'option' && node.props.value === addedModel.slug && visibleText(node) === addedModel.display_name))
         if (edit) assert.equal(descendants(view.root).find(node => node.props.id === 'chatgpt-model-slug')!.props.value, originalModel.slug)
         assert.deepEqual(view.errors, [])

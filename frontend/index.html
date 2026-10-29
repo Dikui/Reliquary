@@ -20,11 +20,32 @@
   var t=localStorage.getItem('Reliquary_theme')||'light';
   if(t==='system')t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
   document.documentElement.setAttribute('theme-mode',t);
+  /* 与 theme.css 中 --td-bg-color-page 一致，避免样式加载后整页背景从 #fff 跳到 #eee 触发重绘闪动 */
+  var bg=t==='dark'?'#181818':'#eee';
+  document.documentElement.style.background=bg;
+  document.documentElement.style.minHeight='100%';
+  document.documentElement.style.colorScheme=t==='dark'?'dark':'light';
+  document.body.style.background=bg;
+  document.body.style.minHeight='100%';
 })();
 </script>
 <script src="/config.js"></script>
+<!--
+  离线部署兼容：提前本地加载 tdesign-icons SVG sprite，避免 tdesign-vue-next 的
+  <t-icon> 运行时向 https://tdesign.gtimg.com 发起请求（见 issue #867 / #897）。
+  升级 tdesign-icons-vue-next 时需同步更新 public/tdesign-icons/<version>/fonts/index.js。
+-->
+<script src="/tdesign-icons/0.4.1/fonts/index.js"></script>
 <div id="app"></div>
-
+<script>
+(function(){
+  var t=localStorage.getItem('Reliquary_theme')||'light';
+  if(t==='system')t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
+  var bg=t==='dark'?'#181818':'#eee';
+  var el=document.getElementById('app');
+  if(el){ el.style.background=bg; el.style.minHeight='100%'; }
+})();
+</script>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

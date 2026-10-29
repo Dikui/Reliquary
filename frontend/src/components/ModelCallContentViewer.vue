@@ -64,13 +64,13 @@ watch(() => [props.callId, props.entryId, props.processingAttempt, props.spanId]
   </section>
 </template>
 <style scoped>
-.call-content { color: var(--text); min-width: 0; width: 100%; font-size: 13px; overflow-wrap: anywhere; }
+.call-content { color: var(--td-text-color-primary); min-width: 0; width: 100%; font-size: 13px; overflow-wrap: anywhere; }
 .call-content nav, .call-content header { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
-.call-content button, .call-content select { color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: 0; padding: 5px 9px; cursor: pointer; max-width: 100%; }
-.call-content button[aria-pressed="true"] { color: var(--accent); }
+.call-content button, .call-content select { color: inherit; background: var(--td-bg-color-container); border: 1px solid var(--td-component-border); border-radius: 5px; padding: 5px 9px; cursor: pointer; max-width: 100%; }
+.call-content button[aria-pressed="true"] { color: var(--td-brand-color); }
 .call-content select { width: 100%; }
-.call-content pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; padding: 10px; background: var(--surface-soft); font-size: 12px; }
+.call-content pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; padding: 10px; background: var(--td-bg-color-secondarycontainer); font-size: 12px; }
 .call-content details { margin: 8px 0; }
 .call-content summary { cursor: pointer; }
-.message-block { border: 1px solid var(--border); padding: 10px; border-radius: 0; margin: 10px 0; }
+.message-block { border: 1px solid var(--td-component-border); padding: 10px; border-radius: 6px; margin: 10px 0; }
 </style>

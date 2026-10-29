@@ -1,4 +1,4 @@
-import { toast } from '@/components/ui/feedback'
+import { MessagePlugin } from 'tdesign-vue-next'
 import i18n from '@/i18n'
 
 /**
@@ -59,9 +59,9 @@ export async function copyWithToast(
   if (!text) return false
   const ok = await copyToClipboard(text)
   if (ok) {
-    toast.success(i18n.global.t(successKey))
+    MessagePlugin.success(i18n.global.t(successKey))
   } else {
-    toast.error(i18n.global.t(failureKey))
+    MessagePlugin.error(i18n.global.t(failureKey))
   }
   return ok
 }

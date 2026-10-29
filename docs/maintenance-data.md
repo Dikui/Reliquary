@@ -53,7 +53,7 @@
 | `public.image_embeddings` | 无 | 无 | `entry_id`、`space_id`、`library_id`、`attachment_path`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
 | `public.ingest_assets` | `id`、`space_id`、`name`、`file_type`、`size`、`path`、`created_at`、`referenced_at`、`entry_id` | 无 | 无 | 无 |
 | `public.ingest_discards` | `space_id`、`normalized_url`、`entry_id`、`discarded_at`、`reason`、`library_id`、`fingerprint` | 无 | 无 | 无 |
-| `public.libraries` | `model_tiers`、`id`、`name`、`description`、`space_id`、`chunking_config`、`embedding_model_id`、`summary_model_id`、`created_at`、`updated_at`、`deleted_at`、`type`、`indexing_strategy`、`creator_id`、`system_role`、`template`、`directory`、`review_criteria`、`source_evidence_rule`、`feed_enabled`、`color` | 无 | 无 | 无 |
+| `public.libraries` | `model_tiers`、`id`、`name`、`description`、`space_id`、`chunking_config`、`embedding_model_id`、`summary_model_id`、`created_at`、`updated_at`、`deleted_at`、`type`、`indexing_strategy`、`creator_id`、`system_role`、`template`、`directory`、`review_criteria`、`source_evidence_rule`、`feed_enabled` | 无 | 无 | 无 |
 | `public.library_content_types` | `library_id`、`name`、`position`、`enabled`、`extract_graph` | 无 | 无 | 无 |
 | `public.library_relation_types` | `library_id`、`name`、`position`、`enabled` | 无 | 无 | 无 |
 | `public.maintenance_state` | `backup_at`、`backup_status`、`backup_path`、`backup_size_bytes`、`backup_error`、`drill_at`、`drill_status`、`drill_error`、`backup_schedule`、`drill_schedule`、`schedule_timezone`、`backup_directory`、`automatic_enabled` | 无 | `id`、`paused`、`pause_mode`、`pause_reason`、`paused_at`、`updated_at`、`backup_due_at`、`drill_due_at` | 无 |
@@ -345,8 +345,6 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 `spaces.embedding_model_id` 是空间共享向量模型的配置正本。旧 `libraries.embedding_model_id` 和 `model_tiers.embedding` 保留用于旧副本兼容，运行读取投影为空间选择，不能作为各库独立的模型选择。模型设置的旧 HTTP 入口写入空间值。维护核对允许向量配置变更时一并检查空间选择；重建配置副本包含空间和两个库配置子表。
 
 版本 10 之前的维护使用原有列归属，不要求新列或新表。迁移 000010 将原库保留为机构发布，新增其余系统库，按原来源类别迁移资料及索引归属；原正文、文件路径和业务字段保留。开发用 down 将资料归回原库，生产退回仍必须恢复升级前完整备份。
-
-结构版本 35 新增 `libraries.color`，属于配置正本，保存在既有 `config/libraries.json`。颜色范围为 1 至 8；旧结构副本按创建时间、ID 升序循环分配颜色，当前结构副本完整保留已保存的选择。升级核对只投影新增颜色，不修改原始证据或忽略其他配置变化，副本格式和持久表登记版本不变。
 
 ### 收录契约列（结构版本 11）
 

@@ -1,5 +1,5 @@
 // Setting rows keep a stable Vue key (`item.key`) while persistSetting
-// replaces the object in `settings`. Reused controls can therefore
+// replaces the object in `settings`. Reused TDesign controls can therefore
 // fire @change/@blur with a stale item whose `.value` is the pre-save
 // snapshot. Event handlers must resolve by key from the latest map before
 // dirty-checking or reverting the control.

@@ -1,6 +1,7 @@
 <template>
-  <div class="ollama-settings settings-form">
+  <div class="ollama-settings">
     <div class="section-header">
+      <h2>{{ $t('ollamaSettings.title') }}</h2>
       <p class="section-description">{{ $t('ollamaSettings.description') }}</p>
     </div>
 
@@ -13,39 +14,49 @@
         </div>
         <div class="setting-control">
           <div class="status-display">
-            <Tag
+            <t-tag
               v-if="testing"
+              theme="default"
+              variant="light"
             >
-
+              <t-icon name="loading" class="status-icon spinning" />
               {{ $t('ollamaSettings.status.testing') }}
-            </Tag>
-            <Tag
+            </t-tag>
+            <t-tag
               v-else-if="connectionStatus === true"
+              theme="success"
+              variant="light"
             >
-
+              <t-icon name="check-circle-filled" />
               {{ $t('ollamaSettings.status.available') }}
-            </Tag>
-            <Tag
+            </t-tag>
+            <t-tag
               v-else-if="connectionStatus === false"
-              variant="danger"
+              theme="danger"
+              variant="light"
             >
-
+              <t-icon name="close-circle-filled" />
               {{ $t('ollamaSettings.status.unavailable') }}
-            </Tag>
-            <Tag
+            </t-tag>
+            <t-tag
               v-else
+              theme="default"
+              variant="light"
             >
-
+              <t-icon name="help-circle" />
               {{ $t('ollamaSettings.status.untested') }}
-            </Tag>
-            <Button
-              variant="ghost"
+            </t-tag>
+            <t-button
+              size="small"
+              variant="text"
               :loading="testing"
               @click="testConnection"
             >
-
+              <template #icon>
+                <t-icon name="refresh" />
+              </template>
               {{ $t('ollamaSettings.status.retest') }}
-            </Button>
+            </t-button>
           </div>
         </div>
       </div>
@@ -58,54 +69,58 @@
         </div>
         <div class="setting-control">
           <div class="url-control-group">
-            <Input
-              v-model="localBaseUrl" :aria-label="$t('ollamaSettings.address.label')"
+            <t-input
+              v-model="localBaseUrl"
               :placeholder="$t('ollamaSettings.address.placeholder')"
               disabled
               style="flex: 1;"
             />
           </div>
-          <p
+          <t-alert
             v-if="connectionStatus === false"
+            theme="warning"
+            :message="$t('ollamaSettings.address.failed')"
             style="margin-top: 8px;"
-           class="settings-error" role="alert">{{ $t('ollamaSettings.address.failed') }}</p>
+          />
         </div>
       </div>
 
     </div>
 
     <!-- 下载新模型 -->
-    <div v-if="connectionStatus === true" class="model-category-section setting-row">
-      <div class="category-header setting-info">
+    <div v-if="connectionStatus === true" class="model-category-section">
+      <div class="category-header">
         <div class="header-info">
           <h3>{{ $t('ollamaSettings.download.title') }}</h3>
           <p>
             {{ $t('ollamaSettings.download.descPrefix') }}
             <a href="https://ollama.com/search" target="_blank" rel="noopener noreferrer" class="doc-link">
               {{ $t('ollamaSettings.download.browse') }}
-
+              <t-icon name="link" class="link-icon" />
             </a>
           </p>
         </div>
       </div>
 
-      <div class="download-content setting-control">
+      <div class="download-content">
         <div class="input-group">
-          <Input
-            v-model="downloadModelName" :disabled="downloading" :aria-label="$t('ollamaSettings.download.title')"
+          <t-input
+            v-model="downloadModelName"
             :placeholder="$t('ollamaSettings.download.placeholder')"
             style="flex: 1;"
           />
-          <Button
-            variant="default"
+          <t-button
+            variant="base"
+            theme="default"
+            size="small"
             class="download-btn"
             :loading="downloading"
             :disabled="!downloadModelName.trim()"
             @click="downloadModel"
           >
-
+            <template #icon><t-icon name="download" /></template>
             {{ $t('ollamaSettings.download.download') }}
-          </Button>
+          </t-button>
         </div>
 
         <div v-if="downloadProgress > 0" class="download-progress">
@@ -113,30 +128,33 @@
             <span>{{ $t('ollamaSettings.download.downloading', { name: downloadModelName }) }}</span>
             <span>{{ downloadProgress.toFixed(2) }}%</span>
           </div>
-          <progress :value="downloadProgress" max="100" :aria-label="$t('ollamaSettings.download.title')" />
+          <t-progress :percentage="downloadProgress" size="small" />
         </div>
       </div>
     </div>
 
     <!-- 已下载的模型 -->
-    <div v-if="connectionStatus === true" class="model-category-section setting-row">
-      <div class="category-header setting-info">
+    <div v-if="connectionStatus === true" class="model-category-section">
+      <div class="category-header">
         <div class="header-info">
           <h3>{{ $t('ollamaSettings.installed.title') }}</h3>
           <p>{{ $t('ollamaSettings.installed.desc') }}</p>
         </div>
-        <Button
-          variant="ghost"
+        <t-button
+          size="small"
+          variant="text"
           :loading="loadingModels"
           @click="refreshModels"
         >
-
+          <template #icon>
+            <t-icon name="refresh" />
+          </template>
           {{ $t('common.refresh') }}
-        </Button>
+        </t-button>
       </div>
 
       <div v-if="loadingModels" class="loading-state">
-        <span class="rq-spinner" aria-hidden="true" />
+        <t-loading size="small" />
         <span>{{ $t('common.loading') }}</span>
       </div>
       <div v-else-if="downloadedModels.length > 0" class="model-list-container">
@@ -158,10 +176,9 @@
 </template>
 
 <script setup lang="ts">
-import { Button, Input, Tag, toast } from '@/components/ui'
-import '@/styles/settings-form.css'
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
+import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { checkOllamaStatus, listOllamaModels, downloadOllamaModel, getDownloadProgress, type OllamaModelInfo } from '@/api/initialization'
 
@@ -177,9 +194,6 @@ const downloadedModels = ref<OllamaModelInfo[]>([])
 const downloading = ref(false)
 const downloadModelName = ref('')
 const downloadProgress = ref(0)
-
-let progressInterval: ReturnType<typeof setInterval> | undefined
-onBeforeUnmount(() => clearInterval(progressInterval))
 
 // 测试连接
 const testConnection = async () => {
@@ -202,14 +216,14 @@ const testConnection = async () => {
     connectionStatus.value = result.available
 
     if (connectionStatus.value) {
-      toast.success(t('ollamaSettings.toasts.connected'))
+      MessagePlugin.success(t('ollamaSettings.toasts.connected'))
       refreshModels()
     } else {
-      toast.error(result.error || t('ollamaSettings.toasts.connectFailed'))
+      MessagePlugin.error(result.error || t('ollamaSettings.toasts.connectFailed'))
     }
   } catch (error: any) {
     connectionStatus.value = false
-    toast.error(error.message || t('ollamaSettings.toasts.connectFailed'))
+    MessagePlugin.error(error.message || t('ollamaSettings.toasts.connectFailed'))
   } finally {
     testing.value = false
   }
@@ -225,7 +239,7 @@ const refreshModels = async () => {
     downloadedModels.value = models
   } catch (error: any) {
     console.error('获取模型列表失败:', error)
-    toast.error(error.message || t('ollamaSettings.toasts.listFailed'))
+    MessagePlugin.error(error.message || t('ollamaSettings.toasts.listFailed'))
   } finally {
     loadingModels.value = false
   }
@@ -259,7 +273,7 @@ const formatDate = (dateStr: string): string => {
 
 // 下载模型
 const downloadModel = async () => {
-  if (downloading.value || !downloadModelName.value.trim()) return
+  if (!downloadModelName.value.trim()) return
 
   downloading.value = true
   downloadProgress.value = 0
@@ -269,44 +283,44 @@ const downloadModel = async () => {
     const result = await downloadOllamaModel(downloadModelName.value)
 
     if (result.status === 'failed') {
-      toast.error(t('ollamaSettings.toasts.downloadFailed'))
+      MessagePlugin.error(t('ollamaSettings.toasts.downloadFailed'))
       downloading.value = false
       downloadProgress.value = 0
       return
     }
 
-    toast.success(t('ollamaSettings.toasts.downloadStarted', { name: downloadModelName.value }))
+    MessagePlugin.success(t('ollamaSettings.toasts.downloadStarted', { name: downloadModelName.value }))
 
     // 查询下载进度
     const taskId = result.taskId
-    progressInterval = setInterval(async () => {
+    const progressInterval = setInterval(async () => {
       try {
         const task = await getDownloadProgress(taskId)
         downloadProgress.value = task.progress
 
         if (task.status === 'completed') {
           clearInterval(progressInterval)
-          toast.success(t('ollamaSettings.toasts.downloadCompleted', { name: downloadModelName.value }))
+          MessagePlugin.success(t('ollamaSettings.toasts.downloadCompleted', { name: downloadModelName.value }))
           downloadModelName.value = ''
           downloadProgress.value = 0
           downloading.value = false
           refreshModels()
         } else if (task.status === 'failed') {
           clearInterval(progressInterval)
-          toast.error(task.message || t('ollamaSettings.toasts.downloadFailed'))
+          MessagePlugin.error(task.message || t('ollamaSettings.toasts.downloadFailed'))
           downloading.value = false
           downloadProgress.value = 0
         }
       } catch (error) {
         clearInterval(progressInterval)
-        toast.error(t('ollamaSettings.toasts.progressFailed'))
+        MessagePlugin.error(t('ollamaSettings.toasts.progressFailed'))
         downloading.value = false
         downloadProgress.value = 0
       }
     }, 1000)
   } catch (error: any) {
     console.error('下载失败:', error)
-    toast.error(error.message || t('ollamaSettings.toasts.downloadFailed'))
+    MessagePlugin.error(error.message || t('ollamaSettings.toasts.downloadFailed'))
     downloading.value = false
     downloadProgress.value = 0
   }
@@ -352,16 +366,252 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-.status-display, .url-control-group, .input-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); width: 100%; }
-.input-group .rq-control { flex: 1; min-width: 160px; }
-.download-content, .download-progress { width: 100%; }
-.progress-info { display: flex; gap: var(--space-2); justify-content: space-between; }
-progress { width: 100%; accent-color: var(--text); }
-.model-list-container { display: grid; gap: var(--space-2); min-width: 0; }
-.model-card { padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
-.model-name { font-family: var(--mono); overflow-wrap: anywhere; }
-.model-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
-.loading-state { display: flex; gap: var(--space-2); align-items: center; }
-.category-header h3, .category-header p { margin-top: 0; }
+<style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
+.ollama-settings {
+  width: 100%;
+}
+
+.section-header {
+  margin-bottom: 32px;
+
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+    margin: 0 0 8px 0;
+  }
+
+  .section-description {
+    font-size: 14px;
+    color: var(--td-text-color-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.setting-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--td-component-stroke);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.setting-info {
+  flex: 1;
+  padding-right: 32px;
+
+  label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--td-text-color-primary);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .desc {
+    font-size: 13px;
+    color: var(--td-text-color-secondary);
+    margin: 0;
+    line-height: 1.6;
+  }
+}
+
+.setting-control {
+  flex-shrink: 0;
+  min-width: 360px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.status-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .status-icon.spinning {
+    animation: spin 1s linear infinite;
+  }
+}
+
+.url-control-group {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-category-section {
+  margin-top: 32px;
+  margin-bottom: 32px;
+  padding-top: 32px;
+  border-top: 1px solid var(--td-component-stroke);
+
+  &:first-of-type {
+    margin-top: 24px;
+    padding-top: 24px;
+  }
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.category-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+
+  .header-info {
+    flex: 1;
+
+    h3 {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--td-text-color-primary);
+      margin: 0 0 6px 0;
+    }
+
+    p {
+      font-size: 13px;
+      color: var(--td-text-color-placeholder);
+      margin: 0;
+      line-height: 1.5;
+    }
+
+  }
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 0;
+  color: var(--td-text-color-placeholder);
+  font-size: 14px;
+}
+
+.model-list-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.model-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 6px;
+  background: var(--td-bg-color-secondarycontainer);
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: var(--td-brand-color);
+    background: var(--td-bg-color-container);
+  }
+}
+
+.model-info {
+  flex: 1;
+  min-width: 0;
+
+  .model-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--td-text-color-primary);
+    margin-bottom: 4px;
+    font-family: var(--app-font-family-mono);
+  }
+
+  .model-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--td-text-color-secondary);
+  }
+}
+
+.download-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+
+    .download-btn {
+      flex-shrink: 0;
+      height: 32px;
+    }
+  }
+
+  .download-progress {
+    padding: 16px;
+    background: var(--td-bg-color-secondarycontainer);
+    border-radius: 8px;
+    border: 1px solid var(--td-component-stroke);
+
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 13px;
+      color: var(--td-text-color-primary);
+      font-weight: 500;
+    }
+  }
+}
+
+.empty-state {
+  padding: 48px 0;
+  text-align: center;
+
+  .empty-text {
+    font-size: 14px;
+    color: var(--td-text-color-placeholder);
+    margin: 0;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.settings-responsive-rows();
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .status-display, .model-meta { flex-wrap: wrap; }
+  .model-list-container { grid-template-columns: minmax(0, 1fr); }
+  .model-name, .progress-info { overflow-wrap: anywhere; }
+  .download-content .input-group :deep(.t-input__wrap) { min-width: 0; }
+}
 </style>

@@ -25,10 +25,9 @@ export interface Element {
   style: Record<string, string>
   children: Element[]
   parent: Element | null
-  querySelector: (selector: string) => Element | null
   querySelectorAll: (selector: string) => Element[]
 }
-export const element = (tag: string, text = ''): Element => ({ tag, text, props: {}, style: {}, children: [], parent: null, querySelector: () => null, querySelectorAll: () => [] })
+export const element = (tag: string, text = ''): Element => ({ tag, text, props: {}, style: {}, children: [], parent: null, querySelectorAll: () => [] })
 export const descendants = (node: Element): Element[] => [node, ...node.children.flatMap(descendants)]
 export const visibleText = (node: Element): string => node.tag === '#comment' ? '' : node.text + node.children.map(visibleText).join('')
 export const hasClass = (node: Element, value: string): boolean => String(node.props.class || '').split(' ').includes(value)

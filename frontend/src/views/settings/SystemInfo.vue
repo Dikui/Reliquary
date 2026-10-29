@@ -1,22 +1,23 @@
 <template>
-  <div class="system-info settings-form">
+  <div class="system-info">
     <div class="section-header">
+      <h2>{{ $t('system.title') }}</h2>
       <p class="section-description">{{ $t('system.sectionDescription') }}</p>
     </div>
 
     <!-- Loading state -->
     <div v-if="loading" class="loading-inline">
-      <span class="rq-spinner" aria-hidden="true" />
+      <t-loading size="small" />
       <span>{{ $t('system.loadingInfo') }}</span>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="error-inline">
-      <div class="settings-error" role="alert">{{ error }}
-        <div class="settings-actions">
-          <Button @click="loadInfo">{{ $t('system.retry') }}</Button>
-        </div>
-      </div>
+      <t-alert theme="error" :message="error">
+        <template #operation>
+          <t-button size="small" @click="loadInfo">{{ $t('system.retry') }}</t-button>
+        </template>
+      </t-alert>
     </div>
 
     <!-- Content -->
@@ -30,10 +31,13 @@
         <div class="setting-control">
           <span class="info-value">
               {{ systemInfo?.version || $t('system.unknown') }}
-              <Tag
+              <t-tag
                 v-if="systemInfo?.edition"
+                theme="default"
+                variant="light"
+                size="small"
                 style="margin-left: 8px;"
-              >{{ systemInfo.edition }}</Tag>
+              >{{ systemInfo.edition }}</t-tag>
               <span v-if="systemInfo?.commit_id" class="commit-info">
                 ({{ systemInfo.commit_id }})
               </span>
@@ -50,10 +54,13 @@
         <div class="setting-control">
           <span class="info-value">
             {{ frontendVersion }}
-            <Tag
+            <t-tag
               v-if="systemInfo?.version && systemInfo.version !== 'unknown' && frontendVersion !== 'unknown' && systemInfo.version !== frontendVersion"
+              theme="warning"
+              variant="light"
+              size="small"
               style="margin-left: 8px;"
-            >{{ $t('system.versionMismatch') }}</Tag>
+            >{{ $t('system.versionMismatch') }}</t-tag>
             <span v-if="frontendCommit && frontendCommit !== 'unknown'" class="commit-info">
               ({{ frontendCommit }})
             </span>
@@ -114,35 +121,40 @@
         <div class="setting-control">
           <span class="info-value">
             {{ systemInfo?.db_version || $t('system.unknown') }}
-            <Tag
+            <t-tag
               v-if="systemInfo?.db_migration_error"
-              variant="danger"
+              theme="danger"
+              variant="light"
+              size="small"
               style="margin-left: 8px;"
-            >{{ $t('system.dbMigrationFailedTag') }}</Tag>
+            >{{ $t('system.dbMigrationFailedTag') }}</t-tag>
           </span>
         </div>
       </div>
 
       <!-- DB migration error: full-width banner under the row -->
       <div v-if="systemInfo?.db_migration_error" class="setting-row migration-error-row">
-        <div class="settings-error" role="alert"><strong>{{ $t('system.dbMigrationFailedTitle') }}</strong>
-
+        <t-alert theme="error" :title="$t('system.dbMigrationFailedTitle')" style="width: 100%;">
+          <template #default>
             <p class="migration-error-desc">{{ $t('system.dbMigrationFailedDesc') }}</p>
             <pre class="migration-error-detail">{{ systemInfo.db_migration_error }}</pre>
             <div class="migration-error-actions">
-              <a
+              <t-link
+                theme="primary"
                 :href="troubleshootingDocsURL"
                 target="_blank"
                 rel="noopener noreferrer"
-              >{{ $t('system.dbMigrationViewDocs') }}</a>
+              >{{ $t('system.dbMigrationViewDocs') }}</t-link>
               <span class="migration-error-actions-sep">·</span>
-              <a
+              <t-link
+                theme="primary"
                 :href="reportIssueURL"
                 target="_blank"
                 rel="noopener noreferrer"
-              >{{ $t('system.dbMigrationReportIssue') }}</a>
+              >{{ $t('system.dbMigrationReportIssue') }}</t-link>
             </div>
-        </div>
+          </template>
+        </t-alert>
       </div>
 
       <!-- Keyword Index Engine -->
@@ -162,9 +174,9 @@
           <p class="desc">{{ $t(systemInfo?.credential_encryption_enabled ? 'system.credentialEncryptionEnabledDescription' : 'system.credentialEncryptionDisabledDescription') }}</p>
         </div>
         <div class="setting-control">
-          <Tag :variant="systemInfo?.credential_encryption_enabled ? 'success' : 'plain'">
+          <t-tag :theme="systemInfo?.credential_encryption_enabled ? 'success' : 'warning'" variant="light" size="small">
             {{ $t(systemInfo?.credential_encryption_enabled ? 'system.credentialEncryptionEnabled' : 'system.credentialEncryptionDisabled') }}
-          </Tag>
+          </t-tag>
         </div>
       </div>
 
@@ -173,8 +185,6 @@
 </template>
 
 <script setup lang="ts">
-import { Button, Tag } from '@/components/ui'
-import '@/styles/settings-form.css'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { getSystemInfo, type SystemInfo } from '@/api/system'
 import { useI18n } from 'vue-i18n'
@@ -292,3 +302,183 @@ onUnmounted(() => {
   }
 })
 </script>
+
+<style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
+.system-info {
+  width: 100%;
+}
+
+.section-header {
+  margin-bottom: 32px;
+
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+    margin: 0 0 8px 0;
+  }
+
+  .section-description {
+    font-size: 14px;
+    color: var(--td-text-color-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+}
+
+.loading-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 0;
+  justify-content: center;
+  color: var(--td-text-color-secondary);
+  font-size: 14px;
+}
+
+.error-inline {
+  padding: 20px 0;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.setting-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--td-component-stroke);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.setting-info {
+  flex: 1;
+  max-width: 65%;
+  padding-right: 24px;
+
+  label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--td-text-color-primary);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .desc {
+    font-size: 13px;
+    color: var(--td-text-color-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+}
+
+.migration-error-row {
+  display: block;
+  padding: 0 0 20px 0;
+  border-bottom: 1px solid var(--td-component-stroke);
+}
+
+.migration-error-desc {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--td-text-color-primary);
+}
+
+.migration-error-detail {
+  margin: 0 0 12px 0;
+  padding: 8px 12px;
+  background: var(--td-bg-color-container-hover);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow: auto;
+  color: var(--td-text-color-secondary);
+}
+
+.migration-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+
+  .migration-error-actions-sep {
+    color: var(--td-text-color-placeholder);
+  }
+}
+
+.setting-control {
+  flex-shrink: 0;
+  min-width: 280px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+
+  .info-value {
+    font-size: 14px;
+    color: var(--td-text-color-primary);
+    text-align: right;
+    word-break: break-word;
+
+    .commit-info {
+      color: var(--td-text-color-placeholder);
+      font-size: 12px;
+      margin-left: 6px;
+    }
+  }
+}
+
+.settings-responsive-rows();
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .setting-control .info-value {
+    min-width: 0;
+    max-width: 100%;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 640px) {
+  .setting-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .setting-info {
+    flex: none;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    padding-right: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .setting-control {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+
+    .info-value {
+      min-width: 0;
+      max-width: 100%;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+  }
+}
+</style>

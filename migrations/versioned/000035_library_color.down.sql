@@ -1,5 +1,0 @@
-BEGIN;
-
-ALTER TABLE libraries DROP COLUMN color;
-
-COMMIT;

@@ -23,7 +23,6 @@ export interface EntityEntry {
   library_name?: string
   title?: string
   file_name?: string
-  content_type?: string
   created_at: string
 }
 export interface EntityDetail { entity: Entity; entries: EntityEntry[] }

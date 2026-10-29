@@ -15,7 +15,6 @@ import (
 const librariesTestDDL = `
 CREATE TABLE IF NOT EXISTS libraries (
     id VARCHAR(36) PRIMARY KEY,
-    color INTEGER NOT NULL DEFAULT 1 CHECK (color BETWEEN 1 AND 8),
     system_role TEXT NOT NULL DEFAULT '', template TEXT NOT NULL DEFAULT 'own', directory TEXT NOT NULL DEFAULT '',
     review_criteria TEXT NOT NULL DEFAULT '', source_evidence_rule TEXT NOT NULL DEFAULT '', feed_enabled BOOLEAN NOT NULL DEFAULT false,
     name VARCHAR(255) NOT NULL,

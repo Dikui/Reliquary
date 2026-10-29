@@ -323,9 +323,7 @@ func TestVaultRebuildKeywordOnlyNeedsNoModelAndSkipsInvalidArticles(t *testing.T
 	var mine types.Library
 	require.NoError(t, h.db.Where("system_role=?", "personal").First(&mine).Error)
 	personal := VaultArticleHeader{LibraryID: mine.ID, ID: uuid.NewString(), SourceKind: "mine", Title: "Imported tutorial", CollectedAt: now, ContentType: "tutorial"}
-	// New exports omit source_kind. An older file still retains its imported-document identity.
-	legacyHeader := strings.Replace(string(RenderVaultArticleHeader(personal)), "---\n", "---\nsource_kind: mine\n", 1)
-	h.write(t, "personal/imported.md", legacyHeader+"# Imported tutorial\n\npersonaltutorialfixture full text")
+	h.write(t, "personal/imported.md", string(RenderVaultArticleHeader(personal))+"# Imported tutorial\n\npersonaltutorialfixture full text")
 	h.write(t, "personal/bad-utf8.md", string([]byte{0xff, 0xfe}))
 	h.write(t, "ai-output/bad-utf8.md", string([]byte{0xff, 0xfe}))
 	for relative, data := range map[string]string{

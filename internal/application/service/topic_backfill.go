@@ -268,13 +268,7 @@ func (s *TopicService) judgeBatch(ctx context.Context, job types.TopicBackfillJo
 		}
 		input.Articles = append(input.Articles, topicBackfillArticle{ID: article.ID, Title: article.Title, Summary: summary})
 	}
-	var library types.Library
-	if err := s.db.WithContext(ctx).
-		Joins("JOIN topics ON topics.library_id = libraries.id AND topics.space_id = libraries.space_id").
-		Where("topics.id = ? AND topics.space_id = ?", job.TopicID, job.SpaceID).First(&library).Error; err != nil {
-		return nil, fmt.Errorf("read topic library: %w", err)
-	}
-	model, err := GetTierChatModel(ctx, s.db, s.models, &library, types.ModelTierGeneration)
+	model, err := GetTierChatModel(ctx, s.db, s.models, nil, types.ModelTierGeneration)
 	if err != nil {
 		return nil, err
 	}

@@ -1,21 +1,23 @@
 <template>
-    <div class="rq-platform">
+    <div class="main">
         <Menu v-if="!compactNavigation" />
-        <header v-else class="rq-mobile-navigation">
-            <RouterLink class="rq-mobile-navigation__brand" to="/platform/libraries" aria-current-value="false"><span aria-hidden="true" />Reliquary</RouterLink>
-            <Drawer v-model="mobileSidebarOpen" placement="left" :title="t('menu.mainNavigation')"
-                content-class="rq-navigation-drawer" @close-auto-focus="commandPaletteStore.open && $event.preventDefault()">
-                <template #trigger>
-                    <button type="button" :aria-label="t('menu.expandSidebar')"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor"><path d="M3 5h14M3 10h14M3 15h14" /></svg></button>
-                </template>
-                <Menu mobile-overlay @close="mobileSidebarOpen = false" />
-            </Drawer>
-            <button type="button" :aria-label="t('menu.commandSearch')" @click="commandPaletteStore.openPalette()"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor"><circle cx="8" cy="8" r="5" /><path d="m12 12 5 5" /></svg></button>
-        </header>
+        <div v-else class="mobile-navigation-bar">
+            <t-button variant="text" :aria-label="t('menu.expandSidebar')" @click="mobileSidebarOpen = true">
+                <template #icon><t-icon name="menu" /></template>
+                {{ t('menu.expandSidebar') }}
+            </t-button>
+        </div>
+        <t-drawer v-if="compactNavigation" v-model:visible="mobileSidebarOpen" placement="left"
+            :header="t('menu.library')" :footer="false" size="min(280px, 90vw)"
+            drawer-class-name="platform-mobile-navigation">
+            <Menu mobile-overlay @close="mobileSidebarOpen = false" />
+        </t-drawer>
         <div v-if="isRouterAlive" class="platform-route-outlet">
             <ContentCheckNotice />
             <RouterView />
         </div>
+        <!-- 全局设置模态框，供所有 platform 子路由使用 -->
+        <Settings />
         <!-- 全局命令面板 (⌘K)，随 platform 路由存活 -->
         <GlobalCommandPalette />
     </div>
@@ -24,17 +26,14 @@
 import Menu from '@/components/SideMenu.vue'
 import ContentCheckNotice from '@/components/ContentCheckNotice.vue'
 import { ref, onMounted, onUnmounted, nextTick, provide, watch } from 'vue';
-import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import { Drawer } from '@/components/ui'
-import { connectSettingsNavigation } from '@/config/settingsNavigation'
-import { useUIStore } from '@/stores/ui'
+import { useRoute, useRouter } from 'vue-router'
+import Settings from '@/views/settings/Settings.vue'
 import GlobalCommandPalette from '@/components/GlobalCommandPalette.vue'
 import { useCommandPaletteStore } from '@/stores/commandPalette'
 import { useI18n } from 'vue-i18n'
 
 const route = useRoute();
 const router = useRouter();
-const disconnectSettings = connectSettingsNavigation(router, useUIStore());
 const commandPaletteStore = useCommandPaletteStore();
 const { t } = useI18n();
 const navigationMedia = window.matchMedia('(max-width: 640px)');
@@ -45,7 +44,6 @@ const updateNavigationLayout = (event: MediaQueryListEvent) => {
     mobileSidebarOpen.value = false;
 };
 watch(() => route.fullPath, () => { mobileSidebarOpen.value = false; });
-watch(() => commandPaletteStore.open, open => { if (open) mobileSidebarOpen.value = false; });
 
 const isRouterAlive = ref(true)
 const reloadApp = () => {
@@ -75,25 +73,25 @@ function maybeOpenCmdkFromRoute() {
     commandPaletteStore.openPalette(q)
     // 清除 query，避免回退/刷新时反复触发
     const newQuery = { ...route.query }
-    delete newQuery.cmdk
+    delete (newQuery as any).cmdk
     router.replace({ path: route.path, query: newQuery, hash: route.hash })
 }
 
 // 组件卸载时移除全局事件监听器
 onUnmounted(() => {
-    disconnectSettings();
     navigationMedia.removeEventListener('change', updateNavigationLayout);
 });
 </script>
 <style lang="less">
-.rq-platform {
+.main {
     display: flex;
     align-items: stretch;
     width: 100%;
     height: 100%;
     min-width: 0;
     min-height: 0;
-    background: var(--surface);
+    /* 统一整页背景，让左侧菜单与右侧内容区视觉连贯 */
+    background: var(--td-bg-color-container);
 }
 
 /* 右侧路由区：占满剩余宽度与整列高度，并把 min-height:0 传给子页面以便内部 flex 滚动 */
@@ -106,35 +104,38 @@ onUnmounted(() => {
     overflow: hidden;
 }
 
-.rq-mobile-navigation {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
+.mobile-navigation-bar {
     flex-shrink: 0;
-    padding: var(--space-2) var(--space-4);
-    border-bottom: 2px solid var(--rule);
-    background: var(--surface);
-    color: var(--text);
-    font-family: var(--font);
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--td-component-stroke);
 }
-.rq-mobile-navigation__brand { display: flex; align-items: center; gap: var(--space-2); margin-right: auto; color: inherit; font-size: var(--text-lg); font-weight: 800; letter-spacing: -0.035em; text-decoration: none; }
-.rq-mobile-navigation__brand span { width: 14.4px; height: 14.4px; background: var(--accent); }
-.rq-mobile-navigation button { display: grid; place-items: center; width: var(--control); height: var(--control); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; }
-.rq-mobile-navigation button:hover { background: var(--surface-soft); }
-.rq-mobile-navigation :is(a, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.rq-navigation-drawer {
-    width: min(90vw, 320px);
-    padding: var(--space-4) 0 0;
-    gap: 0;
-    .rq-dialog__header { padding: 0 var(--space-4) var(--space-3); }
-    .rq-dialog__body { flex: 1; overflow: hidden; }
+
+.platform-mobile-navigation {
+    .t-drawer__body {
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .aside_box {
+        width: 100%;
+        min-width: 0;
+        height: 100%;
+        border-right: 0;
+    }
 }
 
 @media (max-width: 640px) {
-    .rq-platform {
+    .main {
         flex-direction: column;
         overflow: hidden;
     }
 }
 
+img {
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    user-drag: none;
+}
 </style>

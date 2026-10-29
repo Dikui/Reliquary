@@ -1,97 +1,69 @@
+<template>
+  <section class="merge-suggestions">
+    <div class="merge-suggestions-heading"><div><h3>{{ t('mergeSuggestions.title') }}</h3><p>{{ t('mergeSuggestions.description') }}</p></div><t-select v-model="status" :options="statusOptions" :disabled="!!decidingId" :aria-label="t('mergeSuggestions.statusFilter')" /></div>
+    <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" :loading="loading" @click="load(false)">{{ t('common.refresh') }}</t-button></template></t-alert>
+    <t-loading :loading="loading" show-overlay>
+      <div class="merge-suggestions-list">
+        <t-empty v-if="!items.length && !error" :description="t(`mergeSuggestions.empty.${status}`)" />
+        <article v-for="item in items" :key="item.id" class="merge-suggestion">
+          <div class="merge-suggestion-heading"><strong>{{ t('mergeSuggestions.pair', { source: item.new_entity_name || item.new_entity_id, target: item.candidate_entity_name || item.candidate_entity_id }) }}</strong><t-tag :theme="item.status === 'pending' ? 'warning' : item.status === 'accepted' ? 'success' : 'default'" variant="light">{{ t(`mergeSuggestions.status.${item.status}`) }}</t-tag></div>
+          <p>{{ item.reason || t('mergeSuggestions.noReason') }}</p>
+          <div class="merge-suggestion-actions"><t-button v-if="item.entry_id" variant="text" @click="emit('open-source', item.entry_id)">{{ t('knowledgeWorkbench.entities.openArticle') }}</t-button><template v-if="item.status === 'pending'"><t-button variant="outline" :disabled="!!decidingId" :loading="decidingId === item.id && decision === 'reject'" @click="decide(item, 'reject')">{{ t('mergeSuggestions.reject') }}</t-button><t-button theme="primary" variant="outline" :disabled="!!decidingId" :loading="decidingId === item.id && decision === 'accept'" @click="confirmAccept(item)">{{ t('mergeSuggestions.accept') }}</t-button></template></div>
+        </article>
+      </div>
+    </t-loading>
+    <div class="merge-suggestions-footer"><span role="status">{{ t('mergeSuggestions.loaded', { count: items.length }) }}</span><t-button v-if="hasMore" variant="outline" :disabled="!!decidingId" :loading="loading" @click="load(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button></div>
+  </section>
+</template>
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Button, EmptyState, ErrorState, Select, Tag } from '@/components/ui'
-import { confirm, toast, type ConfirmHandle } from '@/components/ui/feedback'
-import { acceptEntityMergeSuggestion, rejectEntityMergeSuggestion, type EntityMergeSuggestion } from '@/api/entities'
-import type { LibraryCatalogItem } from '@/api/library'
-import { searchErrorCode } from '@/utils/search'
-import MergeCandidate from './MergeCandidate.vue'
-
-const props = defineProps<{ items: EntityMergeSuggestion[]; libraries?: LibraryCatalogItem[]; loading: boolean; error: string }>()
-const emit = defineEmits<{ refresh: []; changed: [id: string, status: 'accepted' | 'rejected']; 'busy-change': [value: boolean] }>()
-const { t, n } = useI18n()
-const status = ref<'pending' | 'accepted' | 'rejected'>('pending'), index = ref(0), busy = ref(false), asking = ref(false), actionError = ref('')
-const filtered = computed(() => props.items.filter(item => item.status === status.value))
-const selected = computed(() => filtered.value[index.value])
-const statuses = computed(() => [
-  { value: 'pending', label: t('mergeSuggestions.status.pending') },
-  { value: 'accepted', label: t('mergeSuggestions.status.accepted') },
-  { value: 'rejected', label: t('mergeSuggestions.status.rejected') },
-])
-let dialog: ConfirmHandle | undefined, disposed = false
-watch(status, () => { index.value = 0; actionError.value = '' })
-watch(() => selected.value?.id, () => { actionError.value = '' })
-watch(() => filtered.value.length, size => { index.value = Math.min(index.value, Math.max(0, size - 1)) })
-function move(delta: number) {
-  if (busy.value || asking.value || props.loading) return
-  index.value = Math.max(0, Math.min(index.value + delta, filtered.value.length - 1))
-  actionError.value = ''
+import { MessagePlugin } from 'tdesign-vue-next'
+import { acceptEntityMergeSuggestion, listEntityMergeSuggestions, rejectEntityMergeSuggestion, type EntityMergeSuggestion } from '@/api/entities'
+import { useConfirmDelete } from '@/components/settings/useConfirmDelete'
+const props = defineProps<{ libraryId: string }>()
+const emit = defineEmits<{ 'open-source': [id: string]; changed: [] }>()
+const { t } = useI18n(), confirmDelete = useConfirmDelete()
+const status = ref<'pending' | 'accepted' | 'rejected'>('pending')
+const statusOptions = computed(() => ['pending', 'accepted', 'rejected'].map(value => ({ value, label: t(`mergeSuggestions.status.${value}`) })))
+const items = ref<EntityMergeSuggestion[]>([]), loading = ref(false), error = ref(''), hasMore = ref(false), decidingId = ref('')
+const decision = ref<'accept' | 'reject'>('accept')
+const pageSize = 20
+let request = 0
+async function load(more = false) {
+  if (more && loading.value) return
+  const current = ++request, offset = more ? items.value.length : 0
+  if (!props.libraryId) { items.value = []; hasMore.value = false; loading.value = false; return }
+  loading.value = true; error.value = ''
+  try { const response = await listEntityMergeSuggestions({ library_id: props.libraryId, status: status.value, limit: pageSize, offset }); if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed')); if (current === request) { const page = response.data || []; items.value = more ? [...items.value, ...page] : page; hasMore.value = page.length === pageSize } }
+  catch (cause) { if (current === request) error.value = cause instanceof Error ? cause.message : t('knowledgeWorkbench.requestFailed') }
+  finally { if (current === request) loading.value = false }
 }
-function keydown(event: KeyboardEvent) {
-  if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing || (event.target as HTMLElement)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return
-  if (event.key.toLowerCase() === 'j' || event.key.toLowerCase() === 'k') { event.preventDefault(); move(event.key.toLowerCase() === 'j' ? 1 : -1) }
+function confirmAccept(item: EntityMergeSuggestion) { if (decidingId.value || item.status !== 'pending') return; confirmDelete({ title: t('mergeSuggestions.confirmTitle'), body: t('mergeSuggestions.confirmBody', { source: item.new_entity_name || item.new_entity_id, target: item.candidate_entity_name || item.candidate_entity_id }), confirmText: t('mergeSuggestions.accept'), onConfirm: () => decide(item, 'accept') }) }
+async function decide(item: EntityMergeSuggestion, action: 'accept' | 'reject') {
+  if (decidingId.value || item.status !== 'pending') return
+  const current = request
+  decidingId.value = item.id; decision.value = action; error.value = ''
+  try { const response = await (action === 'accept' ? acceptEntityMergeSuggestion(item.id) : rejectEntityMergeSuggestion(item.id)); if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed')); if (current === request) { MessagePlugin.success(t(`mergeSuggestions.feedback.${action}`)); await load(false); emit('changed') } }
+  catch (cause) { if (current === request) error.value = cause instanceof Error ? cause.message : t('knowledgeWorkbench.requestFailed') }
+  finally { decidingId.value = '' }
 }
-async function decide(item: EntityMergeSuggestion, accept: boolean) {
-  if (busy.value || item.status !== 'pending' || disposed) return
-  busy.value = true; emit('busy-change', true); actionError.value = ''
-  try {
-    const response = await (accept ? acceptEntityMergeSuggestion(item.id) : rejectEntityMergeSuggestion(item.id))
-    if (!response.success) throw response
-    if (disposed) return
-    emit('changed', item.id, accept ? 'accepted' : 'rejected')
-    toast.success(accept ? t('mergeSuggestions.feedback.accept') : t('mergeSuggestions.feedback.reject'))
-  } catch (cause: any) {
-    if (disposed) return
-    const code = searchErrorCode(cause)
-    actionError.value = t(code === 1003 || cause?.status === 404 ? 'pendingPage.notFound' : code === 1000 || code === 1005 || cause?.status === 409 ? 'pendingPage.changed' : 'pendingPage.saveFailed')
-    throw cause
-  } finally { busy.value = false; if (!disposed && !asking.value) emit('busy-change', false) }
-}
-function accept() {
-  const item = selected.value
-  if (!item || busy.value || dialog) return
-  asking.value = true; emit('busy-change', true)
-  dialog = confirm({ header: t('mergeSuggestions.confirmTitle'), body: t('mergeSuggestions.confirmBody', { source: item.new_entity_name || item.new_entity_id.slice(0, 8), target: item.candidate_entity_name || item.candidate_entity_id.slice(0, 8) }), confirmBtn: t('mergeSuggestions.accept'), onConfirm: () => decide(item, true) })
-  void dialog.result.finally(() => { dialog = undefined; asking.value = false; if (!disposed) emit('busy-change', false) })
-}
-async function reject() { if (selected.value) { try { await decide(selected.value, false) } catch { /* The inline state remains available for retry. */ } } }
-onBeforeUnmount(() => { disposed = true; dialog?.destroy(); emit('busy-change', false) })
+function refresh() { return load(false) }
+defineExpose({ refresh })
+watch([status, () => props.libraryId], () => { request++; items.value = []; hasMore.value = false; void load(false) }, { immediate: true })
+onBeforeUnmount(() => { request++ })
 </script>
-
-<template>
-  <section class="merge-suggestions" tabindex="0" :aria-label="t('mergeSuggestions.title')" @keydown="keydown">
-    <div class="merge-toolbar"><p>{{ t('mergeSuggestions.description') }}</p><Select v-model="status" :disabled="busy || loading || asking" :aria-label="t('mergeSuggestions.statusFilter')"><option v-for="option in statuses" :key="option.value" :value="option.value">{{ option.label }}</option></Select></div>
-    <ErrorState v-if="error" :title="error"><Button :disabled="busy" @click="emit('refresh')">{{ t('common.retry') }}</Button></ErrorState>
-    <p v-if="loading" role="status">{{ t('common.loading') }}</p>
-    <EmptyState v-else-if="!selected && !error" :title="status === 'pending' ? t('mergeSuggestions.empty.pending') : status === 'accepted' ? t('mergeSuggestions.empty.accepted') : t('mergeSuggestions.empty.rejected')" />
-    <template v-if="selected">
-      <div class="merge-queue"><Tag>{{ statuses.find(item => item.value === selected?.status)?.label }}</Tag><span class="mono" role="status">{{ n(index + 1) }} / {{ n(filtered.length) }}</span><Button :disabled="busy || loading || asking || index === 0" :aria-label="t('pendingPage.previous')" @click="move(-1)">K</Button><Button :disabled="busy || loading || asking || index >= filtered.length - 1" :aria-label="t('pendingPage.next')" @click="move(1)">J</Button></div>
-      <div class="merge-pair">
-        <MergeCandidate :libraries="libraries" :key="selected.new_entity_id" :status="selected.status" :merged-into-name="selected.status === 'accepted' ? selected.candidate_entity_name || selected.candidate_entity_id.slice(0, 8) : undefined" :entity-id="selected.new_entity_id" :name="selected.new_entity_name" :entry-id="selected.entry_id" :label="t('pendingPage.candidateA')" />
-        <MergeCandidate :libraries="libraries" :key="selected.candidate_entity_id" :status="selected.status" :entity-id="selected.candidate_entity_id" :name="selected.candidate_entity_name" :entry-id="selected.entry_id" :label="t('pendingPage.candidateB')" />
-      </div>
-      <div class="merge-reason"><b>{{ t('pendingPage.reason') }}</b><p>{{ selected.reason || t('mergeSuggestions.noReason') }}</p></div>
-      <p v-if="actionError" class="merge-action-error" role="alert">{{ actionError }}</p>
-      <div v-if="selected.status === 'pending'" class="merge-decide"><Button variant="primary" :loading="busy" :disabled="loading || asking" @click="accept">{{ t('pendingPage.mergeInto', { name: selected.candidate_entity_name || selected.candidate_entity_id.slice(0, 8) }) }}</Button><Button variant="ghost" :disabled="busy || loading || asking" @click="reject">{{ t('mergeSuggestions.reject') }}</Button><Button v-if="actionError" :disabled="busy" @click="emit('refresh')">{{ t('common.refresh') }}</Button></div>
-    </template>
-  </section>
-</template>
-
-<style scoped>
-.merge-suggestions { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; outline-offset: 4px; }
-.merge-toolbar, .merge-queue, .merge-decide { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
-.merge-toolbar { justify-content: space-between; }
-.merge-toolbar p, .merge-reason p { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading); }
-.merge-toolbar .rq-select { width: auto; }
-.merge-queue { justify-content: flex-end; }
-.merge-queue .rq-tag { margin-right: auto; }
-.merge-queue .rq-button { min-height: 32px; }
-.merge-queue .mono { font-family: var(--mono); font-size: var(--text-sm); }
-.merge-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border: 2px solid var(--rule); }
-.merge-pair > :deep(.merge-candidate + .merge-candidate) { border-left: 2px solid var(--rule); }
-.merge-reason { border-top: 2px solid var(--rule); padding: var(--space-3) var(--space-4); display: grid; gap: var(--space-1); font-size: var(--text-sm); overflow-wrap: anywhere; }
-.merge-action-error { margin: 0; color: var(--danger); }
-.merge-suggestions :deep(.rq-empty) { padding: var(--space-5) 0; }
-@media (max-width: 760px) { .merge-pair { grid-template-columns: minmax(0, 1fr); } .merge-pair > :deep(.merge-candidate + .merge-candidate) { border-left: 0; border-top: 2px solid var(--rule); } }
+<style scoped lang="less">
+.merge-suggestions { display: flex; flex-direction: column; gap: 16px; }
+.merge-suggestions-heading, .merge-suggestion-heading, .merge-suggestions-footer { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.merge-suggestions-heading h3 { margin: 0; font-size: 16px; }
+.merge-suggestions-heading p { color: var(--td-text-color-secondary); font-size: 13px; line-height: 1.6; }
+.merge-suggestions-heading :deep(.t-select__wrap) { width: 180px; flex-shrink: 0; }
+.merge-suggestions-list { min-height: 240px; }
+.merge-suggestion { padding: 16px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-medium); margin-bottom: 12px; overflow-wrap: anywhere; }
+.merge-suggestion p { color: var(--td-text-color-secondary); line-height: 1.6; }
+.merge-suggestion blockquote { border-left: 3px solid var(--td-component-stroke); margin: 12px 0; padding-left: 12px; font-size: 13px; color: var(--td-text-color-secondary); }
+.merge-suggestion-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.merge-suggestions-footer { color: var(--td-text-color-secondary); font-size: 13px; align-items: center; }
+@media (max-width: 600px) { .merge-suggestions-heading, .merge-suggestion-heading { flex-direction: column; } }
 </style>

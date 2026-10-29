@@ -81,11 +81,6 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 		for table, rule := range copy {
 			copy[table] = catalogSchemaRule(table, rule, migration.Version)
 		}
-		if migration.Version < 35 {
-			rule := copy["libraries"]
-			rule.Configuration = strings.TrimSpace(strings.ReplaceAll(" "+rule.Configuration+" ", " color ", " "))
-			copy["libraries"] = rule
-		}
 		result = copy
 	}()
 	if migration.Dirty {

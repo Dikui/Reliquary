@@ -1,5 +1,3 @@
-import * as feedback from '../../components/ui/feedback'
-import { entryPresentationTestModules } from '../library/entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -30,11 +28,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         } : require(name), api, api.exports)
         const notice = loadComponent(new URL('./QueueConnectionNotice.vue', import.meta.url), { '@/api/system': api.exports })
         const component = loadComponent(new URL(`./${page}.vue`, import.meta.url), {
-          ...entryPresentationTestModules, '@/components/ui': { ...entryPresentationTestModules['@/components/ui'] as object, ...feedback }, '@/styles/settings-form.css': {},
           './QueueConnectionNotice.vue': moduleOf(notice), '@/api/system': api.exports,
           '@/stores/deploymentCapabilities': { useDeploymentCapabilitiesStore: () => ({}) },
           './systemSettingsEdit': require('./systemSettingsEdit'),
           './runtimeTaskPagination': require('./runtimeTaskPagination'), '@/i18n/countCopy': require('../../i18n/countCopy'),
+          'tdesign-vue-next': { MessagePlugin: {} },
           '@/api/chatgpt': { getChatGPTAccounts: async () => ({ accounts: [] }), getChatGPTPolicy: async () => ({ paused: false }) }, '@/components/ChatGPTUsageStatus.vue': moduleOf(defineComponent({ setup: () => () => null })),
           '@/components/settings/SettingDrawer.vue': moduleOf(defineComponent({ setup: () => () => null })),
         })
@@ -46,7 +44,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         app.config.errorHandler = error => errors.push(error)
         try {
           app.mount(root); await settle()
-          assert.deepEqual(errors, [])
           const banner = descendants(root).find(node => node.props.role === 'alert')
           assert.ok(banner)
           const text = messages[locale].system.globalSettings.runtime

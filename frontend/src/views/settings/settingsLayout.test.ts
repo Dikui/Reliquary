@@ -13,25 +13,59 @@ const scenarios = [
   { viewport: 768, inner: 504, stacked: true },
 ]
 
-test('settings page uses the designed navigation width and a scrollable content container', async () => {
+test('settings shell names the usable content container and preserves wide desktop geometry', async () => {
   const rules = await compiledSFCStyleRules(new URL('./Settings.vue', import.meta.url))
-  assert.equal(styleDeclarationsAtWidth(rules, '.settings-page', 1280)['grid-template-columns'], '208px minmax(0, 1fr)')
-  assert.equal(styleDeclarationsAtWidth(rules, '.settings-page', 900)['grid-template-columns'], 'minmax(0, 1fr)')
-  assert.equal(styleDeclarationsAtWidth(rules, '.content-wrapper', 1280)['container-name'], 'settings-content')
-  assert.equal(styleDeclarationsAtWidth(rules, '.content-wrapper', 1280)['container-type'], 'inline-size')
-  assert.equal(styleDeclarationsAtWidth(rules, '.settings-content', 1280)['min-width'], '0')
-  assert.equal(styleDeclarationsAtWidth(rules, '.settings-content', 1280)['overflow-y'], 'auto')
+  for (const { viewport } of scenarios) {
+    const wrapper = styleDeclarationsAtWidth(rules, '.content-wrapper', viewport)
+    assert.equal(wrapper['container-name'], 'settings-content')
+    assert.equal(wrapper['container-type'], 'inline-size')
+    assert.equal(wrapper.padding, '40px 48px')
+    assert.equal(wrapper['padding-left'], viewport <= 1100 ? '24px' : undefined)
+    assert.equal(wrapper['padding-right'], viewport <= 1100 ? '24px' : undefined)
+    assert.equal(styleDeclarationsAtWidth(rules, '.settings-sidebar', viewport).width, viewport <= 900 ? '176px' : '208px')
+    assert.equal(styleDeclarationsAtWidth(rules, '.settings-content', viewport)['min-width'], '0')
+  }
+  assert.equal(styleDeclarationsAtWidth(rules, '.settings-sidebar', 390).display, 'none')
+  assert.equal(styleDeclarationsAtWidth(rules, '.content-wrapper', 390).padding, '20px 16px')
 })
 
-test('shared setting rows stack at the content breakpoint and keep controls shrinkable', async () => {
-  const rules = await compiledSFCStyleRules(new URL('../../styles/settings-form.css', import.meta.url))
-  for (const { viewport, inner, stacked } of scenarios) {
-    const style = (selector: string) => styleDeclarationsAtWidth(rules, selector, viewport, { 'settings-content': inner })
-    assert.equal(style('.settings-form .setting-row')['grid-template-columns'], stacked ? 'minmax(0, 1fr)' : '224px minmax(0, 1fr)')
-    assert.equal(style('.settings-form .setting-control')['min-width'], '0')
-    assert.equal(style('.settings-form .setting-control')['max-width'], 'none')
-    assert.equal(style('.settings-form .font-preview').width, '100%')
-    assert.equal(style('.settings-form .info-value')['overflow-wrap'], 'anywhere')
+for (const [file, wideMinimum] of [
+  ['GeneralSettings.vue', '280px'], ['UserProfile.vue', '280px'],
+  ['OllamaSettings.vue', '360px'],
+  ['SystemInfo.vue', '280px'], ['SpaceInfo.vue', '0'],
+] as const) {
+  test(`${file}: narrow content stacks labels and allows controls to shrink`, async () => {
+    const rules = await compiledSFCStyleRules(new URL(`./${file}`, import.meta.url))
+    for (const { viewport, inner, stacked } of scenarios) {
+      const style = (selector: string) => styleDeclarationsAtWidth(rules, selector, viewport, { 'settings-content': inner })
+      assert.equal(style('.setting-row')['flex-direction'], stacked ? 'column' : undefined)
+      assert.equal(style('.setting-control')['min-width'], stacked ? '0' : wideMinimum)
+      if (!stacked) continue
+      for (const selector of ['.setting-info', '.setting-control']) {
+        assert.equal(style(selector).width, '100%', `${file} ${viewport} ${selector}`)
+        assert.equal(style(selector)['max-width'], '100%')
+      }
+      assert.equal(style('.setting-info')['padding-right'], '0')
+      assert.equal(style('.setting-control')['justify-content'], 'flex-start')
+      assert.equal(style('.setting-control')['flex-wrap'], 'wrap')
+    }
+    // A real narrow container reflows even inside a wide window. An uncontained
+    // sibling keeps its original layout and does not inherit settings rules.
+    assert.equal(styleDeclarationsAtWidth(rules, '.setting-row', 1440, { 'settings-content': 720 })['flex-direction'], 'column')
+    assert.equal(styleDeclarationsAtWidth(rules, '.setting-row', 1440, { 'settings-content': 721 })['flex-direction'], undefined)
+    assert.equal(styleDeclarationsAtWidth(rules, '.setting-row', 1440)['flex-direction'], undefined)
+  })
+}
+
+test('narrow font choices and information values preserve readable widths', async () => {
+  const general = await compiledSFCStyleRules(new URL('./GeneralSettings.vue', import.meta.url))
+  for (const selector of ['.setting-select', '.font-preview']) {
+    assert.equal(styleDeclarationsAtWidth(general, selector, 900, { 'settings-content': 636 }).width, '100%')
+    assert.equal(styleDeclarationsAtWidth(general, selector, 1440, { 'settings-content': 760 }).width, '280px')
+  }
+  for (const file of ['SystemInfo.vue', 'UserProfile.vue', 'SpaceInfo.vue']) {
+    const rules = await compiledSFCStyleRules(new URL(`./${file}`, import.meta.url))
+    assert.equal(styleDeclarationsAtWidth(rules, '.setting-control .info-value', 900, { 'settings-content': 636 })['text-align'], 'left')
   }
 })
 
@@ -44,5 +78,5 @@ test('narrow model tier forms keep their natural height', async () => {
   for (const rules of [tiers]) {
     assert.ok(!rules.some(rule => rule.containers.length && ['height', 'max-height', 'overflow-y'].some(property => property in rule.declarations)))
   }
-  assert.equal(styleDeclarationsAtWidth(tiers, '.model-tier-row', 1440)['grid-template-columns'], '224px minmax(0, 1fr)')
+  assert.equal(styleDeclarationsAtWidth(tiers, '.model-tier-row', 1440)['grid-template-columns'], 'minmax(0, 2fr) minmax(0, 3fr)')
 })

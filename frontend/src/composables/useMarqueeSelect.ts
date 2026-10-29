@@ -11,6 +11,7 @@ const IGNORE_TARGET_SELECTOR = [
   'textarea',
   'select',
   'label',
+  '.t-checkbox',
   '.more-wrap',
   '.card-menu',
   '.card-menu-item',

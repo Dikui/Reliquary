@@ -1,4 +1,3 @@
-import { detailPresentation, entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -22,7 +21,7 @@ function evaluate(source: string, modules: Record<string, unknown>) {
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', output)(
-    (name: string) => modules[name] ?? entryPresentationTestModules[name] ?? (name.endsWith('.vue') ? emptyModule : name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : require(name)), module, module.exports,
+    (name: string) => modules[name] ?? (name.endsWith('.vue') ? emptyModule : name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : require(name)), module, module.exports,
   )
   return module.exports
 }
@@ -56,7 +55,7 @@ async function renderComponent(component: any, props: Record<string, unknown>, l
   return html
 }
 
-async function renderView(name: 'DocumentListView', record: Record<string, unknown>, locale: keyof typeof messages) {
+async function renderView(name: 'DocumentCardView' | 'DocumentListView', record: Record<string, unknown>, locale: keyof typeof messages) {
   const component = createComponent(`../views/library/components/${name}.vue`, {
     '@/utils/entrySourceLabels': entrySourceLabels,
     '@/utils/markdownPlainText': markdownPlainText,
@@ -70,28 +69,27 @@ async function renderView(name: 'DocumentListView', record: Record<string, unkno
 
 async function renderDetail(details: Record<string, unknown>, locale: keyof typeof messages) {
   const unexpectedRequest = () => { throw new Error('Rendering the source label must not call an API') }
-  const component = detailPresentation({
+  const component = createComponent('../components/DocContent.vue', {
     '@/utils/entrySourceLabels': entrySourceLabels,
     marked: { marked: { use() {}, Renderer: class {}, parse: (value: string) => value } },
     'marked-katex-extension': { __esModule: true, default: () => ({}) },
     'highlight.js': { __esModule: true, default: {} },
     mermaid: { __esModule: true, default: { initialize() {} } },
+    'tdesign-vue-next': { MessagePlugin: { error: unexpectedRequest, warning: unexpectedRequest } },
     '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 20, getEntryDetails: unexpectedRequest },
     '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }), isValidURL: () => false, safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value },
     '@/utils/mermaidViewer': {}, '@/utils/clipboard': {},
     '@/views/library/entryDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
   })
-  const previousDocument = globalThis.document
-  globalThis.document = { title: '' } as Document
-  try { return await renderComponent(component, { visible: true, details }, locale) }
-  finally { globalThis.document = previousDocument }
+  return renderComponent(component, { visible: true, details }, locale)
 }
 
 function createLoadingHook(read: (id: string) => Promise<unknown>, records: object[] = []) {
   return evaluate(readFileSync(new URL('../composables/useLibrary.ts', import.meta.url), 'utf8'), {
     pinia: { storeToRefs: () => ({ cardList: ref([]), total: ref(0) }) },
     '../utils/index': { formatStringDate: () => '2026-10-12' },
+    'tdesign-vue-next': { MessagePlugin: {} },
     '@/stores/entry': { entryStore: () => ({}) },
     'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     '@/api/library': {
@@ -161,19 +159,20 @@ test('actual detail loading preserves API key names and clears them immediately 
 })
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: the material list and details separate Markdown format from submission channel`, async () => {
+  test(`${locale}: cards, rows and details separate Markdown format from submission channel`, async () => {
     const record = { id: 'ingest', title: 'Article', file_name: 'Article.md', source_kind: 'article', type: 'manual', file_type: 'manual', channel: 'api', parse_status: 'completed', md: [], total: 0,
       acquisition: 'verbatim', metadata: { intake: { source: 'ingest' } }, ingest_api_key_name: 'Research Bot' }
     const hook = createLoadingHook(async () => ({ success: true, data: record }), [record])
     await hook.loadEntries()
     hook.getCardDetails(record)
     await settle()
-    const views = [await renderView('DocumentListView', hook.cardList.value[0], locale), await renderDetail(hook.details, locale)]
+    const views = [await renderView('DocumentCardView', hook.cardList.value[0], locale), await renderView('DocumentListView', hook.cardList.value[0], locale), await renderDetail(hook.details, locale)]
     for (const html of views) {
       assert.ok(html.includes('Markdown'))
       assert.ok(html.includes(messages[locale].library.channelApi))
+      assert.ok(!html.includes(`>${messages[locale].library.typeManual}<`))
     }
-    assert.ok(views[1].includes('Research Bot'))
+    assert.ok(views[2].includes('Research Bot'))
     const legacy = await renderView('DocumentListView', { ...record, channel: 'web', metadata: { intake: { source: 'manual' } } }, locale)
     assert.ok(legacy.includes(messages[locale].library.channelWeb))
     assert.ok(legacy.includes('Markdown'))

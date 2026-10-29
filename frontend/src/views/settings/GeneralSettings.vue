@@ -1,6 +1,7 @@
 <template>
-  <div class="general-settings settings-form">
+  <div class="general-settings">
     <div class="section-header">
+      <h2>{{ $t('general.title') }}</h2>
       <p class="section-description">{{ $t('general.description') }}</p>
     </div>
 
@@ -12,15 +13,15 @@
           <p class="desc">{{ $t('language.languageDescription') }}</p>
         </div>
         <div class="setting-control">
-          <Select
-            v-model="localLanguage" :aria-label="$t('language.language')"
+          <t-select
+            v-model="localLanguage"
             :placeholder="$t('language.selectLanguage')"
-            @update:model-value="handleLanguageChange"
+            @change="handleLanguageChange"
             class="setting-select"
           >
-            <option value="zh-CN" :label="$t('language.zhCN')">{{ $t('language.zhCN') }}</option>
-            <option value="en-US" :label="$t('language.enUS')">{{ $t('language.enUS') }}</option>
-          </Select>
+            <t-option value="zh-CN" :label="$t('language.zhCN')">{{ $t('language.zhCN') }}</t-option>
+            <t-option value="en-US" :label="$t('language.enUS')">{{ $t('language.enUS') }}</t-option>
+          </t-select>
         </div>
       </div>
 
@@ -31,16 +32,16 @@
           <p class="desc">{{ $t('theme.themeDescription') }}</p>
         </div>
         <div class="setting-control">
-          <Select
-            v-model="localTheme" :aria-label="$t('theme.theme')"
+          <t-select
+            v-model="localTheme"
             class="setting-select"
             :placeholder="$t('theme.selectTheme')"
-            @update:model-value="value => handleThemeChange(value as ThemeMode)"
+            @change="handleThemeChange"
           >
-            <option value="light" :label="$t('theme.light')">{{ $t('theme.light') }}</option>
-            <option value="dark" :label="$t('theme.dark')">{{ $t('theme.dark') }}</option>
-            <option value="system" :label="$t('theme.system')">{{ $t('theme.system') }}</option>
-          </Select>
+            <t-option value="light" :label="$t('theme.light')">{{ $t('theme.light') }}</t-option>
+            <t-option value="dark" :label="$t('theme.dark')">{{ $t('theme.dark') }}</t-option>
+            <t-option value="system" :label="$t('theme.system')">{{ $t('theme.system') }}</t-option>
+          </t-select>
         </div>
       </div>
 
@@ -51,21 +52,21 @@
           <p class="desc">{{ $t('font.uiFontDescription') }}</p>
         </div>
         <div class="setting-control setting-control--stacked">
-          <Select
-            v-model="localSansFont" :aria-label="$t('font.uiFont')"
+          <t-select
+            v-model="localSansFont"
             class="setting-select"
             :placeholder="$t('font.selectFont')"
-            @update:model-value="value => handleSansFontChange(value as FontKey)"
+            @change="handleSansFontChange"
           >
-            <option
+            <t-option
               v-for="opt in sansFontOptions"
               :key="opt.value"
               :value="opt.value"
-              :label="opt.label" :style="{ fontFamily: opt.preview }"
+              :label="opt.label"
             >
-              {{ opt.label }}
-            </option>
-          </Select>
+              <span :style="{ fontFamily: opt.preview }">{{ opt.label }}</span>
+            </t-option>
+          </t-select>
           <div class="font-preview" :style="{ fontFamily: currentSansStack }">
             {{ $t('font.sansPreview') }}
           </div>
@@ -79,21 +80,21 @@
           <p class="desc">{{ $t('font.monoFontDescription') }}</p>
         </div>
         <div class="setting-control setting-control--stacked">
-          <Select
-            v-model="localMonoFont" :aria-label="$t('font.monoFont')"
+          <t-select
+            v-model="localMonoFont"
             class="setting-select"
             :placeholder="$t('font.selectFont')"
-            @update:model-value="value => handleMonoFontChange(value as MonoFontKey)"
+            @change="handleMonoFontChange"
           >
-            <option
+            <t-option
               v-for="opt in monoFontOptions"
               :key="opt.value"
               :value="opt.value"
-              :label="opt.label" :style="{ fontFamily: opt.preview }"
+              :label="opt.label"
             >
-              {{ opt.label }}
-            </option>
-          </Select>
+              <span :style="{ fontFamily: opt.preview }">{{ opt.label }}</span>
+            </t-option>
+          </t-select>
           <div class="font-preview font-preview--mono" :style="{ fontFamily: currentMonoStack }">
             {{ $t('font.monoPreview') }}
           </div>
@@ -107,11 +108,14 @@
           <p class="desc">{{ $t('font.fontSizeDescription') }}</p>
         </div>
         <div class="setting-control">
-          <Select v-model="localFontSize" :aria-label="$t('font.fontSize')" @update:model-value="value => handleFontSizeChange(value as FontSizeKey)">
-            <option value="small">{{ $t('font.size.small') }}</option>
-            <option value="normal">{{ $t('font.size.normal') }}</option>
-            <option value="large">{{ $t('font.size.large') }}</option>
-          </Select>
+          <t-radio-group
+            v-model="localFontSize"
+            @change="handleFontSizeChange"
+          >
+            <t-radio-button value="small">{{ $t('font.size.small') }}</t-radio-button>
+            <t-radio-button value="normal">{{ $t('font.size.normal') }}</t-radio-button>
+            <t-radio-button value="large">{{ $t('font.size.large') }}</t-radio-button>
+          </t-radio-group>
         </div>
       </div>
 
@@ -120,9 +124,8 @@
 </template>
 
 <script setup lang="ts">
-import { Select, toast } from '@/components/ui'
-import '@/styles/settings-form.css'
 import { ref, onMounted, computed, watch } from 'vue'
+import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { SUPPORTED_LOCALES } from '@/i18n/resolveDefaultLocale'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
@@ -199,7 +202,7 @@ onMounted(() => {
 const handleLanguageChange = () => {
   locale.value = localLanguage.value
   localStorage.setItem('locale', localLanguage.value)
-  toast.success(t('language.languageSaved'))
+  MessagePlugin.success(t('language.languageSaved'))
     }
 
 // 处理主题变化
@@ -210,7 +213,7 @@ const handleThemeChange = (val: ThemeMode) => {
     localTheme.value = currentTheme.value
     return
   }
-  toast.success(t('common.success'))
+  MessagePlugin.success(t('common.success'))
 }
 
 // 处理字体变化
@@ -219,7 +222,7 @@ const handleSansFontChange = (val: FontKey) => {
     localSansFont.value = currentSans.value
     return
   }
-  toast.success(t('common.success'))
+  MessagePlugin.success(t('common.success'))
 }
 
 const handleMonoFontChange = (val: MonoFontKey) => {
@@ -227,7 +230,7 @@ const handleMonoFontChange = (val: MonoFontKey) => {
     localMonoFont.value = currentMono.value
     return
   }
-  toast.success(t('common.success'))
+  MessagePlugin.success(t('common.success'))
 }
 
 const handleFontSizeChange = (val: FontSizeKey) => {
@@ -235,6 +238,150 @@ const handleFontSizeChange = (val: FontSizeKey) => {
     localFontSize.value = currentSize.value
     return
   }
-  toast.success(t('common.success'))
+  MessagePlugin.success(t('common.success'))
 }
 </script>
+
+<style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
+.general-settings {
+  width: 100%;
+}
+
+.section-header {
+  margin-bottom: 32px;
+
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+    margin: 0 0 8px 0;
+  }
+
+  .section-description {
+    font-size: 14px;
+    color: var(--td-text-color-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.setting-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--td-component-stroke);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.setting-info {
+  flex: 1;
+  max-width: 65%;
+  padding-right: 24px;
+
+  label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--td-text-color-primary);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .desc {
+    font-size: 13px;
+    color: var(--td-text-color-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+}
+
+.setting-control {
+  flex-shrink: 0;
+  min-width: 280px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+// When a font picker is rendered, stack the select on top of a live
+// preview line so the user can verify their choice without hunting for
+// an API Info page or a code block.
+.setting-control--stacked {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.font-preview {
+  width: 280px;
+  padding: 8px 12px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--td-radius-medium);
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-primary);
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+  box-sizing: border-box;
+
+  &--mono {
+    // Harden the preview against wrap-around for long monospace samples.
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+.setting-select {
+  width: 280px;
+}
+
+.settings-responsive-rows();
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .setting-select, .font-preview {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .setting-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .setting-info {
+    flex: none;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    padding-right: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .setting-control {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    justify-content: flex-start;
+    align-items: flex-start;
+  }
+
+  .setting-select,
+  .font-preview {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+</style>

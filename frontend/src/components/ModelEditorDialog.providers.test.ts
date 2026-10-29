@@ -1,4 +1,3 @@
-import { settingsTestUi } from '../views/settings/settingsTestUi'
 import assert from 'node:assert/strict'
 import { readFileSync, appendFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -52,8 +51,8 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = 
   const modules: Record<string, unknown> = {
     vue: { ...require('vue'), watch: (getter: any, callback: any, options: any) => { if (String(getter).includes('props.visible')) visibleWatcher = callback; return require('vue').watch(getter, callback, options) } },
     'vue-i18n': { useI18n: () => i18n.global },
-    '@/components/ui': settingsTestUi(),
-    '@/styles/settings-form.css': {}, '@/api/initialization': {
+    'tdesign-vue-next': { MessagePlugin: { error() {}, success() {}, warning() {}, info() {} }, DialogPlugin: {} },
+    '@/api/initialization': {
       listModelProviders: (type: string) => { requests.push(type); return listProviders(type) },
       listOllamaModels: async () => [{ name: 'qwen3:8b', size: 5 * 1024 * 1024 * 1024, digest: 'local-model', modified_at: '2026-10-10T00:00:00Z' }],
       testEmbeddingModel: testEmbedding,
@@ -73,7 +72,7 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = 
   function evaluate(code: string) {
     const module = { exports: {} as any }
     const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-    new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? (name === '@/styles/settings-form.css' ? {} : require(name)), module, module.exports)
+    new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports)
     return module.exports
   }
   modules['@i18n'] = i18n
@@ -131,9 +130,9 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const { html, state, requests } = await renderEditor({ locale })
     assert.deepEqual(requests, ['chat'])
     assert.deepEqual(state.providerOptions.value.map((preset: ModelProviderOption) => preset.value), presetIds)
-    assert.deepEqual(Object.keys((locale === 'zh-CN' ? zhCN : enUS).model.editor.providers).sort(), [...presetIds].sort())
+    assert.deepEqual(Object.keys((locale === 'zh-CN' ? zhCN : enUS).model.editor.providers), presetIds)
     for (const preset of state.providerOptions.value) {
-      assert.match(html, new RegExp(`value="${preset.value}"`))
+      assert.match(html, new RegExp(`data-option-value="${preset.value}"`))
       assert.ok(html.includes(preset.label), preset.label)
     }
     assert.doesNotMatch(html, /API description for/)
@@ -144,7 +143,7 @@ test('rerank dropdown uses only the supported server presets', async () => {
   const { html, state, requests } = await renderEditor({ modelType: 'rerank' })
   assert.deepEqual(requests, ['rerank'])
   assert.deepEqual(state.providerOptions.value.map((preset: ModelProviderOption) => preset.value), rerankIds)
-  assert.doesNotMatch(html, /value="(?:openai|zhipu|volcengine|ollama)"/)
+  assert.doesNotMatch(html, /data-option-value="(?:openai|zhipu|volcengine|ollama)"/)
 })
 
 test('Aliyun text embedding fills the compatible endpoint supplied by the server', async () => {
@@ -192,7 +191,7 @@ test('a saved provider missing from server presets becomes generic and preserves
 test('an empty API response does not restore a separate frontend preset table', async () => {
   const { html, state } = await renderEditor({ listProviders: async () => [] })
   assert.deepEqual(state.providerOptions.value, [])
-  assert.doesNotMatch(html, /<option[^>]*value="(?:generic|openai|aliyun)"/)
+  assert.doesNotMatch(html, /data-option-value="(?:generic|openai|aliyun)"/)
 })
 
 test('a response from a previous model type cannot overwrite the active preset list', async () => {

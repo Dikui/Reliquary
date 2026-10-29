@@ -1,107 +1,14 @@
 import type { TranslationCall } from './translationCallAudit.ts'
 
+/** Reviewed runtime expressions. New expressions must be explicitly reviewed here. */
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
+  { file: 'views/insights/ContentChecksPage.vue', expressions: ['`contentCheck.day${value}`', '`contentCheck.${s}`', '`contentCheck.${kind}`'], reason: 'Weekdays, run states and finding kinds use the fixed content-check contract and have labels in both locales.' },
+  { file: 'components/EntryBatchDialog.vue', expressions: ['`entryBatch.actions.${value}`', '`entryBatch.actions.${batch.action}`', '`entryBatch.reasons.${reason.code}`', '`entryBatch.status.${batch.status}`', '`entryBatch.status.${item.status}`'], reason: 'Batch actions, item states and preview reasons use the server batch contract; unknown reasons retain their raw code.' },
+  { file: 'components/EntryProcessingStatus.vue', expressions: ['state.label'], reason: 'entryProcessingState returns the fixed admission and processing label keys defined in the locale bundles.' },
   {
-    "file": "views/settings/LibraryCatalogSettings.vue",
-    "expressions": [
-      "`library.contentTypes.${name}`",
-      "`settingsPage.colors.${colorNames[index]}`",
-      "`libraryEditor.chunking.strategies.${strategy}.label`",
-      "`libraryEditor.chunking.languageOptions.${language}`"
-    ],
-    "reason": "Built-in types are guarded by CONTENT_TYPES. Colors, strategies and languages come from fixed local choices; custom type names remain plain text."
-  },
-  {
-    "file": "components/GlobalCommandPalette.vue",
-    "expressions": [
-      "`library.contentTypes.${value}`",
-      "`workbench.entities.types.${entity.entity_type}`"
-    ],
-    "reason": "Built-in material types are checked against CONTENT_TYPES; entity types use the existing API enum."
-  },
-  {
-    "file": "views/library/components/FollowFeedItem.vue",
-    "expressions": [
-      "`library.contentTypes.${props.article.content_type}`",
-      "`follows.targetTypes.${target.target_type}`"
-    ],
-    "reason": "Built-in content types are guarded by CONTENT_TYPES; follow target types use the existing entity/topic enum. Custom content types remain plain text."
-  },
-  {
-    "file": "views/library/TopicManagement.vue",
-    "expressions": [
-      "`library.contentTypes.${value}`"
-    ],
-    "reason": "Built-in content types are guarded by CONTENT_TYPES; custom library type names remain plain text."
-  },
-  {
-    "file": "views/library/SearchResult.vue",
-    "expressions": [
-      "`library.contentTypes.${props.article.content_type}`",
-      "`search.sources.${article.source}`"
-    ],
-    "reason": "Built-in content types are guarded by CONTENT_TYPES; search sources use the existing HTTP enum. Custom content types render as plain text."
-  },
-  {
-    "file": "views/library/EntryDetail.vue",
-    "expressions": [
-      "processing.label",
-      "`workbench.entities.types.${entity.entity_type}`"
-    ],
-    "reason": "Shared processing status keys and the fixed entity type vocabulary."
-  },
-  {
-    "file": "views/library/components/DocumentListView.vue",
-    "expressions": [
-      "`entries.columns.${key}`",
-      "entryProcessingState(item).label",
-      "entryProcessingState(row).label"
-    ],
-    "reason": "The fixed material columns and shared processing state labels exist in both locales."
-  },
-  {
-    "file": "views/library/components/EntryPreview.vue",
-    "expressions": [
-      "`processingStages.stage.${node.name}`",
-      "`processingStages.status.${status}`",
-      "state.label"
-    ],
-    "reason": "Preview stage names and statuses are restricted to the existing localized enums; entry state uses the shared resolver."
-  },
-  {
-    "file": "views/insights/IngestFailuresPage.vue",
-    "expressions": [
-      "`ingestDiagnostics.${key}`"
-    ],
-    "reason": "Fixed failure table columns have labels in both locales."
-  },
-  {
-    "file": "views/insights/FailedProcessingEntries.vue",
-    "expressions": [
-      "`library.contentTypes.${value}`",
-      "entryProcessingState(row).label"
-    ],
-    "reason": "Built-in content types are guarded by CONTENT_TYPES; processing labels come from the shared state resolver."
-  },
-  {
-    "file": "views/insights/ContentChecksPage.vue",
-    "expressions": [
-      "`contentCheck.day${value}`",
-      "`contentCheck.${status}`",
-      "`contentCheck.${group.kind}`"
-    ],
-    "reason": "Weekdays, run states and finding kinds use the fixed content-check contract and have labels in both locales."
-  },
-  {
-    "file": "components/EntryBatchDialog.vue",
-    "expressions": [
-      "`entryBatch.actions.${value}`",
-      "`entryBatch.actions.${batch.action}`",
-      "`entryBatch.reasons.${reason.code}`",
-      "`entryBatch.status.${batch.status}`",
-      "`entryBatch.status.${item.status}`"
-    ],
-    "reason": "Batch actions, item states and preview reasons use the server batch contract; unknown reasons retain their raw code."
+    file: 'views/library/components/EntityRelations.vue',
+    expressions: ['`ikb18.${relation.direction}`'],
+    reason: 'Relation direction has two HTTP enum values covered by ikb18 component tests.',
   },
   {
     "file": "api/auth.ts",
@@ -147,6 +54,39 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
+    "file": "components/EntryClassification.vue",
+    "expressions": [
+      "`library.contentTypes.${type}`"
+    ],
+    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
+  },
+  {
+    "file": "components/EntryProcessingTimeline.vue",
+    "expressions": [
+      "'knowledgeStages.detail.' + detailTab",
+      "`knowledgeStages.stage.${row.node.name}`",
+      "`knowledgeStages.stage.${s.name}`",
+      "`knowledgeStages.stage.${target.name}`",
+      "`knowledgeStages.status.${s.status}`",
+      "key"
+    ],
+    "reason": "Backend stage, status and error enums are covered by localeKeyAudit; detail tabs use a finite key set."
+  },
+  {
+    "file": "components/LibraryInfoPopover.vue",
+    "expressions": [
+      "path"
+    ],
+    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
+  },
+  {
+    "file": "components/ModelCallSummary.vue",
+    "expressions": [
+      "key"
+    ],
+    "reason": "Stage and status labels check te() and preserve the existing unknown-value fallback."
+  },
+  {
     "file": "components/ModelDebugDrawer.vue",
     "expressions": [
       "`modelSettings.typeShort.${keys[value].short}`",
@@ -171,6 +111,23 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
       "`modelTiers.names.${tier}`",
       "`modelTiers.uses.${tier}`",
       "key"
+    ],
+    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
+  },
+  {
+    "file": "components/ReviewActions.vue",
+    "expressions": [
+      "`knowledgeReview.actions.${confirmation.value}`",
+      "`knowledgeReview.confirmations.${confirmation.value}.description`",
+      "`knowledgeReview.confirmations.${confirmation.value}.title`"
+    ],
+    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
+  },
+  {
+    "file": "components/SearchEntry.vue",
+    "expressions": [
+      "`follows.targetTypes.${target.target_type}`",
+      "`knowledgeSearch.sources.${article.source}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
@@ -228,7 +185,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   {
     "file": "views/library/Library.vue",
     "expressions": [
-      "`search.sources.${value}`"
+      "`knowledgeSearch.sources.${value}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
@@ -241,31 +198,43 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/library/components/EntryWorkbench.vue",
+    "file": "views/library/TopicManagement.vue",
     "expressions": [
-      "`workbench.entities.types.${ENTITY_TYPES.includes(value as EntityType) ? value : 'other'}`",
-      "`workbench.nameEmbeddings.status.${status}`"
+      "`topicManagement.status.${progress[topic.id]!.status}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/library/components/MergeCandidate.vue",
+    "file": "views/library/components/EntryWorkbench.vue",
     "expressions": [
-      "`workbench.entities.types.${ENTITY_TYPES.includes(entityType.value as EntityType) ? entityType.value : 'other'}`"
+      "`knowledgeWorkbench.entities.types.${ENTITY_TYPES.includes(value as EntityType) ? value : 'other'}`",
+      "`knowledgeWorkbench.nameEmbeddings.status.${status}`",
+      "`knowledgeWorkbench.nav.${section}`"
     ],
-    "reason": "Entity types are guarded by the fixed entity type vocabulary."
+    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
-    "file": "views/library/components/PendingReviews.vue",
+    "file": "views/library/components/MergeSuggestions.vue",
     "expressions": [
-      "`library.contentTypes.${value}`"
+      "`mergeSuggestions.empty.${status}`",
+      "`mergeSuggestions.feedback.${action}`",
+      "`mergeSuggestions.status.${item.status}`",
+      "`mergeSuggestions.status.${value}`"
     ],
-    "reason": "Built-in content types are guarded by CONTENT_TYPES; custom names remain plain text."
+    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
   {
     "file": "views/library/components/RepostSources.vue",
     "expressions": [
-      "`workbench.sourceTime.matchMethods.${known ? method : 'other'}`"
+      "`knowledgeWorkbench.sourceTime.matchMethods.${known ? method : 'other'}`"
+    ],
+    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
+  },
+  {
+    "file": "views/library/settings/LibraryChunkingDebug.vue",
+    "expressions": [
+      "`knowledgeEditor.chunking.debug.${p.labelKey}`",
+      "`knowledgeEditor.chunking.strategies.${normalizeTier(tier)}.label`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },
@@ -282,6 +251,13 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
     "expressions": [
       "key",
       "modelUsageBindingI18nKey(binding)"
+    ],
+    "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
+  },
+  {
+    "file": "views/settings/Settings.vue",
+    "expressions": [
+      "`integrations.tabs.${item.key}`"
     ],
     "reason": "Finite UI option or backend enum keys; existing prefix and mapped-key audits check the locale trees."
   },

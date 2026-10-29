@@ -207,12 +207,6 @@ func (s *libraryService) UpdateLibrary(ctx context.Context,
 	library.Name = name
 	library.Description = description
 	if config != nil {
-		if config.Color != nil {
-			if err := types.ValidateLibraryColor(*config.Color); err != nil {
-				return nil, apperrors.NewBadRequestError(err.Error())
-			}
-			library.Color = *config.Color
-		}
 		if config.ChunkingConfig != nil {
 			if config.ChunkingConfig.ChunkSize <= 0 || config.ChunkingConfig.ChunkOverlap < 0 || config.ChunkingConfig.ChunkOverlap >= config.ChunkingConfig.ChunkSize {
 				return nil, apperrors.NewBadRequestError("chunk size must be positive and chunk overlap must be smaller than chunk size")

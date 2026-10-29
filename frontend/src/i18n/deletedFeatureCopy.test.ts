@@ -12,11 +12,11 @@ const allowed: Record<string, string> = {
   'ikb18.systemRole': 'System library identity is read only and does not describe user permissions.',
   'agent.editor.systemPromptPlaceholder': 'The model persona in a system prompt is still configurable.',
   'agentEditor.desc.systemPrompt': 'The role describes a model persona, not a user permission.',
-  'workbench.subtitle': '组织 is a verb meaning organize documents.',
+  'knowledgeWorkbench.subtitle': '组织 is a verb meaning organize documents.',
   'agent.subtitle': '组织 is a verb meaning organize documents.',
   'knowledgeList.subtitle': '组织 is a verb meaning organize documents.',
-  'libraryEditor.document.subtitle': '组织 is a verb meaning organize documents.',
-  'workbench.entities.types.organization': 'Organization is a supported entity type, not an organization account.',
+  'knowledgeEditor.document.subtitle': '组织 is a verb meaning organize documents.',
+  'knowledgeWorkbench.entities.types.organization': 'Organization is a supported entity type, not an organization account.',
 }
 
 for (const [locale, bundle] of Object.entries({ 'en-US': enUS, 'zh-CN': zhCN })) {
@@ -64,8 +64,8 @@ test('unused generic high-risk confirmation is removed while SSRF entry confirma
     assert.ok(source.includes(`confirmSsrfListEntryChange('${action}', entry)`))
   }
   for (const bundle of [enUS, zhCN]) {
-    assert.equal(getLocaleValueAtPath(bundle, 'system.globalSettings.confirm.highRiskBody') !== undefined, false)
-    assert.equal(getLocaleValueAtPath(bundle, 'system.globalSettings.confirm.bodyAuthRegistrationMode') !== undefined, false)
+    assert.equal('highRiskBody' in bundle.system.globalSettings.confirm, false)
+    assert.equal('bodyAuthRegistrationMode' in bundle.system.globalSettings.confirm, false)
     for (const action of ['add', 'remove'] as const) {
       const confirmation = bundle.system.globalSettings.listConfirm.ssrf.whitelist[action]
       assert.match(confirmation.body, /\{entry\}/)

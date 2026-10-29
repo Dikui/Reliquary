@@ -1,6 +1,3 @@
-import { entryPresentationTestModules } from './entryPresentationTestModules'
-import { loadUiComponent } from '../../components/ui/uiTestLoader'
-import * as libraryColor from '../../utils/libraryColor'
 import * as bodyReference from '../../utils/bodyReference'
 import * as libraryScopeHelpers from '../../utils/libraryScope'
 import assert from 'node:assert/strict'
@@ -30,7 +27,7 @@ const stub = defineComponent({ setup: (_props, { attrs, slots }) => () => h('div
 function evaluate(code: string, modules: Record<string, unknown>) {
   const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as any }
-  new Function('require', 'module', 'exports', compiled)((name: string) => (name === '@/api/entities' ? { listEntities: async () => ({ success: true, data: [] }) } : name === '@/utils/bodyReference' ? bodyReference : name === '@/utils/libraryScope' ? libraryScopeHelpers : name === '@/utils/search' ? helpers : name === '@/composables/useLibraryScope' ? { useLibraryScope: () => ref([]) } : (name.endsWith('LibraryScopeSelect.vue') ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name])) ?? (name === '@/components/ui' ? { ...entryPresentationTestModules[name] as object, Tabs: loadUiComponent('Tabs'), Checkbox: loadUiComponent('Checkbox'), Dialog: loadUiComponent('Dialog') } : undefined) ?? require(name), module, module.exports)
+  new Function('require', 'module', 'exports', compiled)((name: string) => (name === '@/utils/bodyReference' ? bodyReference : name === '@/utils/libraryScope' ? libraryScopeHelpers : name === '@/composables/useLibraryScope' ? { useLibraryScope: () => ref([]) } : (name.endsWith('LibraryScopeSelect.vue') ? { __esModule: true, default: defineComponent({ setup: () => () => null }) } : modules[name])) ?? require(name), module, module.exports)
   return module.exports
 }
 function component(path: string, modules: Record<string, unknown>) {
@@ -53,7 +50,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
       return state
     }
   }
-  const app = createSSRApp(value, { libraries: [], ...props })
+  const app = createSSRApp(value, props)
   app.use(createI18n({ legacy: false, locale, messages }))
   app.component('SearchEntry', value)
   for (const name of ['t-tag', 't-icon', 't-button', 't-select', 't-switch', 't-date-picker', 't-input-number', 't-alert', 't-loading', 't-empty', 't-dialog', 't-tooltip', 't-drawer']) app.component(name, controls?.[name] || stub)
@@ -64,13 +61,18 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
   assert.deepEqual(warnings, []); assert.deepEqual(errors, [])
   return html
 }
+const classificationModules = { './FollowToggle.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/utils/markdownPlainText': markdownPlainText, '@/types/entryClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
 function articleComponent() {
-  return component('./SearchResult.vue', {
-    '@/types/entryClassification': { CONTENT_TYPES },
-    '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) },
-    '@/components/GlobalCommandPalette/useHighlight': highlight,
-    '@/components/EntryUpdateNotice.vue': moduleOf(component('../../components/EntryUpdateNotice.vue', {})),
-    '@/components/SearchImage.vue': moduleOf(component('../../components/SearchImage.vue', { '@/utils/protectedFileAccess': protectedAccess })),
+  const preview = component('../../components/ImagePreview.vue', {
+    'tdesign-vue-next': { ImageViewer: defineComponent({ setup: () => () => null }) },
+  })
+  return component('../../components/SearchEntry.vue', {
+    './EntryUpdateNotice.vue': moduleOf(component('../../components/EntryUpdateNotice.vue', {})),
+    './EntryClassification.vue': moduleOf(component('../../components/EntryClassification.vue', classificationModules)),
+    './SearchImage.vue': moduleOf(component('../../components/SearchImage.vue', {
+      '@/utils/protectedFileAccess': protectedAccess, './ImagePreview.vue': moduleOf(preview),
+    })),
+    './GlobalCommandPalette/useHighlight': highlight,
     '@/utils/markdownPlainText': markdownPlainText,
   })
 }
@@ -110,10 +112,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: actual command palette renders API-loaded Markdown snippets as localized plain text`, async () => {
     const api = ingestSearchAPI({ snippets: [{ ...article.snippets[0], content: markdownExcerpt }] })
     const hook = evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts', import.meta.url), 'utf8'), { '@/utils/search': helpers, '@/api/search': api })
-    const store = { open: ref(true), initialQuery: ref('Launch'), recentQueries: ref([]), recentTargets: ref([]), closePalette() {}, pushRecent() {}, pushTarget() {} }
+    const store = { open: ref(true), initialQuery: ref('Launch'), recentQueries: ref([]), closePalette() {}, pushRecent() {} }
     const palette = component('../../components/GlobalCommandPalette.vue', {
-      '@/components/ui': { ...entryPresentationTestModules['@/components/ui'] as object, Dialog: stub, Drawer: stub },
-      '@/composables/useTheme': { useTheme: () => ({ currentTheme: ref('light'), setTheme() {} }) },
       pinia: { storeToRefs: (value: unknown) => value },
       '@/stores/commandPalette': { useCommandPaletteStore: () => store },
       '@/stores/auth': { useAuthStore: () => ({}) },
@@ -170,6 +170,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const api = ingestSearchAPI({ acquisition: flagged ? 'model_written' : 'extracted', ...(flagged !== undefined ? { incomplete: flagged } : {}) })
       const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, api.searchEntries, locale)
       assert.equal(result.html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
+      assert.equal(result.html.includes(messages[locale].ingestStatus.incomplete), false)
       for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
         assert.equal(result.html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
       }
@@ -182,6 +183,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const html = await render(articleComponent(), { article: result.data.results[0], query: 'Launch' }, locale, async state => { state.expanded.value = true })
       const nested = html.slice(html.indexOf('data-article-id="nested"'))
       assert.equal(nested.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
+      assert.equal(nested.includes(messages[locale].ingestStatus.incomplete), false)
       for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
         assert.equal(nested.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
       }
@@ -189,7 +191,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: source unverified marker reaches search results through the page API loading path`, async () => {
     const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, async () => ({ success: true, data: { results: [{ ...article, source_unverified: true }], excluded_missing_published_at: 0 } }), locale)
-    assert.ok(result.html.includes(messages[locale].review.sourceUnverified))
+    assert.ok(result.html.includes(messages[locale].knowledgeReview.sourceUnverified))
     assert.match(result.html, /data-article-id="a"/)
   })
   test(`${locale}: real search API loading forwards image snippets to the protected thumbnail component`, async () => {
@@ -200,11 +202,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(state.results.value[0].snippets[0].image_path, imagePath)
     }, async () => ({ success: true, data: { results: [{ ...article, entry_id: 'image-article', snippets: [{ chunk_id: 'image', chunk_index: 0, content: '', score: 0.99, match_type: 'image', image_path: imagePath }] }] } }), locale)
     assert.ok(result.html.includes(`data-image-path="${imagePath}"`))
-    assert.ok(result.html.includes(messages[locale].search.imageMatch))
+    assert.ok(result.html.includes(messages[locale].knowledgeSearch.imageMatch))
   })
   test(`${locale}: article results show summary, attribution, safe link and at most three highlighted snippets`, async () => {
     const html = await render(articleComponent(), { article, query: 'Launch' }, locale)
-    for (const text of ['Launch article', 'Launch overview', 'Useful point', 'Launch term', 'Launch Labs', 'Releases', article.vault_path, messages[locale].search.sources.article]) assert.ok(html.includes(text), text)
+    for (const text of ['Launch article', 'Launch overview', 'Useful point', 'Launch term', 'Launch Labs', 'Releases', article.vault_path, messages[locale].knowledgeSearch.sources.article]) assert.ok(html.includes(text), text)
     assert.match(html, /href="https:\/\/example.com\/a"/)
     assert.match(html, /<mark class="search-highlight">Launch<\/mark> snippet 0/)
     assert.doesNotMatch(html, /snippet 3|<script>/)
@@ -219,19 +221,24 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
   })
   test(`${locale}: user documents show their source, missing date and content type`, async () => {
     const html = await render(articleComponent(), { article: { ...article, source: 'mine', summary: null, published_at: null, original_url: '' }, query: 'Launch' }, locale)
-    assert.ok(html.includes(messages[locale].search.sources.mine)); assert.ok(html.includes(messages[locale].search.missingPublishedAt))
-    assert.match(html, /rq-tag/)
+    assert.ok(html.includes(messages[locale].knowledgeSearch.sources.mine)); assert.ok(html.includes(messages[locale].knowledgeSearch.missingPublishedAt))
+    assert.match(html, /entry-classification/)
     assert.ok(html.includes(messages[locale].library.contentTypes.research))
   })
   test(`${locale}: filters offer six content types and ID-valued entity and topic options without a source filter`, async () => {
     const filtersComponent = component('../../components/SearchFilters.vue', { '@/types/entryClassification': { CONTENT_TYPES } })
-    const html = await render(filtersComponent, { modelValue: helpers.defaultSearchFilters(), options: { entities: article.entities, topics: article.topics } }, locale)
-    assert.match(html, /Launch Labs/)
-    assert.match(html, /Releases/)
-    assert.match(html, /value="e1"/)
-    assert.match(html, /value="t1"/)
-    for (const value of CONTENT_TYPES) assert.ok(html.includes(messages[locale].library.contentTypes[value]))
-
+    const selects: any[] = [], dates: any[] = []
+    const select = defineComponent({ props: ['modelValue', 'options', 'multiple', 'clearable', 'filterable', 'disabled', 'loading'], setup: (props, { attrs }) => { selects.push(props); return () => h('div', attrs) } })
+    const date = defineComponent({ props: ['modelValue', 'format', 'valueType', 'clearable', 'allowInput'], setup: (props, { attrs }) => { dates.push(props); return () => h('div', attrs) } })
+    const html = await render(filtersComponent, { modelValue: helpers.defaultSearchFilters(), options: { entities: article.entities, topics: article.topics } }, locale, undefined, { 't-select': select, 't-date-picker': date })
+    assert.deepEqual(selects[0].options.map((option: any) => option.value), CONTENT_TYPES)
+    assert.deepEqual(selects[1].options, [{ value: 'e1', label: 'Launch Labs' }]); assert.deepEqual(selects[2].options, [{ value: 't1', label: 'Releases' }])
+    assert.equal(selects.length, 4)
+    assert.ok(!html.includes(messages[locale].knowledgeSearch.source))
+    assert.ok(selects.slice(0, 3).every(select => select.multiple !== undefined))
+    assert.deepEqual(selects[3].options.map((option: any) => option.value), ['', 'true', 'false'])
+    assert.ok(dates.every(date => date.valueType === 'YYYY-MM-DD'))
+    assert.ok(html.includes(messages[locale].knowledgeSearch.filterHint))
   })
 }
 
@@ -240,12 +247,9 @@ async function pageScenario(action: (state: any, calls: SearchRequest[], pushes:
   const page = component('./SearchView.vue', {
     'vue-router': { useRoute: () => ({ query: {} }), useRouter: () => ({ replace: (value: unknown) => Promise.resolve(pushes.push(value)), push: (value: unknown) => Promise.resolve(pushes.push(value)) }) },
     '@/api/search': { searchEntries: (request: SearchRequest) => { calls.push(request); return search ? search(request) : Promise.resolve({ success: true, data: { results: [article], excluded_missing_published_at: 2 } }) }, getSearchOptions: async () => ({ success: true, data: { entities: article.entities, topics: article.topics } }) },
-    '@/api/library': { listLibraries: async () => ({ success: true, data: [{ id: 'lib-a', display_name: 'Research', color: 2 }] }) },
-    '@/utils/libraryColor': libraryColor,
-    './GraphSearchPanel.vue': moduleOf(stub),
-    '@/components/SearchFilters.vue': moduleOf(stub), './SearchResult.vue': moduleOf(articleComponent()), '@/utils/search': helpers,
+    '@/components/SearchFilters.vue': moduleOf(stub), '@/components/SearchEntry.vue': moduleOf(articleComponent()), '@/utils/search': helpers,
   })
-  const html = await render(page, {}, locale, async state => { await state.loadLibraries(); await action(state, calls, pushes) })
+  const html = await render(page, {}, locale, state => action(state, calls, pushes))
   return { calls, pushes, html }
 }
 test('search page submits all filters, renders exclusion count and opens the article detail', async () => {
@@ -257,7 +261,7 @@ test('search page submits all filters, renders exclusion count and opens the art
     assert.equal(calls.length, 1); assert.equal(calls[0].collapse_similar, false); assert.deepEqual(calls[0].entity_ids, ['e1'])
     assert.deepEqual(state.options.value.topics, article.topics)
     state.openArticle(article)
-    assert.deepEqual(pushes.at(-1), { path: '/platform/entries/a', query: {} })
+    assert.deepEqual(pushes.at(-1), { path: '/platform/entries', query: { entry_id: 'a' } })
   })
   assert.ok(result.html.includes('已排除 2 篇缺失发布时间的资料。')); assert.match(result.html, /data-article-id="a"/)
 })
@@ -267,7 +271,7 @@ test('search page rejects invalid date order and ignores an older response after
   await pageScenario(async (state, calls) => {
     state.query.value = 'invalid'
     state.filters.value.published_from = '2026-10-12'; state.filters.value.published_to = '2026-10-11'
-    await state.runSearch(); assert.equal(calls.length, 0); assert.equal(state.error.value, zh.search.invalidDateRange)
+    await state.runSearch(); assert.equal(calls.length, 0); assert.equal(state.error.value, zh.knowledgeSearch.invalidDateRange)
     state.filters.value = helpers.defaultSearchFilters()
     state.query.value = 'old'
     const first = state.runSearch()
@@ -278,32 +282,6 @@ test('search page rejects invalid date order and ignores an older response after
     assert.equal(state.results.value[0].entry_id, 'a'); assert.equal(state.excludedMissingPublishedAt.value, 0)
     state.clearQuery(); assert.equal(state.results.value.length, 0); assert.equal(state.hasSearched.value, false)
   }, request => request.query === 'old' ? old : Promise.resolve({ success: true, data: { results: [article], excluded_missing_published_at: 0 } }))
-})
-
-for (const locale of ['zh-CN', 'en-US'] as const) test(`${locale}: automatic keyword fallback is visible and search titles retain the first paragraph reference`, async () => {
-  const location = { heading_path: ['Heading'], paragraph: 9, start: 10, end: 20, body_hash: 'v2', mapping: 'exact' }
-  const hit = { ...article, snippets: [{ ...article.snippets[0]!, locations: [location] }] }
-  const result = await pageScenario(async (state, calls, pushes) => {
-    state.query.value = 'Launch'
-    await state.runSearch()
-    assert.deepEqual(calls[0]!.libraries, ['lib-a'])
-    assert.equal('keyword_only' in calls[0]!, false)
-    state.openArticle(hit)
-    assert.deepEqual(pushes.at(-1), bodyReference.entryDetailLocation('a', location))
-  }, async () => ({ success: true, data: { results: [hit], vector_unavailable: true } }), locale)
-  assert.ok(result.html.includes(messages[locale].searchPage.vectorFallback))
-  assert.ok(result.html.includes('¶9'))
-  assert.doesNotMatch(result.html, /class="t-/)
-})
-
-test('deselecting the last library cannot silently broaden search to all libraries', async () => {
-  await pageScenario(async (state, calls) => {
-    state.query.value = 'Launch'
-    state.toggleLibrary('lib-a')
-    await state.runSearch()
-    assert.equal(calls.length, 0)
-    assert.equal(state.error.value, zh.searchPage.chooseLibraries)
-  })
 })
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
@@ -319,6 +297,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       } })
       const html = await render(palette, {}, locale)
       assert.equal(html.includes(messages[locale].ingestStatus.modelWritten), Boolean(flagged))
+      assert.equal(html.includes(messages[locale].ingestStatus.incomplete), false)
       for (const hint of [messages[locale].ingestStatus.modelWrittenHint]) {
         assert.equal(html.includes(`title="${hint.replaceAll("'", "&#39;")}"`), Boolean(flagged), hint)
       }
@@ -332,15 +311,15 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const result = await pageScenario(async state => {
       state.query.value = 'Launch'
       await state.runSearch()
-      assert.equal(state.error.value, messages[locale].search.unavailable)
+      assert.equal(state.error.value, messages[locale].knowledgeSearch.unavailable)
     }, async () => { attempts++; throw { error: { code: 2400, message: '<html>EmbedBatch upstream secret</html>' } } }, locale)
-    assert.ok(result.html.includes(messages[locale].search.unavailable))
+    assert.ok(result.html.includes(messages[locale].knowledgeSearch.unavailable))
     assert.ok(result.html.includes(messages[locale].common.retry))
     assert.doesNotMatch(result.html, /EmbedBatch|upstream|html&gt;/)
     assert.equal(attempts, 1)
     await pageScenario(async state => {
       state.query.value = 'Launch'; await state.runSearch()
-      assert.equal(state.error.value, messages[locale].search.searchFailed)
+      assert.equal(state.error.value, messages[locale].knowledgeSearch.searchFailed)
       await state.runSearch(); assert.equal(state.error.value, ''); assert.equal(state.results.value.length, 1)
     }, async () => { if (attempts++ === 1) throw new Error('<html>upstream secret</html>'); return { success: true, data: { results: [article] } } }, locale)
   })
@@ -387,7 +366,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       return () => state.fileGroups.value.length ? h(item, { index: 0, title: state.fileGroups.value[0].title, sourceUnverified: state.fileGroups.value[0].source_unverified }) : null
     } })
     const html = await render(palette, {}, locale)
-    assert.ok(html.includes(messages[locale].review.sourceUnverified))
+    assert.ok(html.includes(messages[locale].knowledgeReview.sourceUnverified))
     assert.match(readFileSync(new URL('../../components/GlobalCommandPalette.vue', import.meta.url), 'utf8'), /:source-unverified="item.file.source_unverified"/)
   })
   test(`${locale}: command palette failure is localized and retry restores article results`, async () => {
@@ -404,7 +383,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       onServerPrefetch(async () => {
         state.query.value = 'Launch'
         await state.retry()
-        assert.equal(state.searchError.value, messages[locale].search.unavailable)
+        assert.equal(state.searchError.value, messages[locale].knowledgeSearch.unavailable)
         assert.equal(state.loading.value, false)
         await state.retry()
         assert.equal(state.searchError.value, '')
@@ -443,7 +422,7 @@ for (const locale of ['zh-CN','en-US'] as const) test(`${locale}: real search re
  const api=ingestSearchAPI({source:'mine',has_update:true,latest_entry_id:'latest-record'})
  const result=await pageScenario(async state=>{state.query.value='Launch';await state.runSearch()},api.searchEntries,locale)
  assert.ok(result.html.includes(messages[locale].ikb18.hasUpdate))
- assert.ok(result.html.includes('/platform/entries/latest-record'))
+ assert.ok(result.html.includes('/platform/entries?entry_id=latest-record'))
  const groups=evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts',import.meta.url),'utf8'),{'@/utils/search':helpers,'@/api/search':{}}).articleFileGroups([{...article,source:'mine',has_update:true,latest_entry_id:'latest-record'}])
  assert.equal(groups[0].has_update,true);assert.equal(groups[0].latest_entry_id,'latest-record')
 })

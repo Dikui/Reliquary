@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
-import { reactive, ref, defineComponent, h } from 'vue'
+import { reactive, defineComponent, h } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { loadComponent, renderer, element, descendants, visibleText, click, settle, type Element } from '../library/componentTestHarness.ts'
 import zh from '../../i18n/locales/zh-CN.ts'
@@ -9,7 +9,6 @@ import en from '../../i18n/locales/en-US.ts'
 import { metricKeys, metricLabels } from '../../api/insightMetrics.ts'
 import { mapTrend, chartGeometry } from './trend.ts'
 import { contentBlocks, formatContent, contentCharacters } from '../../utils/modelCallContent'
-import { diagnosticUI } from './diagnosticsTestSupport'
 import { createApplicationRoutes } from '../../router/routes.ts'
 
 const metrics = (v: number) => Object.fromEntries(metricKeys.map(k => [k, v]))
@@ -19,18 +18,16 @@ const summary = (currency = 'USD', extra = {}) => ({ model_id: 'model1', purpose
 function environment(locale = 'en-US') {
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en }, warnHtmlMessage: false }), route = reactive({ query: {} as Record<string, unknown> })
   const calls: { method: string; path: string; body: any; update?: boolean }[] = []
-  const state = { sets: [{ id: 'set1', name: 'Calibration set', description: 'Hand checked' }], questions: [question()], records: [{ id: 'record1', query: 'Original search?', source: 'web', method: 'ordinary', libraries: ['lib1'], created_at: '2026-10-14T07:00:00Z', results: [{ entry_id: 'e1', rank: 1, score: .8 }, { entry_id: 'e2', rank: 2, score: .6 }], error: '' }], runs: [run('run1', .2), run('run2', .75)], summaries: [summary(), summary('CNY', { cost: null, unknown_cost_calls: 0, not_applicable_cost_calls: 4 })], details: [{ id: 'call1', requested_at: '2026-10-14T08:00:00Z', model_id: 'model1', model_name: 'Fixture', purpose: 'body_embedding', entry_id: 'e1', duration_ms: 125, success: true, error_category: '', input_tokens: 0, output_tokens: null, cost: null, cost_status: 'not_applicable', currency: 'USD', attempt: 2, retry_number: 3 }], total: 26, readOverride: (_path: string, _body: unknown): unknown => undefined, fail: (_method: string, _path: string): any => undefined }
+  const state = { sets: [{ id: 'set1', name: 'Calibration set', description: 'Hand checked' }], questions: [question()], records: [{ id: 'record1', query: 'Original search?', source: 'web', method: 'ordinary', libraries: ['lib1'], created_at: '2026-10-14T07:00:00Z', results: [{ entry_id: 'e1', rank: 1, score: .8 }, { entry_id: 'e2', rank: 2, score: .6 }], error: '' }], runs: [run('run1', .2), run('run2', .75)], summaries: [summary(), summary('CNY', { cost: null, unknown_cost_calls: 0, not_applicable_cost_calls: 4 })], details: [{ id: 'call1', requested_at: '2026-10-14T08:00:00Z', model_id: 'model1', model_name: 'Fixture', purpose: 'body_embedding', entry_id: 'e1', duration_ms: 125, success: true, error_category: '', input_tokens: 0, output_tokens: null, cost: null, cost_status: 'not_applicable', currency: 'USD', attempt: 2, retry_number: 3 }], total: 26, fail: (_method: string, _path: string): any => undefined }
   const comparison = { before_summary: metrics(.2), after_summary: metrics(.75), delta: metrics(.55), questions: [{ question_id: 'q1', question_changed: true, change: 'retained', before: run('run1', .2).questions[0], after: { ...run('run2', .75).questions[0], question: question({ revision: 2 }) }, delta: metrics(.55), added_hits: ['new-hit'], lost_hits: ['lost-hit'] }] }
   const capture = (method: string, path: string, body: any, update?: boolean) => { calls.push({ method, path, body: body && JSON.parse(JSON.stringify(body)), update }); const error = state.fail(method, path); if (error) throw error }
   const api = { metricKeys, metricLabels,
     async read(path: string, body = {}) {
       capture('get', path, body)
-      const overridden = state.readOverride(path, body)
-      if (overridden !== undefined) return await overridden
       if (path === 'libraries') return [{ id: 'lib1', name: 'My materials' }, { id: 'lib2', name: 'Other library' }]
       if (path === 'models') return [{ id: 'model1', name: 'Fixture', type: 'KnowledgeQA' }, { id: 'rerank1', name: 'Rerank fixture', type: 'Rerank' }]
       if (path === 'evaluation/sets') return state.sets
-      if (path.endsWith('/questions')) return state.questions.filter(q => !(body as any).status || q.status === (body as any).status)
+      if (path.endsWith('/questions')) return state.questions.filter(q => q.status === (body as any).status)
       if (path === 'search/records') return state.records
       if (path === 'evaluation/runs') return state.runs.filter(r => !(body as any).set_id || r.set_id === (body as any).set_id)
       if (path === 'evaluation/vector-sets') return [{ selector: 'active', model_id: 'current', dimension: 3 }, { selector: 'candidate:next', model_id: 'next', dimension: 3 }, { selector: 'archive:old', model_id: 'old', dimension: 3 }]
@@ -57,29 +54,26 @@ function environment(locale = 'en-US') {
     async remove(path: string) { capture('delete', path, {}); if (path === 'evaluation/sets/set1') state.sets = []; else state.questions = []; return {} },
     async callDetails(body: any) { capture('get', 'model-calls', body); return { data: state.details, total: state.total } },
   }
-  const modules: Record<string, unknown> = { '@/utils/modelCallContent': { contentBlocks, formatContent, contentCharacters }, '@/utils/clipboard': { copyToClipboard: async () => true }, 'vue-i18n': { useI18n: () => i18n.global }, 'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async (to: any) => { route.query = to.query } }) }, '@/api/insights': api, '@/api/library': { listLibraries: async () => ({ success: true, data: await api.read('libraries') }) }, './insights.css': {}, './diagnostics.css': {}, './diagnostics-b.css': {}, './trend': { mapTrend, chartGeometry } }
-  const confirmation = ref<any>(), notifications: string[] = []
-  modules['@/components/ui'] = { ...diagnosticUI(), toast: { success: (message: string) => notifications.push(message) }, confirm: (options: any) => { confirmation.value = options; return { destroy: () => { confirmation.value = undefined } } } }
+  const modules: Record<string, unknown> = { '@/utils/modelCallContent': { contentBlocks, formatContent, contentCharacters }, '@/utils/clipboard': { copyToClipboard: async () => true }, 'vue-i18n': { useI18n: () => i18n.global }, 'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async (to: any) => { route.query = to.query } }) }, '@/api/insights': api, '@/api/library': { listLibraries: async () => ({ success: true, data: await api.read('libraries') }) }, './insights.css': {}, './trend': { mapTrend, chartGeometry } }
   function component(name: string) { return loadComponent(new URL(name, import.meta.url), modules) }
   modules['@/components/ModelCallContentViewer.vue'] = component('../../components/ModelCallContentViewer.vue')
   modules['@/components/LibraryScopeSelect.vue'] = component('../../components/LibraryScopeSelect.vue')
   for (const name of ['EntryPicker', 'QuestionEditor', 'RunResults', 'TrendChart']) modules[`./${name}.vue`] = component(`./${name}.vue`)
   function mount(name: string, props = {}) {
-    const mountedComponent = component(name)
-    const root = element('root'), errors: unknown[] = [], warnings: string[] = [], app = renderer.createApp(defineComponent({ setup: () => () => h('div', [h(mountedComponent, props), confirmation.value ? h('section', { role: 'alertdialog' }, [h('p', confirmation.value.body), h('button', { onClick: async () => { await confirmation.value.onConfirm(); confirmation.value = undefined } }, confirmation.value.confirmBtn)]) : null]) }))
+    const root = element('root'), errors: unknown[] = [], warnings: string[] = [], app = renderer.createApp(component(name), props)
     app.component('t-select', defineComponent({ props: { value: Array, options: Array, disabled: Boolean, loading: Boolean, multiple: Boolean }, emits: ['change'], setup: (props, { attrs, emit }) => () => h('scope-select', { ...attrs, ...props, onChange: (event: any) => emit('change', event.target.value) }) }))
     app.component('t-button', defineComponent({ setup: (_props, { attrs, slots }) => () => h('button', attrs, slots.default?.()) }))
-    app.use(i18n); app.config.errorHandler = e => errors.push(e); app.config.warnHandler = w => warnings.push(w); app.mount(root)
+    app.config.errorHandler = e => errors.push(e); app.config.warnHandler = w => warnings.push(w); app.mount(root)
     return { root, errors, warnings, close: () => app.unmount() }
   }
-  return { mount, state, calls, route, comparison, notifications, t: i18n.global.t }
+  return { mount, state, calls, route, comparison, t: i18n.global.t }
 }
 const button = (root: Element, text: string) => { const b = descendants(root).find(n => n.tag === 'button' && visibleText(n).trim() === text); assert.ok(b, `Missing button ${text}`); return b }
 const control = (root: Element, label: string, tag = 'input') => { const n = descendants(root).find(n => n.tag === 'label' && visibleText(n).startsWith(label))?.children.find(n => n.tag === tag); assert.ok(n, `Missing control ${label}`); return n }
 async function input(node: Element, value: string | number) { node.props.onInput?.({ target: { value: String(value) } }); await settle() }
-async function change(node: Element, value: string | boolean | string[]) { node.props.onChange?.({ target: { value, checked: value, selectedOptions: Array.isArray(value) ? value.map(value => ({ value })) : [] } }); await settle() }
+async function change(node: Element, value: string | boolean | string[]) { node.props.onChange?.({ target: { value, checked: value } }); await settle() }
 async function submit(root: Element) { const form = descendants(root).find(n => n.tag === 'form')!; assert.ok(form); form.props.onSubmit({ preventDefault() {} }); await settle() }
-const scope = (root: Element) => descendants(root).find(n => String(n.props.class).includes('library-scope'))!.children.find(n => n.tag === 'select' || n.tag === 'scope-select')!
+const scope = (root: Element) => descendants(root).find(n => n.tag === 'scope-select')!
 const check = (root: Element, text?: string) => text ? descendants(root).find(n => n.tag === 'label' && visibleText(n).includes(text))!.children.find(n => n.tag === 'input')! : descendants(root).find(n => n.tag === 'input' && n.props.type === 'checkbox')!
 
 test('set creation, editing and confirmed deletion preserve the history explanation', async () => {
@@ -123,7 +117,7 @@ test('record filters default to excluding evaluation and conversion sends only c
 test('AI generation sends scope and count, shows pending questions, then supports confirmation and deletion', async () => {
   const env = environment(), m = env.mount('./EvaluationPage.vue')
   try {
-    await settle(); await click(button(m.root, 'Questions')); await click(button(m.root, 'AI candidates')); await change(scope(m.root), ['lib1']); await input(control(m.root, 'Search materials'), 'calibration'); await click(button(m.root, 'Search')); await change(check(m.root, 'Selected material'), true); await input(control(m.root, 'Question count'), 2); await change(control(m.root, 'Model', 'select'), 'model1'); await submit(m.root)
+    await settle(); await click(button(m.root, 'AI candidates')); await change(scope(m.root), ['lib1']); await input(control(m.root, 'Search materials'), 'calibration'); await click(button(m.root, 'Search')); await change(check(m.root, 'Selected material'), true); await input(control(m.root, 'Question count'), 2); await change(control(m.root, 'Model', 'select'), 'model1'); await submit(m.root)
     assert.deepEqual(env.calls.find(c => c.path.endsWith('/candidates'))?.body, { libraries: ['lib1'], entry_ids: ['e1'], count: 2, model_id: 'model1' }); assert.equal(control(m.root, 'Confirmation status', 'select').props.value, 'pending')
     await click(button(m.root, 'Confirm candidate')); assert.ok(env.calls.some(c => c.path.endsWith('/pending1/confirm'))); assert.ok(visibleText(m.root).includes('No pending questions.')); await change(control(m.root, 'Confirmation status', 'select'), 'confirmed'); await click(button(m.root, 'Delete')); await click(button(m.root, 'Confirm delete')); assert.ok(env.calls.some(c => c.path.endsWith('/pending1') && c.method === 'delete')); assert.deepEqual(m.errors, [])
   } finally { m.close() }
@@ -157,16 +151,16 @@ test('material scope applies to every statistics request and can be cleared', as
 test('trend mapping separates currencies, inserts zero days and retains null cost gaps', () => {
   const data = [summary('USD', { period: '2026-10-01T00:00:00Z', calls: 2, input_tokens: 0, output_tokens: null, cost: 0 }), summary('USD', { period: '2026-10-03T00:00:00Z', cost: null }), summary('CNY', { period: '2026-10-01T00:00:00Z', cost: .02 })], mapped = mapTrend(data, 'cost')
   assert.deepEqual(mapped.map(s => s.currency), ['CNY', 'USD']); assert.deepEqual(mapped[1]!.points.map(p => p.value), [0, 0, null]); assert.equal(mapTrend(data, 'tokens')[1]!.points[0]!.value, 0); assert.equal(mapTrend(data, 'calls')[1]!.points[0]!.value, 2)
-  const g = chartGeometry(mapped[1]!.points, .02); assert.equal(g.bars[0]!.y, 210); assert.equal(g.bars[2]!.y, null); assert.equal(g.bars.length, 3)
+  const g = chartGeometry(mapped[1]!.points, .02); assert.equal(g.points[0]!.y, 210); assert.equal(g.points[2]!.y, null); assert.equal(g.segments.length, 1)
 })
 test('SVG chart has mapped series, accessible data table and partial value annotations', () => {
   const env = environment(), m = env.mount('./TrendChart.vue', { rows: env.state.summaries, metric: 'cost' })
-  try { assert.equal(descendants(m.root).filter(n => n.tag === 'svg' && n.props.role === 'img').length, 2); assert.equal(descendants(m.root).filter(n => n.props['data-currency']).length, 2); assert.ok(visibleText(m.root).includes('View chart data')); assert.ok(visibleText(m.root).includes('Partial total')); assert.deepEqual(m.errors, []) } finally { m.close() }
+  try { assert.equal(descendants(m.root).filter(n => n.tag === 'svg' && n.props.role === 'img').length, 1); assert.equal(descendants(m.root).filter(n => n.props['data-currency']).length, 2); assert.ok(visibleText(m.root).includes('View chart data')); assert.ok(visibleText(m.root).includes('Partial total')); assert.deepEqual(m.errors, []) } finally { m.close() }
 })
 for (const empty of ['sets', 'questions', 'pending', 'records', 'runs', 'calls', 'trend']) test(`empty state offers next step: ${empty}`, async () => {
   const env = environment(); if (empty === 'sets') env.state.sets = []; if (empty === 'questions' || empty === 'pending') env.state.questions = []; if (empty === 'records') env.state.records = []; if (empty === 'runs') env.state.runs = []; if (empty === 'calls') { env.state.total = 0; env.state.details = []; env.state.summaries = [] }
   const m = env.mount(empty === 'calls' ? './ModelCallsPage.vue' : empty === 'trend' ? './TrendChart.vue' : './EvaluationPage.vue', empty === 'trend' ? { rows: [], metric: 'calls' } : {})
-  try { await settle(); if (empty === 'questions' || empty === 'pending') await click(button(m.root, 'Questions')); if (empty === 'records') await click(button(m.root, 'Search records')); if (empty === 'runs') await click(button(m.root, 'Runs and comparison')); if (empty === 'pending') await change(control(m.root, 'Confirmation status', 'select'), 'pending'); const key = ({ sets: 'noSets', questions: 'noQuestions', pending: 'noCandidates', records: 'noRecords', runs: 'noRuns', calls: 'noCalls', trend: 'noTrend' } as Record<string, string>)[empty]; assert.ok(visibleText(m.root).includes(env.t(`ikb19.${key}`))); assert.deepEqual(m.errors, []) } finally { m.close() }
+  try { await settle(); if (empty === 'records') await click(button(m.root, 'Search records')); if (empty === 'runs') await click(button(m.root, 'Runs and comparison')); if (empty === 'pending') await change(control(m.root, 'Confirmation status', 'select'), 'pending'); const key = ({ sets: 'noSets', questions: 'noQuestions', pending: 'noCandidates', records: 'noRecords', runs: 'noRuns', calls: 'noCalls', trend: 'noTrend' } as Record<string, string>)[empty]; assert.ok(visibleText(m.root).includes(env.t(`ikb19.${key}`))); assert.deepEqual(m.errors, []) } finally { m.close() }
 })
 for (const page of ['./EvaluationPage.vue', './ModelCallsPage.vue']) test(`${page}: failed API has retry and recovers without false empty states`, async () => {
   const env = environment(); env.state.fail = () => ({ message: 'Service unavailable' }); const m = env.mount(page)
@@ -181,7 +175,7 @@ test('failed and running details show errors and next actions', () => {
   try { assert.ok(visibleText(bad.root).includes('Model timeout')); assert.ok(visibleText(bad.root).includes('start another run')); assert.ok(visibleText(running.root).includes('Refresh details to check progress')); assert.deepEqual([...bad.errors, ...running.errors], []) } finally { bad.close(); running.close() }
 })
 test('narrow layout contains scrolling tables and responds to theme tokens', () => {
-  const css = readFileSync(new URL('./diagnostics-b.css', import.meta.url), 'utf8'); assert.match(css, /\.table-scroll[^}]*max-width: 100%;[^}]*overflow-x: auto/); assert.match(css, /@media \(max-width: 640px\)/); assert.match(css, /grid-template-columns: minmax\(0, 1fr\)/); assert.match(css, /var\(--surface-soft\)/); assert.match(css, /min-width: 0/)
+  const css = readFileSync(new URL('./insights.css', import.meta.url), 'utf8'); assert.match(css, /\.table-scroll[^}]*max-width: 100%;[^}]*overflow-x: auto/); assert.match(css, /@media \(max-width: 640px\)/); assert.match(css, /grid-template-columns: minmax\(0, 1fr\)/); assert.match(css, /var\(--td-bg-color-container\)/); assert.match(css, /min-width: 0/)
 })
 
 for (const locale of ['zh-CN', 'en-US']) test(`${locale}: graph question runs successfully and renders its metrics and reference hit without an outage warning`, async () => {
@@ -191,7 +185,7 @@ for (const locale of ['zh-CN', 'en-US']) test(`${locale}: graph question runs su
   env.state.runs = [run('graph-run', 1, { questions: [{ ...run('graph-run', 1).questions[0], question: graphQuestion }] })]
   const m = env.mount('./EvaluationPage.vue')
   try {
-    await settle(); await click(button(m.root, env.t('ikb19.questions'))); assert.ok(visibleText(m.root).includes(env.t('ikb19.graph')))
+    await settle(); assert.ok(visibleText(m.root).includes(env.t('ikb19.graph')))
     assert.ok(!visibleText(m.root).includes(env.t('ikb19.graphUnavailable')))
     await click(button(m.root, env.t('ikb19.runs'))); await submit(m.root)
     assert.ok(env.calls.some(call => call.method === 'write' && call.path.endsWith('/runs')))
@@ -206,7 +200,7 @@ test('clearing the shared library scope explicitly resolves all current librarie
   try { await settle(); await change(scope(editor.root), []); await submit(editor.root); assert.deepEqual(env.calls.find(c => c.method === 'write')?.body.request.libraries, ['lib1', 'lib2']); assert.equal(scope(editor.root).props.multiple, true); assert.deepEqual(editor.errors, []) } finally { editor.close() }
   const page = env.mount('./EvaluationPage.vue')
   try {
-    await settle(); await click(button(page.root, 'Questions')); await click(button(page.root, 'AI candidates')); await change(scope(page.root), ['lib1']); await change(scope(page.root), []); await input(control(page.root, 'Search materials'), 'Calibration'); await click(button(page.root, 'Search')); await change(check(page.root, 'Selected material'), true); await submit(page.root)
+    await settle(); await click(button(page.root, 'AI candidates')); await change(scope(page.root), ['lib1']); await change(scope(page.root), []); await input(control(page.root, 'Search materials'), 'Calibration'); await click(button(page.root, 'Search')); await change(check(page.root, 'Selected material'), true); await submit(page.root)
     assert.deepEqual(env.calls.find(c => c.path.endsWith('/candidates'))?.body.libraries, ['lib1', 'lib2']); assert.deepEqual(page.errors, [])
   } finally { page.close() }
 })
@@ -214,7 +208,7 @@ test('clearing the shared library scope explicitly resolves all current librarie
 
 test('merged navigation retains unique evaluation, model calls, and library settings entries', () => {
   const menus = readFileSync(new URL('../../stores/menu.ts', import.meta.url), 'utf8')
-  for (const key of ['evaluation', 'modelCalls']) assert.equal([...menus.matchAll(new RegExp(`key: '${key}'`, 'g'))].length, 1)
+  for (const key of ['evaluation', 'modelCalls', 'settings']) assert.equal([...menus.matchAll(new RegExp(`key: '${key}'`, 'g'))].length, 1)
   const routes = createApplicationRoutes().find(route => route.path === '/platform')!.children!
   for (const path of ['evaluation', 'model-calls', 'settings', 'entries', 'search']) assert.equal(routes.filter(route => route.path === path).length, 1)
   const settings = readFileSync(new URL('../settings/Settings.vue', import.meta.url), 'utf8')
@@ -262,124 +256,4 @@ test('call statistics opens the shared content viewer for the chosen request', a
  await click(descendants(m.root).find(n => n.tag === 'button' && visibleText(n) === 'View input and output')!)
  assert.match(visibleText(m.root), /Complete prompt/)
  assert.ok(env.calls.some(c => c.path === 'model-calls/call1/content')); assert.deepEqual(m.errors, []); m.close()
-})
-
-
-test('Swiss evaluation has three tabs and opens set and candidate editors as dialogs', async () => {
-  const env = environment(), m = env.mount('./EvaluationPage.vue')
-  try {
-    await settle()
-    assert.equal(descendants(m.root).filter(n => n.props.role === 'tab').length, 3)
-    await click(button(m.root, 'New set'))
-    assert.ok(descendants(m.root).some(n => n.props.role === 'dialog' && n.props['aria-label'] === 'New set'))
-    await click(button(m.root, 'Cancel'))
-    await click(button(m.root, 'Questions')); await click(button(m.root, 'AI candidates'))
-    assert.ok(descendants(m.root).some(n => n.props.role === 'dialog' && n.props['aria-label'] === 'AI candidates'))
-    assert.deepEqual(m.errors, [])
-  } finally { m.close() }
-})
-test('empty calls omit summary, chart and table shells, and details open in a drawer with material links', async () => {
-  const env = environment(); env.state.total = 0; env.state.details = []; env.state.summaries = []
-  const m = env.mount('./ModelCallsPage.vue')
-  try { await settle(); assert.equal(descendants(m.root).filter(n => n.tag === 'table' || n.tag === 'svg').length, 0); assert.deepEqual(m.errors, []) } finally { m.close() }
-  const populated = environment(), detail = populated.mount('./ModelCallsPage.vue')
-  try {
-    await settle(); await click(button(detail.root, 'View input and output'))
-    const drawer = descendants(detail.root).find(n => n.props.role === 'dialog')
-    assert.ok(drawer); assert.match(visibleText(drawer), /Fixture/)
-    assert.ok(descendants(drawer).some(n => n.tag === 'a' && n.props.href === '/platform/entries/e1'))
-    assert.deepEqual(detail.errors, [])
-  } finally { detail.close() }
-})
-
-
-test('changing the evaluation set cannot leave old questions actionable after a failed load', async () => {
-  const env = environment(); env.state.sets.push({ id: 'set2', name: 'Another set', description: '' })
-  const m = env.mount('./EvaluationPage.vue')
-  try {
-    await settle(); await click(button(m.root, 'Questions')); assert.match(visibleText(m.root), /Calibration\?/)
-    env.state.fail = (_method, path) => path === 'evaluation/sets/set2/questions' ? { message: 'New set unavailable' } : undefined
-    await change(control(m.root, 'Evaluation set', 'select'), 'set2')
-    assert.match(visibleText(m.root), /New set unavailable/)
-    assert.ok(!visibleText(m.root).includes('Calibration?'))
-    assert.deepEqual(m.errors, [])
-  } finally { m.close() }
-})
-test('failed model call pagination clears the old page and retains filters', async () => {
-  const env = environment(), m = env.mount('./ModelCallsPage.vue')
-  try {
-    await settle(); env.state.fail = (_method, path) => path === 'model-calls' ? { message: 'Page unavailable' } : undefined
-    await click(button(m.root, 'Next'))
-    assert.match(visibleText(m.root), /Page unavailable/)
-    assert.ok(!descendants(m.root).some(n => n.props['data-row-key'] === 'call1'))
-    assert.equal(env.calls.filter(c => c.path === 'model-calls').at(-1)?.body.offset, 25)
-    assert.deepEqual(m.errors, [])
-  } finally { m.close() }
-})
-test('failed set saving keeps the error and draft visible inside the dialog', async () => {
-  const env = environment(), m = env.mount('./EvaluationPage.vue')
-  try {
-    await settle(); await click(button(m.root, 'New set')); await input(control(m.root, 'Name'), 'Keep draft')
-    env.state.fail = method => method === 'write' ? { message: 'Save unavailable' } : undefined
-    await submit(m.root)
-    const dialog = descendants(m.root).find(n => n.props.role === 'dialog')!
-    assert.match(visibleText(dialog), /Save unavailable/)
-    assert.equal(control(dialog, 'Name').props.value, 'Keep draft')
-  } finally { m.close() }
-})
-
-test('a late comparison cannot replace the newly selected pair of runs', async () => {
-  const env = environment(), m = env.mount('./EvaluationPage.vue')
-  let resolve!: (value: unknown) => void
-  env.state.readOverride = path => path === 'evaluation/compare' ? new Promise(done => { resolve = done }) : undefined
-  try {
-    await settle(); await change(control(m.root, 'Before run', 'select'), 'run1'); await change(control(m.root, 'After run', 'select'), 'run2')
-    await click(button(m.root, 'Compare'))
-    await change(control(m.root, 'After run', 'select'), '')
-    resolve(env.comparison); await settle()
-    assert.ok(!visibleText(m.root).includes('+0.5500'))
-    assert.deepEqual(m.errors, [])
-  } finally { m.close() }
-})
-test('model grouping and material filter preserve all request filters and show real aggregate calls', async () => {
-  const env = environment(), m = env.mount('./ModelCallsPage.vue')
-  try {
-    await settle()
-    const kpis = descendants(m.root).find(n => String(n.props.class).includes('call-kpis'))!
-    assert.equal(visibleText(descendants(kpis).find(n => n.tag === 'strong')!), '8')
-    for (const group of ['model', 'purpose', 'model,purpose']) {
-      await change(control(m.root, 'Group by', 'select'), group)
-      assert.equal(env.calls.filter(c => c.path === 'model-calls/summary').at(-1)?.body.group_by, group)
-    }
-    await input(control(m.root, 'Material'), 'e1'); await submit(m.root)
-    assert.equal(env.route.query.entry_id, 'e1')
-    assert.equal(env.calls.filter(c => c.path === 'model-calls').at(-1)?.body.entry_id, 'e1')
-    assert.equal(env.calls.filter(c => c.path === 'model-calls/trend').at(-1)?.body.entry_id, 'e1')
-    assert.deepEqual(m.errors, [])
-  } finally { m.close() }
-})
-
-
-test('evaluation dialogs expose one title for set, manual question and AI candidate forms', async () => {
-  const env = environment(), m = env.mount('./EvaluationPage.vue')
-  function oneTitle(title: string) {
-    const dialog = descendants(m.root).find(node => node.props.role === 'dialog')!
-    assert.ok(dialog)
-    assert.equal(dialog.props['aria-label'], title)
-    const headings = descendants(dialog).filter(node => node.tag === 'h2')
-    assert.equal(headings.length, 1, `${title} has only the Dialog heading`)
-    assert.equal(visibleText(headings[0]!), title)
-  }
-  try {
-    await settle(); await click(button(m.root, 'New set')); oneTitle('New set')
-    await click(button(m.root, 'Cancel'))
-    await click(button(m.root, 'Edit set')); oneTitle('Edit set')
-    await click(button(m.root, 'Cancel'))
-    await click(button(m.root, 'Questions')); await click(button(m.root, 'Add question')); oneTitle('Add question')
-    await click(button(m.root, 'Cancel'))
-    await click(button(m.root, 'Edit')); oneTitle('Edit question')
-    await click(button(m.root, 'Cancel'))
-    await click(button(m.root, 'AI candidates')); oneTitle('AI candidates')
-    assert.deepEqual(m.errors, [])
-  } finally { m.close() }
 })

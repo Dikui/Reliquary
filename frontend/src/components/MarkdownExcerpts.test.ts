@@ -1,4 +1,3 @@
-import { entryPresentationTestModules } from '../views/library/entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -23,7 +22,7 @@ const record = { id: 'excerpt-article', title: 'Article', file_name: 'Article.md
 function evaluate(code: string, modules: Record<string, unknown>) {
   const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const value = { exports: {} as any }
-  new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? entryPresentationTestModules[name] ?? (name.endsWith('.vue') ? empty : name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : require(name)), value, value.exports)
+  new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? (name.endsWith('.vue') ? empty : name.endsWith('.css') ? {} : name.endsWith('.png') ? '/image.png' : require(name)), value, value.exports)
   return value.exports
 }
 
@@ -55,7 +54,7 @@ async function render(value: any, props: Record<string, unknown>, locale: keyof 
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: API-loaded material list uses plain text and article detail keeps rendering Markdown`, async () => {
+  test(`${locale}: API-loaded card hover uses plain text and article detail keeps rendering Markdown`, async () => {
     const requests: string[] = []
     const api = evaluate(readFileSync(new URL('../api/library.ts', import.meta.url), 'utf8'), {
       '../utils/request': { get: async (url: string) => {
@@ -71,6 +70,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/stores/entry': { entryStore: () => ({}) },
       '@/api/library': api,
       '../utils/index': { formatStringDate: () => '2026-10-13' },
+      'tdesign-vue-next': { MessagePlugin: {} },
       'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
     })
     const hook = hookModule.default('excerpts')
@@ -78,11 +78,17 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     hook.getCardDetails(hook.cardList.value[0])
     await new Promise<void>(resolve => setImmediate(resolve))
     assert.equal(hook.details.md[0].content, source)
-    const card = component('../views/library/components/DocumentListView.vue', {
+    const card = component('../views/library/components/DocumentCardView.vue', {
       '@/utils/markdownPlainText': markdownPlainText,
       '@/utils/entrySourceLabels': entrySourceLabels,
       '@/utils/files': { formatFileSize: () => '' },
     })
+    const setup = card.setup
+    card.setup = (props: any, context: any) => {
+      const state = setup(props, context)
+      onServerPrefetch(() => { state.hoveredCardItem.value = props.items[0] })
+      return state
+    }
     const hover = await render(card, { items: hook.cardList.value, selectedIds: new Set(), batchMode: false, traceAvailableById: {} }, locale)
     const image = locale === 'zh-CN' ? '[图片]' : '[Image]'
     assert.ok(hover.includes(`${image} ${image} HTML`))
@@ -97,6 +103,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       'marked-katex-extension': { __esModule: true, default: () => ({}) },
       'highlight.js': { __esModule: true, default: {} },
       mermaid: { __esModule: true, default: { initialize() {} } },
+      'tdesign-vue-next': { MessagePlugin: {} },
       '@/api/library': api,
       '@/utils/entrySourceLabels': entrySourceLabels,
       '@/utils/security': { createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }),

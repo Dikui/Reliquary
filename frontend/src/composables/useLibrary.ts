@@ -1,7 +1,7 @@
-import { ref, reactive, getCurrentScope, onScopeDispose } from "vue";
+import { ref, reactive } from "vue";
 import { storeToRefs } from "pinia";
 import { formatStringDate } from "../utils/index";
-import { toast } from '@/components/ui/feedback';
+import { MessagePlugin } from "tdesign-vue-next";
 import {
   listEntryFiles,
   getEntryDetails,
@@ -57,12 +57,10 @@ export default function (defaultLibraryId?: string) {
     chunkLoadError: "",
     repost_sources: [] as EntryRepostSource[],
   });
-  const listError = ref('');
   let entryListGeneration = 0;
   let chunkRequestGeneration = 0;
   let detailRequestGeneration = 0;
   let activeEntryId = '';
-  if (getCurrentScope()) onScopeDispose(() => { entryListGeneration++; detailRequestGeneration++; chunkRequestGeneration++; });
   const loadEntries = (
     query: {
       page: number;
@@ -84,12 +82,10 @@ export default function (defaultLibraryId?: string) {
     if (!targetLibraryId) return Promise.resolve();
     const requestGeneration = query.page === 1 ? ++entryListGeneration : entryListGeneration;
 
-    listError.value = '';
     return listEntryFiles(targetLibraryId, query)
       .then((result: any) => {
         if (requestGeneration !== entryListGeneration) return;
 
-        if (!result?.success || !Array.isArray(result.data)) throw new Error(result?.message || t('entries.loadFailed'));
         const { data, total: totalResult } = result;
     const cardList_ = data.map((item: any) => {
       const isVaultDocument = item.source_kind === 'mine' || item.source_kind === 'report'
@@ -116,13 +112,13 @@ export default function (defaultLibraryId?: string) {
         }
         total.value = totalResult;
       })
-      .catch(() => { if (requestGeneration === entryListGeneration) listError.value = t('entries.loadFailed'); });
+      .catch(() => {});
   };
   const delEntry = (index: number, item: any, onSuccess?: () => void) => {
     return delEntryDetails(item.id)
       .then(async (result: any) => {
         if (result.success) {
-          toast.info(t(item.source_kind === 'mine' ? 'personalDocument.deleted' : 'library.deleteSuccess'));
+          MessagePlugin.info(t(item.source_kind === 'mine' ? 'personalDocument.deleted' : 'library.deleteSuccess'));
           if (onSuccess) {
             await onSuccess();
           } else {
@@ -139,12 +135,12 @@ export default function (defaultLibraryId?: string) {
           }
           return true;
         } else {
-          toast.error(t('library.deleteFailed'));
+          MessagePlugin.error(t('library.deleteFailed'));
           return false;
         }
       })
       .catch(() => {
-        toast.error(t('library.deleteFailed'));
+        MessagePlugin.error(t('library.deleteFailed'));
         return false;
       });
   };
@@ -284,7 +280,6 @@ export default function (defaultLibraryId?: string) {
   };
   return {
     cardList,
-    listError,
     moreIndex,
     loadEntries,
     details,

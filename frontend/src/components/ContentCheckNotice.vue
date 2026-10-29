@@ -15,6 +15,6 @@ onUnmounted(() => { disposed = true; clearTimeout(timer) })
 </script>
 <template><div v-if="failedID && route.path !== '/platform/content-checks'" class="check-notice" role="alert"><router-link :to="{ path: '/platform/content-checks', query: { run: failedID } }">{{ t('contentCheck.notice') }}</router-link></div></template>
 <style scoped>
-.check-notice { flex-shrink: 0; padding: 10px 16px; border-bottom: 1px solid var(--warning); color: var(--text); background: var(--surface); }
-a { color: inherit; cursor: pointer; text-decoration: underline; } a:hover { color: var(--accent); } a:focus-visible { outline: 2px solid currentColor; }
+.check-notice { flex-shrink: 0; padding: 10px 16px; border-bottom: 1px solid var(--td-warning-color); color: var(--td-text-color-primary); background: var(--td-bg-color-container); }
+a { color: var(--td-warning-color); cursor: pointer; } a:hover { text-decoration: underline; } a:focus-visible { outline: 2px solid currentColor; }
 </style>

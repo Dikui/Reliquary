@@ -11,7 +11,7 @@ const libraryEditorSource = readFileSync(
 test('model deletion renders structured usage groups and localized fallback errors', () => {
   assert.match(source, /error instanceof ModelInUseError/)
   assert.match(source, /usageConflict\.libraries/)
-  assert.match(source, /toast\.error\(error\.message \|\| t\('modelSettings\.toasts\.deleteFailed'\)\)/)
+  assert.match(source, /MessagePlugin\.error\(error\.message \|\| t\('modelSettings\.toasts\.deleteFailed'\)\)/)
 })
 
 test('referenced knowledge configuration opens in the single settings center', () => {

@@ -18,8 +18,7 @@ export type CompiledStyleRule = {
 // DOM geometry or replace browser verification of the resulting layout.
 export async function compiledSFCStyleRules(url: URL): Promise<CompiledStyleRule[]> {
   const filename = fileURLToPath(url)
-  const source = readFileSync(url, 'utf8')
-  const descriptor = filename.endsWith('.css') ? { styles: [{ content: source, scoped: false, lang: undefined }] } : parse(source, { filename }).descriptor
+  const { descriptor } = parse(readFileSync(url, 'utf8'), { filename })
   const rules: CompiledStyleRule[] = []
   for (const style of descriptor.styles) {
     const compiled = await compileStyleAsync({

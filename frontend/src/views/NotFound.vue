@@ -1,15 +1,15 @@
 <template>
   <section class="not-found">
+    <t-icon name="error-circle" size="48px" aria-hidden="true" />
     <h1>{{ t('navigation.pageNotFound') }}</h1>
     <p>{{ t('navigation.pageNotFoundDescription') }}</p>
-    <Button variant="primary" @click="router.push('/platform/entries')">
-      {{ t('navigation.returnToEntries') }}
-    </Button>
+    <t-button theme="primary" @click="router.push('/platform/entries')">
+      {{ t('navigation.returnToKnowledge') }}
+    </t-button>
   </section>
 </template>
 
 <script setup lang="ts">
-import { Button } from '@/components/ui'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
@@ -28,10 +28,10 @@ const router = useRouter()
   justify-content: center;
   gap: 16px;
   text-align: center;
-  color: var(--text);
-  background: var(--surface);
+  color: var(--td-text-color-primary);
+  background: var(--td-bg-color-container);
   overflow-wrap: anywhere;
 }
 h1, p { margin: 0; }
-p { color: var(--muted); line-height: 1.6; }
+p { color: var(--td-text-color-secondary); line-height: 1.6; }
 </style>

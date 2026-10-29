@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { Button, Select } from '@/components/ui'
-import '@/styles/settings-form.css'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -52,36 +50,37 @@ onUnmounted(() => { disposed = true; generation++ })
 </script>
 
 <template>
-  <section class="operation-log-page settings-form">
-    <header><p>{{ t('operationLogs.description') }}</p></header>
-    <div class="log-toolbar"><label><span>{{ t('operationLogs.type') }}</span><Select v-model="operationType" :aria-label="t('operationLogs.type')" @update:model-value="filterChanged"><option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option></Select></label><Button variant="default" :loading="loading" @click="load">{{ t('operationLogs.refresh') }}</Button><span>{{ t('operationLogs.timezone', { timezone }) }}</span></div>
-    <div v-if="error" role="alert" class="log-error">{{ error }} <Button variant="ghost" @click="load">{{ t('common.retry') }}</Button></div>
-    <div :loading="loading">
+  <main class="operation-log-page">
+    <header><h1>{{ t('operationLogs.title') }}</h1><p>{{ t('operationLogs.description') }}</p></header>
+    <div class="log-toolbar"><label><span>{{ t('operationLogs.type') }}</span><t-select v-model="operationType" :options="options" :aria-label="t('operationLogs.type')" @change="filterChanged" /></label><t-button variant="outline" :loading="loading" @click="load">{{ t('operationLogs.refresh') }}</t-button><span>{{ t('operationLogs.timezone', { timezone }) }}</span></div>
+    <div v-if="error" role="alert" class="log-error">{{ error }} <t-button variant="text" @click="load">{{ t('common.retry') }}</t-button></div>
+    <t-loading :loading="loading">
       <ol v-if="items.length" class="log-list">
         <li v-for="item in items" :key="item.id" class="log-item">
           <div class="log-item-heading"><strong>{{ t(`operationLogs.types.${item.operation_type}`) }}</strong><time :datetime="item.created_at">{{ timestamp(item.created_at) }}</time></div>
           <p class="log-actor">{{ t('operationLogs.actor') }} {{ actorLabel(item) }}</p>
-          <p class="log-object">{{ t('operationLogs.object') }} <code :title="item.object_id">{{ item.object_id.length > 36 ? item.object_id.slice(0, 12) + '…' : item.object_id }}</code></p>
+          <p class="log-object">{{ t('operationLogs.object') }} <code>{{ item.object_id }}</code></p>
           <div class="log-values"><div><span>{{ t('operationLogs.before') }}</span><pre>{{ formatValue(item.before) }}</pre></div><div><span>{{ t('operationLogs.after') }}</span><pre>{{ formatValue(item.after) }}</pre></div></div>
         </li>
       </ol>
-      <p v-else-if="!loading && !error" role="status">{{ t('operationLogs.empty') }}</p>
-    </div>
-    <nav v-if="total > 0" class="settings-actions" :aria-label="t('entries.pagination')"><Button :disabled="loading || page <= 1" @click="pageChanged(page - 1)">{{ t('entries.previous') }}</Button><span>{{ page }} / {{ Math.ceil(total / pageSize) }}</span><Button :disabled="loading || page * pageSize >= total" @click="pageChanged(page + 1)">{{ t('entries.next') }}</Button></nav>
-  </section>
+      <t-empty v-else-if="!loading && !error" :description="t('operationLogs.empty')" />
+    </t-loading>
+    <t-pagination v-if="total > 0" :current="page" :page-size="pageSize" :total="total" :show-page-size="false" @current-change="pageChanged" />
+  </main>
 </template>
 
-<style scoped>
- header p { color: var(--muted); }
-.log-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); border-top: 2px solid var(--rule); padding-top: var(--space-4); }
-.log-toolbar label { display: grid; gap: var(--space-2); min-width: 180px; }
-.log-list { list-style: none; padding: 0; }
-.log-item { border-top: 2px solid var(--rule); padding: var(--space-4) 0; overflow-wrap: anywhere; }
-.log-item-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); }
-.log-item-heading time, .log-actor, .log-object, .log-values span { font-size: var(--text-sm); color: var(--muted); }
-.log-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
-.log-values pre { padding: var(--space-3); background: var(--surface-soft); }
-.log-error { color: var(--danger); }
-@container settings-content (max-width: 720px) { .log-values { grid-template-columns: minmax(0, 1fr); } }
+<style scoped lang="less">
+.operation-log-page { min-width: 0; color: var(--td-text-color-primary); }
+header h1 { margin: 0; font-size: 24px; }
+header p, .log-toolbar { color: var(--td-text-color-secondary); line-height: 1.7; }
+.log-toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; font-size: 13px; }
+.log-toolbar label { display: grid; gap: 6px; min-width: 220px; }
+.log-list { display: grid; gap: 16px; padding: 0; list-style: none; margin: 20px 0; }
+.log-item { padding: 20px; border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-medium); background: var(--td-bg-color-container); min-width: 0; overflow-wrap: anywhere; }
+.log-item-heading { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; }
+.log-item-heading time, .log-actor, .log-object, .log-values span { font-size: 13px; color: var(--td-text-color-secondary); }
+.log-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.log-values pre { margin: 6px 0 0; padding: 12px; border-radius: var(--td-radius-small); background: var(--td-bg-color-secondarycontainer); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; }
+.log-error { color: var(--td-error-color); }
 @media (max-width: 640px) { .log-values { grid-template-columns: minmax(0, 1fr); } }
 </style>

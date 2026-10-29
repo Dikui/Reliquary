@@ -48,7 +48,7 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 			return werrors.NewBadRequestError("entities must belong to the same library")
 		}
 		if merged.MergedIntoID == keep.ID {
-			return closeMergedEntitySuggestions(tx, spaceID, keep.ID, merged.ID)
+			return nil
 		}
 		if keep.MergedIntoID != "" || merged.MergedIntoID != "" {
 			return werrors.NewBadRequestError("entity was already merged into a different entity")
@@ -105,9 +105,6 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 			return err
 		}
 		if err := tx.Model(&merged).Update("merged_into_id", keep.ID).Error; err != nil {
-			return err
-		}
-		if err := closeMergedEntitySuggestions(tx, spaceID, keep.ID, merged.ID); err != nil {
 			return err
 		}
 		for _, id := range []string{merged.ID, keep.ID} {

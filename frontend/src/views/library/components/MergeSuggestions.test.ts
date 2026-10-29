@@ -1,31 +1,57 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import test from 'node:test'
+import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
+import { renderToString } from '@vue/server-renderer'
+import { createSSRApp, defineComponent, h, nextTick, onServerPrefetch } from 'vue'
 import { createI18n } from 'vue-i18n'
-import { defineComponent, h } from 'vue'
-import en from '../../../i18n/locales/en-US'
-import zh from '../../../i18n/locales/zh-CN'
-import { loadUiComponent } from '../../../components/ui/uiTestLoader'
-import { descendants, element, loadComponent, renderer, settle, visibleText } from '../componentTestHarness'
+import ts from 'typescript'
+import enUS from '../../../i18n/locales/en-US'
+import zhCN from '../../../i18n/locales/zh-CN'
 
-for (const language of ['zh-CN', 'en-US']) {
+const require = createRequire(import.meta.url)
+const filename = 'MergeSuggestions.vue'
+const { descriptor } = parse(readFileSync(new URL('./MergeSuggestions.vue', import.meta.url), 'utf8'), { filename })
+const script = compileScript(descriptor, { id: filename })
+const template = compileTemplate({ id: filename, filename, source: descriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: script.bindings } })
+assert.deepEqual(template.errors, [])
+
+async function renderSuggestions(locale: 'zh-CN' | 'en-US', count: number, status: 'accepted' | 'rejected') {
+  const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
+  const modules: Record<string, unknown> = {
+    'vue-i18n': { useI18n: () => i18n.global },
+    'tdesign-vue-next': { MessagePlugin: { success() {} } },
+    '@/components/settings/useConfirmDelete': { useConfirmDelete: () => () => {} },
+    '@/api/entities': { listEntityMergeSuggestions: () => Promise.resolve({ success: true, data: Array.from({ length: count }, (_, index) => ({ id: `suggestion-${index}`, status, new_entity_name: 'Aurora', candidate_entity_name: 'Aurora model' })) }) },
+  }
+  function evaluate(code: string) {
+    const module = { exports: {} as any }
+    const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+    new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports)
+    return module.exports
+  }
+  const component = evaluate(script.content).default
+  component.ssrRender = evaluate(template.code).ssrRender
+  const setup = component.setup
+  component.setup = (props: object, context: object) => {
+    const state = setup(props, context)
+    onServerPrefetch(async () => { state.status.value = status; await nextTick(); await state.refresh() })
+    return state
+  }
+  const app = createSSRApp(component, { libraryId: 'library-a' })
+  const stub = defineComponent({ props: ['message', 'description'], setup: (props, { attrs, slots }) => () => h('div', attrs, [props.message, props.description, slots.default?.()]) })
+  for (const name of ['t-alert', 't-button', 't-empty', 't-loading', 't-select', 't-tag']) app.component(name, stub)
+  return renderToString(app)
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
   for (const count of [0, 1, 2]) {
-    for (const status of ['accepted', 'rejected']) {
-      test(`${language}: ${status} history remains accessible with ${count} suggestions`, async t => {
-        const component = loadComponent(new URL('./MergeSuggestions.vue', import.meta.url), {
-          '@/api/entities': {}, '@/utils/search': {}, '@/components/ui/feedback': {},
-          '@/components/ui': Object.fromEntries(['Button', 'Select', 'Tag', 'EmptyState', 'ErrorState'].map(name => [name, loadUiComponent(name)])),
-          './MergeCandidate.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('article') }) },
-        })
-        const app = renderer.createApp(component, { items: Array.from({ length: count }, (_, i) => ({ id: String(i), status, reason: 'Saved rationale', new_entity_id: 'a', candidate_entity_id: 'b' })), loading: false, error: '' })
-        app.use(createI18n({ legacy: false, locale: language, messages: { 'zh-CN': zh, 'en-US': en } }))
-        const root = element('root'); app.mount(root); t.after(() => app.unmount())
-        descendants(root).find(node => node.tag === 'select')!.props.onChange({ target: { value: status } })
-        await settle()
-        const html = visibleText(root)
-        if (count) { assert.ok(html.includes(`1 / ${count}`)); assert.ok(html.includes('Saved rationale')) }
-        else assert.ok(html.includes(language === 'zh-CN' ? '没有' : 'No'))
+    for (const status of ['accepted', 'rejected'] as const) {
+      test(`${locale}: ${status} suggestions use the correct loaded count for ${count}`, async () => {
+        const html = await renderSuggestions(locale, count, status)
+        assert.ok(html.includes(locale === 'zh-CN' ? `已加载 ${count} 条建议` : `Loaded ${count} ${count === 1 ? 'suggestion' : 'suggestions'}<`), html)
         assert.doesNotMatch(html, /mergeSuggestions\./)
-        assert.equal(descendants(root).some(node => node.props.class?.includes('merge-decide')), false)
       })
     }
   }

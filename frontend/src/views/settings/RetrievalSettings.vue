@@ -1,25 +1,111 @@
 <template>
-  <div class="rq-retrieval-settings settings-form">
-      <p class="rq-retrieval-description">{{ t('retrievalSettings.description') }}</p>
-      <p v-if="loadError" role="alert">{{ loadError }} <Button @click="loadConfig">{{ t('common.retry') }}</Button></p>
-      <p v-if="saveError" role="alert">{{ saveError }}</p>
-      <form novalidate ref="nativeForm" @submit.prevent>
-      <div v-for="field in fields" :key="field.key" class="rq-retrieval-field">
-        <label :for="`cmdk-retrieval-${field.key}`">{{ field.label }}</label>
-        <div class="rq-retrieval-control">
-          <input :id="`cmdk-retrieval-${field.key}`" v-model.number="localConfig[field.key]" :type="field.range ? 'range' : 'number'" :min="field.min" :max="field.max" :step="field.step" required :disabled="configLoading || !!loadError || saving" :aria-describedby="field.hint ? `cmdk-retrieval-${field.key}-hint` : undefined" @change="handleNativeChange" />
-          <output v-if="field.range" :for="`cmdk-retrieval-${field.key}`">{{ localConfig[field.key] }}</output>
-        </div>
-        <p v-if="field.hint" :id="`cmdk-retrieval-${field.key}-hint`">{{ field.hint }}</p>
-      </div>
-      </form>
+  <div class="retrieval-settings">
+    <div class="section-header">
+      <h2>{{ t('retrievalSettings.title') }}</h2>
+      <p class="section-description">{{ t('retrievalSettings.description') }}</p>
+    </div>
 
+    <div class="settings-group">
+      <!-- Embedding Top K -->
+      <div class="setting-item">
+        <div class="setting-label-row">
+          <span>{{ t('retrievalSettings.embeddingTopKLabel') }}</span>
+          <span class="value-display">{{ localConfig.embedding_top_k }}</span>
+        </div>
+        <t-slider
+          v-model="localConfig.embedding_top_k"
+          :min="1"
+          :max="100"
+          :step="1"
+
+          @change="handleParamChange"
+        />
+      </div>
+
+      <!-- Vector Threshold -->
+      <div class="setting-item">
+        <div class="setting-label-row">
+          <span>{{ t('retrievalSettings.vectorThresholdLabel') }}</span>
+          <span class="value-display">{{ localConfig.vector_threshold.toFixed(2) }}</span>
+        </div>
+        <t-slider
+          v-model="localConfig.vector_threshold"
+          :min="0"
+          :max="1"
+          :step="0.05"
+
+          @change="handleParamChange"
+        />
+      </div>
+
+      <!-- Keyword Threshold -->
+      <div class="setting-item">
+        <div class="setting-label-row">
+          <span>{{ t('retrievalSettings.keywordThresholdLabel') }}</span>
+          <span class="value-display">{{ localConfig.keyword_threshold.toFixed(2) }}</span>
+        </div>
+        <t-slider
+          v-model="localConfig.keyword_threshold"
+          :min="0"
+          :max="1"
+          :step="0.05"
+
+          @change="handleParamChange"
+        />
+      </div>
+
+      <!-- Rerank Top K -->
+      <div class="setting-item">
+        <div class="setting-label-row">
+          <span>{{ t('retrievalSettings.rerankTopKLabel') }}</span>
+          <span class="value-display">{{ localConfig.rerank_top_k }}</span>
+        </div>
+        <t-slider
+          v-model="localConfig.rerank_top_k"
+          :min="1"
+          :max="100"
+          :step="1"
+
+          @change="handleParamChange"
+        />
+      </div>
+
+      <!-- Rerank Threshold -->
+      <div class="setting-item">
+        <div class="setting-label-row">
+          <span>{{ t('retrievalSettings.rerankThresholdLabel') }}</span>
+          <span class="value-display">{{ localConfig.rerank_threshold.toFixed(2) }}</span>
+        </div>
+        <t-slider
+          v-model="localConfig.rerank_threshold"
+          :min="-10"
+          :max="10"
+          :step="0.1"
+
+          @change="handleParamChange"
+        />
+      </div>
+      <div class="setting-item">
+        <div class="setting-label-row"><span>{{ t('retrievalSettings.imageWeightLabel') }}</span></div>
+        <t-input-number v-model="localConfig.rrf_image_weight" :min="0" :max="1" :step="0.05" :decimal-places="2" :aria-label="t('retrievalSettings.imageWeightLabel')" @change="handleParamChange" />
+        <p class="setting-desc">{{ t('retrievalSettings.imageWeightHint') }}</p>
+      </div>
+      <div class="setting-item">
+        <div class="setting-label-row"><span>{{ t('retrievalSettings.similarReportsThresholdLabel') }}</span></div>
+        <t-input-number v-model="localConfig.similar_reports_threshold" :min="0.01" :max="1" :step="0.01" :decimal-places="2" :aria-label="t('retrievalSettings.similarReportsThresholdLabel')" @change="handleParamChange" />
+      </div>
+      <div class="setting-item">
+        <div class="setting-label-row"><span>{{ t('retrievalSettings.similarReportsWindowDaysLabel') }}</span></div>
+        <t-input-number v-model="localConfig.similar_reports_window_days" :min="1" :step="1" :decimal-places="0" :aria-label="t('retrievalSettings.similarReportsWindowDaysLabel')" @change="handleParamChange" />
+        <p class="setting-desc">{{ t('retrievalSettings.similarReportsHint') }}</p>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, onMounted, onBeforeUnmount, nextTick, ref } from 'vue'
-import { Button, toast } from '@/components/ui'
+import { reactive, computed, onMounted, nextTick } from 'vue'
+import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import {
   getSpaceRetrievalConfig,
@@ -27,20 +113,7 @@ import {
   type RetrievalConfig,
 } from '@/api/retrieval'
 
-const props = withDefaults(defineProps<{ swiss?: boolean }>(), { swiss: false })
 const { t } = useI18n()
-const configLoading = ref(false), loadError = ref(''), saveError = ref(''), saving = ref(false)
-const nativeForm = ref<HTMLFormElement | null>(null)
-const fields = computed(() => [
-  { key: 'embedding_top_k' as const, label: t('retrievalSettings.embeddingTopKLabel'), min: 1, max: 100, step: 1, range: true },
-  { key: 'vector_threshold' as const, label: t('retrievalSettings.vectorThresholdLabel'), min: 0, max: 1, step: 0.05, range: true },
-  { key: 'keyword_threshold' as const, label: t('retrievalSettings.keywordThresholdLabel'), min: 0, max: 1, step: 0.05, range: true },
-  { key: 'rerank_top_k' as const, label: t('retrievalSettings.rerankTopKLabel'), min: 1, max: 100, step: 1, range: true },
-  { key: 'rerank_threshold' as const, label: t('retrievalSettings.rerankThresholdLabel'), min: -10, max: 10, step: 0.1, range: true },
-  { key: 'rrf_image_weight' as const, label: t('retrievalSettings.imageWeightLabel'), min: 0, max: 1, step: 0.05, hint: t('retrievalSettings.imageWeightHint') },
-  { key: 'similar_reports_threshold' as const, label: t('retrievalSettings.similarReportsThresholdLabel'), min: 0.01, max: 1, step: 0.01 },
-  { key: 'similar_reports_window_days' as const, label: t('retrievalSettings.similarReportsWindowDaysLabel'), min: 1, step: 1, hint: t('retrievalSettings.similarReportsHint') },
-])
 const defaultConfig: RetrievalConfig = {
   embedding_top_k: 50,
   vector_threshold: 0.15,
@@ -57,7 +130,6 @@ let initialConfig: RetrievalConfig = { ...defaultConfig }
 let isInitializing = true
 
 const loadConfig = async () => {
-  configLoading.value = true; loadError.value = ''
   try {
     const response = await getSpaceRetrievalConfig()
     if (response.data) {
@@ -79,9 +151,8 @@ const loadConfig = async () => {
       initialConfig = { ...localConfig }
     }
   } catch (error: any) {
-    loadError.value = t('retrievalSettings.loadFailed')
+    console.error('Failed to load retrieval config:', error)
   } finally {
-    configLoading.value = false
     await nextTick()
     await nextTick()
     setTimeout(() => { isInitializing = false }, 100)
@@ -93,24 +164,17 @@ const hasConfigChanged = (): boolean => {
 }
 
 const saveConfig = async () => {
-  if (!hasConfigChanged() || saving.value) return
-  if (nativeForm.value && !nativeForm.value.checkValidity()) return
-  saving.value = true; saveError.value = ''
-  const submitted = { ...localConfig }
+  if (!hasConfigChanged()) return
   try {
-    const response = await updateSpaceRetrievalConfig(submitted)
+    const response = await updateSpaceRetrievalConfig({ ...localConfig })
     if (response.data) {
-      initialConfig = submitted
+      initialConfig = { ...localConfig }
     }
-    const feedback = toast
-    feedback.success(t('retrievalSettings.toasts.saveSuccess'))
+    MessagePlugin.success(t('retrievalSettings.toasts.saveSuccess'))
   } catch (error: any) {
-    const errorMessage = error?.message || t('common.operationFailed')
-    saveError.value = t('retrievalSettings.toasts.saveFailed', { message: errorMessage })
-    const feedback = toast
-    feedback.error(saveError.value)
-  } finally {
-    saving.value = false
+    console.error('Failed to save retrieval config:', error)
+    const errorMessage = error?.message || 'Unknown error'
+    MessagePlugin.error(t('retrievalSettings.toasts.saveFailed', { message: errorMessage }))
   }
 }
 
@@ -119,32 +183,95 @@ const debouncedSave = () => {
   if (isInitializing) return
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => {
-    saveTimer = null
     saveConfig().catch(() => {})
   }, 500)
 }
 
 const handleParamChange = () => debouncedSave()
-const handleNativeChange = () => { if (nativeForm.value?.reportValidity()) debouncedSave() }
-onBeforeUnmount(() => {
-  if (saveTimer) { clearTimeout(saveTimer); if (!loadError.value && !configLoading.value) void saveConfig() }
-})
 onMounted(async () => {
   isInitializing = true
   await loadConfig()
 })
 </script>
 
-<style scoped>
-.rq-retrieval-settings { color: var(--text); }
-.rq-retrieval-settings .rq-retrieval-description { margin: 0 0 var(--space-4); color: var(--muted); font-size: var(--text-sm); }
-.rq-retrieval-settings .rq-retrieval-field { padding-block: var(--space-4); border-bottom: 1px solid var(--border); }
-.rq-retrieval-settings .rq-retrieval-field label { font-size: var(--text-sm); font-weight: 700; }
-.rq-retrieval-settings .rq-retrieval-field p { color: var(--muted); font-size: var(--text-xs); }
-.rq-retrieval-settings .rq-retrieval-control { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
-.rq-retrieval-settings .rq-retrieval-control input { min-width: 0; width: 100%; border-radius: 0; accent-color: var(--text); }
-.rq-retrieval-settings .rq-retrieval-control input[type="range"] { flex: 1 1 0; width: 0; min-width: 0; }
-.rq-retrieval-settings .rq-retrieval-control output { flex: 0 0 56px; min-width: 56px; white-space: nowrap; overflow-wrap: normal; word-break: normal; text-align: right; }
-.rq-retrieval-settings .rq-retrieval-control input[type="number"] { padding: var(--space-2); border: 1px solid var(--border); background: var(--surface); color: var(--text); font: var(--text-sm)/1.5 var(--mono); }
-.rq-retrieval-settings output { font-family: var(--mono); }
+<style lang="less" scoped>
+.retrieval-settings {
+  width: 100%;
+}
+
+.section-header {
+  margin-bottom: 24px;
+
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+    margin: 0 0 6px 0;
+  }
+
+  .section-description {
+    font-size: 13px;
+    color: var(--td-text-color-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.setting-item {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--td-component-stroke);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.setting-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+  margin-bottom: 4px;
+}
+
+.setting-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+  margin-bottom: 10px;
+}
+
+.setting-desc {
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+  margin: 0 0 8px 0;
+  line-height: 1.5;
+}
+
+.required-mark {
+  color: var(--td-error-color);
+}
+
+.warning-text {
+  color: var(--td-warning-color) !important;
+}
+
+.setting-control-full {
+  width: 100%;
+}
+
+.value-display {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--td-brand-color);
+  font-family: var(--app-font-family-mono);
+}
 </style>

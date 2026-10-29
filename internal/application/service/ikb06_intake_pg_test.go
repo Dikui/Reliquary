@@ -55,6 +55,7 @@ func TestIKB06IdentityAndDiscardStayInLibrary(t *testing.T) {
 	base.Library = "official"
 	require.NotEqual(t, first.EntryID, send(base).EntryID)
 	// Publisher, title and date alone cannot identify a source.
+	require.NoError(t, h.db.Model(&types.Library{}).Where("id=?", h.library.ID).Update("source_evidence_rule", "link_or_publisher_date").Error)
 	noLink := types.IngestRequest{Library: "official", Title: "Bulletin", Publisher: "Agency", PublishedAt: "2026-10-01", Content: "First complete bulletin text.", Acquisition: "verbatim"}
 	bulletin := send(noLink)
 	require.Equal(t, "accepted", bulletin.Status)

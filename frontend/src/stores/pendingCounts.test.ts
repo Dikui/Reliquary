@@ -82,10 +82,7 @@ function fixture(t: TestContext) {
   const reviews = evaluate(source('../api/entry-review.ts'), { '@/utils/request': request })
   const pinia = createPinia()
   setActivePinia(pinia)
-  const storeModule = evaluate(source('./pendingCounts.ts'), { pinia: { defineStore }, vue: { ref, onScopeDispose }, '@/api/entry-review': reviews,
-    '@/api/library': { listLibraries: async () => ({ success: true, data: [] }) },
-    '@/api/entities': { listEntityMergeSuggestions: async () => ({ success: true, data: [] }) },
-  })
+  const storeModule = evaluate(source('./pendingCounts.ts'), { pinia: { defineStore }, vue: { ref, onScopeDispose }, '@/api/entry-review': reviews })
   const store = storeModule.usePendingCountsStore()
   t.after(async () => {
     store.$dispose()

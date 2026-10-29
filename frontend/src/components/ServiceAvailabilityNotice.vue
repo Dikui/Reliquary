@@ -13,5 +13,5 @@ const { t } = useI18n()
 onUnmounted(stopServiceAvailabilityRetry)
 </script>
 <style scoped>
-.service-availability-notice { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 10000; padding: 10px 18px; border: 1px solid var(--warning); border-radius: 0; background: var(--surface-soft); color: var(--text); max-width: calc(100% - 32px); }
+.service-availability-notice { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 10000; padding: 10px 18px; border: 1px solid var(--td-warning-color); border-radius: 8px; background: var(--td-warning-color-1); color: var(--td-text-color-primary); max-width: calc(100% - 32px); }
 </style>

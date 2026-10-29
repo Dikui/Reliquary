@@ -1,4 +1,3 @@
-import { entryPresentationTestModules } from './entryPresentationTestModules'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -14,10 +13,10 @@ const vueRouter = require('vue-router') as typeof import('vue-router')
 async function mountCatalog(fail = false) {
   const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh, 'en-US': en } })
   const libraries = [
-    { id: 'one', color: 1, display_name: 'Library One', name: 'one', description: 'First library', entry_count: 2 },
-    { id: 'two', color: 2, display_name: 'Library Two', name: 'two', description: 'Second library', entry_count: 0 },
+    { id: 'one', display_name: 'Library One', name: 'one', description: 'First library', entry_count: 2 },
+    { id: 'two', display_name: 'Library Two', name: 'two', description: 'Second library', entry_count: 0 },
   ]
-  const page = loadComponent(new URL('./LibraryList.vue', import.meta.url), { ...entryPresentationTestModules,
+  const page = loadComponent(new URL('./LibraryList.vue', import.meta.url), {
     'vue-router': vueRouter, 'vue-i18n': { useI18n: () => i18n.global },
     '@/api/library': { listLibraries: async () => { if (fail) throw new Error('Offline'); return { success: true, data: libraries } } },
   })

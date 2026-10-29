@@ -6,7 +6,6 @@ export type ReviewKind = 'intake'
 export type IntakeReviewAction = 'approve' | 'reject' | 'retry' | 'discard' | 'supplement_url' | 'admit_unverified'
 export interface ReviewEntry extends ClassifiedEntry {
   id: string
-  created_at?: string
   title?: string
   file_name?: string
   parse_status?: string

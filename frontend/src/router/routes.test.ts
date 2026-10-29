@@ -19,17 +19,6 @@ function testRoutes(): RouteRecordRaw[] {
   return createApplicationRoutes().map(stub)
 }
 
-test('material details have a direct route and legacy bookmarks preserve references', async () => {
-  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  await router.push('/platform/entries/article-a?reference=paragraph&tab=relations')
-  assert.equal(router.currentRoute.value.name, 'entryDetail')
-  assert.equal(router.currentRoute.value.params.id, 'article-a')
-  await router.push('/platform/entries?entry_id=article-b&reference=paragraph&libraries=lib-a')
-  assert.equal(router.currentRoute.value.name, 'entryDetail')
-  assert.equal(router.currentRoute.value.params.id, 'article-b')
-  assert.deepEqual(router.currentRoute.value.query, { reference: 'paragraph', libraries: 'lib-a' })
-})
-
 test('removed feature routes return to libraries with one notice', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
   let notices = 0
@@ -76,7 +65,7 @@ test('unknown root and platform paths match an application error page', async ()
   const source = readFileSync(new URL('../views/NotFound.vue', import.meta.url), 'utf8')
   assert.match(source, /<h1>\{\{ t\('navigation.pageNotFound'\) \}\}<\/h1>/)
   assert.match(source, /router.push\('\/platform\/entries'\)/)
-  assert.match(source, /t\('navigation.returnToEntries'\)/)
+  assert.match(source, /t\('navigation.returnToKnowledge'\)/)
 })
 
 test('settings deep links and system shortcuts mount one settings instance', async () => {
@@ -84,20 +73,18 @@ test('settings deep links and system shortcuts mount one settings instance', asy
   const platform = routes.find(route => route.name === 'Platform')!
   const settings = platform.children!.find(route => route.name === 'settings')!
   const list = platform.children!.find(route => route.name === 'libraries')!
-  assert.notEqual('component' in settings && settings.component, 'component' in list && list.component)
+  assert.equal('component' in settings && settings.component, 'component' in list && list.component)
 
   const source = readFileSync(new URL('../views/platform/index.vue', import.meta.url), 'utf8')
-  assert.equal((source.match(/<Settings\s*\/>/g) || []).length, 0)
+  assert.equal((source.match(/<Settings\s*\/>/g) || []).length, 1)
 
   const renderedRoutes = testRoutes()
   const renderedPlatform = renderedRoutes.find(route => route.name === 'Platform')!
   let settingsMounts = 0
   const settingsStub = defineComponent({ setup() { settingsMounts++; return () => h('aside', { 'data-settings-instance': '' }) } })
   if ('component' in renderedPlatform) {
-    renderedPlatform.component = defineComponent({ render: () => h('main', [h(RouterView)]) })
+    renderedPlatform.component = defineComponent({ render: () => h('main', [h(RouterView), h(settingsStub)]) })
   }
-  const renderedSettings = renderedPlatform.children!.find(route => route.name === 'settings')!
-  if ('component' in renderedSettings) renderedSettings.component = settingsStub
   for (const path of ['/platform/settings?section=space', '/platform/settings?section=runtime-queues', '/platform/system/queues']) {
     settingsMounts = 0
     const router = createRouter({ history: createMemoryHistory(), routes: renderedRoutes })
@@ -107,7 +94,7 @@ test('settings deep links and system shortcuts mount one settings instance', asy
     const html = await renderToString(app)
     assert.equal(settingsMounts, 1, path)
     assert.equal((html.match(/data-settings-instance/g) || []).length, 1, path)
-    assert.doesNotMatch(html, /data-page="libraries"/, path)
+    assert.match(html, /data-page="settings"/, path)
   }
 })
 
@@ -117,7 +104,7 @@ test('root, platform and old login links return to libraries and removed convers
     await router.push(path)
     assert.equal(router.currentRoute.value.name, 'libraries')
   }
-  for (const path of ['/platform/chat/old-id', '/platform/creatChat', '/platform/agents']) {
+  for (const path of ['/platform/chat/old-id', '/platform/creatChat', '/platform/agents', '/platform/entries/obsolete']) {
     await router.push(path)
     assert.equal(router.currentRoute.value.name, 'platformNotFound', path)
   }
@@ -127,8 +114,8 @@ test('old library ID routes keep their library scope and entry reference', async
   const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
   for (const old of ['/platform/libraries/library-a', '/platform/libraries/library-a/documents']) {
     await router.push(old + '?entry_id=article-a')
-    assert.equal(router.currentRoute.value.path, '/platform/entries/article-a')
-    assert.equal(router.currentRoute.value.params.id, 'article-a')
+    assert.equal(router.currentRoute.value.path, '/platform/entries')
+    assert.equal(router.currentRoute.value.query.entry_id, 'article-a')
     assert.equal(router.currentRoute.value.query.libraries, 'library-a')
   }
 })
@@ -175,31 +162,4 @@ test('old collection page URLs redirect to the article list instead of not found
     await router.push(path)
     assert.equal(router.currentRoute.value.name, 'platformNotFound', path)
   }
-})
-
-test('entities use an independent route while legacy entity bookmarks preserve context', async () => {
-  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  await router.push('/platform/entities?entity_id=company&libraries=lib-a')
-  assert.equal(router.currentRoute.value.name, 'entities')
-  await router.push('/platform/entries?tab=entities&entity_id=company&libraries=lib-a#profile')
-  assert.equal(router.currentRoute.value.name, 'entities')
-  assert.equal(router.currentRoute.value.query.entity_id, 'company')
-  assert.equal(router.currentRoute.value.query.libraries, 'lib-a')
-  assert.equal(router.currentRoute.value.hash, '#profile')
-  await router.push('/platform/entries?tab=entities&section=merges&libraries=lib-a')
-  assert.equal(router.currentRoute.value.name, 'pending')
-  assert.equal(router.currentRoute.value.query.tab, 'merges')
-})
-
-
-test('pending bookmarks redirect with their tab, library scope and reference intact', async () => {
-  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
-  for (const [legacy, tab] of [['reviews', 'reviews'], ['entities&section=merges', 'merges']]) {
-    await router.push(`/platform/entries?tab=${legacy}&libraries=a,b&entry_id=entry-a#evidence`)
-    assert.equal(router.currentRoute.value.name, 'pending')
-    assert.deepEqual(router.currentRoute.value.query, { tab, libraries: 'a,b', entry_id: 'entry-a' })
-    assert.equal(router.currentRoute.value.hash, '#evidence')
-  }
-  await router.push('/platform/pending')
-  assert.equal(router.currentRoute.value.name, 'pending')
 })

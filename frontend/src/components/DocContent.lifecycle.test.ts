@@ -1,5 +1,3 @@
-import * as reading from '../utils/readingParagraphs'
-import * as feedback from './ui/feedback'
 import assert from 'node:assert/strict'
 import * as entrySourceLabels from '../utils/entrySourceLabels'
 import { readFileSync } from 'node:fs'
@@ -39,7 +37,7 @@ function unresolvedReferences(path: string, text = source(path)) {
 }
 
 test('detail and related article components have defined script and template references', () => {
-  for (const path of [detailPath, resolve('src/components/FollowToggle.vue'), resolve('src/views/library/FollowFeed.vue'), resolve('src/views/library/TopicManagement.vue'), resolve('src/views/library/OperationLogs.vue'), resolve('src/views/library/components/DocumentListView.vue'), resolve('src/views/library/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
+  for (const path of [detailPath, resolve('src/components/FollowToggle.vue'), resolve('src/components/EntryClassification.vue'), resolve('src/components/ReportAssociations.vue'), resolve('src/components/EntryStarToggle.vue'), resolve('src/components/EntryArticleJudgments.vue'), resolve('src/views/library/FollowFeed.vue'), resolve('src/views/library/TopicManagement.vue'), resolve('src/views/library/OperationLogs.vue'), resolve('src/components/EntryProcessingTimeline.vue'), resolve('src/views/library/components/DocumentActionMenu.vue'), resolve('src/views/library/components/DocumentCardView.vue'), resolve('src/views/library/components/DocumentListView.vue'), resolve('src/views/library/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
 })
 
 test('reference audit detects deleted callbacks in watchers, lifecycle, expose and template events', () => {
@@ -92,12 +90,12 @@ test('mounted detail switches full-text articles, closes and unmounts without un
     const detail = evaluate(script.content, {
       marked: { marked: { use() {}, Renderer: class {}, parse: passthrough } }, 'marked-katex-extension': { __esModule: true, default: () => ({}) },
       'highlight.js': { __esModule: true, default: {} }, mermaid: { __esModule: true, default: { initialize() {} } },
-      'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) },
+      'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } },
       '@/api/library': { ENTRY_CHUNK_PAGE_SIZE: 25 },
-      '@/utils/readingParagraphs': reading, '@/components/ui/feedback': feedback,
       '@/utils/clipboard': { copyWithToast() {} },
       '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => { imageHydrations++ }, createProtectedFileImageScope: () => ({ signal: new AbortController().signal, dispose() {} }) },
-      '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {}, '@/components/DocumentPreview.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/EntryUpdateNotice.vue': { __esModule:true, default:notice }, '@/components/EntryClassification.vue': empty, '@/components/EntryStarToggle.vue': empty,
+      '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {},
+      '@/components/SafeTextarea.vue': empty, '@/components/DocumentPreview.vue': empty, '@/components/EntryProcessingTimeline.vue': empty, '@/components/ReviewActions.vue': empty, '@/components/EntryArticleJudgments.vue': empty, '@/components/EntryUpdateNotice.vue': { __esModule:true, default:notice }, '@/components/EntryClassification.vue': empty, '@/components/EntryStarToggle.vue': empty,
       '@/components/ReportAssociations.vue': empty,
       '@/components/EntryProcessingStatus.vue': empty,
       '@/components/MissingMaterials.vue': empty, '@/components/IncompleteActions.vue': empty, '@/components/PersonalDocumentDelete.vue': empty,
@@ -111,20 +109,23 @@ test('mounted detail switches full-text articles, closes and unmounts without un
     const props = reactive({ visible: true, details: article('event') })
     app = renderer.createApp(defineComponent({ setup: () => () => h(detail, props) }))
     const stub = defineComponent({ props: ['visible'], setup: (props, { slots }) => () => props.visible === false ? null : h('div', slots.default?.()) })
-    for (const name of new Set(source(detailPath).match(/\bt-[\w-]+(?=[\s>])/g) || [])) app.component(name, stub)
+    for (const name of new Set(source(detailPath).match(/\bt-[\w-]+(?=[\s>])/g))) app.component(name, stub)
     app.config.globalProperties.$t = (key: string) => key
     app.config.errorHandler = error => errors.push(error)
     app.config.warnHandler = warning => warnings.push(warning)
     const root = node(); app.mount(root); await nextTick()
     Object.assign(props.details, { has_update:true, latest_entry_id:'latest' }); await nextTick()
     const flatten = (n: HostNode): HostNode[] => [n, ...n.children.flatMap(flatten)]
+    assert.equal(flatten(root).find(n=>n.props?.href==='/platform/entries?entry_id=latest')?.props?.href, '/platform/entries?entry_id=latest')
     const beforeVaultMetadata = imageHydrations
     Object.assign(props.details, { source_kind: 'article', vault_path: 'articles/2026-10/event.md' })
     await nextTick(); await nextTick()
     assert.ok(imageHydrations > beforeVaultMetadata, 'late vault metadata hydrates images even when chunks arrived first')
     for (const value of [article('another-event'), article('tutorial'), article('research'), article('reference')]) {
+      state.chunkPage.value = 3; state.loadedChunkPage.value = 3
       props.details = value; await nextTick()
       assert.deepEqual(errors, []); assert.deepEqual(warnings, [])
+      assert.equal(state.chunkPage.value, 1); assert.equal(state.loadedChunkPage.value, 1)
     }
     props.visible = false; await nextTick()
     props.details = article(''); await nextTick()

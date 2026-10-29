@@ -1,88 +1,110 @@
 <template>
-  <div class="api-settings settings-form">
-    <section v-for="endpoint in endpoints" :key="endpoint.label" class="setting-row">
-      <div class="setting-info"><label>{{ endpoint.label }}</label><p class="desc">{{ endpoint.desc }}</p></div>
-      <div class="setting-control"><code :title="`${endpoint.method ? endpoint.method + ' ' : ''}${endpoint.url}`">{{ endpoint.method }} {{ endpoint.url }}</code><Button variant="ghost" :aria-label="endpoint.copy" @click="copy(endpoint.url)">{{ t('integrations.api.copy') }}</Button></div>
-    </section>
-    <section class="setting-row"><div class="setting-info"><label>{{ t('integrations.api.apiKeys') }}</label><p class="desc">{{ t('integrations.api.apiKeysDesc') }}</p></div><div class="setting-control"><Button variant="primary" @click="openCreate">{{ t('integrations.api.createApiKey') }}</Button></div></section>
-    <p v-if="loading" role="status">{{ t('integrations.api.loading') }}</p>
-    <p v-else-if="error" class="settings-error" role="alert">{{ error }} <Button @click="load">{{ t('integrations.api.retry') }}</Button></p>
-    <p v-else-if="!keys.length" role="status">{{ t('integrations.api.noApiKeys') }}</p>
-    <template v-else>
-      <DataTable v-model:focused="focusedKey" :rows="pagedKeys" :columns="columns" :label="t('integrations.api.apiKeys')">
-        <template #cell-api_key="{ row }"><span v-if="row.status === 'migration_invalidated'">{{ t('integrations.api.migrationInvalidated') }}</span><code v-else>{{ row.api_key }}</code></template>
-        <template #cell-expires_at="{ row }">{{ row.status === 'migration_invalidated' ? t('integrations.api.migrationInvalidated') : row.expires_at ? new Date(row.expires_at).toLocaleString() : t('integrations.api.apiKeyNeverExpires') }}</template>
-        <template #cell-actions="{ row }"><div class="settings-actions"><Button v-if="row.status === 'migration_invalidated'" variant="ghost" @click="openCreate">{{ t('integrations.api.regenerateMigratedKey') }}</Button><Button variant="ghost" @click="openEdit(row)">{{ t('integrations.api.editApiKey') }}</Button><Button variant="danger" @click="revoke(row)">{{ t('integrations.api.apiKeyRevoke') }}</Button></div></template>
-      </DataTable>
-      <nav class="settings-actions" :aria-label="t('entries.pagination')"><label class="page-size-control">{{ t('common.pageSize') }}<Select :model-value="pagination.pageSize" :aria-label="t('common.pageSize')" @update:model-value="onPageChange({ current: 1, pageSize: Number($event) })"><option v-for="size in [5, 10, 20, 50]" :key="size" :value="size">{{ size }}</option></Select></label><Button :disabled="pagination.current <= 1" @click="pagination.current--">{{ t('entries.previous') }}</Button><span>{{ pagination.current }} / {{ Math.ceil(pagination.total / pagination.pageSize) }}</span><Button :disabled="pagination.current * pagination.pageSize >= pagination.total" @click="pagination.current++">{{ t('entries.next') }}</Button></nav>
-    </template>
-    <section class="setting-row"><div class="setting-info"><label>{{ t('integrations.api.playgroundTitle') }}</label><p class="desc">{{ t('integrations.api.playgroundDesc') }}</p></div><div class="setting-control"><Button @click="openPlayground">{{ t('integrations.api.playgroundOpen') }}</Button></div></section>
-    <Dialog v-model="editingVisible" :title="editingId ? t('integrations.api.editApiKey') : t('integrations.api.createApiKey')" :closable="!saving" :close-on-overlay-click="!saving" :close-on-esc-keydown="!saving">
-      <form novalidate class="settings-form" @submit.prevent="save">
-        <Field :label="t('integrations.api.apiKeyName')"><Input v-model="form.name" :disabled="saving" required /></Field>
-        <Field :label="t('integrations.api.apiKeyExpiresAt')"><div class="api-key-expiry-field"><Input v-model="form.expiresAt" class="api-key-expiry" type="datetime-local" :disabled="saving" :aria-label="t('integrations.api.apiKeyExpiresAt')" /><p class="api-key-expiry-hint">{{ t('integrations.api.apiKeyExpiresAtHint') }}</p></div></Field>
-        <p v-if="formError" class="settings-error" role="alert">{{ formError }}</p>
-      </form>
-      <template #footer><Button :disabled="saving" @click="editingVisible = false">{{ t('common.cancel') }}</Button><Button variant="primary" :loading="saving" @click="save">{{ t('common.save') }}</Button></template>
-    </Dialog>
-    <Dialog v-model="createdVisible" :title="t('integrations.api.apiKeyCreatedTitle')">
-      <p>{{ t('integrations.api.apiKeyCreatedHint') }}</p><div class="token-value"><Input :model-value="createdToken" type="password" readonly :aria-label="t('integrations.api.apiKeyValue')" /><Button @click="copy(createdToken)">{{ t('integrations.api.copy') }}</Button></div>
-    </Dialog>
-    <Dialog v-model="playgroundVisible" :title="t('integrations.api.playgroundTitle')">
-      <form novalidate class="settings-form" @submit.prevent="runQuery">
-        <Field :label="t('integrations.api.apiKeyValue')"><Input v-model="playground.apiKey" type="password" autocomplete="off" :disabled="running" /></Field>
-        <Field :label="t('integrations.api.playgroundQuestion')"><Textarea v-model="playground.query" rows="4" :disabled="running" /></Field>
+  <div class="api-settings">
+    <div class="setting-row">
+      <div class="setting-info"><label>{{ t('integrations.api.baseUrl') }}</label><p>{{ t('integrations.api.baseUrlDesc') }}</p></div>
+      <div class="setting-control"><t-tooltip :content="apiBaseUrl"><code :title="apiBaseUrl">{{ apiBaseUrl }}</code></t-tooltip><t-button variant="text" :aria-label="t('integrations.api.copy')" @click="copy(apiBaseUrl)"><t-icon name="copy" /></t-button></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-info"><label>{{ t('integrations.api.ingestUrl') }}</label><p>{{ t('integrations.api.ingestUrlDesc') }}</p></div>
+      <div class="setting-control"><t-tooltip :content="`POST ${ingestUrl}`"><code :title="`POST ${ingestUrl}`">POST {{ ingestUrl }}</code></t-tooltip><t-button variant="text" :aria-label="t('integrations.api.copyIngestUrl')" @click="copy(ingestUrl)"><t-icon name="copy" /></t-button></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-info"><label>{{ t('integrations.api.mcpUrl') }}</label><p>{{ t('integrations.api.mcpUrlDesc') }}</p></div>
+      <div class="setting-control"><t-tooltip :content="mcpUrl"><code :title="mcpUrl">{{ mcpUrl }}</code></t-tooltip><t-button variant="text" :aria-label="t('integrations.api.copyMcpUrl')" @click="copy(mcpUrl)"><t-icon name="copy" /></t-button></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-info"><label>{{ t('integrations.api.apiKeys') }}</label><p>{{ t('integrations.api.apiKeysDesc') }}</p></div>
+      <t-button theme="primary" @click="openCreate">{{ t('integrations.api.createApiKey') }}</t-button>
+    </div>
+    <t-loading v-if="loading" :text="t('integrations.api.loading')" />
+    <t-alert v-else-if="error" theme="error" :message="error"><template #operation><t-button variant="text" @click="load">{{ t('integrations.api.retry') }}</t-button></template></t-alert>
+    <t-empty v-else-if="!keys.length" :description="t('integrations.api.noApiKeys')" />
+    <div v-else class="api-table-shell">
+      <t-table row-key="id" :data="keys" :columns="columns" :pagination="pagination" @page-change="onPageChange">
+        <template #api_key="{ row }"><span v-if="row.status === 'migration_invalidated'">{{ t('integrations.api.migrationInvalidated') }}</span><code v-else>{{ row.api_key }}</code></template>
+        <template #expires_at="{ row }">{{ row.status === 'migration_invalidated' ? t('integrations.api.migrationInvalidated') : row.expires_at ? new Date(row.expires_at).toLocaleString() : t('integrations.api.apiKeyNeverExpires') }}</template>
+        <template #actions="{ row }"><t-button v-if="row.status === 'migration_invalidated'" variant="text" @click="openCreate">{{ t('integrations.api.regenerateMigratedKey') }}</t-button><t-button variant="text" @click="openEdit(row)">{{ t('integrations.api.editApiKey') }}</t-button><t-button theme="danger" variant="text" @click="revoke(row)">{{ t('integrations.api.apiKeyRevoke') }}</t-button></template>
+      </t-table>
+    </div>
+    <div class="setting-row">
+      <div class="setting-info"><label>{{ t('integrations.api.playgroundTitle') }}</label><p>{{ t('integrations.api.playgroundDesc') }}</p></div>
+      <t-button variant="outline" @click="openPlayground">{{ t('integrations.api.playgroundOpen') }}</t-button>
+    </div>
+    <SettingDrawer v-model:visible="editingVisible" :title="editingId ? t('integrations.api.editApiKey') : t('integrations.api.createApiKey')" :confirm-text="t('common.save')" :confirm-loading="saving" storage-key="setting-drawer:width:api-key" width="560px" @confirm="save">
+      <t-form ref="formRef" :data="form" :rules="rules" layout="vertical" label-align="top" @submit.prevent>
+        <t-form-item :label="t('integrations.api.apiKeyName')" name="name"><t-input v-model="form.name" :disabled="saving" /></t-form-item>
+        <t-form-item :label="t('integrations.api.apiKeyExpiresAt')" name="expiresAt">
+          <div class="api-key-expiry-field">
+            <t-date-picker v-model="expiryPickerValue" class="api-key-expiry" enable-time-picker clearable allow-input
+              format="YYYY-MM-DD HH:mm" value-type="YYYY-MM-DD HH:mm"
+              :time-picker-props="{ format: 'HH:mm' }" :popup-props="{ zIndex: 6200 }" :disabled="saving" />
+            <p class="api-key-expiry-hint">{{ t('integrations.api.apiKeyExpiresAtHint') }}</p>
+          </div>
+        </t-form-item>
+        <t-alert v-if="formError" theme="error" :message="formError" />
+      </t-form>
+    </SettingDrawer>
+    <SettingDrawer v-model:visible="createdVisible" :title="t('integrations.api.apiKeyCreatedTitle')" :hide-footer="true" storage-key="setting-drawer:width:api-key-created" width="560px">
+      <t-alert theme="warning" :message="t('integrations.api.apiKeyCreatedHint')" />
+      <div class="token-value"><t-input :value="createdToken" type="password" readonly /><t-button variant="outline" @click="copy(createdToken)">{{ t('integrations.api.copy') }}</t-button></div>
+    </SettingDrawer>
+    <SettingDrawer v-model:visible="playgroundVisible" :title="t('integrations.api.playgroundTitle')" :confirm-text="t('integrations.api.playgroundRun')" :confirm-loading="running" storage-key="setting-drawer:width:api-playground" width="680px" @confirm="runQuery">
+      <t-form :data="playground" layout="vertical" label-align="top" novalidate @submit.prevent>
+        <t-form-item :label="t('integrations.api.apiKeyValue')"><t-input v-model="playground.apiKey" type="password" autocomplete="off" :disabled="running" /></t-form-item>
+
+        <t-form-item :label="t('integrations.api.playgroundQuestion')"><SafeTextarea v-model="playground.query" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="running" /></t-form-item>
         <SearchFilters v-model="playgroundFilters" :options="searchOptions" :loading="searchOptionsLoading" :disabled="running" />
-      </form>
-      <p v-if="searchOptionsError" class="settings-error" role="alert">{{ searchOptionsError }} <Button @click="loadSearchOptions">{{ t('common.retry') }}</Button></p>
-      <strong class="request-preview-label">{{ t('search.requestPreview') }}</strong><pre class="query-result">{{ playgroundRequestPreview }}</pre>
-      <p v-if="playgroundError" class="settings-error" role="alert">{{ playgroundError }}</p><pre v-if="playgroundResult" class="query-result">{{ playgroundResult }}</pre>
-      <template #footer><Button variant="primary" :loading="running" @click="runQuery">{{ t('integrations.api.playgroundRun') }}</Button></template>
-    </Dialog>
+      </t-form>
+      <t-alert v-if="searchOptionsError" theme="error" :message="searchOptionsError"><template #operation><t-button variant="text" @click="loadSearchOptions">{{ t('common.retry') }}</t-button></template></t-alert>
+      <strong class="request-preview-label">{{ t('knowledgeSearch.requestPreview') }}</strong>
+      <pre class="query-result request-preview">{{ playgroundRequestPreview }}</pre>
+      <t-alert v-if="playgroundError" theme="error" :message="playgroundError" />
+      <pre v-if="playgroundResult" class="query-result">{{ playgroundResult }}</pre>
+    </SettingDrawer>
   </div>
 </template>
+
 <script setup lang="ts">
-import { Button, Input, Select, Textarea, Dialog, DataTable, Field, toast, useConfirm } from '@/components/ui'
-import '@/styles/settings-form.css'
 import { computed, onMounted, reactive, ref } from 'vue'
+import { DialogPlugin, MessagePlugin, type DateValue, type DateMultipleValue } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
+import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import SearchFilters from '@/components/SearchFilters.vue'
 import { getSearchOptions } from '@/api/search'
 import type { SearchOptions } from '@/types/search'
 import { buildSearchRequest, searchErrorMessage, searchErrorCode, defaultSearchFilters } from '@/utils/search'
 import { apiKeyErrorMessage } from '@/utils/personalServerError'
 import { getApiBaseUrl } from '@/utils/api-base'
-import { copyToClipboard } from '@/utils/clipboard'
+import { copyWithToast } from '@/utils/clipboard'
 import { listAPIKeys, createAPIKey, updateAPIKey, deleteAPIKey, type APIKey } from '@/api/space'
 
-const confirm = useConfirm()
 const { t } = useI18n()
 const apiBaseUrl = computed(() => getApiBaseUrl().replace(/\/$/, '') || window.location.origin)
 const externalAgentBaseUrl = computed(() => apiBaseUrl.value.startsWith('/') ? `${window.location.origin}${apiBaseUrl.value}` : apiBaseUrl.value)
 const ingestUrl = computed(() => `${externalAgentBaseUrl.value}/api/v1/ingest`)
 const mcpUrl = computed(() => `${externalAgentBaseUrl.value}/mcp`)
-const endpoints = computed(() => [
-  { label: t('integrations.api.baseUrl'), desc: t('integrations.api.baseUrlDesc'), url: apiBaseUrl.value, copy: t('integrations.api.copy'), method: '' },
-  { label: t('integrations.api.ingestUrl'), desc: t('integrations.api.ingestUrlDesc'), url: ingestUrl.value, copy: t('integrations.api.copyIngestUrl'), method: 'POST' },
-  { label: t('integrations.api.mcpUrl'), desc: t('integrations.api.mcpUrlDesc'), url: mcpUrl.value, copy: t('integrations.api.copyMcpUrl'), method: '' },
-])
-const focusedKey = ref('')
 const keys = ref<APIKey[]>([])
 const loading = ref(false)
 const error = ref('')
 const pagination = reactive({ current: 1, pageSize: 10, total: 0 })
 const columns = computed(() => [
-  { key: 'name', label: t('integrations.api.apiKeyName') },
-  { key: 'api_key', label: t('integrations.api.apiKeyValue') },
-  { key: 'expires_at', label: t('integrations.api.apiKeyExpiresAt') },
-  { key: 'actions', label: t('common.operation') },
+  { colKey: 'name', title: t('integrations.api.apiKeyName') },
+  { colKey: 'api_key', title: t('integrations.api.apiKeyValue') },
+  { colKey: 'expires_at', title: t('integrations.api.apiKeyExpiresAt') },
+  { colKey: 'actions', title: t('common.operation') },
 ])
-const pagedKeys = computed(() => keys.value.slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize))
 const editingVisible = ref(false)
 const editingId = ref<number | null>(null)
+const formRef = ref()
 const saving = ref(false)
 const formError = ref('')
 const form = reactive({ name: '', expiresAt: '' })
+const expiryPickerValue = computed({
+  get: () => form.expiresAt.replace('T', ' '),
+  set: (value: DateValue | DateMultipleValue) => { form.expiresAt = typeof value === 'string' ? value.replace(' ', 'T') : '' },
+})
+const rules = computed(() => ({ name: [{ required: true, message: t('integrations.api.apiKeyNameRequired'), type: 'error' as const }] }))
 const createdVisible = ref(false)
 const createdToken = ref('')
 const playgroundVisible = ref(false)
@@ -96,11 +118,8 @@ const running = ref(false)
 const playgroundError = ref('')
 const playgroundResult = ref('')
 
-const copy = async (value: string) => { const copied = await copyToClipboard(value); if (copied) toast.success(t('common.copySuccess')); else toast.error(t('common.copyFailed')) }
-function onPageChange(page: { current: number; pageSize: number }) {
-  const pageSize = [5, 10, 20, 50].includes(page.pageSize) ? page.pageSize : pagination.pageSize
-  Object.assign(pagination, { pageSize, current: Math.max(1, Math.min(page.current, Math.ceil(pagination.total / pageSize) || 1)) })
-}
+const copy = (value: string) => copyWithToast(value, 'common.copySuccess')
+function onPageChange(page: { current: number; pageSize: number }) { Object.assign(pagination, page) }
 async function load() {
   loading.value = true
   error.value = ''
@@ -122,8 +141,7 @@ function openEdit(key: APIKey) {
   editingVisible.value = true
 }
 async function save() {
-  if (saving.value) return
-  if (!form.name.trim()) { formError.value = t('integrations.api.apiKeyNameRequired'); return }
+  if (saving.value || await formRef.value?.validate() !== true) return
   const expires = form.expiresAt ? Math.floor(new Date(form.expiresAt).getTime() / 1000) : 0
   if (form.expiresAt && (!Number.isFinite(expires) || expires <= Date.now() / 1000)) { formError.value = t('integrations.api.apiKeyExpiresAtInvalid'); return }
   saving.value = true
@@ -134,18 +152,18 @@ async function save() {
     if (!response.success) throw new Error(response.message || t('integrations.api.createApiKeyFailed'))
     if (!editingId.value) { createdToken.value = (response.data as any)?.token || ''; createdVisible.value = true }
     editingVisible.value = false
-    toast.success(t('integrations.api.updateApiKeySuccess'))
+    MessagePlugin.success(t('integrations.api.updateApiKeySuccess'))
     await load()
   } catch (e: any) { formError.value = apiKeyErrorMessage(e, t, editingId.value ? 'integrations.api.updateApiKeyFailed' : 'integrations.api.createApiKeyFailed') }
   finally { saving.value = false }
 }
 function revoke(key: APIKey) {
-  const dialog = confirm({
+  const dialog = DialogPlugin.confirm({
     header: t('integrations.api.apiKeyRevoke'), body: t('integrations.api.apiKeyRevokeConfirm', { name: key.name }),
-    confirmBtn: t('integrations.api.apiKeyRevoke'), theme: 'danger',
+    confirmBtn: { content: t('integrations.api.apiKeyRevoke'), theme: 'danger' },
     onConfirm: async () => {
-      try { const response = await deleteAPIKey(key.id); if (!response.success) throw new Error(response.message); dialog.destroy(); await load(); toast.success(t('integrations.api.apiKeyRevoked')) }
-      catch (e: any) { toast.error(apiKeyErrorMessage(e, t, 'integrations.api.deleteApiKeyFailed')) }
+      try { const response = await deleteAPIKey(key.id); if (!response.success) throw new Error(response.message); dialog.hide(); await load(); MessagePlugin.success(t('integrations.api.apiKeyRevoked')) }
+      catch (e: any) { MessagePlugin.error(apiKeyErrorMessage(e, t, 'integrations.api.deleteApiKeyFailed')) }
     },
   })
 }
@@ -157,14 +175,14 @@ async function loadSearchOptions() {
     const response = await getSearchOptions(playgroundLibraries.value)
     if (!response.success) throw new Error(response.message)
     searchOptions.value = response.data
-  } catch { searchOptionsError.value = t('search.optionsFailed') }
+  } catch { searchOptionsError.value = t('knowledgeSearch.optionsFailed') }
   finally { searchOptionsLoading.value = false }
 }
 async function runQuery() {
   if (running.value) return
   if (!playground.apiKey.trim() || !playground.query.trim()) { playgroundError.value = t('integrations.api.playgroundNeedQuestionAndKey'); return }
-  if (playgroundFilters.value.published_from && playgroundFilters.value.published_to && playgroundFilters.value.published_from > playgroundFilters.value.published_to) { playgroundError.value = t('search.invalidDateRange'); return }
-  if (!Number.isInteger(playgroundFilters.value.limit) || playgroundFilters.value.limit < 1 || playgroundFilters.value.limit > 100) { playgroundError.value = t('search.invalidLimit'); return }
+  if (playgroundFilters.value.published_from && playgroundFilters.value.published_to && playgroundFilters.value.published_from > playgroundFilters.value.published_to) { playgroundError.value = t('knowledgeSearch.invalidDateRange'); return }
+  if (!Number.isInteger(playgroundFilters.value.limit) || playgroundFilters.value.limit < 1 || playgroundFilters.value.limit > 100) { playgroundError.value = t('knowledgeSearch.invalidLimit'); return }
   running.value = true
   playgroundError.value = ''
   try {
@@ -184,18 +202,48 @@ async function runQuery() {
 }
 onMounted(load)
 </script>
-<style scoped>
- .setting-control code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.setting-control .rq-button { flex-shrink: 0; }
-.api-key-expiry-field { display: flex; flex-direction: column; gap: var(--space-2); width: 100%; min-width: 0; }
-.api-key-expiry { width: 100%; }
-.api-key-expiry-hint { margin: 0; color: var(--muted); font-size: var(--text-sm); }
-.token-value { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.token-value .rq-control { flex: 1; min-width: 160px; }
-.query-result { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; padding: var(--space-3); background: var(--surface-soft); color: var(--text); font-family: var(--mono); }
-.page-size-control { display: flex; gap: var(--space-2); align-items: center; }
-.page-size-control .rq-control { width: auto; }
-.api-settings :deep(.rq-table) { min-width: 640px; }
-.api-settings :deep(.rq-table th), .api-settings :deep(.rq-table td) { min-width: 120px; }
 
+<style scoped lang="less">
+@import '../../assets/settings-layout.less';
+
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.setting-info { flex: 1; min-width: 0; }
+.setting-info label { color: var(--td-text-color-primary); font-weight: 500; }
+.setting-info p { color: var(--td-text-color-secondary); margin: 6px 0 0; }
+.setting-control, .token-value { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.setting-control { width: 360px; min-width: 280px; max-width: 100%; }
+.setting-control code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setting-control .t-button { flex-shrink: 0; }
+.api-table-shell { min-width: 0; max-width: 100%; }
+.api-key-expiry-field { display: flex; flex-direction: column; gap: 6px; width: 100%; min-width: 0; }
+.api-key-expiry { width: 100%; min-width: 0; }
+.api-key-expiry-hint { margin: 0; color: var(--td-text-color-secondary); }
+.token-value { margin-top: 16px; }
+code { overflow-wrap: anywhere; }
+.query-result { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.request-preview-label { display: block; margin-top: 20px; font-weight: 500; }
+@media (max-width: 600px) { .setting-row { align-items: flex-start; flex-direction: column; } }
+
+.settings-responsive-rows();
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .setting-row > .t-button {
+    max-width: 100%;
+    height: auto;
+    white-space: normal;
+  }
+
+  .api-table-shell :deep(.t-table__content) {
+    overflow-x: auto;
+  }
+
+  .api-table-shell :deep(table) {
+    min-width: 640px;
+  }
+
+  .api-table-shell :deep(.t-pagination) {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+}
 </style>

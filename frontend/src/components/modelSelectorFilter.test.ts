@@ -33,8 +33,8 @@ test('model selectors filter by type and preserve vision-capable generation mode
 })
 
 test('model labels, values and deletion preserve the model identity', () => {
-  assert.match(selectorSource, /label: \[modelDisplayName\(model\)/)
-  assert.match(selectorSource, /value: model\.id!/)
+  assert.match(selectorSource, /:label="modelDisplayName\(model\)"/)
+  assert.match(selectorSource, /:key="model\.id"[\s\S]*:value="model\.id"/)
   assert.match(selectorSource, /emit\('update:selectedModelId', value \|\| ''\)/)
   assert.match(modelSettingsSource, /await deleteModelAPI\(modelId\)/)
 })

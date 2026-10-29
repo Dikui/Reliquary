@@ -25,5 +25,5 @@ onUnmounted(() => { if (timer) clearInterval(timer) })
 </script>
 
 <style scoped>
-.queue-connection-notice { display: flex; flex-direction: column; gap: 8px; padding: 16px; margin-bottom: 16px; border: 1px solid var(--border); border-radius: 0; overflow-wrap: anywhere; color: var(--text); background: var(--surface-soft); }
+.queue-connection-notice { display: flex; flex-direction: column; gap: 8px; padding: 16px; margin-bottom: 16px; border: 1px solid var(--td-warning-color); border-radius: 8px; overflow-wrap: anywhere; color: var(--td-text-color-primary); background: var(--td-warning-color-1); }
 </style>
