@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { graphElements, graphStyles } from './entityGraphPresentation'
+import { graphElements, graphStyles, overviewStyles } from './entityGraphPresentation'
 import type { GraphSearchResponse } from '../../../types/graph'
 const data = {
   entities: ['center', 'near', 'far'].map(id => ({ id, canonical_name: id, entity_type: 'company' })),
@@ -19,6 +19,15 @@ test('graph assigns shortest undirected hop distance while preserving edge direc
   assert.deepEqual(elements.slice(3).map(item => [item.data.source, item.data.target, item.data.label]), [
     ['entity:near', 'entity:center', 'owns'], ['entity:near', 'entity:far', 'uses'], ['entity:center', 'entity:near', 'funds'],
   ])
+})
+
+test('overview nodes grow with degree and edge labels only show when highlighted', () => {
+  assert.deepEqual(graphElements(data, '').slice(0, 3).map(item => item.data.degree), [2, 3, 1])
+  const styles = overviewStyles({ text: '#111', bg: '#fff', muted: '#888', border: '#ccc', select: '#fc0', onSelect: '#111', font: 'Helvetica', accent: '#e2231a' })
+  const style = (selector: string) => (styles.find(item => item.selector === selector)! as unknown as { style: Record<string, unknown> }).style
+  assert.equal(style('edge').label, undefined)
+  assert.equal(style('edge.highlight, edge.selected').label, 'data(label)')
+  assert.equal(style('node.highlight')['background-color'], '#e2231a')
 })
 
 test('both themes use inverted center, neutral distant nodes and readable yellow selected edges', () => {
