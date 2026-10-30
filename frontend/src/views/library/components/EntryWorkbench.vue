@@ -233,10 +233,10 @@ onMounted(() => { void loadCatalog(); void refreshAll(); void loadPendingCount()
 onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; nameEmbeddingRequest++; catalogRequest++; pendingRequest++; relationRequest++; clearNameEmbeddingPoll(); if (entitySearchTimer) clearTimeout(entitySearchTimer) })
 </script>
 <style scoped>
-.entry-workbench { display: grid; grid-template-columns: 304px minmax(0, 1fr); min-height: 100%; font-family: var(--font); color: var(--text); background: var(--bg); font-size: var(--type-body-size); }
+.entry-workbench { display: grid; grid-template-columns: 304px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100%; font-family: var(--font); color: var(--text); background: var(--bg); font-size: var(--type-body-size); }
 .entry-workbench.is-empty { grid-template-columns: minmax(0, 1fr); }
 .entry-workbench.is-empty .entity-list { border-right: 0; }
-.entity-list { border-right: 2px solid var(--rule); min-width: 0; }
+.entity-list { border-right: 2px solid var(--rule); min-width: 0; overflow: auto; }
 .entity-list-head { display: grid; gap: var(--space-3); padding: var(--space-5) var(--space-4) var(--space-3); }
 h1, h2 { margin: 0; font-size: var(--type-page-size); font-weight: var(--type-page-weight); line-height: 1.05; letter-spacing: -0.045em; overflow-wrap: anywhere; }
 .entity-search { display: flex; gap: var(--space-1); min-width: 0; }
@@ -252,7 +252,8 @@ h1, h2 { margin: 0; font-size: var(--type-page-size); font-weight: var(--type-pa
 .entity-items button[aria-current="true"] small { color: var(--bg); opacity: .7; }
 .entity-items button:hover:not([aria-current="true"]), .entity-items button:focus-visible:not([aria-current="true"]) { background: var(--select); color: var(--on-select); }
 .entity-items button:hover:not([aria-current="true"]) small, .entity-items button:focus-visible:not([aria-current="true"]) small { color: var(--on-select); }
-.entity-detail { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; padding: var(--space-5) var(--space-6) var(--space-7); }
+.entity-detail { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; overflow: auto; padding: var(--space-5) var(--space-6) var(--space-7); }
+.entity-detail > * { flex-shrink: 0; }
 .entity-eyebrow { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); font-size: var(--type-eyebrow-size); font-weight: var(--type-eyebrow-weight); color: var(--muted); overflow-wrap: anywhere; }
 .entity-head, .entity-actions { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); }
 .entity-intro { max-width: 46em; font-size: var(--text-lg); line-height: 1.6; margin: 0; }
@@ -281,7 +282,8 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .merge-form { display: grid; gap: var(--space-3); }
 .run-error, .entity-detail :deep(.follow-error) { color: var(--danger); overflow-wrap: anywhere; }
 @media (max-width: 900px) {
-  .entry-workbench { grid-template-columns: minmax(0, 1fr); }
+  .entry-workbench { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; height: auto; min-height: 100%; }
+  .entity-list, .entity-detail { overflow: visible; }
   .entity-list { border-right: 0; border-bottom: 2px solid var(--rule); }
   .entity-items { max-height: 240px; overflow: auto; }
   .entity-detail { padding: var(--space-4); }
