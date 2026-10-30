@@ -67,7 +67,7 @@ function moveFocus(event: KeyboardEvent, index: number) {
           :class="{ 'rq-table__row--selected': selectedKeys.has(keyOf(row)), 'rq-table__row--focused': focused === keyOf(row) }"
           :tabindex="focused === keyOf(row) || (!hasFocusedRow && index === 0) ? 0 : -1"
           :aria-current="focused === keyOf(row) ? 'true' : undefined"
-          @focusin="emit('update:focused', keyOf(row))" @mouseenter="emit('update:focused', keyOf(row))" @keydown="moveFocus($event, index)">
+          @focusin="emit('update:focused', keyOf(row))" @keydown="moveFocus($event, index)">
           <td v-if="selectable" class="rq-table__check" @click.capture="shiftClick = $event.shiftKey"><Checkbox :model-value="selectedKeys.has(keyOf(row))" :aria-label="t('ui.selectRow', { label: keyOf(row) })" @update:model-value="selectRow(keyOf(row), $event)" /></td>
           <td v-for="column in columns" :key="column.key"><slot :name="`cell-${column.key}`" :row="row" :value="row[column.key as keyof T]">{{ row[column.key as keyof T] }}</slot></td>
         </tr>

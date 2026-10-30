@@ -60,7 +60,7 @@ function keydown(event: KeyboardEvent, item: EntryItem) {
   <ul v-if="mode === 'list'" class="entries-list" :aria-label="t('entries.list')">
     <li v-for="(item, index) in items" :key="item.id" class="entries-list__row" :data-select-id="item.id"
       :class="{ 'rq-focus-row': focused === item.id }" :aria-current="focused === item.id ? 'true' : undefined"
-      @mouseenter="emit('update:focused', item.id)" @focusin="emit('update:focused', item.id)">
+      @focusin="emit('update:focused', item.id)">
       <button type="button" class="entries-list__select" :tabindex="focused === item.id || (!focused && index === 0) ? 0 : -1"
         @click="emit('update:focused', item.id)" @keydown="keydown($event, item)">
         <span class="entries-id" :title="item.id">{{ item.id }}</span>

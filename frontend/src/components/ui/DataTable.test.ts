@@ -20,7 +20,10 @@ test('DataTable keeps multiple checked rows separate from the single current row
   const renderedRows = mounted.root.querySelectorAll('[data-row-key]')
   assert.ok(renderedRows.every(row => row.props.class.includes('rq-table__row--selected')))
   assert.equal(renderedRows.filter(row => row.props.class.includes('rq-table__row--focused')).length, 1)
+  // Hover must not change the focused row; only click/keyboard focus does.
   await send(renderedRows[1]!, 'mouseenter')
+  assert.equal(focused.value, 'a')
+  await send(renderedRows[1]!, 'focusin')
   assert.equal(focused.value, 'b')
   assert.deepEqual(selected.value, ['a', 'b'])
   renderedRows[1]!.focus()
