@@ -833,12 +833,14 @@ const refreshLibrarySettings = () => { if (libraryId.value) void loadLibraryInfo
 .entries-filters__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; padding: 12px 0; }
 .entries-filters label { display: grid; gap: 4px; font-size: var(--text-sm); }
 .entries-filters fieldset { min-width: 0; border: 1px solid var(--border); }
-.doc-scroll-container { overflow: auto; min-height: 240px; flex: 1 0 240px; position: relative; scrollbar-gutter: stable; }
+.doc-scroll-container { overflow: auto; min-height: 240px; flex: 1 0 240px; position: relative; scrollbar-gutter: stable; container-type: size; }
 .entries-split { display: grid; grid-template-columns: minmax(288px, 384px) minmax(0, 1fr); min-height: 100%; align-items: start; }
+/* Keep the preview in view while the list scrolls; 100cqh = the scroll container's height. */
+.entries-split > .entry-preview { position: sticky; top: 0; max-height: 100cqh; overflow: auto; }
 .entries-loading { display: grid; gap: 16px; padding: 24px; }
 .entries-loading :deep(.rq-skeleton) { min-height: 80px; }
 .entries-more { padding: 16px 24px; }
 .doc-marquee-box { position: absolute; pointer-events: none; z-index: 2; border: 1px solid var(--text); background: var(--surface-soft); opacity: 0.4; }
-@media (max-width: 900px) { .entries-split { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) { .entries-split { grid-template-columns: minmax(0, 1fr); } .entries-split > .entry-preview { position: static; max-height: none; overflow: visible; } }
 @media (max-width: 640px) { .entries-head, .entries-toolbar, .entries-search-row { padding-left: 16px; padding-right: 16px; } .entries-filters { padding-inline: 16px; } }
 </style>
