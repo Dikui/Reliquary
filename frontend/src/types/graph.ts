@@ -3,10 +3,10 @@ import type { Acquisition } from './ingest'
 
 export interface GraphSearchRequest {
   libraries: string[]
-  entity: { id: string } | { name: string }
+  entity?: { id: string } | { name: string }
   target?: { id: string } | { name: string }
-  mode: 'neighbors' | 'path'
-  hops: number
+  mode: 'neighbors' | 'path' | 'all'
+  hops?: number
   relation_types: string[]
   limit: number
 }
@@ -37,7 +37,7 @@ export interface GraphSearchEdge {
 export interface GraphSearchResponse {
   status: 'ok' | 'needs_selection'
   libraries: string[]
-  mode: 'neighbors' | 'path'
+  mode: 'neighbors' | 'path' | 'all'
   hops: number
   expansion_limit: number
   candidates: Record<string, SearchEntity[]>

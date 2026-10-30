@@ -43,8 +43,8 @@ func validateGraphRequest(r *types.GraphSearchRequest) error {
 	if r.Mode == "" {
 		r.Mode = "neighbors"
 	}
-	if r.Mode != "neighbors" && r.Mode != "path" {
-		return apperrors.NewBadRequestError("mode must be neighbors or path")
+	if r.Mode != "neighbors" && r.Mode != "path" && r.Mode != "all" {
+		return apperrors.NewBadRequestError("mode must be neighbors, path or all")
 	}
 	if r.Hops == 0 {
 		r.Hops = 1
@@ -55,13 +55,20 @@ func validateGraphRequest(r *types.GraphSearchRequest) error {
 	if r.Limit == 0 {
 		r.Limit = 20
 	}
-	if r.Limit < 1 || r.Limit > 100 {
-		return apperrors.NewBadRequestError("limit must be 1 to 100")
+	maxLimit := 100
+	if r.Mode == "all" {
+		maxLimit = 500
+	}
+	if r.Limit < 1 || r.Limit > maxLimit {
+		return apperrors.NewBadRequestError(fmt.Sprintf("limit must be 1 to %d", maxLimit))
+	}
+	if r.Mode == "all" && (r.Entity != (types.GraphEntityInput{}) || r.Target != nil) {
+		return apperrors.NewBadRequestError("all mode takes no entity or target")
 	}
 	valid := func(e types.GraphEntityInput) bool {
 		return (strings.TrimSpace(e.ID) != "") != (strings.TrimSpace(e.Name) != "") && len(e.ID) <= 512 && len(e.Name) <= 2048
 	}
-	if !valid(r.Entity) {
+	if r.Mode != "all" && !valid(r.Entity) {
 		return apperrors.NewBadRequestError("entity requires exactly one of id or name")
 	}
 	if r.Mode == "path" && (r.Target == nil || !valid(*r.Target)) {
@@ -153,6 +160,12 @@ func (s *GraphSearchService) Search(ctx context.Context, request types.GraphSear
 		}
 	}()
 	out = &types.GraphSearchResponse{Status: "ok", Libraries: request.Libraries, Mode: request.Mode, Hops: request.Hops, ExpansionLimit: s.expansionLimit, Candidates: map[string][]types.EntrySearchEntity{}, Entities: []types.EntrySearchEntity{}, Edges: []types.GraphSearchEdge{}, Paths: []types.GraphSearchPath{}, Documents: []*types.EntrySearchResult{}, Truncations: []types.GraphTruncation{}}
+	if request.Mode == "all" {
+		if out.Edges, err = s.allEdges(ctx, space, libraries, request, out); err != nil {
+			return nil, err
+		}
+		return out, s.finish(ctx, space, request.Limit, nil, out)
+	}
 	candidates, err := s.resolveEntity(ctx, space, request.Libraries, request.Entity)
 	if err != nil {
 		return nil, err
@@ -261,6 +274,11 @@ func (s *GraphSearchService) Search(ctx context.Context, request types.GraphSear
 	if target != "" {
 		ids = append(ids, target)
 	}
+	return out, s.finish(ctx, space, request.Limit, ids, out)
+}
+
+// finish loads the nodes and documents for out.Edges plus the given anchor IDs.
+func (s *GraphSearchService) finish(ctx context.Context, space uint64, limit int, ids []string, out *types.GraphSearchResponse) error {
 	for _, e := range out.Edges {
 		ids = append(ids, e.SubjectID, e.ObjectID)
 	}
@@ -268,18 +286,43 @@ func (s *GraphSearchService) Search(ctx context.Context, request types.GraphSear
 	ids = slices.Compact(ids)
 	var nodes []types.Entity
 	if err := s.db.WithContext(ctx).Where("space_id=? AND id IN ?", space, ids).Order("id").Find(&nodes).Error; err != nil {
-		return nil, err
+		return err
 	}
 	for _, n := range nodes {
 		out.Entities = append(out.Entities, types.EntrySearchEntity{ID: n.ID, CanonicalName: n.CanonicalName, EntityType: n.EntityType, Aliases: []string{}})
 	}
 	out.Documents = graphDocuments(out.Edges)
-	if len(out.Documents) > request.Limit {
-		out.Documents = out.Documents[:request.Limit]
+	if len(out.Documents) > limit {
+		out.Documents = out.Documents[:limit]
 		out.Truncations = append(out.Truncations, types.GraphTruncation{Reason: "document_limit"})
 	}
 	out.Truncated = len(out.Truncations) > 0
-	return out, s.pending(ctx, space, ids, out)
+	return s.pending(ctx, space, ids, out)
+}
+
+// allEdges reads the whole scoped graph from PG, best-evidenced relations first,
+// so it works without the Neo4j replica.
+func (s *GraphSearchService) allEdges(ctx context.Context, space uint64, libraries []types.Library, request types.GraphSearchRequest, out *types.GraphSearchResponse) ([]types.GraphSearchEdge, error) {
+	live := "EXISTS (SELECT 1 FROM entities e WHERE e.space_id=relations.space_id AND e.id=relations.%s AND coalesce(e.merged_into_id,'')='')"
+	sourced := "FROM relation_sources rs JOIN entries en ON en.id=rs.entry_id WHERE rs.relation_id=relations.id AND en.space_id=relations.space_id AND en.library_id=relations.library_id AND en.deleted_at IS NULL"
+	q := s.db.WithContext(ctx).Model(&types.Relation{}).Where("space_id=? AND library_id IN ?", space, request.Libraries).
+		Where(fmt.Sprintf(live, "subject_id")).Where(fmt.Sprintf(live, "object_id")).Where("EXISTS (SELECT 1 " + sourced + ")")
+	if len(request.RelationTypes) > 0 {
+		q = q.Where("relation_type IN ?", request.RelationTypes)
+	}
+	var rows []types.Relation
+	if err := q.Order("(SELECT count(*) " + sourced + ") DESC, id").Limit(request.Limit + 1).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if len(rows) > request.Limit {
+		rows = rows[:request.Limit]
+		out.Truncations = append(out.Truncations, types.GraphTruncation{Reason: "result_limit"})
+	}
+	edges := []graphreplica.Edge{}
+	for _, r := range rows {
+		edges = append(edges, graphreplica.Edge{SpaceID: space, ID: r.ID, SubjectID: r.SubjectID, ObjectID: r.ObjectID, LibraryID: r.LibraryID, RelationType: r.RelationType, Version: r.Version})
+	}
+	return s.hydrate(ctx, space, libraries, edges)
 }
 func (s *GraphSearchService) pending(ctx context.Context, space uint64, ids []string, out *types.GraphSearchResponse) error {
 	// One statement observes both counts at the same PG snapshot. Global means the personal space.

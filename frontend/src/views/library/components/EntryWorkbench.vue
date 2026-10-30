@@ -10,17 +10,23 @@
         <div class="entity-search"><Input ref="searchInput" v-model="entityFilter" type="search" :disabled="merging" :placeholder="t('workbench.entities.filter')" :aria-label="t('workbench.entities.filter')" @compositionstart="entityComposing = true" @compositionend="endEntityComposition" @keydown.enter="onEntityEnter(undefined, { e: $event })" /><Button v-if="entityFilter" variant="ghost" :aria-label="t('common.clear')" @click="clearSearch">×</Button></div>
       </div>
       <a class="merge-link" :href="pendingHref">{{ t('mergeSuggestions.title') }}<span v-if="pendingCount !== null" class="mono">{{ pendingCount }}</span></a>
+      <button type="button" class="merge-link overview-link" :disabled="!selectedLibraryId || merging" :aria-pressed="overview" @click="overview = true">{{ t('entityGraph.overview') }}</button>
       <ErrorState v-if="catalogError" :title="catalogError"><Button @click="loadCatalog">{{ t('common.retry') }}</Button></ErrorState>
       <ErrorState v-else-if="loadError" :title="loadError"><Button @click="loadEntities()">{{ t('common.retry') }}</Button></ErrorState>
       <Skeleton v-if="entitiesLoading && !entities.length" :label="t('common.loading')" />
       <ul v-else class="entity-items">
-        <li v-for="entity in entities" :key="entity.id"><button type="button" :disabled="merging" :aria-current="selectedEntity?.id === entity.id ? 'true' : undefined" @click="selectEntity(entity)"><strong>{{ entity.canonical_name }}</strong><small>{{ entityTypeLabel(entity.entity_type) }} · {{ entity.aliases?.length || 0 }} {{ t('workbench.entities.aliases', entity.aliases?.length || 0) }}</small></button></li>
+        <li v-for="entity in entities" :key="entity.id"><button type="button" :disabled="merging" :aria-current="!overview && selectedEntity?.id === entity.id ? 'true' : undefined" @click="selectEntity(entity)"><strong>{{ entity.canonical_name }}</strong><small>{{ entityTypeLabel(entity.entity_type) }} · {{ entity.aliases?.length || 0 }} {{ t('workbench.entities.aliases', entity.aliases?.length || 0) }}</small></button></li>
       </ul>
       <EmptyState v-if="!entities.length && !entitiesLoading && !loadError && !catalogLoading && !catalogError" :title="t(entityFilter || entityTypeFilter ? 'workbench.entities.noResults' : 'entityPage.empty')" :description="t('entityPage.emptyHint')"><a href="/platform/entries">{{ t('entityPage.viewMaterials') }}</a></EmptyState>
       <Button v-if="hasMoreEntities" :loading="entitiesLoading" @click="loadEntities(true)">{{ t('workbench.loadMore') }}</Button>
     </aside>
-    <div v-if="selectedEntity || entityDetailLoading || entityDetailError || entityNotFound || entities.length" class="entity-detail">
-      <EmptyState v-if="entityNotFound" :title="t('entityPage.notFound')" :description="t('entityPage.notFoundHint')" />
+    <div v-if="overview || selectedEntity || entityDetailLoading || entityDetailError || entityNotFound || entities.length" class="entity-detail">
+      <template v-if="overview">
+        <div class="entity-eyebrow"><LibMark v-if="selectedLibrary" :color="selectedLibrary.color" />{{ selectedLibrary?.display_name || selectedLibrary?.name || selectedLibraryId }}</div>
+        <div class="entity-head"><h2>{{ t('entityGraph.overview') }}</h2></div>
+        <EntityGraph :library-id="selectedLibraryId" :relation-type-options="graphRelationTypes" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @relation-types-changed="loadCatalog" />
+      </template>
+      <EmptyState v-else-if="entityNotFound" :title="t('entityPage.notFound')" :description="t('entityPage.notFoundHint')" />
       <ErrorState v-else-if="entityDetailError" :title="entityDetailError"><Button @click="selectedEntity ? selectEntity(selectedEntity) : selectInitialEntity(initialEntityId)">{{ t('common.retry') }}</Button></ErrorState>
       <Skeleton v-else-if="entityDetailLoading" :label="t('common.loading')" />
       <EmptyState v-else-if="!selectedEntity" :title="t('workbench.entities.choose')" />
@@ -79,7 +85,7 @@ const followStore = useFollowStore()
 const libraryScope = ref<string[]>(props.libraryId ? [props.libraryId] : [])
 const selectedLibraryId = computed(() => libraryScope.value[0] || '')
 const pageSize = 50
-const relationView = ref('graph')
+const relationView = ref('graph'), overview = ref(false)
 const searchInput = ref<InstanceType<typeof Input>>()
 function clearSearch() { entityFilter.value = ''; searchInput.value?.focus() }
 const entityFilter = ref(''), entityTypeFilter = ref<EntityType | ''>(''), entityComposing = ref(false)
@@ -155,6 +161,7 @@ async function rebuildNameEmbeddings() {
 }
 async function selectInitialEntity(id: string, preview?: Entity) {
   if (!id) return
+  overview.value = false
   const current = ++detailRequest
   relationRequest++
   relations.value = []; relationError.value = ''; relationsLoading.value = false
@@ -244,6 +251,9 @@ h1, h2 { margin: 0; font-size: var(--type-page-size); font-weight: var(--type-pa
 .entity-filters { display: flex; gap: var(--space-2); }
 .entity-filters :deep(select) { min-width: 0; width: 50%; }
 .merge-link { display: flex; justify-content: space-between; padding: var(--space-2) var(--space-4); font-weight: 700; background: var(--surface-soft); color: var(--text); text-decoration: underline; }
+.overview-link { width: 100%; border: 0; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+.overview-link[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+.overview-link:disabled { cursor: not-allowed; opacity: 0.5; }
 .merge-link:hover, .merge-link:focus-visible { background: var(--select); color: var(--on-select); }
 .entity-items { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--rule); }
 .entity-items button { display: grid; gap: var(--space-1); width: 100%; padding: var(--space-2) var(--space-4); border: 0; border-bottom: 1px solid var(--border); color: var(--text); background: var(--bg); font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }

@@ -350,7 +350,9 @@ export default {
     failed: 'Graph search failed. Try again.',
     unavailable: 'Graph search is temporarily unavailable. Try again later.',
     noLibraries: 'No libraries are available for this query. Select libraries again.',
-    chooseEntity: 'The entity is ambiguous. Select an entity again.'
+    chooseEntity: 'The entity is ambiguous. Select an entity again.',
+    overview: 'All entities graph',
+    overviewTruncated: 'Showing only the {limit} relationships with the most sources. Raise the limit or filter by relationship type to see more.'
   },
   contentCheck: {
     invalidModel: 'Choose an active check model.',

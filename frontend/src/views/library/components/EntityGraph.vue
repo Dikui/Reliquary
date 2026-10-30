@@ -5,16 +5,19 @@ import { useI18n } from 'vue-i18n'
 import cytoscape, { type Core, type StylesheetJson } from 'cytoscape'
 import { searchGraph } from '@/api/graph'
 import { Button, Checkbox, EmptyState, ErrorState, Select, Skeleton } from '@/components/ui'
-import { graphElements, graphStyles } from './entityGraphPresentation'
+import { graphElements, graphStyles, overviewStyles } from './entityGraphPresentation'
 import { searchErrorCode } from '@/utils/search'
 import type { GraphSearchResponse } from '@/types/graph'
 import type { SearchEntity, SourceLocation } from '@/types/search'
 import RelationTypeManager from './RelationTypeManager.vue'
 
-const props = withDefaults(defineProps<{ entity: SearchEntity; active?: boolean; relationTypeOptions?: string[] }>(), { active: true, relationTypeOptions: () => [] })
+// Without an entity the graph shows every relation in libraryId.
+const props = withDefaults(defineProps<{ entity?: SearchEntity; libraryId?: string; active?: boolean; relationTypeOptions?: string[] }>(), { active: true, relationTypeOptions: () => [] })
 const emit = defineEmits<{ 'open-source': [id: string, location?: SourceLocation]; 'open-entity': [id: string]; 'relation-types-changed': [] }>()
 const { t, locale } = useI18n()
-const hops = ref(2), limit = ref(50), relationTypes = ref<string[]>([])
+const scopeLibrary = computed(() => props.entity ? props.entity.library_id : props.libraryId || '')
+const limitOptions = props.entity ? [20, 50, 100] : [100, 200, 500]
+const hops = ref(2), limit = ref(limitOptions[1]!), relationTypes = ref<string[]>([])
 const relationOptions = computed(() => [...new Set(props.relationTypeOptions)].sort())
 const managingTypes = ref(false)
 function toggleRelationType(value: string, checked: boolean) {
@@ -29,6 +32,7 @@ const graphTruncated = computed(() => data.value?.truncated && (!data.value.trun
 const documentsTruncated = computed(() => data.value?.truncations.some(item => item.reason === 'document_limit'))
 let graph: Core | undefined, resizeObserver: ResizeObserver | undefined, themeObserver: MutationObserver | undefined
 let sequence = 0, controller: AbortController | undefined
+let fitZoom = 1, quiet = false
 
 function entityName(id: string) { return data.value?.entities.find(entity => entity.id === id)?.canonical_name || id }
 function entityType(type: string) {
@@ -38,7 +42,7 @@ function entityType(type: string) {
 
 function edgeLabel(edge: { subject_id: string; object_id: string; relation_type: string }) { return `${entityName(edge.subject_id)} — ${edge.relation_type} → ${entityName(edge.object_id)}` }
 function select(type: 'node' | 'edge', id: string) {
-  if (type === 'node') { if (id !== props.entity.id) emit('open-entity', id); return }
+  if (type === 'node') { if (id !== props.entity?.id) emit('open-entity', id); return }
   selection.value = { type, id }
 }
 function relationTypesChanged() { emit('relation-types-changed'); void runQuery() }
@@ -49,13 +53,14 @@ async function runQuery() {
   stopQuery()
   if (!props.active) return
   clearGraph(); error.value = ''; entityNotFound.value = false
-  const libraries = props.entity.library_id ? [props.entity.library_id] : []
+  const libraries = scopeLibrary.value ? [scopeLibrary.value] : []
   if (!libraries.length) { error.value = t('entityGraph.noLibraries'); return }
   const current = sequence
   controller = new AbortController()
   loading.value = true
   try {
-    const response = await searchGraph({ libraries, entity: { id: props.entity.id }, mode: 'neighbors', hops: hops.value, relation_types: relationTypes.value, limit: limit.value }, controller.signal)
+    const request = props.entity ? { entity: { id: props.entity.id }, mode: 'neighbors' as const, hops: hops.value } : { mode: 'all' as const }
+    const response = await searchGraph({ libraries, ...request, relation_types: relationTypes.value, limit: limit.value }, controller.signal)
     if (current !== sequence) return
     if (!response.success) throw new Error(response.message || t('entityGraph.failed'))
     if (response.data.status !== 'ok') throw new Error(t('entityGraph.chooseEntity'))
@@ -74,18 +79,28 @@ async function runQuery() {
 function graphStyle(): StylesheetJson {
   const style = getComputedStyle(canvas.value!)
   const color = (name: string) => style.getPropertyValue(name).trim()
-  return graphStyles({ text: color('--text'), bg: color('--bg'), muted: color('--muted'), border: color('--border'), select: color('--select'), onSelect: color('--on-select'), font: color('--font') })
+  const colors = { text: color('--text'), bg: color('--bg'), muted: color('--muted'), border: color('--border'), select: color('--select'), onSelect: color('--on-select'), font: color('--font'), accent: color('--accent') }
+  return props.entity ? graphStyles(colors) : overviewStyles(colors)
 }
 function drawGraph() {
   if (!canvas.value || !data.value || !props.active) return
   graph?.destroy()
+  quiet = false
   graph = cytoscape({
     container: canvas.value,
-    elements: graphElements(data.value, props.entity.id),
+    elements: graphElements(data.value, props.entity?.id || ''),
     style: graphStyle(),
-    layout: { name: 'cose', animate: false, padding: 45, nodeRepulsion: () => 24000, idealEdgeLength: () => 150, nodeOverlap: 20 },
+    layout: props.entity
+      ? { name: 'cose', animate: false, padding: 45, nodeRepulsion: () => 24000, idealEdgeLength: () => 150, nodeOverlap: 20 }
+      : { name: 'cose', animate: false, padding: 30, nodeDimensionsIncludeLabels: true, nodeRepulsion: () => 35000, idealEdgeLength: () => 70, nodeOverlap: 40, componentSpacing: 60, gravity: 0.5 },
     minZoom: 0.2, maxZoom: 3, boxSelectionEnabled: false, autounselectify: true,
   })
+  if (!props.entity) {
+    // Hovering a node lights up its neighbourhood and fades the rest of the graph.
+    graph.on('mouseover', 'node', event => { graph!.elements().addClass('faded'); event.target.closedNeighborhood().removeClass('faded').addClass('highlight') })
+    graph.on('mouseout', 'node', () => graph!.elements().removeClass('faded highlight'))
+    graph.on('zoom', updateQuiet)
+  }
   graph.on('tap', 'node', event => select('node', event.target.data('rawID')))
   graph.on('tap', 'edge', event => select('edge', event.target.data('rawID')))
   resizeObserver?.disconnect()
@@ -105,7 +120,13 @@ function zoomBy(factor: number) {
   if (!graph) return
   graph.zoom({ level: Math.min(graph.maxZoom(), Math.max(graph.minZoom(), graph.zoom() * factor)), renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } })
 }
-function fitGraph() { if (graph) { graph.fit(undefined, 45); if (graph.zoom() > 1) graph.zoom(1); graph.center() } }
+function fitGraph() { if (graph) { graph.fit(undefined, 45); if (graph.zoom() > 1) graph.zoom(1); graph.center(); fitZoom = graph.zoom(); updateQuiet() } }
+// Overview names drop out once zoomed out past the fitted view or too small to read, as in Obsidian.
+function updateQuiet() {
+  if (!graph || props.entity) return
+  const next = graph.zoom() < Math.max(0.35, fitZoom * 0.8)
+  if (next !== quiet) { quiet = next; graph.nodes().toggleClass('quiet', quiet) }
+}
 function graphKeydown(event: KeyboardEvent) {
   if (!graph) return
   const moves: Record<string, { x: number; y: number }> = { ArrowLeft: { x: 40, y: 0 }, ArrowRight: { x: -40, y: 0 }, ArrowUp: { x: 0, y: 40 }, ArrowDown: { x: 0, y: -40 } }
@@ -117,7 +138,7 @@ function graphKeydown(event: KeyboardEvent) {
 watch(selection, updateSelection)
 // Drop filters for relation types that were renamed, disabled or merged away.
 watch(relationOptions, options => { const next = relationTypes.value.filter(type => options.includes(type)); if (next.length !== relationTypes.value.length) relationTypes.value = next })
-watch([() => props.entity.id, () => props.entity.library_id, () => props.active, hops, limit, relationTypes], () => { void runQuery() }, { immediate: true })
+watch([() => props.entity?.id, scopeLibrary, () => props.active, hops, limit, relationTypes], () => { void runQuery() }, { immediate: true })
 watch(locale, () => { if (graph) graph.style(graphStyle()) })
 onMounted(() => {
   resizeObserver = new ResizeObserver(() => { if (props.active && graph) { graph.resize(); fitGraph() } })
@@ -129,9 +150,9 @@ onBeforeUnmount(() => { stopQuery(); resizeObserver?.disconnect(); themeObserver
 </script>
 
 <template>
-  <section class="entity-graph" :aria-label="t('entityGraph.graph')" :aria-busy="loading">
+  <section class="entity-graph" :class="{ 'is-overview': !entity }" :aria-label="t('entityGraph.graph')" :aria-busy="loading">
     <div class="graph-bar">
-      <div class="graph-hops" role="group" :aria-label="t('entityGraph.hops')">
+      <div v-if="entity" class="graph-hops" role="group" :aria-label="t('entityGraph.hops')">
         <Button v-for="count in [1, 2, 3]" :key="count" :aria-pressed="hops === count" @click="hops = count">{{ t('entityGraph.hopCount', { count }, count) }}</Button>
       </div>
       <details v-if="relationOptions.length" class="graph-type-filter">
@@ -141,11 +162,11 @@ onBeforeUnmount(() => { stopQuery(); resizeObserver?.disconnect(); themeObserver
           <Button v-if="relationTypes.length" variant="ghost" @click="relationTypes = []">{{ t('common.clear') }}</Button>
         </div>
       </details>
-      <label class="graph-limit">{{ t('entityGraph.limit') }}<Select :model-value="limit" :aria-label="t('entityGraph.limit')" @update:model-value="limit = Number($event)"><option v-for="count in [20, 50, 100]" :key="count" :value="count">{{ count }}</option></Select></label>
-      <Button :disabled="!entity.library_id" @click="managingTypes = true">{{ t('ikb18.manageRelationTypes') }}</Button>
+      <label class="graph-limit">{{ t('entityGraph.limit') }}<Select :model-value="limit" :aria-label="t('entityGraph.limit')" @update:model-value="limit = Number($event)"><option v-for="count in limitOptions" :key="count" :value="count">{{ count }}</option></Select></label>
+      <Button :disabled="!scopeLibrary" @click="managingTypes = true">{{ t('ikb18.manageRelationTypes') }}</Button>
       <span v-if="data" class="graph-hint graph-count" role="status">{{ t('entityGraph.count', { nodes: data.entities.length, edges: data.edges.length }) }}</span>
     </div>
-    <RelationTypeManager v-if="managingTypes && active" :initial-library-id="entity.library_id" @close="managingTypes = false" @changed="relationTypesChanged" />
+    <RelationTypeManager v-if="managingTypes && active" :initial-library-id="scopeLibrary" @close="managingTypes = false" @changed="relationTypesChanged" />
     <ErrorState v-if="error" :title="error"><Button @click="runQuery">{{ t('common.retry') }}</Button></ErrorState>
     <Skeleton v-else-if="loading" :label="t('common.loading')" />
     <EmptyState v-else-if="entityNotFound" :title="t('entityPage.notFound')" :description="t('entityPage.graphNotFoundHint')" />
@@ -153,7 +174,7 @@ onBeforeUnmount(() => { stopQuery(); resizeObserver?.disconnect(); themeObserver
       <div v-if="data.pending_sync.global || graphTruncated || documentsTruncated" class="graph-notices" role="status">
         <p v-if="data.pending_sync.global">{{ t('entityGraph.pending', { global: data.pending_sync.global, involved: data.pending_sync.involved }) }}</p>
         <p v-if="data.pending_sync.global">{{ t('entityPage.syncHint') }}</p>
-        <p v-if="graphTruncated">{{ t('entityGraph.truncated') }}</p>
+        <p v-if="graphTruncated">{{ entity ? t('entityGraph.truncated') : t('entityGraph.overviewTruncated', { limit }) }}</p>
         <p v-if="documentsTruncated">{{ t('entityGraph.documentsTruncated') }}</p>
       </div>
       <EmptyState v-if="!data.edges.length" :title="t('entityGraph.empty')" />
@@ -167,7 +188,7 @@ onBeforeUnmount(() => { stopQuery(); resizeObserver?.disconnect(); themeObserver
         </div>
         <details class="graph-accessible">
           <summary>{{ t('entityGraph.keyboardBrowse') }}</summary>
-          <div class="graph-node-buttons"><button v-for="node in data.entities" :key="node.id" type="button" :aria-current="node.id === entity.id ? 'true' : undefined" @click="select('node', node.id)">{{ node.canonical_name }} · {{ entityType(node.entity_type) }}</button></div>
+          <div class="graph-node-buttons"><button v-for="node in data.entities" :key="node.id" type="button" :aria-current="node.id === entity?.id ? 'true' : undefined" @click="select('node', node.id)">{{ node.canonical_name }} · {{ entityType(node.entity_type) }}</button></div>
           <div class="graph-edge-buttons"><button v-for="edge in data.edges" :key="edge.id" type="button" :aria-pressed="selectedEdge?.id === edge.id" @click="select('edge', edge.id)">{{ edgeLabel(edge) }}</button></div>
         </details>
         <section v-if="selectedEdge" class="graph-detail" aria-live="polite">
@@ -219,5 +240,6 @@ onBeforeUnmount(() => { stopQuery(); resizeObserver?.disconnect(); themeObserver
 .graph-edge-buttons button[aria-pressed="true"] { background: var(--select); color: var(--on-select); }
 .graph-source-warning { color: var(--danger); }
 button:focus-visible, summary:focus-visible, .graph-canvas:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.is-overview .graph-canvas { height: min(70vh, 720px); }
 @media (max-width: 640px) { .graph-canvas { height: 320px; } }
 </style>

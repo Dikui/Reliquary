@@ -2242,7 +2242,9 @@ export default {
     failed: '图谱查询失败，请重试。',
     unavailable: '图谱查询服务暂时不可用，请稍后重试。',
     noLibraries: '没有可查询的资料库，请重新选择资料库。',
-    chooseEntity: '实体尚未明确，请重新选择实体。'
+    chooseEntity: '实体尚未明确，请重新选择实体。',
+    overview: '全部实体图谱',
+    overviewTruncated: '仅显示来源最多的前 {limit} 条关系。提高关系上限或按关系类型筛选可查看更多。'
   },
   entryBatch: {
     scopeSummary: '范围摘要',

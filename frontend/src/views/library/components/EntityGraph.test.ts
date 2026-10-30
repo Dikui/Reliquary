@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { graphElements, graphStyles } from './entityGraphPresentation'
+import { graphElements, graphStyles, overviewStyles } from './entityGraphPresentation'
 import test, { type TestContext } from 'node:test'
 import { defineComponent, h, onMounted, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
@@ -20,7 +20,7 @@ const result = (): GraphSearchResponse => ({
   edges: ['official', 'media'].map(library => ({ id: `edge-${library}`, library_id: library, subject_id: peer.id, object_id: center.id, relation_type: '隶属', version: 1, source_count: 1, sources: [{ entry_id: `entry-${library}`, title: '云帆助手产品介绍', library_id: library, library_name: library, library_directory: library, published_at: null, source_unverified: true, acquisition: 'verbatim', evidence: [{ locations: [location] }] }] })),
 })
 
-async function fixture(t: TestContext, search: (request: GraphSearchRequest, signal?: AbortSignal) => Promise<unknown> = async () => ({ success: true, data: result() })) {
+async function fixture(t: TestContext, search: (request: GraphSearchRequest, signal?: AbortSignal) => Promise<unknown> = async () => ({ success: true, data: result() }), initial: SearchEntity | null = center) {
   const globals = ['ResizeObserver', 'MutationObserver', 'getComputedStyle', 'document'] as const
   const previous = globals.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
   class Observer { observe() {} disconnect() {} }
@@ -31,19 +31,19 @@ async function fixture(t: TestContext, search: (request: GraphSearchRequest, sig
   })
   const requests: Array<{ request: GraphSearchRequest; signal?: AbortSignal }> = []
   const graphs: any[] = [], sources: Array<[string, SourceLocation | undefined]> = [], centers: string[] = []
-  const selectedEntity = ref(center), active = ref(true), savedScope = ref<string[]>([]), relationTypeOptions = ref(['发布', '研发', '隶属'])
+  const selectedEntity = ref<SearchEntity | undefined>(initial ?? undefined), active = ref(true), savedScope = ref<string[]>([]), relationTypeOptions = ref(['发布', '研发', '隶属'])
   let relationTypesChanged = 0
   const component = loadComponent(new URL('./EntityGraph.vue', import.meta.url), {
     'cytoscape': { __esModule: true, default: (options: any) => {
       const graph = { options, handlers: {} as Record<string, (event: unknown) => void>, destroyed: false, moves: [] as unknown[],
-        on(_name: string, selector: string, handler: (event: unknown) => void) { graph.handlers[selector] = handler },
+        on(name: string, selector: string, handler: (event: unknown) => void) { if (name === 'tap') graph.handlers[selector] = handler },
         elements: () => options.elements.map((item: any) => ({ data: (key: string) => item.data[key], isNode: () => !item.data.source, toggleClass() {} })),
         style() {}, destroy() { graph.destroyed = true }, resize() {}, fit() {}, zoom() { return 1 }, center() {},
         panBy(move: unknown) { graph.moves.push(move) },
       }
       graphs.push(graph); return graph
     } },
-    './entityGraphPresentation': { graphElements, graphStyles },
+    './entityGraphPresentation': { graphElements, graphStyles, overviewStyles },
     './RelationTypeManager.vue': { __esModule: true, default: defineComponent({
       props: ['initialLibraryId'], emits: ['changed', 'close'], setup(props, { emit }) {
         return () => h('section', { 'data-relation-manager': props.initialLibraryId }, h('button', { 'data-save-types': true, onClick: () => { emit('changed'); emit('close') } }, 'Save relation types'))
@@ -65,7 +65,7 @@ async function fixture(t: TestContext, search: (request: GraphSearchRequest, sig
       },
     }) },
   })
-  const app = renderer.createApp(defineComponent({ setup: () => () => h(component, { entity: selectedEntity.value, active: active.value, relationTypeOptions: relationTypeOptions.value, onRelationTypesChanged: () => { relationTypesChanged++; relationTypeOptions.value = ['发布', '研发', '属于'] }, onOpenSource: (id: string, position?: SourceLocation) => sources.push([id, position]), onOpenEntity: (id: string) => centers.push(id) }) }))
+  const app = renderer.createApp(defineComponent({ setup: () => () => h(component, { entity: selectedEntity.value, libraryId: 'official', active: active.value, relationTypeOptions: relationTypeOptions.value, onRelationTypesChanged: () => { relationTypesChanged++; relationTypeOptions.value = ['发布', '研发', '属于'] }, onOpenSource: (id: string, position?: SourceLocation) => sources.push([id, position]), onOpenEntity: (id: string) => centers.push(id) }) }))
   registerPrimitives(app)
   delete app._context.components['t-alert']; delete app._context.components['t-select']
   app.component('t-alert', defineComponent({ props: ['message'], setup: props => () => h('p', { role: 'alert' }, props.message) }))
@@ -120,12 +120,23 @@ test('entity graph preserves directed parallel edges, scope, evidence navigation
   assert.deepEqual(f.errors, [])
 })
 
+test('entity graph without an entity shows the whole library', async t => {
+  const f = await fixture(t, undefined, null)
+  assert.deepEqual(f.requests[0]!.request, { libraries: ['official'], mode: 'all', relation_types: [], limit: 200 })
+  assert.equal(descendants(f.root).some(node => node.tag === 'button' && visibleText(node) === '2 跳'), false, 'hops only apply around an entity')
+  assert.deepEqual(f.graphs[0].options.elements.slice(0, 2).map((item: any) => item.classes), ['near', 'near'])
+  assert.equal(f.graphs[0].options.style.find((item: any) => item.selector === 'node').style.shape, 'ellipse', 'whole-library graph uses the dot style')
+  f.graphs[0].handlers.node({ target: { data: () => center.id } }); await settle()
+  assert.deepEqual(f.centers, [center.id], 'every node opens its entity')
+  assert.deepEqual(f.errors, [])
+})
+
 test('entity graph cancels stale queries and never renders an older entity response', async t => {
   let resolveOld: (value: unknown) => void = () => {}
   let resolveLeaving: (value: unknown) => void = () => {}
-  const f = await fixture(t, request => 'id' in request.entity && request.entity.id === center.id
+  const f = await fixture(t, request => request.entity && 'id' in request.entity && request.entity.id === center.id
     ? new Promise(resolve => { resolveOld = resolve })
-    : 'id' in request.entity && request.entity.id === 'leaving' ? new Promise(resolve => { resolveLeaving = resolve }) : Promise.resolve({ success: true, data: { ...result(), entities: [peer], edges: [], documents: [], truncated: false, truncations: [], pending_sync: { global: 0, involved: 0 } } }))
+    : request.entity && 'id' in request.entity && request.entity.id === 'leaving' ? new Promise(resolve => { resolveLeaving = resolve }) : Promise.resolve({ success: true, data: { ...result(), entities: [peer], edges: [], documents: [], truncated: false, truncations: [], pending_sync: { global: 0, involved: 0 } } }))
   f.selectedEntity.value = peer; await settle()
   assert.equal(f.requests[0]!.signal!.aborted, true)
   assert.equal(f.graphs.length, 0)
