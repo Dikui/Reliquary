@@ -35,14 +35,15 @@ type EntryService interface {
 }
 
 type Services struct {
-	Diagnostics *diagnostics.Service
-	Libraries   interfaces.LibraryService
-	Entries     EntryService
-	Search      interfaces.SearchService
-	Graph       *service.GraphSearchService
-	Topics      *service.TopicService
-	Entities    *service.EntityService
-	Follows     *service.FollowService
+	Diagnostics   *diagnostics.Service
+	ContentChecks *service.ContentCheckService
+	Libraries     interfaces.LibraryService
+	Entries       EntryService
+	Search        interfaces.SearchService
+	Graph         *service.GraphSearchService
+	Topics        *service.TopicService
+	Entities      *service.EntityService
+	Follows       *service.FollowService
 }
 
 // Handler uses sessionless Streamable HTTP so every request carries its own
@@ -376,6 +377,23 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in starInput) (any, error) {
 			return services.Entries.SetStarred(ctx, in.ID, in.Starred)
 		})
+
+	if services.ContentChecks != nil {
+		addTool(server, "list_content_checks", mcp.ToolAnnotations{ReadOnlyHint: true}, "分页列出资料自检运行及状态，每页 20 条，返回 items、total；问题和证据通过 get_content_check 读取。"+externalContentNotice,
+			object(map[string]any{"page": integer("页码，默认 1", 1, 1000000)}),
+			func(ctx context.Context, in struct {
+				Page *int `json:"page,omitempty"`
+			}) (any, error) {
+				page := 1
+				if in.Page != nil {
+					page = *in.Page
+				}
+				return services.ContentChecks.List(ctx, page)
+			})
+		addTool(server, "get_content_check", mcp.ToolAnnotations{ReadOnlyHint: true}, "按运行 ID 读取资料自检详情，包含问题说明、涉及资料、当前结果与原文证据及位置；只读取已有结果，不触发复检。"+externalContentNotice,
+			object(map[string]any{"id": text("资料自检运行 ID，必填")}, "id"),
+			func(ctx context.Context, in idInput) (any, error) { return services.ContentChecks.Get(ctx, in.ID) })
+	}
 }
 
 func object(properties map[string]any, required ...string) map[string]any {

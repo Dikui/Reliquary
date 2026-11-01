@@ -201,10 +201,15 @@ func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture
 	f.router.GET("/api/v1/diagnostics/ingest-failures/:id", diagnosticHandler.Get)
 	f.router.GET("/api/v1/diagnostics/ingest-failures/:id/materials/:material_id", diagnosticHandler.Read)
 	articles := entry.(mcpserver.EntryService)
-	adapter := mcpserver.New(mcpserver.Services{Diagnostics: diagnosticStore, Libraries: bases, Entries: articles,
-		Search: service.NewSearchService(bases, f.params.SpaceService, models, f.db),
-		Graph:  service.NewGraphSearchService(f.db, nil),
-		Topics: service.NewTopicService(f.db), Entities: service.NewEntityService(f.db, models), Follows: service.NewFollowService(f.db)})
+	search := service.NewSearchService(bases, f.params.SpaceService, models, f.db)
+	graph := service.NewGraphSearchService(f.db, nil)
+	entities := service.NewEntityService(f.db, models)
+	contentChecks := service.NewContentCheckService(f.db, queue, models, entry, search, entities, graph)
+	contentCheckHandler := handler.NewContentCheckHandler(contentChecks)
+	f.router.GET("/api/v1/diagnostics/content-checks", contentCheckHandler.List)
+	f.router.GET("/api/v1/diagnostics/content-checks/:id", contentCheckHandler.Get)
+	adapter := mcpserver.New(mcpserver.Services{Diagnostics: diagnosticStore, ContentChecks: contentChecks, Libraries: bases, Entries: articles,
+		Search: search, Graph: graph, Topics: service.NewTopicService(f.db), Entities: entities, Follows: service.NewFollowService(f.db)})
 	f.router.Any("/mcp", gin.WrapH(adapter))
 	server := httptest.NewServer(f.router)
 	t.Cleanup(server.Close)
@@ -486,6 +491,8 @@ func TestMCPToolAnnotations(t *testing.T) {
 		"delete_document":              {destructive: true, idempotent: true},
 		"discard_pending":              {destructive: true, idempotent: true},
 		"approve_pending":              {destructive: true},
+		"list_content_checks":          {readOnly: true},
+		"get_content_check":            {readOnly: true},
 	}
 	tools, err := client.ListTools(context.Background(), nil)
 	require.NoError(t, err)
@@ -537,7 +544,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 		require.NoError(t, err)
 		require.NotRegexp(t, `文章|本人文档|用户文档|整理结果|摘要加链接|event、opinion`, string(definition), tool.Name)
 	}
-	require.ElementsMatch(t, []string{"list_libraries", "search", "get_entry", "graph_search", "list_topics", "create_topic", "update_topic", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "update_entry_content", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "check_urls", "list_ingest_failures", "get_ingest_failure", "read_ingest_failure_material"}, names)
+	require.ElementsMatch(t, []string{"list_libraries", "search", "get_entry", "graph_search", "list_topics", "create_topic", "update_topic", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "update_entry_content", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "check_urls", "list_ingest_failures", "get_ingest_failure", "read_ingest_failure_material", "list_content_checks", "get_content_check"}, names)
 	_, err = client.CallTool(context.Background(), &mcp.CallToolParams{Name: "write_report", Arguments: map[string]any{"title": "Removed report entry point", "markdown": "# Report"}})
 	require.Error(t, err)
 	var search types.EntrySearchResponse
