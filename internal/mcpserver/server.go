@@ -232,6 +232,7 @@ func contractFields(value any) any {
 }
 
 func registerTools(server *mcp.Server, services Services) {
+	registerGuide(server)
 	registerIngestDiagnostics(server, services.Diagnostics)
 	registerGraphSearch(server, services.Graph)
 	if services.Libraries != nil {
