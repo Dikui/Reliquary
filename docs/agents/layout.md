@@ -9,6 +9,7 @@
 | `AGENTS.md`、`CLAUDE.md` | 规则文件 | setup-dikui-skills | 是 | 不清理 |
 | `docs/agents/` | 技能配置 | setup-dikui-skills、safe-push | 是 | 不清理 |
 | `CONTEXT.md`、`docs/adr/` | 术语、架构决策 | domain-modeling | 是 | 不清理 |
+| `skills/` | Agent Skills 技能包及嵌入包 | 人工或代理 | 是 | 不清理 |
 | `design/` | 界面设计稿 | mockup | 否 | 不清理 |
 | `docs/research/` | 调研结论 | research | 否 | 不清理 |
 | `docs/experiments/` | 实验记录 | ablation | 否 | 不清理 |

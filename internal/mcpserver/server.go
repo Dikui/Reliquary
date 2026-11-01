@@ -16,6 +16,7 @@ import (
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/skills"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -51,7 +52,11 @@ type Handler struct {
 }
 
 func New(services Services) *Handler {
-	server := mcp.NewServer(&mcp.Implementation{Name: "reliquary", Version: "1.0.0"}, nil)
+	rules, err := skills.Files.ReadFile("reliquary/rules.md")
+	if err != nil {
+		panic(fmt.Errorf("read embedded reliquary/rules.md: %w", err))
+	}
+	server := mcp.NewServer(&mcp.Implementation{Name: "reliquary", Version: "1.0.0"}, &mcp.ServerOptions{Instructions: string(rules)})
 	registerTools(server, services)
 	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: types.MaxIngestMCPBytes})
