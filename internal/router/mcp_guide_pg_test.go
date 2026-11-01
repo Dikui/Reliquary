@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -22,6 +23,9 @@ func TestMCPGuideWorkflows(t *testing.T) {
 		result, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "reliquary_guide", Arguments: arguments})
 		require.NoError(t, err)
 		require.Len(t, result.Content, 1)
+		data, err := json.Marshal(result)
+		require.NoError(t, err)
+		require.NotRegexp(t, mcpDeprecatedTerms, string(data))
 		return result
 	}
 
@@ -49,7 +53,6 @@ func TestMCPGuideWorkflows(t *testing.T) {
 			require.False(t, result.IsError)
 			text := result.Content[0].(*mcp.TextContent).Text
 			require.Equal(t, string(data), text)
-			require.NotRegexp(t, `文章|本人文档|用户文档|整理结果|摘要加链接|event、opinion`, text)
 		})
 	}
 	for _, arguments := range []any{nil, map[string]any{}} {
