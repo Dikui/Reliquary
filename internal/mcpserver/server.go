@@ -27,6 +27,7 @@ const completeMaterialNotice = "送入可读 Markdown 正文与可选图片；�
 type EntryService interface {
 	interfaces.IngestService
 	AuthorizeIngestRequest(context.Context) (context.Context, error)
+	GetEntryByID(context.Context, string) (*types.Entry, error)
 	ReadEntry(context.Context, string, int, int) (*service.EntryReadResult, error)
 	ListPending(context.Context, int, int, ...string) (*types.PageResult, error)
 	ReviewEntryIntake(context.Context, string, string, types.SourceInfo) (*types.Entry, error)
@@ -133,6 +134,12 @@ type idInput struct {
 
 type documentInput struct {
 	DocumentID string `json:"document_id"`
+	Confirmed  bool   `json:"confirmed,omitempty"`
+}
+
+type discardInput struct {
+	ID        string `json:"id"`
+	Confirmed bool   `json:"confirmed,omitempty"`
 }
 
 type entryContentInput struct {
@@ -316,9 +323,16 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in entryContentInput) (any, error) {
 			return services.Entries.UpdateEntryContent(ctx, in.EntryID, &types.EntryContentUpdate{Content: in.Content, Acquisition: in.Acquisition, Images: in.Images})
 		})
-	addTool(server, "delete_document", mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true}, "按 ID 删除旧版导入的个人资料（source_kind=mine），同时删除文件、附件、索引和记录并写入操作日志。通过 ingest 收录的资料和 AI产出不能用此工具删除。删除后可重新导入相同内容。"+externalContentNotice,
-		object(map[string]any{"document_id": text("旧版导入的个人资料 ID，必填")}, "document_id"),
+	addTool(server, "delete_document", mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true}, "按 ID 删除旧版导入的个人资料（source_kind=mine），同时删除文件、附件、索引和记录并写入操作日志。通过 ingest 收录的资料和 AI产出不能用此工具删除。删除后可重新导入相同内容。必须先向用户展示目标与风险并取得明确同意，再带 confirmed=true 调用；未确认返回 confirmation_required，不得自行补上 confirmed。"+externalContentNotice,
+		object(map[string]any{"document_id": text("旧版导入的个人资料 ID，必填"), "confirmed": boolean("仅在向用户展示目标与删除风险并取得明确同意后设为 true；省略或 false 不执行，不得自行补上确认")}, "document_id"),
 		func(ctx context.Context, in documentInput) (any, error) {
+			if !in.Confirmed {
+				entry, err := services.Entries.GetEntryByID(ctx, in.DocumentID)
+				if err != nil {
+					return nil, err
+				}
+				return nil, fmt.Errorf("confirmation_required: 将删除资料 %q（ID: %s）及其文件、附件、索引和记录，会写操作日志，不能恢复。先向用户展示目标并取得明确同意，再带 confirmed=true 重试；不得自行补上 confirmed", entry.Title, entry.ID)
+			}
 			if err := services.Entries.DeleteDocument(ctx, in.DocumentID); err != nil {
 				return nil, err
 			}
@@ -344,9 +358,16 @@ func registerTools(server *mcp.Server, services Services) {
 			}
 			return services.Entries.ReviewEntryIntake(ctx, in.ID, action, types.SourceInfo{OriginalURL: in.URL, Confirmed: in.Confirmed})
 		})
-	addTool(server, "discard_pending", mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true}, "丢弃指定待审资料及暂存来源，记录操作日志，返回被丢弃的资料。"+externalContentNotice,
-		object(map[string]any{"id": text("待审资料 ID，必填")}, "id"),
-		func(ctx context.Context, in idInput) (any, error) {
+	addTool(server, "discard_pending", mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true}, "丢弃指定待审资料及暂存来源，记录操作日志，返回被丢弃的资料。必须先向用户展示目标与风险并取得明确同意，再带 confirmed=true 调用；未确认返回 confirmation_required，不得自行补上 confirmed。"+externalContentNotice,
+		object(map[string]any{"id": text("待审资料 ID，必填"), "confirmed": boolean("仅在向用户展示目标与丢弃风险并取得明确同意后设为 true；省略或 false 不执行，不得自行补上确认")}, "id"),
+		func(ctx context.Context, in discardInput) (any, error) {
+			if !in.Confirmed {
+				entry, err := services.Entries.GetEntryByID(ctx, in.ID)
+				if err != nil {
+					return nil, err
+				}
+				return nil, fmt.Errorf("confirmation_required: 将丢弃待审资料 %q（ID: %s）及其暂存来源，会写操作日志，不能恢复。先向用户展示目标并取得明确同意，再带 confirmed=true 重试；不得自行补上 confirmed", entry.Title, entry.ID)
+			}
 			return services.Entries.ReviewEntryIntake(ctx, in.ID, "discard", types.SourceInfo{})
 		})
 
