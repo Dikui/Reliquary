@@ -55,16 +55,16 @@ bearer_token_env_var = "RELIQUARY_API_KEY"
 
 ## 流程索引
 
-多步任务先调用 `reliquary_guide`，不带参数可查看可用流程。以下流程文件由任务单 #05 补全：
+多步任务先调用 `reliquary_guide`，不带参数查看全部流程及使用场景，传 `workflow` 名称读取全文。装有技能包时也可直接读取下列文件，内容与工具返回一致。
 
-| 流程 | 使用场景 | 预留文件 |
+| 流程 | 使用场景 | 文件 |
 |---|---|---|
-| topic-brief | 主题简报 | `workflows/topic-brief.md` |
-| entity-profile | 实体档案 | `workflows/entity-profile.md` |
-| compare | 对比分析 | `workflows/compare.md` |
-| write-report | 写回报告 | `workflows/write-report.md` |
-| ingest | 收录资料 | `workflows/ingest.md` |
-| review-check | 资料自检复核 | `workflows/review-check.md` |
+| topic-brief | 围绕已有主题核对新动态、来源标记与未核实项 | [主题简报](workflows/topic-brief.md) |
+| entity-profile | 核对实体身份、档案与关系原文证据 | [实体档案](workflows/entity-profile.md) |
+| compare | 分库检索并列比较，保留冲突和双方证据 | [对比分析](workflows/compare.md) |
+| write-report | 将带引用的结论作为 AI产出写回，先确认写入或覆盖 | [写回报告](workflows/write-report.md) |
+| ingest | 核对链接与来源信息，先确认收录或覆盖 | [收录资料](workflows/ingest.md) |
+| review-check | 核对已有自检问题与原文，只报告结论 | [资料自检复核](workflows/review-check.md) |
 
 ## 参考文件索引
 
