@@ -10,6 +10,7 @@ export function librarySettingsPayload(draft: LibraryCatalogItem) {
   if (chunking) fillParentChunkDefaults(chunking)
   return {
     name: draft.name.trim(), description: draft.description, color: draft.color,
+    ...(draft.prompt_overrides ? { prompt_overrides: { ...draft.prompt_overrides } } : {}),
     ...(draft.model_tiers ? { model_tiers: { ...draft.model_tiers } } : {}),
     ...(chunking ? { chunking_config: chunking } : {}),
     feed_enabled: draft.feed_enabled,

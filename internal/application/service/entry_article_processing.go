@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"reliquary/internal/config"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/models/chat"
@@ -24,14 +23,14 @@ import (
 	"reliquary/internal/utils"
 )
 
-func articleProcessingPrompt() string {
-	return config.Prompt("article_processing") + `
+func articleProcessingPrompt(library *types.Library) string {
+	return libraryPrompt(library, "article_processing") + `
 输出所有字段，格式：{"title":"资料标题","content_type":"所属库类型","summary":{"overview":"一句话概述","points":["要点一","要点二","要点三"],"key_terms":["关键名词"]},"entities":[],"topics":["已给定的主题 ID"],"relations":[]}
 segment 是本段在整篇资料中的位置。只分析本段，context_before 仅作衔接上下文。`
 }
 
-func articleEntityProcessingPrompt() string {
-	return config.Prompt("article_entities") + `
+func articleEntityProcessingPrompt(library *types.Library) string {
+	return libraryPrompt(library, "article_entities") + `
 实体输出格式："entities":[{"name":"名称","type":"company","aliases":[],"description":"原文支持的简短介绍","relevance":"central","evidence_ids":[1]}]。`
 }
 

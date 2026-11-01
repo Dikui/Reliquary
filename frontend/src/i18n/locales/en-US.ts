@@ -1,5 +1,11 @@
 export default {
   settingsPage: {
+    prompts: {
+      title: 'Prompts', hint: 'Set processing instructions for this library. Saved changes apply to future processing; reprocess existing materials to update them. Restoring defaults also requires saving.',
+      default: 'Shared default', custom: 'Library override', customize: 'Customize', restore: 'Restore default', viewDefault: 'View shared default',
+      content: '{name} prompt', limit: 'Up to {max} characters. Output format and evidence validation still apply.', invalid: 'Enter nonblank content, up to {max} characters.',
+      names: { article_processing: 'Understanding and classification', library_summary: 'Summary requirements', article_entities: 'Entity extraction', article_relations: 'Relation extraction', summary_merge: 'Long document summary merge', topic_backfill: 'Historical topic classification' }
+    },
     numberRequired: 'Enter a number.',
     numberRange: 'Enter an integer between {min} and {max}.',
     general: 'General',

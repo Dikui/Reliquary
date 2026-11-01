@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"reliquary/internal/config"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/models/chat"
 	taskqueue "reliquary/internal/queue"
@@ -18,8 +17,8 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-func topicBackfillPrompt() string {
-	return config.Prompt("topic_backfill") + `
+func topicBackfillPrompt(library *types.Library) string {
+	return libraryPrompt(library, "topic_backfill") + `
 必须为每个输入文章 ID 返回且只返回一项判断，不编造 ID，matches 必须为布尔值。
 输出格式：{"decisions":[{"id":"输入文章ID","matches":true},{"id":"另一个输入文章ID","matches":false}]}`
 }
@@ -284,7 +283,7 @@ func (s *TopicService) judgeBatch(ctx context.Context, job types.TopicBackfillJo
 	}
 	callCtx, cancel := context.WithTimeout(types.WithLLMCallMetadata(ctx, "topic_backfill", ""), 2*time.Minute)
 	defer cancel()
-	response, err := model.Chat(callCtx, []chat.Message{{Role: "system", Content: topicBackfillPrompt()}, {Role: "user", Content: string(raw)}}, &chat.ChatOptions{Temperature: 0.1, MaxTokens: max(1024, len(articles)*64)})
+	response, err := model.Chat(callCtx, []chat.Message{{Role: "system", Content: topicBackfillPrompt(&library)}, {Role: "user", Content: string(raw)}}, &chat.ChatOptions{Temperature: 0.1, MaxTokens: max(1024, len(articles)*64)})
 	if err != nil {
 		return nil, err
 	}

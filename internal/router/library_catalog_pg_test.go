@@ -72,6 +72,34 @@ func TestLibraryCatalogHTTPAndMCP(t *testing.T) {
 	var other types.Library
 	require.NoError(t, f.db.First(&other, "id=?", f.library.ID).Error)
 	require.NotEqual(t, model.ID, other.ModelTiers.Generation)
+	promptURL := "/api/v1/libraries/" + custom.Data.ID
+	configured = personalRequest(t, f.router, http.MethodPut, promptURL, `{"prompt_overrides":{"library_summary":"保留条件与步骤"}}`, f.key, true)
+	require.Equal(t, http.StatusOK, configured.Code, configured.Body.String())
+	detail := personalRequest(t, f.router, http.MethodGet, promptURL, "", f.key, true)
+	var promptBody struct {
+		Data struct {
+			PromptOverrides map[string]string `json:"prompt_overrides"`
+			PromptDefaults  map[string]string `json:"prompt_defaults"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(detail.Body.Bytes(), &promptBody))
+	require.Equal(t, "保留条件与步骤", promptBody.Data.PromptOverrides["library_summary"])
+	require.Len(t, promptBody.Data.PromptDefaults, len(types.LibraryPromptIDs))
+	require.NoError(t, f.db.First(&other, "id=?", f.library.ID).Error)
+	require.Empty(t, other.PromptOverrides)
+	unchanged := personalRequest(t, f.router, http.MethodPut, promptURL, `{"name":"Notes"}`, f.key, true)
+	require.Equal(t, http.StatusOK, unchanged.Code, unchanged.Body.String())
+	require.NoError(t, json.Unmarshal(unchanged.Body.Bytes(), &configuredBody))
+	require.Equal(t, promptBody.Data.PromptOverrides, configuredBody.Data.PromptOverrides)
+	rejected := personalRequest(t, f.router, http.MethodPut, promptURL, `{"prompt_overrides":{"graph_verification":"skip"}}`, f.key, true)
+	require.Equal(t, http.StatusBadRequest, rejected.Code)
+	reset := personalRequest(t, f.router, http.MethodPut, promptURL, `{"prompt_overrides":{}}`, f.key, true)
+	require.Equal(t, http.StatusOK, reset.Code, reset.Body.String())
+	reset = personalRequest(t, f.router, http.MethodGet, promptURL, "", f.key, true)
+	require.Equal(t, http.StatusOK, reset.Code)
+	configuredBody.Data = types.Library{}
+	require.NoError(t, json.Unmarshal(reset.Body.Bytes(), &configuredBody))
+	require.Empty(t, configuredBody.Data.PromptOverrides)
 	settings, err = json.Marshal(types.LibraryPatch{ModelTiers: &types.ModelTierConfig{Generation: "missing-model", Embedding: custom.Data.ModelTiers.Embedding}})
 	require.NoError(t, err)
 	invalid := personalRequest(t, f.router, http.MethodPatch, "/api/v1/libraries/"+custom.Data.ID, string(settings), f.key, true)

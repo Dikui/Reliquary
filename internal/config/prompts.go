@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"reliquary/internal/types"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -84,4 +86,13 @@ func Prompt(id string) string {
 		}
 	}
 	panic("prompt template is not loaded: " + id)
+}
+
+// LibraryPromptDefaults exposes the running instance's startup snapshot.
+func LibraryPromptDefaults() map[string]string {
+	prompts := make(map[string]string, len(types.LibraryPromptIDs))
+	for _, id := range types.LibraryPromptIDs {
+		prompts[id] = Prompt(id)
+	}
+	return prompts
 }

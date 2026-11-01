@@ -259,6 +259,7 @@ func Import(ctx context.Context, db *gorm.DB, root, uploads string, materialize 
 	}
 	projectLibraryTemplateSnapshot(snapshot, targetVersion)
 	projectLibraryColorSnapshot(snapshot, targetVersion)
+	projectLibraryPromptsSnapshot(snapshot, targetVersion)
 	if db.Migrator().HasColumn("entries", "source_ref") {
 		projectIngestSnapshot(snapshot)
 	}

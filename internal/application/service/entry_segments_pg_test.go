@@ -29,10 +29,15 @@ type segmentedChat struct {
 	reviewMergeFail   bool
 	reviewMergeAccept bool
 	reviewMergeInput  string
+	prompts           map[string]string
 }
 
 func (m *segmentedChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
+	if m.prompts == nil {
+		m.prompts = map[string]string{}
+	}
+	m.prompts[stage] = messages[0].Content
 	if stage == "article_graph_verification" {
 		var input struct {
 			Source struct {
@@ -214,6 +219,22 @@ func TestSegmentCancellationAndMergeFailureResume(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, before, fmt.Sprint(m.calls))
 	require.Equal(t, 2, m.mergeCalls)
+
+	// A changed prompt invalidates even successful segments from a failed run.
+	h.library.PromptOverrides = map[string]string{"library_summary": "保留本库条件", "summary_merge": "本库合并要求"}
+	m.mergeFail = true
+	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
+	require.ErrorContains(t, err, "merge failed")
+	firstCalls := m.calls["article_processing"][1]
+	require.Contains(t, m.prompts["article_processing"], "保留本库条件")
+	require.Contains(t, m.prompts["article_summary_merge"], "保留本库条件")
+	require.Contains(t, m.prompts["article_summary_merge"], "本库合并要求")
+	h.library.PromptOverrides["library_summary"] = "新的本库条件"
+	m.mergeFail = false
+	_, err = h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
+	require.NoError(t, err)
+	require.Equal(t, firstCalls+1, m.calls["article_processing"][1])
+	require.Contains(t, m.prompts["article_summary_merge"], "新的本库条件")
 }
 
 func TestIntakeDoesNotCreateReviewSegmentsOrApplyModelLimits(t *testing.T) {

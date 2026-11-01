@@ -36,7 +36,8 @@ type Library struct {
 	Name string `yaml:"name"                    json:"name"`
 	Type string `yaml:"type"                    json:"type"                    gorm:"type:varchar(32);default:'document'"`
 	// Description of the library
-	Description string `yaml:"description"             json:"description"`
+	Description     string            `yaml:"description"             json:"description"`
+	PromptOverrides map[string]string `json:"prompt_overrides" gorm:"serializer:json;type:jsonb;not null;default:'{}'"`
 	// Workspace ID
 	SpaceID uint64 `yaml:"space_id"               json:"space_id"`
 	// CreatorID records the user who created this team library.
@@ -172,6 +173,9 @@ func (library *Library) EnsureDefaults() {
 		return
 	}
 	library.Type = LibraryTypeDocument
+	if library.PromptOverrides == nil {
+		library.PromptOverrides = map[string]string{}
+	}
 	if _, known := RulesForTemplate(library.Template); library.Template == "" || known {
 		library.Template = TemplateStandard
 		library.SourceEvidenceRule = ""

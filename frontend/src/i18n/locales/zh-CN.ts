@@ -2542,6 +2542,12 @@ export default {
     relationDeleted: '已删除关系'
   },
   settingsPage: {
+    prompts: {
+      title: '提示词', hint: '为本库设置处理要求。保存后用于后续处理；已有资料需要重新处理才会更新。恢复默认后仍需保存。',
+      default: '通用默认', custom: '本库自定义', customize: '自定义', restore: '恢复默认', viewDefault: '查看通用默认',
+      content: '{name}提示词', limit: '最多 {max} 个字符。程序继续校验输出格式与证据。', invalid: '请输入非空内容，最多 {max} 个字符。',
+      names: { article_processing: '资料理解与分类', library_summary: '摘要要求', article_entities: '实体抽取', article_relations: '关系抽取', summary_merge: '长文摘要合并', topic_backfill: '历史主题归类' }
+    },
     numberRequired: '请输入数值。',
     numberRange: '请输入 {min} 到 {max} 之间的整数。',
     general: '通用',

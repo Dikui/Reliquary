@@ -15,7 +15,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/graph"
-	"reliquary/internal/config"
 	"reliquary/internal/types"
 )
 
@@ -36,9 +35,9 @@ type extractedImage struct {
 
 func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 	catalog, _ := json.Marshal(l.ContentTypes)
-	prompt := articleProcessingPrompt() + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + `
+	prompt := articleProcessingPrompt(l) + "\n所属库：" + l.Name + "\ncontent_types=" + string(catalog) + `
 先从 content_types 的 enabled=true 项选择 content_type，拿不准或清单外选其他。有其他时使用“其他”，否则使用 other。`
-	prompt += "\n" + config.Prompt("library_summary")
+	prompt += "\n" + libraryPrompt(l, "library_summary")
 	if k.ContentTypeCorrected {
 		name, _ := json.Marshal(k.ContentType)
 		prompt += "\n用户已经修正 content_type=" + string(name) + "，必须使用该类型，不再重新分类。"
@@ -59,9 +58,9 @@ func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 		graphOverride = &value
 	}
 	override, _ := json.Marshal(graphOverride)
-	return prompt + "\n" + articleEntityProcessingPrompt() + "\nrelation_types=" + string(names) + "\ngraph_override=" + string(override) + `
+	return prompt + "\n" + articleEntityProcessingPrompt(l) + "\nrelation_types=" + string(names) + "\ngraph_override=" + string(override) + `
 默认抽取有原文依据的关系，不因内容类型关闭。graph_override=false 时 relations=[]，其他值正常抽取；没有合格关系时也返回空数组。
-` + config.Prompt("article_relations") + `
+` + libraryPrompt(l, "article_relations") + `
 附加输出格式："relations":[{"subject":"实体名称","type":"合作","object":"另一实体名称","evidence_ids":[1],"speaker":"发言人"}]。`
 }
 

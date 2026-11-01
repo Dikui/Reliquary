@@ -18,6 +18,7 @@ Object.defineProperty(globalThis, 'Document', { configurable: true, value: class
 Object.defineProperty(TestElement.prototype, 'options', { configurable: true, get() { return this.querySelectorAll('option') } })
 
 const library = (id = 'research', count = 2) => ({ id, name: id, directory: id, color: 2, description: '',
+  prompt_overrides: {}, prompt_defaults: { article_processing: 'Read the material', library_summary: 'Keep key facts', article_entities: 'Extract central entities', article_relations: 'Extract supported relations', summary_merge: 'Merge summaries', topic_backfill: 'Choose matching topics' }, prompt_max_chars: 16000,
   entry_count: count, model_tiers: { generation: 'writer', entity_resolution: '', rerank: 'ranker' }, processing_model_tiers: ['generation', 'entity_resolution'],
   chunking_config: { chunk_size: 512, chunk_overlap: 0, separators: ['\n\n'], enable_parent_child: false, parent_chunk_size: 4096, child_chunk_size: 384 },
   content_types: [{ name: 'research', enabled: true, extract_graph: false, position: 0 }], relation_types: [], feed_enabled: true,
@@ -65,6 +66,11 @@ test('page edits real fields, saves color and notifies navigation without waitin
   const f = await fixture(); t.after(() => f.cleanup())
   const save = f.root.querySelector('button[type="submit"]')!
   assert.equal(save.disabled, true)
+  const summary = f.root.querySelector('textarea[name="prompt-library_summary"]')!
+  assert.equal(summary.value, 'Keep key facts')
+  const customize = f.root.querySelectorAll('button').filter(node => node.textContent === 'Customize')[1]!
+  await send(customize, 'click')
+  await input(f.root, 'textarea[name="prompt-library_summary"]', 'Keep conditions and steps')
   assert.equal(f.root.querySelectorAll('input[type="radio"]').length, 8)
   assert.ok(f.root.textContent.includes('Research'), 'built-in content type is localized')
   assert.ok(f.root.querySelectorAll('span').some(node => String(node.props.class).includes('rq-tag')))
@@ -83,22 +89,30 @@ test('page edits real fields, saves color and notifies navigation without waitin
   assert.equal(f.requests[0].payload.color, 6)
   assert.equal(f.requests[0].payload.name, 'Research notes')
   assert.equal(f.requests[0].payload.description, 'Edited source')
+  assert.deepEqual(f.requests[0].payload.prompt_overrides, { library_summary: 'Keep conditions and steps' })
   assert.equal(f.requests[0].payload.chunking_config.chunk_size, 800)
   assert.equal(f.requests[0].payload.chunking_config.chunk_overlap, 0)
   assert.equal(f.requests[0].payload.feed_enabled, false)
   assert.equal(f.requests[0].payload.content_types[1].name, 'Memo')
   assert.deepEqual(f.events, [{ id: 'research', name: 'Research notes', color: 6 }])
   assert.equal(save.disabled, true)
+  await send(f.root.querySelectorAll('button').find(node => node.textContent === 'Restore default')!, 'click')
+  assert.equal(summary.value, 'Keep key facts')
+  await send(f.root.querySelector('form')!, 'submit')
+  assert.deepEqual(f.requests[1].payload.prompt_overrides, {})
 })
 
 test('failed save retains editable values and dirty state with a visible error', async t => {
   const f = await fixture([library()], true); t.after(() => f.cleanup())
   await input(f.root, 'input[name="library-name"]', 'Keep my draft')
+  await send(f.root.querySelectorAll('button').filter(node => node.textContent === 'Customize')[1]!, 'click')
+  await input(f.root, 'textarea[name="prompt-library_summary"]', 'Keep my prompt')
   await send(f.root.querySelector('form')!, 'submit')
   assert.equal(f.root.querySelector('input[name="library-name"]')!.value, 'Keep my draft')
   assert.match(f.root.querySelector('[role="alert"]')!.textContent, /Reranker was deleted/)
   assert.equal(f.root.querySelector('button[type="submit"]')!.disabled, false)
   assert.equal(f.events.length, 0)
+  assert.equal(f.root.querySelector('textarea[name="prompt-library_summary"]')!.value, 'Keep my prompt')
 })
 
 test('nonempty libraries cannot be deleted and an empty last library returns to a compact empty state', async t => {

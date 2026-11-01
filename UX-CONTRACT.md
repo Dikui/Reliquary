@@ -409,3 +409,7 @@ adds no backend operations or database migration.
 
 Calendar-date values keep the recorded day in every timezone. Timestamp values
 continue to display in the viewer’s timezone. `utils/dateTime.ts` owns this distinction.
+
+## Library prompt settings
+
+The library settings form owns six prompt overrides: understanding/classification, summary requirements, entities, relations, summary merge and historical topic classification. Each disclosure shows Shared default or Library override. Default text comes from the running backend and is read-only. Customize copies it into the draft; Restore default removes the draft override. Both require the existing Save action. Validation associates nonblank/length errors with the editor, opens the first invalid disclosure and focuses it. Failed saves retain the draft. Switching libraries and leaving follow the existing unsaved-change confirmation and stale-response protection. Swiss native textareas retain vertical resizing under DESIGN.md; shared buttons and feedback keep their existing owners. Both locales expose the same actions. Saved changes affect later processing, with no automatic historical reprocessing.

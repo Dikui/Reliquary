@@ -19,7 +19,10 @@ export type LibraryTemplate = 'standard';
 export type LibraryColor = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export interface LibraryContentType { name: string; position: number; enabled: boolean; extract_graph: boolean }
 export interface LibraryRelationType { name: string; position: number; enabled: boolean }
+export type LibraryPromptID = 'article_processing' | 'library_summary' | 'article_entities' | 'article_relations' | 'summary_merge' | 'topic_backfill';
+export type LibraryPromptOverrides = Partial<Record<LibraryPromptID, string>>;
 export interface LibraryCatalogItem {
+  prompt_overrides?: LibraryPromptOverrides; prompt_defaults?: Record<LibraryPromptID, string>; prompt_max_chars?: number;
   color: LibraryColor;
   id: string; directory: string; name: string; display_name: string; system_role: string;
   entry_count?: number; template: LibraryTemplate; description: string; review_criteria: string;
@@ -34,7 +37,7 @@ export interface LibraryCatalogItem {
 export function listLibraries() { return get<{ success: boolean; data: LibraryCatalogItem[]; message?: string }>('/api/v1/libraries'); }
 export const getCatalogLibrary = (id: string) => get<{ success: boolean; data: LibraryCatalogItem; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
 export interface CreateLibraryRequest { template?: LibraryTemplate; directory: string; name: string; description: string; color?: LibraryColor }
-export type LibraryPatch = Partial<Pick<LibraryCatalogItem, 'name' | 'description' | 'color' | 'model_tiers' | 'chunking_config' | 'feed_enabled' | 'content_types' | 'relation_types'>>;
+export type LibraryPatch = Partial<Pick<LibraryCatalogItem, 'name' | 'description' | 'color' | 'model_tiers' | 'chunking_config' | 'feed_enabled' | 'content_types' | 'relation_types' | 'prompt_overrides'>>;
 export const createCatalogLibrary = (data: CreateLibraryRequest) => post<{ success: boolean; data: LibraryCatalogItem; message?: string }>('/api/v1/libraries', data)
 export const saveCatalogLibrary = (id: string, data: LibraryPatch) => put<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`, data)
 export const deleteCatalogLibrary = (id: string) => del<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)

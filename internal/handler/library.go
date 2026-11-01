@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"reliquary/internal/application/repository"
+	"reliquary/internal/config"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
@@ -120,6 +121,8 @@ func (h *LibraryHandler) GetLibrary(c *gin.Context) {
 		logger.Warnf(c.Request.Context(), "Failed to fill Library counts for %s: %v", library.ID, fillErr)
 	}
 	extras := map[string]interface{}{"display_name": library.DisplayName(types.LanguageFromContextOrDefault(c.Request.Context()))}
+	extras["prompt_defaults"] = config.LibraryPromptDefaults()
+	extras["prompt_max_chars"] = types.MaxLibraryPromptChars
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": buildLibraryResponse(library, extras)})
 }

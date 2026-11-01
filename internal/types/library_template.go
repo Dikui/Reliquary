@@ -93,6 +93,7 @@ type LibraryRelationType struct {
 // LibraryPatch intentionally includes immutable fields so attempts to write
 // them are rejected instead of silently ignored by JSON decoding.
 type LibraryPatch struct {
+	PromptOverrides    *map[string]string     `json:"prompt_overrides"`
 	Color              *int                   `json:"color"`
 	Name               *string                `json:"name"`
 	Description        *string                `json:"description"`
@@ -106,6 +107,26 @@ type LibraryPatch struct {
 	Template           *string                `json:"template"`
 	Directory          *string                `json:"directory"`
 	SystemRole         *string                `json:"system_role"`
+}
+
+const MaxLibraryPromptChars = 16000
+
+var LibraryPromptIDs = [...]string{"article_processing", "library_summary", "article_entities", "article_relations", "summary_merge", "topic_backfill"}
+
+func ValidateLibraryPromptOverrides(prompts map[string]string) error {
+	for id, content := range prompts {
+		known := false
+		for _, allowed := range LibraryPromptIDs {
+			known = known || id == allowed
+		}
+		if !known {
+			return fmt.Errorf("unknown library prompt: %s", id)
+		}
+		if strings.TrimSpace(content) == "" || len([]rune(content)) > MaxLibraryPromptChars {
+			return fmt.Errorf("library prompt %s must contain 1 to %d characters of nonblank content", id, MaxLibraryPromptChars)
+		}
+	}
+	return nil
 }
 
 const (

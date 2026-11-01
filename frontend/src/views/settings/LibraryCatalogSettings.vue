@@ -3,7 +3,7 @@ import { computed, onMounted, onBeforeUnmount, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button, Dialog, LibMark, Tag, confirm, toast } from '@/components/ui'
 import { CONTENT_TYPES, type ContentType } from '@/types/entryClassification'
-import { listLibraries, getCatalogLibrary, createCatalogLibrary, saveCatalogLibrary, deleteCatalogLibrary, type LibraryCatalogItem, type LibraryColor } from '@/api/library'
+import { listLibraries, getCatalogLibrary, createCatalogLibrary, saveCatalogLibrary, deleteCatalogLibrary, type LibraryCatalogItem, type LibraryColor, type LibraryPromptID } from '@/api/library'
 import { validDirectory, validLibraryName, validTypes, librarySettingsPayload, moveType, catalogDescription, fillParentChunkDefaults, libraryNumberErrors, type LibraryNumberField } from '@/utils/libraryCatalogForm'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
 import { copyModelTiers } from '@/utils/modelTiers'
@@ -14,6 +14,25 @@ const libraries = ref<LibraryCatalogItem[]>([]), draft = ref<LibraryCatalogItem 
 const errorNotice = ref<HTMLElement>()
 const catalogForm = ref<HTMLFormElement>()
 const validationAttempted = ref(false)
+const promptIds: LibraryPromptID[] = ['article_processing', 'library_summary', 'article_entities', 'article_relations', 'summary_merge', 'topic_backfill']
+const promptNames = computed(() => ({
+  article_processing: t('settingsPage.prompts.names.article_processing'), library_summary: t('settingsPage.prompts.names.library_summary'),
+  article_entities: t('settingsPage.prompts.names.article_entities'), article_relations: t('settingsPage.prompts.names.article_relations'),
+  summary_merge: t('settingsPage.prompts.names.summary_merge'), topic_backfill: t('settingsPage.prompts.names.topic_backfill'),
+}))
+const promptLimit = computed(() => draft.value?.prompt_max_chars || 16000)
+function promptError(id: LibraryPromptID) {
+  const value = draft.value?.prompt_overrides?.[id]
+  return validationAttempted.value && value !== undefined && (!value.trim() || Array.from(value).length > promptLimit.value)
+    ? t('settingsPage.prompts.invalid', { max: promptLimit.value }) : ''
+}
+function customizePrompt(id: LibraryPromptID) {
+  if (draft.value?.prompt_defaults?.[id]) draft.value.prompt_overrides![id] = draft.value.prompt_defaults[id]
+}
+function restorePrompt(id: LibraryPromptID) { if (draft.value?.prompt_overrides) delete draft.value.prompt_overrides[id] }
+function editPrompt(id: LibraryPromptID, event: Event) {
+  if (draft.value?.prompt_overrides) draft.value.prompt_overrides[id] = (event.target as HTMLTextAreaElement).value
+}
 const numberErrors = computed(() => validationAttempted.value && draft.value?.chunking_config ? libraryNumberErrors(draft.value.chunking_config) : {})
 function numberError(field: LibraryNumberField) {
   const issue = numberErrors.value[field]
@@ -64,6 +83,7 @@ async function load(id?: string) {
     const response = await getCatalogLibrary(selected); if (!response.success) throw new Error(response.message)
     if (current !== sequence) return
     draft.value = { ...response.data, model_tiers: copyModelTiers({ ...response.data.model_tiers, generation: response.data.model_tiers?.generation || response.data.summary_model_id || '' }), description: catalogDescription(response.data, t('ikb18.systemMediaDescription')), chunking_config: response.data.chunking_config ? { ...response.data.chunking_config, strategy: response.data.chunking_config.strategy ?? '', token_limit: response.data.chunking_config.token_limit ?? 0, languages: response.data.chunking_config.languages ?? [] } : response.data.chunking_config, content_types: response.data.content_types || [], relation_types: response.data.relation_types || [] }
+    draft.value.prompt_overrides = { ...draft.value.prompt_overrides }
     toggleParentChild()
     validationAttempted.value = false
     saved.value = JSON.stringify(draft.value); newContentType.value = ''
@@ -85,6 +105,14 @@ async function save() {
     return
   }
   if (!validLibraryName(draft.value.name)) { error.value = t('ikb18.invalidName'); return }
+  const invalidPrompt = promptIds.find(id => promptError(id))
+  if (invalidPrompt) {
+    await nextTick()
+    const field = catalogForm.value?.querySelector<HTMLElement>(`#prompt-${invalidPrompt}`)
+    field?.closest?.('details')?.setAttribute('open', '')
+    field?.focus()
+    return
+  }
   if (!validTypes(draft.value.content_types)) { error.value = t('ikb18.invalidTypes'); return }
   saving.value = true; error.value = ''
   try {
@@ -166,6 +194,25 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
           <header><h2>{{ t('modelTiers.title') }}</h2><p>{{ t('ikb18.admissionPolicyHint') }}</p></header>
           <div class="catalog-controls"><ModelTierEditor hide-title v-model="draft.model_tiers" :tiers="modelTiers" :before-navigate="confirmLeave" :disabled="saving || loading" /></div>
         </section>
+        <section class="catalog-section">
+          <header><h2>{{ t('settingsPage.prompts.title') }}</h2><p>{{ t('settingsPage.prompts.hint') }}</p></header>
+          <div class="catalog-controls">
+            <details v-for="id in promptIds" :key="id" class="catalog-prompt">
+              <summary>{{ promptNames[id] }} · {{ t(draft.prompt_overrides?.[id] === undefined ? 'settingsPage.prompts.default' : 'settingsPage.prompts.custom') }}</summary>
+              <div class="catalog-controls catalog-advanced">
+                <div class="catalog-inline">
+                  <Button v-if="draft.prompt_overrides?.[id] === undefined" :disabled="!draft.prompt_defaults?.[id]" @click="customizePrompt(id)">{{ t('settingsPage.prompts.customize') }}</Button>
+                  <Button v-else @click="restorePrompt(id)">{{ t('settingsPage.prompts.restore') }}</Button>
+                </div>
+                <label :for="`prompt-${id}`">{{ t('settingsPage.prompts.content', { name: promptNames[id] }) }}</label>
+                <textarea :id="`prompt-${id}`" :name="`prompt-${id}`" rows="10" :readonly="draft.prompt_overrides?.[id] === undefined" :value="draft.prompt_overrides?.[id] ?? draft.prompt_defaults?.[id] ?? ''" :aria-invalid="!!promptError(id)" :aria-describedby="promptError(id) ? `prompt-${id}-error` : undefined" @input="editPrompt(id, $event)" />
+                <span v-if="promptError(id)" :id="`prompt-${id}-error`" class="catalog-field-error">{{ promptError(id) }}</span>
+                <p class="catalog-hint">{{ t('settingsPage.prompts.limit', { max: promptLimit }) }}</p>
+                <details v-if="draft.prompt_overrides?.[id] !== undefined"><summary>{{ t('settingsPage.prompts.viewDefault') }}</summary><pre class="catalog-prompt-default">{{ draft.prompt_defaults?.[id] }}</pre></details>
+              </div>
+            </details>
+          </div>
+        </section>
         <section v-if="draft.chunking_config" class="catalog-section">
           <header><h2>{{ t('libraryEditor.chunking.title') }}</h2><p>{{ t('settingsPage.chunkHint') }}</p></header>
           <div class="catalog-controls">
@@ -226,6 +273,9 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
 .catalog-section h2 { font-size: var(--type-section-size); font-weight: var(--type-section-weight); margin: 0 0 var(--space-1); }
 .catalog-section header p, .catalog-hint { font-size: var(--type-note-size); font-weight: var(--type-note-weight); color: var(--muted); line-height: var(--leading); margin: 0; }
 .catalog-controls { display: grid; gap: var(--space-4); min-width: 0; align-content: start; }
+.catalog-prompt { min-width: 0; }
+.catalog-prompt textarea { resize: vertical; line-height: var(--leading); }
+.catalog-prompt-default { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; color: var(--muted); }
 .catalog-form label:not(.catalog-check):not(.color-choice) { display: grid; gap: var(--space-2); min-width: 0; font-size: var(--type-label-size); }
 .catalog-form input:not([type='checkbox']):not([type='radio']), .catalog-form textarea, .catalog-form select { box-sizing: border-box; width: 100%; min-width: 0; min-height: var(--control); border: 1px solid var(--border); border-radius: 0; padding: var(--space-2) var(--space-3); color: var(--text); background: var(--bg); font: inherit; }
 .catalog-form input[readonly] { background: var(--surface-soft); color: var(--muted); font-family: var(--mono); }

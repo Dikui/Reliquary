@@ -53,7 +53,7 @@
 | `public.image_embeddings` | 无 | 无 | `entry_id`、`space_id`、`library_id`、`attachment_path`、`model_id`、`dimension`、`embedding`、`content_hash`、`created_at`、`updated_at` | 无 |
 | `public.ingest_assets` | `id`、`space_id`、`name`、`file_type`、`size`、`path`、`created_at`、`referenced_at`、`entry_id` | 无 | 无 | 无 |
 | `public.ingest_discards` | `space_id`、`normalized_url`、`entry_id`、`discarded_at`、`reason`、`library_id`、`fingerprint` | 无 | 无 | 无 |
-| `public.libraries` | `model_tiers`、`id`、`name`、`description`、`space_id`、`chunking_config`、`embedding_model_id`、`summary_model_id`、`created_at`、`updated_at`、`deleted_at`、`type`、`indexing_strategy`、`creator_id`、`system_role`、`template`、`directory`、`review_criteria`、`source_evidence_rule`、`feed_enabled`、`color` | 无 | 无 | 无 |
+| `public.libraries` | `model_tiers`、`id`、`name`、`description`、`space_id`、`chunking_config`、`embedding_model_id`、`summary_model_id`、`created_at`、`updated_at`、`deleted_at`、`type`、`indexing_strategy`、`creator_id`、`system_role`、`template`、`directory`、`review_criteria`、`source_evidence_rule`、`feed_enabled`、`color`、`prompt_overrides` | 无 | 无 | 无 |
 | `public.library_content_types` | `library_id`、`name`、`position`、`enabled`、`extract_graph` | 无 | 无 | 无 |
 | `public.library_relation_types` | `library_id`、`name`、`position`、`enabled` | 无 | 无 | 无 |
 | `public.maintenance_state` | `backup_at`、`backup_status`、`backup_path`、`backup_size_bytes`、`backup_error`、`drill_at`、`drill_status`、`drill_error`、`backup_schedule`、`drill_schedule`、`schedule_timezone`、`backup_directory`、`automatic_enabled` | 无 | `id`、`paused`、`pause_mode`、`pause_reason`、`paused_at`、`updated_at`、`backup_due_at`、`drill_due_at` | 无 |
@@ -483,3 +483,7 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 资料批次明细 `entry_batch_items` 与任务记录一同由 PostgreSQL 备份保存，不进入文件库副本。明细保留提交时的资料标识与标题，不随资料删除级联清除；恢复后与 `task_pending_ops` 一起用于核对批次状态。
 
 版本 29 起，`model_calls.text_input_tokens`、`image_input_tokens` 和 `image_input_price` 属于仅备份调用证据，不进入文件库副本。旧版本升级只投影新增 NULL 列，不改历史费用；分项非空时继续参与完整备份的逐行哈希核对。
+
+## 库级提示词配置
+
+结构版本 36 新增 `libraries.prompt_overrides`，属于配置正本，保存于既有 `config/libraries.json`。旧副本导入和升级核对仅补新增空对象；当前副本须完整保留库级覆盖值，丢失或篡改会核对失败。副本格式和持久表登记格式不变。不自动转换历史 `system_settings` 中的旧版提示词。

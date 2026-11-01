@@ -86,6 +86,11 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 			rule.Configuration = strings.TrimSpace(strings.ReplaceAll(" "+rule.Configuration+" ", " color ", " "))
 			copy["libraries"] = rule
 		}
+		if migration.Version < 36 {
+			rule := copy["libraries"]
+			rule.Configuration = strings.TrimSpace(strings.ReplaceAll(" "+rule.Configuration+" ", " prompt_overrides ", " "))
+			copy["libraries"] = rule
+		}
 		result = copy
 	}()
 	if migration.Dirty {

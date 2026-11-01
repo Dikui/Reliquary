@@ -42,6 +42,13 @@ INSERT INTO libraries(id,space_id,name,directory,created_at,embedding_model_id,s
 	after, err := BuildManifest(ctx, db, root, "")
 	require.NoError(t, err)
 	require.Empty(t, CompareManifest(before, after))
+	require.NoError(t, m.Migrate(36))
+	current, err = Capture(ctx, db)
+	require.NoError(t, err)
+	require.NoError(t, WriteSnapshot(root, "", current))
+	withPrompts, err := BuildManifest(ctx, db, root, "")
+	require.NoError(t, err)
+	require.Empty(t, CompareManifest(after, withPrompts), "an empty prompt map is the only new default")
 	restored := pgtest.Open(t)
 	_, err = Import(ctx, restored, restoreRoot, "", nil)
 	require.NoError(t, err)
@@ -49,9 +56,13 @@ INSERT INTO libraries(id,space_id,name,directory,created_at,embedding_model_id,s
 	var colors []int
 	require.NoError(t, restored.Raw(`SELECT color FROM libraries ORDER BY created_at,id`).Scan(&colors).Error)
 	require.Equal(t, []int{1, 2, 3}, colors)
+	var emptyPrompts string
+	require.NoError(t, restored.Raw(`SELECT prompt_overrides::text FROM libraries WHERE id='tie-a'`).Scan(&emptyPrompts).Error)
+	require.JSONEq(t, `{}`, emptyPrompts)
 
 	// Current replicas must retain a user's selection instead of recomputing it.
 	require.NoError(t, db.Exec(`UPDATE libraries SET color=8 WHERE id='tie-a'`).Error)
+	require.NoError(t, db.Exec(`UPDATE libraries SET prompt_overrides='{"library_summary":"保留定义和步骤"}' WHERE id='tie-a'`).Error)
 	current, err = Capture(ctx, db)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, "", current))
@@ -65,6 +76,13 @@ INSERT INTO libraries(id,space_id,name,directory,created_at,embedding_model_id,s
 	var color int
 	require.NoError(t, currentRestored.Raw(`SELECT color FROM libraries WHERE id='tie-a'`).Scan(&color).Error)
 	require.Equal(t, 8, color)
+	var restoredPrompts string
+	require.NoError(t, currentRestored.Raw(`SELECT prompt_overrides::text FROM libraries WHERE id='tie-a'`).Scan(&restoredPrompts).Error)
+	require.JSONEq(t, `{"library_summary":"保留定义和步骤"}`, restoredPrompts)
+	require.NoError(t, currentRestored.Exec(`UPDATE libraries SET prompt_overrides='{}' WHERE id='tie-a'`).Error)
+	check, err := VerifyReplica(ctx, currentRestored, root, "", false)
+	require.NoError(t, err)
+	require.False(t, check.OK, "verification must detect lost prompt overrides")
 	for _, row := range snapshot.Tables["libraries"] {
 		require.NotContains(t, row, "color", "projection must not mutate original evidence")
 	}

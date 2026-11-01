@@ -47,6 +47,8 @@ func TestIngestContractMigrationUpDownUpAndPreservation(t *testing.T) {
 			for _, row := range actual {
 				require.Equal(t, json.Number("1"), row["color"])
 				delete(row, "color")
+				require.Empty(t, row["prompt_overrides"])
+				delete(row, "prompt_overrides")
 				require.Equal(t, "standard", row["template"])
 				row["template"] = "own" // Migration 34 replaces this fixture's old marker.
 			}

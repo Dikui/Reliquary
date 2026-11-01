@@ -134,7 +134,7 @@ func (s *entryService) callArticleProcessing(ctx context.Context, library *types
 	// segments use the current candidates and persistence revalidates all IDs.
 	fingerprintInput := input
 	fingerprintInput.ExistingTopics = []articleProcessingTopic{}
-	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{"library-scoped-topics-v1", k.LibraryID, fingerprintInput, prompt, articleGraphVerificationPrompt(), segmentSummaryPrompt(), entityResolutionPrompt(), segmentModelIdentity(model), budget})
+	run, err := s.openSegmentRun(ctx, k, "processing", body, budget, []any{"library-scoped-topics-v1", k.LibraryID, fingerprintInput, prompt, articleGraphVerificationPrompt(), segmentSummaryPrompt(library), entityResolutionPrompt(), segmentModelIdentity(model), budget})
 	if err != nil {
 		return nil, err
 	}
@@ -314,8 +314,13 @@ func mergeArticleSegments(parts []*articleProcessingResult) *articleProcessingRe
 	return merged
 }
 
-func segmentSummaryPrompt() string {
-	return config.Prompt("summary_merge") + `只输出 JSON {"title":"资料标题","summary":{"overview":"一句话概述","points":["原文支持的要点"],"key_terms":["关键名词"]}}。`
+func segmentSummaryPrompt(library *types.Library) string {
+	prompt := libraryPrompt(library, "summary_merge")
+	// Carry a library's summary requirements through the final merge too.
+	if library != nil && library.PromptOverrides["library_summary"] != "" {
+		prompt += "\n" + library.PromptOverrides["library_summary"]
+	}
+	return prompt + `只输出 JSON {"title":"资料标题","summary":{"overview":"一句话概述","points":["原文支持的要点"],"key_terms":["关键名词"]}}。`
 }
 
 func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types.Library, k *types.Entry, parts []*articleProcessingResult, model *types.Model) (*articleProcessingResult, error) {
@@ -325,9 +330,10 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 		summaries[i] = map[string]any{"segment": i + 1, "summary": part.Summary}
 	}
 	title := articleTitleForProcessing(k)
+	prompt := segmentSummaryPrompt(library)
 	input, _ := json.Marshal(map[string]any{"title": title, "segments": summaries})
 	_, _, completion := s.articleProcessingLimits(model)
-	if model.Parameters.ContextWindow > 0 && len([]rune(string(input)))+len([]rune(segmentSummaryPrompt()))+completion+modelOutputCorrectionReserve > model.Parameters.ContextWindow {
+	if model.Parameters.ContextWindow > 0 && len([]rune(string(input)))+len([]rune(prompt))+completion+modelOutputCorrectionReserve > model.Parameters.ContextWindow {
 		return nil, errors.New("各段摘要超过合并模型上下文，请提高模型上下文或减少分段数")
 	}
 	llm, err := GetTierChatModel(ctx, s.db, s.modelService, library, types.ModelTierGeneration)
@@ -341,7 +347,7 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 		ctx = types.WithModelCallTrace(ctx, span.Attempt, span.SpanID)
 	}
 	var summary *articleProcessingResult
-	err = chatWithOutputValidation(types.WithLLMCallMetadata(ctx, "article_summary_merge", ""), llm, []chat.Message{{Role: "system", Content: segmentSummaryPrompt()}, {Role: "user", Content: string(input)}}, &chat.ChatOptions{Temperature: 0, MaxTokens: completion, MaxCompletionTokens: completion}, func(raw string) error {
+	err = chatWithOutputValidation(types.WithLLMCallMetadata(ctx, "article_summary_merge", ""), llm, []chat.Message{{Role: "system", Content: prompt}, {Role: "user", Content: string(input)}}, &chat.ChatOptions{Temperature: 0, MaxTokens: completion, MaxCompletionTokens: completion}, func(raw string) error {
 		var output struct {
 			Title   string              `json:"title"`
 			Summary *types.EntrySummary `json:"summary"`

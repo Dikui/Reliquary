@@ -54,6 +54,11 @@ func libraryWriteError(err error) error {
 }
 
 func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch types.LibraryPatch) (*types.Library, error) {
+	if patch.PromptOverrides != nil {
+		if err := types.ValidateLibraryPromptOverrides(*patch.PromptOverrides); err != nil {
+			return nil, apperrors.NewBadRequestError(err.Error())
+		}
+	}
 	if patch.Color != nil {
 		if err := types.ValidateLibraryColor(*patch.Color); err != nil {
 			return nil, apperrors.NewBadRequestError(err.Error())
@@ -81,6 +86,9 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 		}
 		if patch.Description != nil {
 			library.Description = *patch.Description
+		}
+		if patch.PromptOverrides != nil {
+			library.PromptOverrides = *patch.PromptOverrides
 		}
 		if patch.Color != nil {
 			library.Color = *patch.Color
