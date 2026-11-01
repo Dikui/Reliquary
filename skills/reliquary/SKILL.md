@@ -2,7 +2,7 @@
 name: reliquary
 description: 查询、阅读、引用、收录资料并将结论写回本机 Reliquary。用户需要检索 Reliquary 的库、核对资料原文与实体关系、读取关注动态或保存 AI产出时使用。
 metadata:
-  tested_against: "0.15.4"
+  tested_against: "0.16.0"
 ---
 
 # Reliquary
