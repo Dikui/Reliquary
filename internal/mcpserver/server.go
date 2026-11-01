@@ -221,27 +221,27 @@ func registerTools(server *mcp.Server, services Services) {
 	registerIngestDiagnostics(server, services.Diagnostics)
 	registerGraphSearch(server, services.Graph)
 	if services.Libraries != nil {
-		addTool(server, "list_libraries", "列出全部库的 ID、目录、名称、模板、说明、该收与不该收的内容、审核标准、去重规则、内容类型和关注动态配置。"+externalContentNotice, map[string]any{"type": "object", "properties": map[string]any{}}, func(ctx context.Context, _ struct{}) (any, error) {
+		addTool(server, "list_libraries", "列出全部库的 ID、英文目录、名称、说明、该收与不该收的内容、去重规则、可选字段、内容类型清单、关系类型清单和关注动态配置。旧审核标准与来源规则仅保留读取，不决定新资料准入。"+externalContentNotice, map[string]any{"type": "object", "properties": map[string]any{}}, func(ctx context.Context, _ struct{}) (any, error) {
 			libraries, err := services.Libraries.ListLibraries(ctx)
 			return map[string]any{"libraries": libraries}, err
 		})
 	}
-	addTool(server, "search", "按查询文本进行混合检索，返回文章结果、命中段落与相似报道。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
+	addTool(server, "search", "按查询文本进行混合检索，返回资料结果、命中段落与相似报道。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。cannot_be_fact=true 表示 AI产出，不能作为事实依据。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
 		object(map[string]any{
 			"query":         text("查询文本，必填"),
 			"libraries":     stringArray("必填，库 ID 或目录名，可选多个"),
-			"content_types": stringArray("内容类型：event、opinion、research、tutorial、case、reference"),
+			"content_types": stringArray("内容类型名称，取所选库内容类型清单中的值；先调用 list_libraries 查看"),
 			"entity_ids":    stringArray("实体 ID 列表"), "topic_ids": stringArray("主题 ID 列表"),
-			"sources":          stringArray("来源类型：article、mine（用户文档）、report（整理结果）"),
-			"starred":          boolean("true 只查星标文章，false 只查未星标，省略查全部"),
-			"published_from":   text("发布时间下限，YYYY-MM-DD 或 RFC3339；缺少发布时间的文章会排除"),
+			"sources":          stringArray("来源类别：article（外部收录资料）、report（AI产出，即 acquisition=model_written）、mine（旧版导入的个人资料）"),
+			"starred":          boolean("true 只查星标资料，false 只查未星标，省略查全部"),
+			"published_from":   text("发布时间下限，YYYY-MM-DD 或 RFC3339；缺少发布时间的资料会排除"),
 			"published_to":     text("发布时间上限，YYYY-MM-DD 或 RFC3339"),
 			"collapse_similar": boolean("是否折叠相似报道，省略使用检索服务默认值"),
 			"limit":            integer("最多返回的资料数，省略使用检索服务默认值", 1, 100),
 		}, "query", "libraries"), func(ctx context.Context, in types.EntrySearchRequest) (any, error) {
 			return services.Search.Search(types.WithSearchSource(ctx, "mcp"), in)
 		})
-	addTool(server, "get_entry", "按 ID 读取数据库表头字段和正文。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。摘要加链接文章返回表头摘要与 original_url，body 为空。offset 和 length 按 Unicode 字符计数，默认 0 和 20000，length 最大 100000；用 next_offset 继续读取。"+externalContentNotice,
+	addTool(server, "get_entry", "按 ID 读取数据库表头字段和正文。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。cannot_be_fact=true 表示 AI产出，不能作为事实依据。offset 和 length 按 Unicode 字符计数，默认 0 和 20000，length 最大 100000；用 next_offset 继续读取。"+externalContentNotice,
 		object(map[string]any{"id": text("资料 ID，必填"), "offset": integer("正文起始 Unicode 字符偏移，默认 0", 0, 0),
 			"length": integer("读取 Unicode 字符数，默认 20000，最大 100000", 1, 100000)}, "id"),
 		func(ctx context.Context, in entryInput) (any, error) {
@@ -283,7 +283,7 @@ func registerTools(server *mcp.Server, services Services) {
 		object(map[string]any{
 			"libraries":        stringArray("库 ID 或英文目录名，可选多个；省略为全部开启动态的库"),
 			"cursor":           text("上一页返回的 next_cursor；继续读取同一窗口，直到没有 next_cursor"),
-			"since":            text("进入动态时间下限，RFC3339 或 YYYY-MM-DD；省略使用网页上次查看时间，返回此时间之后的文章"),
+			"since":            text("进入动态时间下限，RFC3339 或 YYYY-MM-DD；省略使用网页上次查看时间，返回此时间之后的资料"),
 			"target_ids":       stringArray("关注对象 ID 列表，省略查询全部关注；多个对象取并集"),
 			"limit":            integer("最多返回的主资料数，默认 20，最大 100；折叠成员附在相似报道中", 1, 100),
 			"collapse_similar": boolean("是否按摘要向量相似度与发布时间窗口折叠相似报道，省略开启，规则与检索相同"),
@@ -310,26 +310,26 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in entryContentInput) (any, error) {
 			return services.Entries.UpdateEntryContent(ctx, in.EntryID, &types.EntryContentUpdate{Content: in.Content, Acquisition: in.Acquisition, Images: in.Images})
 		})
-	addTool(server, "delete_document", "按文档 ID 删除本人文档，同时删除文件、附件、索引和记录并写入操作日志。文章和整理结果不能用此工具删除。删除后可重新导入相同内容。"+externalContentNotice,
-		object(map[string]any{"document_id": text("本人文档 ID，必填")}, "document_id"),
+	addTool(server, "delete_document", "按 ID 删除旧版导入的个人资料（source_kind=mine），同时删除文件、附件、索引和记录并写入操作日志。通过 ingest 收录的资料和 AI产出不能用此工具删除。删除后可重新导入相同内容。"+externalContentNotice,
+		object(map[string]any{"document_id": text("旧版导入的个人资料 ID，必填")}, "document_id"),
 		func(ctx context.Context, in documentInput) (any, error) {
 			if err := services.Entries.DeleteDocument(ctx, in.DocumentID); err != nil {
 				return nil, err
 			}
 			return map[string]any{"document_id": in.DocumentID, "status": "deleted", "message": "本人文档已删除"}, nil
 		})
-	addTool(server, "check_urls", "收录前按规范化链接查重，含转载来源。输入 1 到 100 条链接，逐条返回 url、status（in_library、pending_review、discarded、not_found）、entry_id。已丢弃的链接不会再次入库。"+completeMaterialNotice+externalContentNotice,
+	addTool(server, "check_urls", "收录前在指定库按规范化链接查重；库规则开启转载归并时，也匹配已记录的转载链接。输入 1 到 100 条链接，逐条返回 url、status（in_library、pending_review、discarded、not_found）、entry_id。已丢弃的链接不会再次入库。"+completeMaterialNotice+externalContentNotice,
 		object(map[string]any{"library": text("必填，库 ID 或英文目录名；可调用 list_libraries"), "urls": boundedArray("原文链接数组，1 到 100 条", text("原文链接"), 1, types.MaxIngestCheckURLs)}, "urls"),
 		func(ctx context.Context, in types.IngestCheckRequest) (any, error) {
 			items, err := services.Entries.CheckURLs(ctx, in.URLs, in.Library)
 			return types.IngestCheckResponse{Items: items}, err
 		})
-	addTool(server, "list_pending", "分页列出收录待审资料，返回 data、total、page、page_size。"+externalContentNotice,
+	addTool(server, "list_pending", "分页列出旧收录待审资料，返回 data、total、page、page_size。新提交默认接收，不再进入此队列。"+externalContentNotice,
 		object(map[string]any{"kind": enum("审核类别", "intake"), "page": integer("页码，从 1 开始，默认 1", 1, 0), "page_size": integer("每页条数，默认 20，最大 100", 1, 100)}),
 		func(ctx context.Context, in pendingInput) (any, error) {
 			return services.Entries.ListPending(ctx, in.Page, in.PageSize, in.Kind)
 		})
-	addTool(server, "approve_pending", "处理指定收录待审条目。默认 approve 批准内容，本人文档无需链接；supplement_url 用 url 补链接并重新模型审核；admit_unverified 需 confirmed=true，无链接入库并标 source_unverified，始终全文保存。记录操作日志，返回条目和状态。"+externalContentNotice,
+	addTool(server, "approve_pending", "处理指定的旧收录待审条目。默认 approve 批准内容，旧版导入的个人资料无需链接；supplement_url 用 url 补链接并重新模型审核；admit_unverified 需 confirmed=true，无链接入库并标 source_unverified，始终全文保存。记录操作日志，返回条目和状态。"+externalContentNotice,
 		object(map[string]any{"id": text("待审资料 ID，必填"), "action": enum("操作，默认 approve", "approve", "supplement_url", "admit_unverified"), "url": text("补充的原始 HTTP/HTTPS 链接"), "confirmed": boolean("无链接入库必须显式确认")}, "id"),
 		func(ctx context.Context, in intakeReviewInput) (any, error) {
 			action := in.Action
@@ -338,13 +338,13 @@ func registerTools(server *mcp.Server, services Services) {
 			}
 			return services.Entries.ReviewEntryIntake(ctx, in.ID, action, types.SourceInfo{OriginalURL: in.URL, Confirmed: in.Confirmed})
 		})
-	addTool(server, "discard_pending", "丢弃指定待审资料及暂存来源，记录操作日志，返回被丢弃的文章。"+externalContentNotice,
+	addTool(server, "discard_pending", "丢弃指定待审资料及暂存来源，记录操作日志，返回被丢弃的资料。"+externalContentNotice,
 		object(map[string]any{"id": text("待审资料 ID，必填")}, "id"),
 		func(ctx context.Context, in idInput) (any, error) {
 			return services.Entries.ReviewEntryIntake(ctx, in.ID, "discard", types.SourceInfo{})
 		})
 
-	addTool(server, "set_star", "设置或取消文章星标，刷新文件库表头并记录发生变化的操作，返回更新后的文章。"+externalContentNotice,
+	addTool(server, "set_star", "设置或取消资料星标，记录发生变化的操作，返回更新后的资料。"+externalContentNotice,
 		object(map[string]any{"id": text("资料 ID，必填"), "starred": boolean("true 设置星标，false 取消星标，必填")}, "id", "starred"),
 		func(ctx context.Context, in starInput) (any, error) {
 			return services.Entries.SetStarred(ctx, in.ID, in.Starred)
