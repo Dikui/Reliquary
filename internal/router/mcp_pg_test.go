@@ -583,7 +583,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
 	var discarded types.Entry
-	mcpCall(t, client, "discard_pending", map[string]any{"id": discard.ID}, &discarded)
+	mcpCall(t, client, "discard_pending", map[string]any{"id": discard.ID, "confirmed": true}, &discarded)
 	require.Equal(t, discard.ID, discarded.ID)
 	var count int64
 	require.NoError(t, f.db.Model(&types.Entry{}).Where("id=?", discard.ID).Count(&count).Error)

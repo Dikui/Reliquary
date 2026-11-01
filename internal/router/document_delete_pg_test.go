@@ -65,11 +65,11 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 			article := f.seedArticle(t, "Article deletion must fail", "full", "Article body")
 			rejected := personalRequest(t, router, http.MethodDelete, "/api/v1/documents/"+article.ID, "", f.key, true)
 			require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
-			toolRejected, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "delete_document", Arguments: map[string]any{"document_id": article.ID}})
+			toolRejected, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "delete_document", Arguments: map[string]any{"document_id": article.ID, "confirmed": true}})
 			require.NoError(t, err)
 			require.True(t, toolRejected.IsError)
 			for _, record := range []string{"missing", ""} {
-				toolMissing, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "delete_document", Arguments: map[string]any{"document_id": record}})
+				toolMissing, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "delete_document", Arguments: map[string]any{"document_id": record, "confirmed": true}})
 				require.NoError(t, err)
 				require.True(t, toolMissing.IsError)
 			}
@@ -80,11 +80,27 @@ func TestPersonalDocumentDeleteHTTPWebAndMCP(t *testing.T) {
 			require.Equal(t, "Changed", edited.Title)
 			switch protocol {
 			case "mcp":
+				before := mcpDestructiveRecordCounts(t, f, id)
+				fileBefore, err := os.ReadFile(filePath)
+				require.NoError(t, err)
+				for _, args := range []map[string]any{{"document_id": id}, {"document_id": id, "confirmed": false}} {
+					response, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "delete_document", Arguments: args})
+					require.NoError(t, err)
+					requireMCPConfirmation(t, response, edited, "文件", "附件", "索引", "记录")
+					var unchanged types.Entry
+					require.NoError(t, f.db.First(&unchanged, "id=?", id).Error)
+					require.Equal(t, edited, unchanged)
+					require.Equal(t, before, mcpDestructiveRecordCounts(t, f, id))
+					fileAfter, err := os.ReadFile(filePath)
+					require.NoError(t, err)
+					require.Equal(t, fileBefore, fileAfter)
+					require.DirExists(t, attachmentPath)
+				}
 				var removed struct {
 					DocumentID string `json:"document_id"`
 					Status     string `json:"status"`
 				}
-				mcpCall(t, client, "delete_document", map[string]any{"document_id": id}, &removed)
+				mcpCall(t, client, "delete_document", map[string]any{"document_id": id, "confirmed": true}, &removed)
 				require.Equal(t, id, removed.DocumentID)
 				require.Equal(t, "deleted", removed.Status)
 			case "web":
