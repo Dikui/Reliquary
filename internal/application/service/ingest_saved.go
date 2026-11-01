@@ -155,7 +155,7 @@ func (s *entryService) saveIngestEntry(ctx context.Context, library *types.Libra
 	}
 	setMessageFingerprint(entry, canonical)
 	entry.SourceBodyHash = sourceBodyHash(canonical)
-	if discarded, err := s.lookupIngestDiscard(ctx, library.ID, entryDiscardKeys(entry, intakeTemplateRules(library))); err != nil {
+	if discarded, err := s.lookupIngestDiscard(ctx, library.ID, entryDiscardKeys(entry)); err != nil {
 		return nil, err
 	} else if discarded != nil {
 		return ingestResult(nil, "discarded", "该来源已被人工拒收。", discarded.Reason, discarded.EntryID), nil

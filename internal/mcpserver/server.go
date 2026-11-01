@@ -241,7 +241,7 @@ func registerTools(server *mcp.Server, services Services) {
 			return map[string]any{"libraries": libraries}, err
 		})
 	}
-	addTool(server, "search", mcp.ToolAnnotations{ReadOnlyHint: true}, "按查询文本进行混合检索，返回资料结果、命中段落与相似报道。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。cannot_be_fact=true 表示 AI产出，不能作为事实依据。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
+	addTool(server, "search", mcp.ToolAnnotations{ReadOnlyHint: true}, "按查询文本进行混合检索，返回资料结果、命中段落与相似报道。source_unverified=true 表示该资料保留来源未核实标记，引用时须注明；缺少链接本身不阻止新资料保存。cannot_be_fact=true 表示 AI产出，不能作为事实依据。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
 		object(map[string]any{
 			"query":         text("查询文本，必填"),
 			"libraries":     stringArray("必填，库 ID 或目录名，可选多个"),
@@ -256,7 +256,7 @@ func registerTools(server *mcp.Server, services Services) {
 		}, "query", "libraries"), func(ctx context.Context, in types.EntrySearchRequest) (any, error) {
 			return services.Search.Search(types.WithSearchSource(ctx, "mcp"), in)
 		})
-	addTool(server, "get_entry", mcp.ToolAnnotations{ReadOnlyHint: true}, "按 ID 读取数据库表头字段和正文。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。cannot_be_fact=true 表示 AI产出，不能作为事实依据。offset 和 length 按 Unicode 字符计数，默认 0 和 20000，length 最大 100000；用 next_offset 继续读取。"+externalContentNotice,
+	addTool(server, "get_entry", mcp.ToolAnnotations{ReadOnlyHint: true}, "按 ID 读取数据库表头字段和正文。source_unverified=true 表示该资料保留来源未核实标记，引用时须注明；缺少链接本身不阻止新资料保存。cannot_be_fact=true 表示 AI产出，不能作为事实依据。offset 和 length 按 Unicode 字符计数，默认 0 和 20000，length 最大 100000；用 next_offset 继续读取。"+externalContentNotice,
 		object(map[string]any{"id": text("资料 ID，必填"), "offset": integer("正文起始 Unicode 字符偏移，默认 0", 0, 0),
 			"length": integer("读取 Unicode 字符数，默认 20000，最大 100000", 1, 100000)}, "id"),
 		func(ctx context.Context, in entryInput) (any, error) {
@@ -319,7 +319,7 @@ func registerTools(server *mcp.Server, services Services) {
 			return map[string]any{"target_type": in.TargetType, "target_id": in.TargetID, "following": false}, nil
 		})
 	addIngestTool(server, services.Entries)
-	addTool(server, "update_entry_content", mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true}, "按资料 ID 一起更新完整 Markdown 正文与图片，保留 ID 和来源，不保留旧正文版本。images 使用 asset_id 或 base64 data，source_url 对应正文中的原图片引用，可为网址或相对路径；程序替换成本地附件。正文和图片提交失败时一起回滚。所有模板均保存后在后台重建正文索引并运行摘要、分类、实体和图谱；删除中返回冲突。省略 acquisition 保留原值。"+externalContentNotice,
+	addTool(server, "update_entry_content", mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true}, "按资料 ID 一起更新完整 Markdown 正文与图片，保留 ID 和来源，不保留旧正文版本。images 使用 asset_id 或 base64 data，source_url 对应正文中的原图片引用，可为网址或相对路径；程序替换成本地附件。正文和图片提交失败时一起回滚。所有库均保存后在后台重建正文索引并运行摘要、分类、实体和图谱；删除中返回冲突。省略 acquisition 保留原值。"+externalContentNotice,
 		object(map[string]any{"entry_id": text("资料 ID，必填"), "content": text("替换后的完整 Markdown 正文，最多 5000000 Unicode 码点"), "acquisition": enum("获取方式，省略保留原值", "verbatim", "extracted", "model_written"),
 			"images": boundedArray("更新图片；每项 source_url 必须对应正文图片引用，使用 asset_id 或 data", ingestImageSchema(), 0, 100)}, "entry_id", "content"),
 		func(ctx context.Context, in entryContentInput) (any, error) {
@@ -340,7 +340,7 @@ func registerTools(server *mcp.Server, services Services) {
 			}
 			return map[string]any{"document_id": in.DocumentID, "status": "deleted", "message": "本人文档已删除"}, nil
 		})
-	addTool(server, "check_urls", mcp.ToolAnnotations{ReadOnlyHint: true}, "收录前在指定库按规范化链接查重；库规则开启转载归并时，也匹配已记录的转载链接。输入 1 到 100 条链接，逐条返回 url、status（in_library、pending_review、discarded、not_found）、entry_id。已丢弃的链接不会再次入库。"+completeMaterialNotice+externalContentNotice,
+	addTool(server, "check_urls", mcp.ToolAnnotations{ReadOnlyHint: true}, "收录前在指定库按规范化链接查重，不按正文或转载关系自动归并。输入 1 到 100 条链接，逐条返回 url、status（in_library、pending_review、discarded、not_found）、entry_id。已丢弃的链接不会再次入库。"+completeMaterialNotice+externalContentNotice,
 		object(map[string]any{"library": text("必填，库 ID 或英文目录名；可调用 list_libraries"), "urls": boundedArray("原文链接数组，1 到 100 条", text("原文链接"), 1, types.MaxIngestCheckURLs)}, "urls"),
 		func(ctx context.Context, in types.IngestCheckRequest) (any, error) {
 			items, err := services.Entries.CheckURLs(ctx, in.URLs, in.Library)
@@ -351,7 +351,7 @@ func registerTools(server *mcp.Server, services Services) {
 		func(ctx context.Context, in pendingInput) (any, error) {
 			return services.Entries.ListPending(ctx, in.Page, in.PageSize, in.Kind)
 		})
-	addTool(server, "approve_pending", mcp.ToolAnnotations{DestructiveHint: new(true)}, "处理指定的旧收录待审条目。默认 approve 批准内容，旧版导入的个人资料无需链接；supplement_url 用 url 补链接并重新模型审核；admit_unverified 需 confirmed=true，无链接入库并标 source_unverified，始终全文保存。记录操作日志，返回条目和状态。"+externalContentNotice,
+	addTool(server, "approve_pending", mcp.ToolAnnotations{DestructiveHint: new(true)}, "处理指定的旧收录待审条目。默认 approve 按当前规则批准内容，不要求补齐来源；supplement_url 用 url 补链接后按当前规则接收并后台处理；admit_unverified 需 confirmed=true，无链接入库并标 source_unverified，始终全文保存。记录操作日志，返回条目和状态。"+externalContentNotice,
 		object(map[string]any{"id": text("待审资料 ID，必填"), "action": enum("操作，默认 approve", "approve", "supplement_url", "admit_unverified"), "url": text("补充的原始 HTTP/HTTPS 链接"), "confirmed": boolean("无链接入库必须显式确认")}, "id"),
 		func(ctx context.Context, in intakeReviewInput) (any, error) {
 			action := in.Action

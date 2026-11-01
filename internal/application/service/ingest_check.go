@@ -15,9 +15,9 @@ import (
 
 type discardKey struct{ fingerprint, url string }
 
-func entryDiscardKeys(entry *types.Entry, rules types.TemplateRules) []discardKey {
+func entryDiscardKeys(entry *types.Entry) []discardKey {
 	keys := []discardKey{}
-	if rules.Identity.SourceRef && entry.SourceRef != "" {
+	if entry.SourceRef != "" {
 		hash := entry.SourceBodyHash
 		if hash == "" {
 			hash = strings.TrimSpace(entry.ContentHash)
@@ -26,13 +26,13 @@ func entryDiscardKeys(entry *types.Entry, rules types.TemplateRules) []discardKe
 			keys = append(keys, discardKey{fingerprint: identityFingerprint("source_ref", entry.SourceRef+"\x00"+hash)})
 		}
 	}
-	if rules.Identity.URL && entry.NormalizedURL != "" {
+	if entry.NormalizedURL != "" {
 		keys = append(keys, discardKey{identityFingerprint("url", entry.NormalizedURL), entry.NormalizedURL})
 	}
 	if hash := strings.TrimSpace(entry.ContentHash); hash != "" {
 		keys = append(keys, discardKey{fingerprint: identityFingerprint("body", hash)})
 	}
-	if rules.Identity.Identifier && entry.Identifier != "" {
+	if entry.Identifier != "" {
 		keys = append(keys, discardKey{fingerprint: identityFingerprint("identifier", entry.Identifier)})
 	}
 	if entry.NormalizedURL == "" {
@@ -60,25 +60,14 @@ func (s *entryService) lookupIngestDiscard(ctx context.Context, libraryID string
 	return &item, err
 }
 
-// Pending intake is deliberately included. Repost origins resolve to their
-// canonical article in all four state checks.
+// Pending intake is deliberately included in URL checks.
 func (s *entryService) findIngestURL(ctx context.Context, normalized string, lock bool, library *types.Library) (*types.Entry, error) {
 	if normalized == "" {
 		return nil, nil
 	}
 	spaceID, _ := types.SpaceIDFromContext(ctx)
-	rules := intakeTemplateRules(library)
-	if !rules.Identity.URL {
-		return nil, nil
-	}
-	owners := s.db.Model(&types.EntryRepostSource{}).Select("entry_id").Where("space_id=? AND library_id=? AND normalized_url=?", spaceID, library.ID, normalized)
 	query := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND related_entry_id=''", spaceID, library.ID).
-		Where("parse_status NOT IN ?", []string{types.ParseStatusDeleting})
-	if rules.MergeReposts {
-		query = query.Where("normalized_url=? OR id IN (?)", normalized, owners)
-	} else {
-		query = query.Where("normalized_url=?", normalized)
-	}
+		Where("parse_status NOT IN ?", []string{types.ParseStatusDeleting}).Where("normalized_url=?", normalized)
 	if lock {
 		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
 	}
@@ -113,7 +102,7 @@ func (s *entryService) CheckURLs(ctx context.Context, urls []string, selectors .
 		}
 		normalized := normalizeMessageURL(raw)
 		item := types.IngestCheckResult{URL: raw, Status: "not_found"}
-		if discarded, err := s.lookupIngestDiscard(ctx, library.ID, entryDiscardKeys(&types.Entry{NormalizedURL: normalized}, intakeTemplateRules(library))); err != nil {
+		if discarded, err := s.lookupIngestDiscard(ctx, library.ID, entryDiscardKeys(&types.Entry{NormalizedURL: normalized})); err != nil {
 			return nil, err
 		} else if discarded != nil {
 			item.Status, item.EntryID = "discarded", discarded.EntryID
@@ -131,29 +120,13 @@ func (s *entryService) CheckURLs(ctx context.Context, urls []string, selectors .
 	return result, nil
 }
 
-// Record every canonical and repost link before destructive deletion. The
-// ledger has no FK because it intentionally survives article removal.
+// Retain human rejection identities after their source entry is removed.
 func (s *entryService) rememberIngestDiscard(ctx context.Context, k *types.Entry, reason string) error {
 	if s.db == nil || k == nil || k.RelatedEntryID != "" {
 		return nil
 	}
-	rules, err := messageTemplateRules(s.db.WithContext(ctx), k)
-	if err != nil {
-		return err
-	}
 	setMessageFingerprint(k, "")
-	keys := entryDiscardKeys(k, rules)
-	if rules.MergeReposts {
-		var reposts []types.EntryRepostSource
-		if err := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND entry_id=?", k.SpaceID, k.LibraryID, k.ID).Find(&reposts).Error; err != nil {
-			return err
-		}
-		for _, source := range reposts {
-			if source.NormalizedURL != "" {
-				keys = append(keys, discardKey{identityFingerprint("url", source.NormalizedURL), source.NormalizedURL})
-			}
-		}
-	}
+	keys := entryDiscardKeys(k)
 	if strings.TrimSpace(reason) == "" {
 		reason = "用户丢弃"
 	}

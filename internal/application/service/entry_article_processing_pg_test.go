@@ -66,9 +66,6 @@ func TestProcessingModelOutputAcceptsFencesAndSinglePointSummary(t *testing.T) {
 	model := &correctedProcessingChat{calls: map[string]int{}}
 	h.service.modelService.(articleProcessingModels).summaryStateModelService.model = model
 	body := strings.Repeat("Original instrument measurements and observations. ", 12)
-	approved, _, err := h.service.reviewSegments(h.ctx, h.library, k, body, types.SourceInfo{OriginalURL: "https://example.org/measurements"})
-	require.NoError(t, err)
-	require.True(t, approved)
 	result, err := h.service.callArticleProcessing(h.ctx, h.library, k, body, nil)
 	require.NoError(t, err)
 	require.Len(t, result.Summary.Points, 1)

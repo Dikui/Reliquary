@@ -112,7 +112,7 @@ func TestChatGPTModelServiceUsesRealOllamaHTTPFallbackAndPreservesQuotaPause(t *
 			require.NoError(t, err)
 			model, err := h.models.GetChatModel(h.ctx, "chatgpt-generation")
 			require.NoError(t, err)
-			messages := []chat.Message{{Role: "system", Content: intakeReviewPrompt()}, {Role: "user", Content: `{"title":"Original publication","content":"Complete measured product capabilities"}`}}
+			messages := []chat.Message{{Role: "system", Content: "Return a JSON object describing the supplied material."}, {Role: "user", Content: `{"title":"Original publication","content":"Complete measured product capabilities"}`}}
 			thinking := false
 			opts := &chat.ChatOptions{Temperature: 0, TopP: 0.7, MaxTokens: 512, Thinking: &thinking, Format: json.RawMessage(`"json"`)}
 			originalOptions, err := json.Marshal(opts)

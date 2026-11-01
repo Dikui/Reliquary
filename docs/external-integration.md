@@ -41,17 +41,13 @@ HTTP 响应一般使用 success/data 包装。MCP 工具结果在 content 中返
 
 ## 选择库
 
-HTTP `GET /api/v1/libraries` 对应 MCP `list_libraries`，无工具参数。每个库返回 id、directory、用途、模板、审核标准、来源证据、去重说明、accepted_fields、内容类型、关系类型和动态开关。优先使用稳定 ID 或英文 directory，不用中文显示名称作为收录或检索参数。自建库按模板执行相同规则，入库后不能换库。库 ID 不随目录更名变化。外部工具应通过 `list_libraries` 获取当前 directory，或继续使用已有库 ID。
+HTTP `GET /api/v1/libraries` 对应 MCP `list_libraries`，无工具参数。每个库返回 id、directory、用途、模板、审核标准、来源证据、去重说明、accepted_fields、内容类型、关系类型和动态开关。优先使用稳定 ID 或英文 directory，不用中文显示名称作为收录或检索参数。所有库统一使用通用模板并执行相同的技术校验，入库后不能换库。库 ID 不随目录更名变化。外部工具应通过 `list_libraries` 获取当前 directory，或继续使用已有库 ID。
 
-| 库目录 | 该收什么 | 来源要求与注意事项 |
-| --- | --- | --- |
-| official | 机构、公司、媒体发布的新闻、公告、财报、时效研报、政策 | 外部时效型；链接必需，配置允许时可用机构加有效发布日期，标记来源未核实 |
-| media | 外部人物的评论、访谈、观点文章 | 外部时效型；按库来源规则，尽量填写 author，关系证据保留发言人 |
-| references | 长期引用的论文、书籍、标准、官方文档、教程 | 外部长效型；链接或 identifier，例 doi:10.1234/example |
-| personal | 本人的工作资料、经验、SOP、笔记 | 自有型；可空链接，source_ref 标识同一来源，正文变化覆盖原记录 |
-| ai-output | 外部 AI 写出的综合分析和报告 | 生成型；先保存、后台处理，cannot_be_fact=true |
+系统允许零库，不自动创建固定目录的库。先读取实际库清单，按库的名称、说明、来源与可信度选择目标。旧审核标准和来源配置仅供历史记录读取，不是新收录的准入条件。
 
-有时效的机构研报收 official，作为定义与方法长期引用的白皮书收 references。人物评论收 media，不能因提到机构就改收 official。所有模板均接受可选 source_ref、identifier 和 graph，具体格式见 accepted_fields。
+所有库的来源链接、作者、发布者、发布时间、`source_ref`、`identifier` 和 `acquisition` 均可省略；提供时校验格式。未知信息留空，不为满足字段编造来源。`source_ref`、`identifier` 和规范化 URL 在同库内精确定位来源；内容变化会覆盖原记录，不保留旧正文版本。AI 写出的内容须声明 `acquisition: "model_written"`，不能依据库名称判断是否为 AI产出。
+
+下文目录名仅为请求示例，使用时替换为当前 `list_libraries` 返回的 ID 或英文目录。
 
 ## 收录与图片提交
 
@@ -89,13 +85,13 @@ HTTP `POST /api/v1/graph/search` 对应 MCP `graph_search`，参数和返回 dat
 
 ## 写入 AI产出
 
-五个库统一使用 HTTP `POST /api/v1/ingest` 或 MCP `ingest`。写入 AI产出时指定 `library: "ai-output"`，提交标题、Markdown 正文和收录方式：
+所有库统一使用 HTTP `POST /api/v1/ingest` 或 MCP `ingest`。写入 AI产出时选择实际目标库（示例为 `library: "ai-output"`），提交标题、Markdown 正文和收录方式：
 
 ```json
 {"items":[{"library":"ai-output","title":"校准分析报告","content":"# 校准分析\n\n基于正文中引用资料的综合分析。","acquisition":"model_written"}]}
 ```
 
-MCP 将同一对象作为 `ingest` 的 `arguments`。AI产出与其他模板共用先保存、后建正文索引并运行摘要、分类、实体和图谱的链路。相同来源且保存内容未变时返回已有资料；缺来源标识时新建。字段和状态见 [收录 API](ingest-api.md#ai产出收录)。
+MCP 将同一对象作为 `ingest` 的 `arguments`。AI产出与其他资料共用先保存、后建正文索引并运行摘要、分类、实体和图谱的链路。相同来源且保存内容未变时返回已有资料；缺来源标识时新建。字段和状态见 [收录 API](ingest-api.md#ai产出收录)。
 
 ## 接收故障与短期故障包
 

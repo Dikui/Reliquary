@@ -1046,12 +1046,8 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 		return err
 	}
 	if intake, _ := entry.IntakeMetadata(); intake != nil && intake.Decision != "approved" {
-		existing, err := s.checkMessageDuplicate(ctx, entry, convertResult.MarkdownContent)
-		if err != nil {
+		if err := s.saveMessageFingerprint(ctx, entry, convertResult.MarkdownContent); err != nil {
 			return err
-		}
-		if existing != nil {
-			return s.stopDuplicateProcessing(ctx, entry)
 		}
 	}
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
@@ -1064,12 +1060,8 @@ func (s *entryService) ProcessDocument(ctx context.Context, t *taskqueue.Task) (
 	}
 
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
-		rejected, reviewErr := s.reviewIntake(ctx, library, entry, convertResult.MarkdownContent)
-		if reviewErr != nil {
-			return reviewErr
-		}
-		if rejected {
-			return nil
+		if err := s.approveRetainedIntake(ctx, entry); err != nil {
+			return err
 		}
 	}
 	if err := s.processArticleBody(ctx, library, entry, convertResult.MarkdownContent, storedImages, eff); err != nil {

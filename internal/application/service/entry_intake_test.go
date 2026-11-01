@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"strings"
 	"testing"
 
 	taskqueue "reliquary/internal/queue"
@@ -19,15 +18,6 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-func TestIntakeXSourceEvidence(t *testing.T) {
-	for _, raw := range []string{"https://x.com/bcherny/status/123", "https://twitter.com/bcherny/status/123", "https://x.com./post/1", "https://www.x.com./post/1", "https://twitter.com../post/1", "https://example.com/article"} {
-		require.False(t, blockedIntakeURL(raw), raw)
-	}
-	for _, raw := range []string{"not-a-url", "https:///post/1", "ftp://x.com/post/1", "https://user:password@x.com/post/1"} {
-		require.True(t, blockedIntakeURL(raw), raw)
-	}
-}
-
 func TestReviewIntakeAcceptsAllTemplatesWithoutModelReview(t *testing.T) {
 	for _, library := range types.SystemLibraryDefaults() {
 		t.Run(library.Template+"/"+library.Directory, func(t *testing.T) {
@@ -35,40 +25,14 @@ func TestReviewIntakeAcceptsAllTemplatesWithoutModelReview(t *testing.T) {
 			require.NoError(t, entry.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "pending"}))
 			capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: `{"approved":false,"reason":"Old model decision"}`}}
 			svc := &entryService{repo: &intakeRepo{entry: entry}, modelService: &tierTestModels{chat: capture}}
-			rejected, err := svc.reviewIntake(context.Background(), library, entry, "未完成的草稿。")
+			err := svc.approveRetainedIntake(context.Background(), entry)
 			require.NoError(t, err)
-			require.False(t, rejected)
 			require.Empty(t, capture.reviews)
 			intake, err := entry.IntakeMetadata()
 			require.NoError(t, err)
 			require.Equal(t, "approved", intake.Decision)
 			require.Empty(t, intake.Reason)
 		})
-	}
-}
-
-func TestReviewMissingImagesDoNotReserveVisualTokens(t *testing.T) {
-	entry := &types.Entry{ID: "missing-images", SpaceID: 1}
-	library := &types.Library{ModelTiers: types.ModelTierConfig{Light: "review-model"}}
-	capture := &mineReviewCapture{retainedProcessingChatInterface: intakeChat{response: `{"approved":false,"reason":"Fixture review decision"}`}}
-	svc := &entryService{repo: &intakeRepo{entry: entry}, modelService: &summaryStateModelService{
-		model: capture, metadata: &types.Model{ID: "review-model", Type: types.ModelTypeGeneration,
-			Parameters: types.ModelParameters{SupportsVision: true, ContextWindow: 16384}},
-	}}
-	approved, _, err := svc.reviewSegments(context.Background(), library, entry, strings.Repeat("![图表](https://example.org/missing.png)\n\n", 8), types.SourceInfo{})
-	require.NoError(t, err)
-	require.False(t, approved, "the model still decides whether the supplied material meets the criteria")
-	require.Len(t, capture.reviews, 1)
-	user := capture.reviews[0][1]
-	require.Empty(t, user.Images)
-	var input struct {
-		Images []reviewImageInput `json:"images"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(user.Content), &input))
-	require.Len(t, input.Images, 8)
-	for _, image := range input.Images {
-		require.False(t, image.Provided)
-		require.Equal(t, "未提供图片文件", image.SkipReason)
 	}
 }
 
@@ -124,9 +88,8 @@ func TestReviewIntakeIgnoresObsoleteModelRejection(t *testing.T) {
 	}))
 	repo := &intakeRepo{entry: entry}
 	svc := &entryService{repo: repo}
-	rejected, err := svc.reviewIntake(context.Background(), &types.Library{ID: "library", SpaceID: 1}, entry, "Complete original body")
+	err := svc.approveRetainedIntake(context.Background(), entry)
 	require.NoError(t, err)
-	require.False(t, rejected)
 	intake, err := repo.entry.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
@@ -179,11 +142,8 @@ func TestReviewEntryIntakeCorrectionClearsQwenRejection(t *testing.T) {
 	require.NoError(t, json.Unmarshal(task.last.Payload(), &review))
 	require.NotEmpty(t, review.ReviewID, "retry reviews the stored source before image processing")
 	require.False(t, review.ReviewApproved)
-	library, err := svc.libraryService.GetLibraryByID(ctx, "library")
+	err = svc.approveRetainedIntake(ctx, updated)
 	require.NoError(t, err)
-	rejected, err := svc.reviewIntake(ctx, library, updated, "Complete original body")
-	require.NoError(t, err)
-	require.False(t, rejected)
 	intake, err := repo.entry.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
@@ -251,7 +211,13 @@ func (m intakeChat) Chat(ctx context.Context, messages []chat.Message, _ *chat.C
 }
 
 func reviewFixtureContent(raw string, messages []chat.Message) string {
-	var decision segmentReviewDecision
+	var decision struct {
+		Approved  *bool  `json:"approved"`
+		Auxiliary bool   `json:"auxiliary,omitempty"`
+		Reason    string `json:"reason"`
+		Warning   string `json:"warning,omitempty"`
+		Summary   string `json:"summary,omitempty"`
+	}
 	if json.Unmarshal([]byte(raw), &decision) != nil {
 		return raw
 	}

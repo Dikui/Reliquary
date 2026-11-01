@@ -381,8 +381,8 @@ resources/ 保留完整历史镜像，包括正常处理流程后来移除的原
 | 14 | `starred` | 星标布尔值 |
 | 15 | `collect_reason` | 有值时输出收录理由 |
 | 16 | `acquisition` | 有值时输出获取方式 |
-| 17 | `source_ref` | 自有型来源标识 |
-| 18 | `identifier` | 外部长效型标识 |
+| 17 | `source_ref` | 可选来源标识，同库精确匹配 |
+| 18 | `identifier` | 可选 scheme:value 来源标识 |
 | 19 | `source_unverified` | 仅 true，表示来源未核实 |
 | 20 | `has_update` | 仅 true，表示有更新的记录 |
 | 21 | `latest_entry_id` | 有 source_ref 时的最新记录 ID，沿用现有接口键名 |

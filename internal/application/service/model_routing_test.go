@@ -101,9 +101,8 @@ func TestIntakeApprovalDoesNotUseLightModel(t *testing.T) {
 	require.NoError(t, message.SetIntakeMetadata(&types.EntryIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.org/source", PublishedAt: "2026-10-01"}}))
 	repo := &intakeRepo{entry: message}
 	svc := &entryService{repo: repo, modelService: models}
-	rejected, err := svc.reviewIntake(context.Background(), &types.Library{ID: "library", SpaceID: 1, ModelTiers: types.ModelTierConfig{Light: "chosen-light"}}, message, "Acme released a report.")
+	err := svc.approveRetainedIntake(context.Background(), message)
 	require.NoError(t, err)
-	require.False(t, rejected)
 	require.Zero(t, model.calls)
 	intake, err := message.IntakeMetadata()
 	require.NoError(t, err)

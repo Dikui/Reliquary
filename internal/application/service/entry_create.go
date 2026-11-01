@@ -160,17 +160,9 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 		}
 	}
 	if intake, _ := entry.IntakeMetadata(); intake != nil && intake.Decision != "approved" {
-		existing, err := s.checkMessageDuplicate(ctx, entry, clean)
-		if err != nil {
+		if err := s.saveMessageFingerprint(ctx, entry, clean); err != nil {
 			entry.ParseStatus = types.ParseStatusFailed
 			return errors.New("article processing failed")
-		}
-		if existing != nil {
-			if err := s.stopDuplicateProcessing(ctx, entry); err != nil {
-				entry.ParseStatus = types.ParseStatusFailed
-				return err
-			}
-			return nil
 		}
 	}
 
@@ -195,13 +187,9 @@ func (s *entryService) triggerManualProcessing(ctx context.Context,
 	eff := ResolveProcessConfig(library, processOverrides)
 
 	if intake, _ := entry.IntakeMetadata(); intake != nil {
-		rejected, err := s.reviewIntake(ctx, library, entry, clean)
-		if err != nil {
+		if err := s.approveRetainedIntake(ctx, entry); err != nil {
 			s.markArticleProcessingFailed(ctx, entry, err)
 			return err
-		}
-		if rejected {
-			return nil
 		}
 	}
 	if err := s.processArticleBody(ctx, library, entry, clean, resolvedImages, eff); err != nil {

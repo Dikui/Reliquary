@@ -278,3 +278,13 @@ func segmentModelIdentity(model *types.Model) any {
 	}
 	return []any{model.ID, model.Name, model.Source, model.Parameters}
 }
+
+func (s *entryService) hasSegmentCheckpoint(ctx context.Context, entry *types.Entry) bool {
+	if s.db == nil {
+		return false
+	}
+	var count int64
+	err := s.db.WithContext(ctx).Model(&entrySegmentRun{}).Where("entry_id=? AND space_id=? AND status IN ?", entry.ID, entry.SpaceID, []string{"pending", "running", "failed"}).Count(&count).Error
+	// A database outage must not turn a resumable failure into source deletion.
+	return err != nil || count > 0
+}

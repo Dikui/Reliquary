@@ -24,7 +24,6 @@ func TestIngestResourceDuplicateCleanupWithinTransaction(t *testing.T) {
 			h.service.resourceCatalog = NewResourceCatalog(repository.NewResourceRepository(h.db))
 			h.service.fileSvc = file.NewResourceCatalogFileService(file.NewLocalFileService(root, ""), h.service.resourceCatalog)
 			h.service.task = redistest.NewClient(t, h.db)
-			t.Setenv("RELIQUARY_DUPLICATE_SIMHASH_DISTANCE", "3")
 			existing, err := h.service.Ingest(h.ctx, &types.IngestRequest{Library: "official", URL: "https://example.org/ui02/existing", Title: "已有待补全文章", Content: body, Acquisition: "extracted", Publisher: "星河观测通讯"})
 			require.NoError(t, err)
 			require.Equal(t, "accepted", existing.Status)

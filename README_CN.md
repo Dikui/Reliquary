@@ -4,7 +4,7 @@
 
 **个人 AI 工作平台的本机单用户资料库。**
 
-外部 AI 工具通过 HTTP 或 MCP 送入完整 Markdown，Reliquary 负责存储、索引、关联与检索。
+外部 AI 工具通过 HTTP 或 MCP 送入可读 Markdown，Reliquary 负责存储、索引、关联与检索。
 
 [![App](https://github.com/Dikui/Reliquary/actions/workflows/app.yml/badge.svg)](https://github.com/Dikui/Reliquary/actions/workflows/app.yml)
 [![Frontend](https://github.com/Dikui/Reliquary/actions/workflows/frontend.yml/badge.svg)](https://github.com/Dikui/Reliquary/actions/workflows/frontend.yml)
@@ -29,25 +29,17 @@
 
 ## 简介
 
-Reliquary 是个人 AI 工作平台的内部资料库。它不抓取任何内容：Grok Bot、外部 Agent、采集程序负责取得原文、转换为 Markdown 并上传图片后提交；Reliquary 负责收录审核、存储、去重、抽取实体与关系，并向这些工具提供普通检索和图谱检索。
+Reliquary 是个人 AI 工作平台的内部资料库。它不抓取任何内容：Grok Bot、外部 Agent、采集程序负责取得原文、转换为 Markdown 并上传图片后提交；Reliquary 负责技术校验、保存、索引，在后台抽取实体与关系，并向这些工具提供普通检索和图谱检索。
 
-个人空间初始化五个系统库，也可按模板新建库：
+个人空间允许零库。用户按来源与可信度自行建库，所有库统一使用通用模板。外部工具先读取实际库清单，再选择目标库。
 
-| 目录 | 收录内容 |
-| --- | --- |
-| `official/` | 机构、公司、媒体发布的新闻、公告、财报、时效研报、政策 |
-| `media/` | 外部人物的评论、访谈、观点文章 |
-| `references/` | 论文、书籍、标准、官方文档、教程 |
-| `personal/` | 本人的工作资料、经验、SOP、笔记 |
-| `ai-output/` | 外部 AI 写出的综合分析和报告 |
-
-网页用于管理资料和简单阅读，日常阅读可用 [Obsidian](https://obsidian.md) 打开文件库。
+网页用于管理资料和阅读已保存正文。需要离线阅读时，可显式导出文件库，用 [Obsidian](https://obsidian.md) 打开。
 
 ## 功能
 
-- **只收录** —— 完整内容经带认证的 HTTP 收录接口或 MCP 送入。未通过审核或缺正文的内容进入待处理，由你审核、补全或丢弃。
-- **联合处理** —— 一次输出摘要、内容类型、实体、主题、关系及图片说明；长文分段处理并保留检查点。
-- **全文保存** —— 每条资料保存 Markdown 全文和图片，按库写入文件库，表头由数据库生成。
+- **只收录** —— 可读 Markdown 和可选图片经带认证的 HTTP 收录接口或 MCP 送入。空内容、纯链接、仅图片等技术校验失败会报错；新资料不做模型准入审核，历史待审资料保留显式人工操作。
+- **联合处理** —— 后台生成摘要、内容类型、实体、主题和有原文依据的关系；长文分段处理并保留检查点。
+- **全文保存** —— Markdown 正文保存在 PostgreSQL，原始图片保存在磁盘。显式导出时才按库生成 Markdown 文件和数据库表头。
 - **混合检索** —— 全文与向量混合，按资料合并结果；可按内容类型、实体、主题、发布时间、星标与库筛选，并折叠相似报道。
 - **图谱检索** —— 查询实体 1 至 3 跳关系或两点路径，返回来源资料与正文位置，不调用模型。
 - **用户判断** —— 星标、修正内容类型与主题、合并实体与关系类型、查看操作日志。

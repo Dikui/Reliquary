@@ -242,9 +242,8 @@ func TestIntakeDoesNotCreateReviewSegmentsOrApplyModelLimits(t *testing.T) {
 	k := segmentedEntry(t, h)
 	h.service.config.ArticleProcessing.MaxSegments = 2
 	m.reject, m.reviewFail = 2, 1
-	rejected, err := h.service.reviewIntake(h.ctx, h.library, k, strings.Repeat("Original draft material. ", 100))
+	err := h.service.approveRetainedIntake(h.ctx, k)
 	require.NoError(t, err)
-	require.False(t, rejected)
 	intake, err := k.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
@@ -283,25 +282,6 @@ func TestSegmentPersistenceResolvesGlobalProvenance(t *testing.T) {
 	require.NoError(t, json.Unmarshal(run.Result, &result))
 	require.Len(t, result.Provenance.ResolvedEntities[entities[0].EntityID], len(m.calls["article_processing"]))
 	require.Len(t, result.Provenance.Topics[topic.ID], len(m.calls["article_processing"]))
-}
-
-func TestSegmentInlineReviewUsesTheFullEnvelopeBudget(t *testing.T) {
-	h, _ := segmentedHarness(t)
-	k := segmentedEntry(t, h)
-	h.service.config.ArticleProcessing.MaxBodyChars = 0
-	models := h.service.modelService.(articleProcessingModels)
-	models.summaryStateModelService.metadata.Parameters.ContextWindow = 16000
-	intake, err := k.IntakeMetadata()
-	require.NoError(t, err)
-	source := intake.SourceInfo
-	source.Confirmed = false
-	metadata := struct {
-		SourceInfo types.SourceInfo `json:"source_info"`
-	}{source}
-	budget, err := h.service.segmentBudget(models.metadata, segmentReviewPrompt(h.library), metadata, 0)
-	require.NoError(t, err)
-	require.True(t, h.service.singleReviewSegment(h.ctx, h.library, k, strings.Repeat("字", budget)))
-	require.False(t, h.service.singleReviewSegment(h.ctx, h.library, k, strings.Repeat("字", budget+1)))
 }
 
 func TestSegmentEvidenceNumberingFitsModelContext(t *testing.T) {

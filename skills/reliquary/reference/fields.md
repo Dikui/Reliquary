@@ -21,7 +21,7 @@
 | 标记 | agent 应如何处理 |
 |---|---|
 | `cannot_be_fact=true` | AI产出，不能作为事实依据；单列其观点与推论，追溯引用的原文。`acquisition=model_written` 是获取方式声明，写回结论必须设置；未带 `cannot_be_fact` 的投影仍需查看 `acquisition` |
-| `source_unverified=true` | 来源未核实，在每处引用旁保留标记；读取成功或处理完成不代表来源核实 |
+| `source_unverified=true` | 保留的历史或显式人工来源未核实标记，在每处引用旁注明；新资料缺少链接不自动设置该标记。读取成功或处理完成不代表来源核实 |
 | `has_update=true`、`latest_entry_id` | 已有最新资料，改读所指 ID 并重新定位证据，不沿用旧位置；最新资料不可读时说明缺口 |
 | 图谱 `truncated=true` 或 `pending_sync` 有未同步记录 | 关系结果不完整，不能据此断言没有关系；输出查询范围与限制 |
 

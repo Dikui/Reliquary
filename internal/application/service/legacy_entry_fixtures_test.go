@@ -81,9 +81,7 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 		return nil, err
 	}
 	if exists {
-		if err := s.recordKnownMessageRepost(ctx, existingEntry, libraryID, types.SourceInfo{Author: metadata["author"], Publisher: metadata["publisher"], OriginalURL: metadata["original_url"], PublishedAt: metadata["published_at"]}, "file_hash"); err != nil {
-			return nil, err
-		}
+		existingEntry.DuplicateMatchMethod = "file_hash"
 		logger.Infof(ctx, "File already exists: %s", fileName)
 		// Update creation time for existing entry
 		if err := s.repo.UpdateEntryColumn(ctx, existingEntry.ID, "created_at", time.Now()); err != nil {
@@ -165,13 +163,11 @@ func (s *entryService) createLegacyFileFixture(ctx context.Context,
 
 	// Save entry record to database after the file is safely stored.
 	logger.Info(ctx, "Saving entry record to database")
-	duplicate, err := s.createMessageWithDeduplication(ctx, entry, "")
-	if err != nil || duplicate != nil {
+	setMessageFingerprint(entry, "")
+	err = s.repo.CreateEntry(ctx, entry)
+	if err != nil {
 		if deleteErr := fileSvc.DeleteFile(ctx, filePath); deleteErr != nil {
 			return nil, deleteErr
-		}
-		if duplicate != nil && err == nil {
-			return duplicate, types.NewDuplicateFileError(duplicate)
 		}
 		logger.Errorf(ctx, "Failed to create entry record, ID: %s, error: %v", entry.ID, err)
 		return nil, err
@@ -282,27 +278,6 @@ func (s *entryService) createLegacyManualFixture(ctx context.Context,
 		title = fmt.Sprintf("Article-%s", now.Format("20060102-150405"))
 	}
 
-	if status == types.ManualEntryStatusPublish {
-		incoming := &types.Entry{SpaceID: spaceID, LibraryID: libraryID, Title: title}
-		if len(payload.SourceMetadata) > 0 {
-			metadata, err := json.Marshal(payload.SourceMetadata)
-			if err != nil {
-				return nil, err
-			}
-			incoming.Metadata = types.JSON(metadata)
-		}
-		if err := incoming.SetIntakeMetadata(&types.EntryIntakeMetadata{SourceInfo: payload.SourceInfo}); err != nil {
-			return nil, err
-		}
-		existing, err := s.checkMessageDuplicate(ctx, incoming, cleanContent)
-		if err != nil {
-			return nil, err
-		}
-		if existing != nil {
-			return existing, &types.DuplicateEntryError{Message: "Message already exists", Entry: existing}
-		}
-	}
-
 	fileName := ensureManualFileName(title)
 	meta := types.NewManualEntryMetadata(cleanContent, status, 1)
 
@@ -366,22 +341,16 @@ func (s *entryService) createLegacyManualFixture(ctx context.Context,
 		}
 	}
 
-	var existing *types.Entry
 	if status == types.ManualEntryStatusPublish {
-		existing, err = s.createMessageWithDeduplication(ctx, entry, cleanContent)
-	} else {
-		err = s.repo.CreateEntry(ctx, entry)
+		setMessageFingerprint(entry, cleanContent)
 	}
-	if err != nil || existing != nil {
+	if err := s.repo.CreateEntry(ctx, entry); err != nil {
 		if intake, _ := entry.IntakeMetadata(); intake != nil && intake.OriginalPath != "" {
 			if cleanupErr := s.resolveFileService(ctx, library).DeleteFile(ctx, intake.OriginalPath); cleanupErr != nil {
 				return nil, cleanupErr
 			}
 		}
-		if err != nil {
-			return nil, err
-		}
-		return existing, &types.DuplicateEntryError{Message: "Message already exists", Entry: existing}
+		return nil, err
 	}
 
 	// Claim referenced files before publishing so a saved draft retains them.

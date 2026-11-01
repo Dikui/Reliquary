@@ -150,25 +150,17 @@ func (s *entryService) processLibraryReviewEntry(ctx context.Context, entry *typ
 		return err
 	}
 	ctx = context.WithValue(ctx, libraryReviewContextKey{}, true)
-	rejected, err := s.reviewIntake(ctx, library, entry, payload.Content)
-	if err != nil {
+	if err := s.approveRetainedIntake(ctx, entry); err != nil {
 		return err
 	}
-	if rejected || payload.ReviewStatus != "" {
-		if !rejected {
-			entry.ParseStatus, entry.EnableStatus = payload.ReviewStatus, payload.ReviewEnabled
-		}
+	if payload.ReviewStatus != "" {
+		entry.ParseStatus, entry.EnableStatus = payload.ReviewStatus, payload.ReviewEnabled
 		if err := setLibraryReviewMetadata(entry, "library_review_completed", payload.ReviewID); err != nil {
 			return err
 		}
 		err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			if err := graph.Lock(tx, entry.SpaceID); err != nil {
 				return err
-			}
-			if rejected {
-				if err := graph.WithdrawTx(tx, []string{entry.ID}); err != nil {
-					return err
-				}
 			}
 			if err := repository.NewEntryRepository(tx).UpdateEntry(ctx, entry); err != nil {
 				return err

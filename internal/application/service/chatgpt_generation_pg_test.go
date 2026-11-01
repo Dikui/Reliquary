@@ -46,8 +46,6 @@ type chatGPTGenerationRequest struct {
 
 func (r chatGPTGenerationRequest) stage() string {
 	switch {
-	case strings.HasPrefix(r.Instructions, intakeReviewPrompt()):
-		return "intake_review"
 	case strings.HasPrefix(r.Instructions, articleProcessingPrompt(nil)):
 		return "article_processing"
 	case strings.HasPrefix(r.Instructions, articleGraphVerificationPrompt()):

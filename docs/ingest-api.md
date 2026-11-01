@@ -157,7 +157,7 @@ curl -X POST "$BASE/api/v1/ingest/assets" \
 
 ## AI产出收录
 
-AI产出和其他库共用 HTTP `POST /api/v1/ingest` 与 MCP `ingest`。每项指定 `library: "ai-output"` 或对应库 ID，提交 `title`、`content` 与 `acquisition: "model_written"`：
+AI产出和其他库共用 HTTP `POST /api/v1/ingest` 与 MCP `ingest`。先用 `list_libraries` 选择实际目标库（下例使用 `ai-output`），提交 `title`、`content` 与 `acquisition: "model_written"`：
 
 ```json
 {"items":[{"library":"ai-output","title":"研究报告","content":"# 研究报告\n\n综合分析内容，引用资料链接写在正文中。","acquisition":"model_written"}]}
@@ -165,7 +165,7 @@ AI产出和其他库共用 HTTP `POST /api/v1/ingest` 与 MCP `ingest`。每项�
 
 MCP 将同一对象作为 `ingest` 的 `arguments`。字段和错误按上文通用收录契约处理。来源资料可在正文中引用；收录不接受专用的关联资料、实体、主题或 `request_id` 参数。
 
-生成型同样先保存，再后台运行正文索引、摘要、分类、实体和图谱。保留 `cannot_be_fact=true`，处理成功不代表陈述已核实。acquisition 仍可省略；无来源标识时相同正文也正常新建。
+AI产出同样先保存，再后台运行正文索引、摘要、分类、实体和图谱。保留 `cannot_be_fact=true`，处理成功不代表陈述已核实。接口允许省略 acquisition，表示获取方式未知；外部 Agent 写回模型产出时仍应显式设置 `model_written`，不能用库名代替声明。无来源标识时相同正文也正常新建。
 
 ## 长文处理
 
