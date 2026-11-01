@@ -16,6 +16,7 @@ import (
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/skills"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -26,6 +27,7 @@ const completeMaterialNotice = "送入可读 Markdown 正文与可选图片；�
 type EntryService interface {
 	interfaces.IngestService
 	AuthorizeIngestRequest(context.Context) (context.Context, error)
+	GetEntryByID(context.Context, string) (*types.Entry, error)
 	ReadEntry(context.Context, string, int, int) (*service.EntryReadResult, error)
 	ListPending(context.Context, int, int, ...string) (*types.PageResult, error)
 	ReviewEntryIntake(context.Context, string, string, types.SourceInfo) (*types.Entry, error)
@@ -33,14 +35,15 @@ type EntryService interface {
 }
 
 type Services struct {
-	Diagnostics *diagnostics.Service
-	Libraries   interfaces.LibraryService
-	Entries     EntryService
-	Search      interfaces.SearchService
-	Graph       *service.GraphSearchService
-	Topics      *service.TopicService
-	Entities    *service.EntityService
-	Follows     *service.FollowService
+	Diagnostics   *diagnostics.Service
+	ContentChecks *service.ContentCheckService
+	Libraries     interfaces.LibraryService
+	Entries       EntryService
+	Search        interfaces.SearchService
+	Graph         *service.GraphSearchService
+	Topics        *service.TopicService
+	Entities      *service.EntityService
+	Follows       *service.FollowService
 }
 
 // Handler uses sessionless Streamable HTTP so every request carries its own
@@ -51,7 +54,11 @@ type Handler struct {
 }
 
 func New(services Services) *Handler {
-	server := mcp.NewServer(&mcp.Implementation{Name: "reliquary", Version: "1.0.0"}, nil)
+	rules, err := skills.Files.ReadFile("reliquary/rules.md")
+	if err != nil {
+		panic(fmt.Errorf("read embedded reliquary/rules.md: %w", err))
+	}
+	server := mcp.NewServer(&mcp.Implementation{Name: "reliquary", Version: "1.0.0"}, &mcp.ServerOptions{Instructions: string(rules)})
 	registerTools(server, services)
 	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: types.MaxIngestMCPBytes})
@@ -128,6 +135,12 @@ type idInput struct {
 
 type documentInput struct {
 	DocumentID string `json:"document_id"`
+	Confirmed  bool   `json:"confirmed,omitempty"`
+}
+
+type discardInput struct {
+	ID        string `json:"id"`
+	Confirmed bool   `json:"confirmed,omitempty"`
 }
 
 type entryContentInput struct {
@@ -166,8 +179,9 @@ type followInput struct {
 	TargetID   string `json:"target_id"`
 }
 
-func addTool[Input any](server *mcp.Server, name, description string, schema map[string]any, call func(context.Context, Input) (any, error)) {
-	mcp.AddTool(server, &mcp.Tool{Name: name, Description: description, InputSchema: schema},
+func addTool[Input any](server *mcp.Server, name string, annotations mcp.ToolAnnotations, description string, schema map[string]any, call func(context.Context, Input) (any, error)) {
+	annotations.OpenWorldHint = new(false)
+	mcp.AddTool(server, &mcp.Tool{Name: name, Annotations: &annotations, Description: description, InputSchema: schema},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input Input) (*mcp.CallToolResult, any, error) {
 			output, err := call(ctx, input)
 			if err != nil {
@@ -218,15 +232,16 @@ func contractFields(value any) any {
 }
 
 func registerTools(server *mcp.Server, services Services) {
+	registerGuide(server)
 	registerIngestDiagnostics(server, services.Diagnostics)
 	registerGraphSearch(server, services.Graph)
 	if services.Libraries != nil {
-		addTool(server, "list_libraries", "列出全部库的 ID、英文目录、名称、说明、该收与不该收的内容、去重规则、可选字段、内容类型清单、关系类型清单和关注动态配置。旧审核标准与来源规则仅保留读取，不决定新资料准入。"+externalContentNotice, map[string]any{"type": "object", "properties": map[string]any{}}, func(ctx context.Context, _ struct{}) (any, error) {
+		addTool(server, "list_libraries", mcp.ToolAnnotations{ReadOnlyHint: true}, "列出全部库的 ID、英文目录、名称、说明、该收与不该收的内容、去重规则、可选字段、内容类型清单、关系类型清单和关注动态配置。旧审核标准与来源规则仅保留读取，不决定新资料准入。"+externalContentNotice, map[string]any{"type": "object", "properties": map[string]any{}}, func(ctx context.Context, _ struct{}) (any, error) {
 			libraries, err := services.Libraries.ListLibraries(ctx)
 			return map[string]any{"libraries": libraries}, err
 		})
 	}
-	addTool(server, "search", "按查询文本进行混合检索，返回资料结果、命中段落与相似报道。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。cannot_be_fact=true 表示 AI产出，不能作为事实依据。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
+	addTool(server, "search", mcp.ToolAnnotations{ReadOnlyHint: true}, "按查询文本进行混合检索，返回资料结果、命中段落与相似报道。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。cannot_be_fact=true 表示 AI产出，不能作为事实依据。筛选之间取交集，同类筛选数组内取并集。"+externalContentNotice,
 		object(map[string]any{
 			"query":         text("查询文本，必填"),
 			"libraries":     stringArray("必填，库 ID 或目录名，可选多个"),
@@ -241,21 +256,21 @@ func registerTools(server *mcp.Server, services Services) {
 		}, "query", "libraries"), func(ctx context.Context, in types.EntrySearchRequest) (any, error) {
 			return services.Search.Search(types.WithSearchSource(ctx, "mcp"), in)
 		})
-	addTool(server, "get_entry", "按 ID 读取数据库表头字段和正文。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。cannot_be_fact=true 表示 AI产出，不能作为事实依据。offset 和 length 按 Unicode 字符计数，默认 0 和 20000，length 最大 100000；用 next_offset 继续读取。"+externalContentNotice,
+	addTool(server, "get_entry", mcp.ToolAnnotations{ReadOnlyHint: true}, "按 ID 读取数据库表头字段和正文。source_unverified=true 表示无链接入库，来源尚未核实；可由库的机构加日期规则接受，或由用户确认。cannot_be_fact=true 表示 AI产出，不能作为事实依据。offset 和 length 按 Unicode 字符计数，默认 0 和 20000，length 最大 100000；用 next_offset 继续读取。"+externalContentNotice,
 		object(map[string]any{"id": text("资料 ID，必填"), "offset": integer("正文起始 Unicode 字符偏移，默认 0", 0, 0),
 			"length": integer("读取 Unicode 字符数，默认 20000，最大 100000", 1, 100000)}, "id"),
 		func(ctx context.Context, in entryInput) (any, error) {
 			return services.Entries.ReadEntry(ctx, in.ID, in.Offset, in.Length)
 		})
-	addTool(server, "list_topics", "列出指定库中用户定义的主题，返回 topics 数组，包含 ID、名称、说明、library_id 和资料数。", object(map[string]any{"library_id": text("所属库 ID，必填")}, "library_id"),
+	addTool(server, "list_topics", mcp.ToolAnnotations{ReadOnlyHint: true}, "列出指定库中用户定义的主题，返回 topics 数组，包含 ID、名称、说明、library_id 和资料数。", object(map[string]any{"library_id": text("所属库 ID，必填")}, "library_id"),
 		func(ctx context.Context, in struct {
 			LibraryID string `json:"library_id"`
 		}) (any, error) {
 			items, err := services.Topics.ListTopics(ctx, in.LibraryID)
 			return map[string]any{"topics": items}, err
 		})
-	addTool(server, "create_topic", "在指定库中创建用户定义主题。"+externalContentNotice, object(map[string]any{"name": text("主题名称"), "description": text("主题说明"), "library_id": text("所属库 ID，必填")}, "name", "library_id"), func(ctx context.Context, in types.Topic) (any, error) { return services.Topics.CreateTopic(ctx, &in) })
-	addTool(server, "update_topic", "修改主题名称或说明，所属库不可变更。"+externalContentNotice, object(map[string]any{"id": text("主题 ID"), "name": text("主题名称"), "description": text("主题说明")}, "id"), func(ctx context.Context, in struct {
+	addTool(server, "create_topic", mcp.ToolAnnotations{DestructiveHint: new(false)}, "在指定库中创建用户定义主题。"+externalContentNotice, object(map[string]any{"name": text("主题名称"), "description": text("主题说明"), "library_id": text("所属库 ID，必填")}, "name", "library_id"), func(ctx context.Context, in types.Topic) (any, error) { return services.Topics.CreateTopic(ctx, &in) })
+	addTool(server, "update_topic", mcp.ToolAnnotations{DestructiveHint: new(false), IdempotentHint: true}, "修改主题名称或说明，所属库不可变更。"+externalContentNotice, object(map[string]any{"id": text("主题 ID"), "name": text("主题名称"), "description": text("主题说明")}, "id"), func(ctx context.Context, in struct {
 		ID          string  `json:"id"`
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
@@ -263,7 +278,7 @@ func registerTools(server *mcp.Server, services Services) {
 		return services.Topics.UpdateTopic(ctx, in.ID, in.Name, in.Description)
 	})
 
-	addTool(server, "list_entities", "查询指定库的实体档案，名称和别名支持模糊查询，类型可选。返回 entities 数组及每个实体的别名。"+externalContentNotice,
+	addTool(server, "list_entities", mcp.ToolAnnotations{ReadOnlyHint: true}, "查询指定库的实体档案，名称和别名支持模糊查询，类型可选。返回 entities 数组及每个实体的别名。"+externalContentNotice,
 		object(map[string]any{"library_id": text("所属库 ID，必填"), "entity": text("名称或别名中的文本，省略查询全部"),
 			"entity_type": enum("实体类型，省略查询全部", types.EntityTypes...),
 			"limit":       integer("返回条数，默认 50，最大 100", 1, 100), "offset": integer("跳过的实体数，默认 0", 0, 0)}, "library_id"),
@@ -271,15 +286,15 @@ func registerTools(server *mcp.Server, services Services) {
 			items, err := services.Entities.ListEntities(ctx, in)
 			return map[string]any{"entities": items}, err
 		})
-	addTool(server, "get_entity", "按 ID 读取实体档案和提及该实体的资料列表；已合并的实体 ID 自动解析到保留档案。"+externalContentNotice,
+	addTool(server, "get_entity", mcp.ToolAnnotations{ReadOnlyHint: true}, "按 ID 读取实体档案和提及该实体的资料列表；已合并的实体 ID 自动解析到保留档案。"+externalContentNotice,
 		object(map[string]any{"id": text("实体 ID，必填")}, "id"),
 		func(ctx context.Context, in idInput) (any, error) { return services.Entities.EntityDetail(ctx, in.ID) })
-	addTool(server, "list_follows", "列出关注的实体与主题，返回 follows 数组，包含 target_type、target_id、名称、关注时间和近 7 天已完成资料数。只统计开启动态的库中已完成、已启用且已通过审核的资料；调用不更新上次查看时间。"+externalContentNotice,
+	addTool(server, "list_follows", mcp.ToolAnnotations{ReadOnlyHint: true}, "列出关注的实体与主题，返回 follows 数组，包含 target_type、target_id、名称、关注时间和近 7 天已完成资料数。只统计开启动态的库中已完成、已启用且已通过审核的资料；调用不更新上次查看时间。"+externalContentNotice,
 		object(map[string]any{}), func(ctx context.Context, _ struct{}) (any, error) {
 			items, err := services.Follows.ListFollows(ctx)
 			return map[string]any{"follows": items}, err
 		})
-	addTool(server, "follow_feed", "读取开启动态的库中与关注实体或主题关联的已完成资料，按进入动态时间倒序。libraries 可选一个或多个库 ID 或目录名，省略查询全部开启动态的库。结果包含 library_id 和 library_name，libraries 返回各库的新动态数及上次查看时间。since 省略使用各库网页上次查看时间；调用不更新查看时间。相似报道只在库内折叠，历史归入不产生新动态。用 next_cursor 继续翻页。"+externalContentNotice,
+	addTool(server, "follow_feed", mcp.ToolAnnotations{ReadOnlyHint: true}, "读取开启动态的库中与关注实体或主题关联的已完成资料，按进入动态时间倒序。libraries 可选一个或多个库 ID 或目录名，省略查询全部开启动态的库。结果包含 library_id 和 library_name，libraries 返回各库的新动态数及上次查看时间。since 省略使用各库网页上次查看时间；调用不更新查看时间。相似报道只在库内折叠，历史归入不产生新动态。用 next_cursor 继续翻页。"+externalContentNotice,
 		object(map[string]any{
 			"libraries":        stringArray("库 ID 或英文目录名，可选多个；省略为全部开启动态的库"),
 			"cursor":           text("上一页返回的 next_cursor；继续读取同一窗口，直到没有 next_cursor"),
@@ -290,12 +305,12 @@ func registerTools(server *mcp.Server, services Services) {
 		}), func(ctx context.Context, in types.FollowFeedRequest) (any, error) {
 			return services.Follows.Feed(ctx, in)
 		})
-	addTool(server, "follow", "关注指定实体或主题，重复关注幂等，实际新增关注时写入操作日志。实体已合并时关注最终保留档案。返回关注对象的类型、ID、名称、关注时间和近 7 天资料数。"+externalContentNotice,
+	addTool(server, "follow", mcp.ToolAnnotations{DestructiveHint: new(false), IdempotentHint: true}, "关注指定实体或主题，重复关注幂等，实际新增关注时写入操作日志。实体已合并时关注最终保留档案。返回关注对象的类型、ID、名称、关注时间和近 7 天资料数。"+externalContentNotice,
 		object(map[string]any{"target_type": enum("关注对象类型，必填", "entity", "topic"), "target_id": text("关注对象 ID，必填")}, "target_type", "target_id"),
 		func(ctx context.Context, in followInput) (any, error) {
 			return services.Follows.Follow(ctx, in.TargetType, in.TargetID)
 		})
-	addTool(server, "unfollow", "取消指定实体或主题的关注，重复取消幂等，实际删除关注时写入操作日志。实体已合并时取消最终保留档案的关注。返回请求对象和 following=false。"+externalContentNotice,
+	addTool(server, "unfollow", mcp.ToolAnnotations{DestructiveHint: new(false), IdempotentHint: true}, "取消指定实体或主题的关注，重复取消幂等，实际删除关注时写入操作日志。实体已合并时取消最终保留档案的关注。返回请求对象和 following=false。"+externalContentNotice,
 		object(map[string]any{"target_type": enum("关注对象类型，必填", "entity", "topic"), "target_id": text("关注对象 ID，必填")}, "target_type", "target_id"),
 		func(ctx context.Context, in followInput) (any, error) {
 			if err := services.Follows.Unfollow(ctx, in.TargetType, in.TargetID); err != nil {
@@ -304,32 +319,39 @@ func registerTools(server *mcp.Server, services Services) {
 			return map[string]any{"target_type": in.TargetType, "target_id": in.TargetID, "following": false}, nil
 		})
 	addIngestTool(server, services.Entries)
-	addTool(server, "update_entry_content", "按资料 ID 一起更新完整 Markdown 正文与图片，保留 ID 和来源，不保留旧正文版本。images 使用 asset_id 或 base64 data，source_url 对应正文中的原图片引用，可为网址或相对路径；程序替换成本地附件。正文和图片提交失败时一起回滚。所有模板均保存后在后台重建正文索引并运行摘要、分类、实体和图谱；删除中返回冲突。省略 acquisition 保留原值。"+externalContentNotice,
+	addTool(server, "update_entry_content", mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true}, "按资料 ID 一起更新完整 Markdown 正文与图片，保留 ID 和来源，不保留旧正文版本。images 使用 asset_id 或 base64 data，source_url 对应正文中的原图片引用，可为网址或相对路径；程序替换成本地附件。正文和图片提交失败时一起回滚。所有模板均保存后在后台重建正文索引并运行摘要、分类、实体和图谱；删除中返回冲突。省略 acquisition 保留原值。"+externalContentNotice,
 		object(map[string]any{"entry_id": text("资料 ID，必填"), "content": text("替换后的完整 Markdown 正文，最多 5000000 Unicode 码点"), "acquisition": enum("获取方式，省略保留原值", "verbatim", "extracted", "model_written"),
 			"images": boundedArray("更新图片；每项 source_url 必须对应正文图片引用，使用 asset_id 或 data", ingestImageSchema(), 0, 100)}, "entry_id", "content"),
 		func(ctx context.Context, in entryContentInput) (any, error) {
 			return services.Entries.UpdateEntryContent(ctx, in.EntryID, &types.EntryContentUpdate{Content: in.Content, Acquisition: in.Acquisition, Images: in.Images})
 		})
-	addTool(server, "delete_document", "按 ID 删除旧版导入的个人资料（source_kind=mine），同时删除文件、附件、索引和记录并写入操作日志。通过 ingest 收录的资料和 AI产出不能用此工具删除。删除后可重新导入相同内容。"+externalContentNotice,
-		object(map[string]any{"document_id": text("旧版导入的个人资料 ID，必填")}, "document_id"),
+	addTool(server, "delete_document", mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true}, "按 ID 删除旧版导入的个人资料（source_kind=mine），同时删除文件、附件、索引和记录并写入操作日志。通过 ingest 收录的资料和 AI产出不能用此工具删除。删除后可重新导入相同内容。必须先向用户展示目标与风险并取得明确同意，再带 confirmed=true 调用；未确认返回 confirmation_required，不得自行补上 confirmed。"+externalContentNotice,
+		object(map[string]any{"document_id": text("旧版导入的个人资料 ID，必填"), "confirmed": boolean("仅在向用户展示目标与删除风险并取得明确同意后设为 true；省略或 false 不执行，不得自行补上确认")}, "document_id"),
 		func(ctx context.Context, in documentInput) (any, error) {
+			if !in.Confirmed {
+				entry, err := services.Entries.GetEntryByID(ctx, in.DocumentID)
+				if err != nil {
+					return nil, err
+				}
+				return nil, fmt.Errorf("confirmation_required: 将删除资料 %q（ID: %s）及其文件、附件、索引和记录，会写操作日志，不能恢复。先向用户展示目标并取得明确同意，再带 confirmed=true 重试；不得自行补上 confirmed", entry.Title, entry.ID)
+			}
 			if err := services.Entries.DeleteDocument(ctx, in.DocumentID); err != nil {
 				return nil, err
 			}
 			return map[string]any{"document_id": in.DocumentID, "status": "deleted", "message": "本人文档已删除"}, nil
 		})
-	addTool(server, "check_urls", "收录前在指定库按规范化链接查重；库规则开启转载归并时，也匹配已记录的转载链接。输入 1 到 100 条链接，逐条返回 url、status（in_library、pending_review、discarded、not_found）、entry_id。已丢弃的链接不会再次入库。"+completeMaterialNotice+externalContentNotice,
+	addTool(server, "check_urls", mcp.ToolAnnotations{ReadOnlyHint: true}, "收录前在指定库按规范化链接查重；库规则开启转载归并时，也匹配已记录的转载链接。输入 1 到 100 条链接，逐条返回 url、status（in_library、pending_review、discarded、not_found）、entry_id。已丢弃的链接不会再次入库。"+completeMaterialNotice+externalContentNotice,
 		object(map[string]any{"library": text("必填，库 ID 或英文目录名；可调用 list_libraries"), "urls": boundedArray("原文链接数组，1 到 100 条", text("原文链接"), 1, types.MaxIngestCheckURLs)}, "urls"),
 		func(ctx context.Context, in types.IngestCheckRequest) (any, error) {
 			items, err := services.Entries.CheckURLs(ctx, in.URLs, in.Library)
 			return types.IngestCheckResponse{Items: items}, err
 		})
-	addTool(server, "list_pending", "分页列出旧收录待审资料，返回 data、total、page、page_size。新提交默认接收，不再进入此队列。"+externalContentNotice,
+	addTool(server, "list_pending", mcp.ToolAnnotations{ReadOnlyHint: true}, "分页列出旧收录待审资料，返回 data、total、page、page_size。新提交默认接收，不再进入此队列。"+externalContentNotice,
 		object(map[string]any{"kind": enum("审核类别", "intake"), "page": integer("页码，从 1 开始，默认 1", 1, 0), "page_size": integer("每页条数，默认 20，最大 100", 1, 100)}),
 		func(ctx context.Context, in pendingInput) (any, error) {
 			return services.Entries.ListPending(ctx, in.Page, in.PageSize, in.Kind)
 		})
-	addTool(server, "approve_pending", "处理指定的旧收录待审条目。默认 approve 批准内容，旧版导入的个人资料无需链接；supplement_url 用 url 补链接并重新模型审核；admit_unverified 需 confirmed=true，无链接入库并标 source_unverified，始终全文保存。记录操作日志，返回条目和状态。"+externalContentNotice,
+	addTool(server, "approve_pending", mcp.ToolAnnotations{DestructiveHint: new(true)}, "处理指定的旧收录待审条目。默认 approve 批准内容，旧版导入的个人资料无需链接；supplement_url 用 url 补链接并重新模型审核；admit_unverified 需 confirmed=true，无链接入库并标 source_unverified，始终全文保存。记录操作日志，返回条目和状态。"+externalContentNotice,
 		object(map[string]any{"id": text("待审资料 ID，必填"), "action": enum("操作，默认 approve", "approve", "supplement_url", "admit_unverified"), "url": text("补充的原始 HTTP/HTTPS 链接"), "confirmed": boolean("无链接入库必须显式确认")}, "id"),
 		func(ctx context.Context, in intakeReviewInput) (any, error) {
 			action := in.Action
@@ -338,17 +360,41 @@ func registerTools(server *mcp.Server, services Services) {
 			}
 			return services.Entries.ReviewEntryIntake(ctx, in.ID, action, types.SourceInfo{OriginalURL: in.URL, Confirmed: in.Confirmed})
 		})
-	addTool(server, "discard_pending", "丢弃指定待审资料及暂存来源，记录操作日志，返回被丢弃的资料。"+externalContentNotice,
-		object(map[string]any{"id": text("待审资料 ID，必填")}, "id"),
-		func(ctx context.Context, in idInput) (any, error) {
+	addTool(server, "discard_pending", mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true}, "丢弃指定待审资料及暂存来源，记录操作日志，返回被丢弃的资料。必须先向用户展示目标与风险并取得明确同意，再带 confirmed=true 调用；未确认返回 confirmation_required，不得自行补上 confirmed。"+externalContentNotice,
+		object(map[string]any{"id": text("待审资料 ID，必填"), "confirmed": boolean("仅在向用户展示目标与丢弃风险并取得明确同意后设为 true；省略或 false 不执行，不得自行补上确认")}, "id"),
+		func(ctx context.Context, in discardInput) (any, error) {
+			if !in.Confirmed {
+				entry, err := services.Entries.GetEntryByID(ctx, in.ID)
+				if err != nil {
+					return nil, err
+				}
+				return nil, fmt.Errorf("confirmation_required: 将丢弃待审资料 %q（ID: %s）及其暂存来源，会写操作日志，不能恢复。先向用户展示目标并取得明确同意，再带 confirmed=true 重试；不得自行补上 confirmed", entry.Title, entry.ID)
+			}
 			return services.Entries.ReviewEntryIntake(ctx, in.ID, "discard", types.SourceInfo{})
 		})
 
-	addTool(server, "set_star", "设置或取消资料星标，记录发生变化的操作，返回更新后的资料。"+externalContentNotice,
+	addTool(server, "set_star", mcp.ToolAnnotations{DestructiveHint: new(false), IdempotentHint: true}, "设置或取消资料星标，记录发生变化的操作，返回更新后的资料。"+externalContentNotice,
 		object(map[string]any{"id": text("资料 ID，必填"), "starred": boolean("true 设置星标，false 取消星标，必填")}, "id", "starred"),
 		func(ctx context.Context, in starInput) (any, error) {
 			return services.Entries.SetStarred(ctx, in.ID, in.Starred)
 		})
+
+	if services.ContentChecks != nil {
+		addTool(server, "list_content_checks", mcp.ToolAnnotations{ReadOnlyHint: true}, "分页列出资料自检运行及状态，每页 20 条，返回 items、total；问题和证据通过 get_content_check 读取。"+externalContentNotice,
+			object(map[string]any{"page": integer("页码，默认 1", 1, 1000000)}),
+			func(ctx context.Context, in struct {
+				Page *int `json:"page,omitempty"`
+			}) (any, error) {
+				page := 1
+				if in.Page != nil {
+					page = *in.Page
+				}
+				return services.ContentChecks.List(ctx, page)
+			})
+		addTool(server, "get_content_check", mcp.ToolAnnotations{ReadOnlyHint: true}, "按运行 ID 读取资料自检详情，包含问题说明、涉及资料、当前结果与原文证据及位置；只读取已有结果，不触发复检。"+externalContentNotice,
+			object(map[string]any{"id": text("资料自检运行 ID，必填")}, "id"),
+			func(ctx context.Context, in idInput) (any, error) { return services.ContentChecks.Get(ctx, in.ID) })
+	}
 }
 
 func object(properties map[string]any, required ...string) map[string]any {
@@ -388,7 +434,7 @@ func enum(description string, values ...string) map[string]any {
 // The batch tool decodes each item itself so one malformed item cannot prevent
 // valid items from being processed. The published schema still documents fields.
 func addIngestTool(server *mcp.Server, collector interfaces.IngestService) {
-	server.AddTool(&mcp.Tool{Name: "ingest", InputSchema: ingestSchema(), Description: "一次收录 1 到 50 条，逐项返回结果。每项 library 必填，接受库 ID 或英文目录名，可调用 list_libraries。各库均可传 source_ref、identifier、graph；acquisition 可选。同库同来源内容变化时覆盖旧文，完全相同返回原 ID；无来源标识时正常新建。正文上限 5000000 Unicode 码点，单项 JSON 64 MiB，批量 JSON 128 MiB，单张图片 10 MiB，内联图片总计 20 MiB。" + completeMaterialNotice + externalContentNotice},
+	server.AddTool(&mcp.Tool{Name: "ingest", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), OpenWorldHint: new(false)}, InputSchema: ingestSchema(), Description: "一次收录 1 到 50 条，逐项返回结果。每项 library 必填，接受库 ID 或英文目录名，可调用 list_libraries。各库均可传 source_ref、identifier、graph；acquisition 可选。同库同来源内容变化时覆盖旧文，完全相同返回原 ID；无来源标识时正常新建。正文上限 5000000 Unicode 码点，单项 JSON 64 MiB，批量 JSON 128 MiB，单张图片 10 MiB，内联图片总计 20 MiB。" + completeMaterialNotice + externalContentNotice},
 		func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			fail := func(err error) (*mcp.CallToolResult, error) {
 				result := &mcp.CallToolResult{}

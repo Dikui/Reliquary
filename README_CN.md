@@ -105,7 +105,7 @@ docker compose up -d --build
    curl --fail http://127.0.0.1:8080/api/v1/libraries -H "Authorization: Bearer $KEY"
    ```
 
-3. 或将 MCP 客户端指向 `http://127.0.0.1:8080/mcp`，使用同一个 Key。
+3. 或将 MCP 客户端指向 `http://127.0.0.1:8080/mcp`，使用同一个 Key。Claude Code、Codex 的配置写法及 agent 技能包见 [skills/reliquary/SKILL.md](skills/reliquary/SKILL.md#连接本机-mcp)。
 
 HTTP 与 MCP 中资料 ID 统一为 `entry_id`（列表为 `entry_ids`），全文读取使用 `get_entry`。从[外部接入总览](docs/external-integration.md)开始，再看[收录](docs/ingest-api.md)、[检索](docs/search-api.md)与[关系](docs/relations-api.md)接口。
 

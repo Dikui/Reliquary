@@ -201,9 +201,15 @@ func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture
 	f.router.GET("/api/v1/diagnostics/ingest-failures/:id", diagnosticHandler.Get)
 	f.router.GET("/api/v1/diagnostics/ingest-failures/:id/materials/:material_id", diagnosticHandler.Read)
 	articles := entry.(mcpserver.EntryService)
-	adapter := mcpserver.New(mcpserver.Services{Diagnostics: diagnosticStore, Libraries: bases, Entries: articles,
-		Search: service.NewSearchService(bases, f.params.SpaceService, models, f.db),
-		Topics: service.NewTopicService(f.db), Entities: service.NewEntityService(f.db, models), Follows: service.NewFollowService(f.db)})
+	search := service.NewSearchService(bases, f.params.SpaceService, models, f.db)
+	graph := service.NewGraphSearchService(f.db, nil)
+	entities := service.NewEntityService(f.db, models)
+	contentChecks := service.NewContentCheckService(f.db, queue, models, entry, search, entities, graph)
+	contentCheckHandler := handler.NewContentCheckHandler(contentChecks)
+	f.router.GET("/api/v1/diagnostics/content-checks", contentCheckHandler.List)
+	f.router.GET("/api/v1/diagnostics/content-checks/:id", contentCheckHandler.Get)
+	adapter := mcpserver.New(mcpserver.Services{Diagnostics: diagnosticStore, ContentChecks: contentChecks, Libraries: bases, Entries: articles,
+		Search: search, Graph: graph, Topics: service.NewTopicService(f.db), Entities: entities, Follows: service.NewFollowService(f.db)})
 	f.router.Any("/mcp", gin.WrapH(adapter))
 	server := httptest.NewServer(f.router)
 	t.Cleanup(server.Close)
@@ -455,6 +461,61 @@ func currentMCPTestFields(value any) any {
 	return value
 }
 
+func TestMCPToolAnnotations(t *testing.T) {
+	f := newMCPFixture(t)
+	client := f.connect(t, "2025-11-25")
+	expected := map[string]struct {
+		readOnly, destructive, idempotent bool
+	}{
+		"list_libraries":               {readOnly: true},
+		"search":                       {readOnly: true},
+		"get_entry":                    {readOnly: true},
+		"graph_search":                 {readOnly: true},
+		"list_topics":                  {readOnly: true},
+		"list_entities":                {readOnly: true},
+		"get_entity":                   {readOnly: true},
+		"list_follows":                 {readOnly: true},
+		"follow_feed":                  {readOnly: true},
+		"check_urls":                   {readOnly: true},
+		"list_pending":                 {readOnly: true},
+		"list_ingest_failures":         {readOnly: true},
+		"get_ingest_failure":           {readOnly: true},
+		"read_ingest_failure_material": {readOnly: true},
+		"follow":                       {idempotent: true},
+		"unfollow":                     {idempotent: true},
+		"set_star":                     {idempotent: true},
+		"update_topic":                 {idempotent: true},
+		"create_topic":                 {},
+		"ingest":                       {destructive: true},
+		"update_entry_content":         {destructive: true, idempotent: true},
+		"delete_document":              {destructive: true, idempotent: true},
+		"discard_pending":              {destructive: true, idempotent: true},
+		"approve_pending":              {destructive: true},
+		"list_content_checks":          {readOnly: true},
+		"get_content_check":            {readOnly: true},
+		"reliquary_guide":              {readOnly: true},
+	}
+	tools, err := client.ListTools(context.Background(), nil)
+	require.NoError(t, err)
+	for _, tool := range tools.Tools {
+		t.Run(tool.Name, func(t *testing.T) {
+			require.NotNil(t, tool.Annotations, "every tool must explicitly declare annotations")
+			require.NotNil(t, tool.Annotations.OpenWorldHint, "openWorldHint must be explicit")
+			require.False(t, *tool.Annotations.OpenWorldHint)
+			if want, ok := expected[tool.Name]; ok {
+				require.Equal(t, want.readOnly, tool.Annotations.ReadOnlyHint)
+				if !want.readOnly {
+					require.NotNil(t, tool.Annotations.DestructiveHint, "write tools must declare destructiveHint")
+					require.Equal(t, want.destructive, *tool.Annotations.DestructiveHint)
+					require.Equal(t, want.idempotent, tool.Annotations.IdempotentHint)
+				}
+			}
+		})
+		delete(expected, tool.Name)
+	}
+	require.Empty(t, expected, "tools missing from tools/list")
+}
+
 func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	f := newMCPFixture(t)
 	article := f.seedArticle(t, "MCP searchfixture article", "full", "# MCP searchfixture\n\n中文与 emoji 🙂 support complete segments.\n")
@@ -482,9 +543,9 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 		// Retired terms (CONTEXT.md) mislead agents choosing tools and arguments.
 		definition, err := json.Marshal(tool)
 		require.NoError(t, err)
-		require.NotRegexp(t, `文章|本人文档|用户文档|整理结果|摘要加链接|event、opinion`, string(definition), tool.Name)
+		require.NotRegexp(t, mcpDeprecatedTerms, string(definition), tool.Name)
 	}
-	require.ElementsMatch(t, []string{"list_libraries", "search", "get_entry", "list_topics", "create_topic", "update_topic", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "update_entry_content", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "check_urls", "list_ingest_failures", "get_ingest_failure", "read_ingest_failure_material"}, names)
+	require.ElementsMatch(t, []string{"list_libraries", "search", "get_entry", "graph_search", "list_topics", "create_topic", "update_topic", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "update_entry_content", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "check_urls", "list_ingest_failures", "get_ingest_failure", "read_ingest_failure_material", "list_content_checks", "get_content_check", "reliquary_guide"}, names)
 	_, err = client.CallTool(context.Background(), &mcp.CallToolParams{Name: "write_report", Arguments: map[string]any{"title": "Removed report entry point", "markdown": "# Report"}})
 	require.Error(t, err)
 	var search types.EntrySearchResponse
@@ -530,7 +591,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
 	var discarded types.Entry
-	mcpCall(t, client, "discard_pending", map[string]any{"id": discard.ID}, &discarded)
+	mcpCall(t, client, "discard_pending", map[string]any{"id": discard.ID, "confirmed": true}, &discarded)
 	require.Equal(t, discard.ID, discarded.ID)
 	var count int64
 	require.NoError(t, f.db.Model(&types.Entry{}).Where("id=?", discard.ID).Count(&count).Error)

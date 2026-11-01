@@ -105,7 +105,7 @@ Host directories default to `~/Reliquary/vault`, `~/Reliquary/files` and `~/Back
    curl --fail http://127.0.0.1:8080/api/v1/libraries -H "Authorization: Bearer $KEY"
    ```
 
-3. Or point an MCP client at `http://127.0.0.1:8080/mcp` with the same key.
+3. Or point an MCP client at `http://127.0.0.1:8080/mcp` with the same key. Claude Code and Codex setup, plus the agent skill package, are in [skills/reliquary/SKILL.md](skills/reliquary/SKILL.md#连接本机-mcp).
 
 Entry IDs are `entry_id` (lists: `entry_ids`) across HTTP and MCP; read bodies with `get_entry`. Start with the [external integration guide](docs/external-integration.md), then the [intake](docs/ingest-api.md), [search](docs/search-api.md) and [relations](docs/relations-api.md) references.
 
