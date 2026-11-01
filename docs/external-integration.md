@@ -27,7 +27,7 @@ export BASE='http://127.0.0.1:8080'
 curl --fail "$BASE/api/v1/libraries" -H "Authorization: Bearer $KEY"
 ```
 
-MCP 地址为 `$BASE/mcp`。客户端先发送 initialize，协商版本，后续按协商值发送 `MCP-Protocol-Version`，Accept 为 `application/json, text/event-stream`。同样使用 Bearer API Key。服务器支持标准 MCP 工具发现；下列示例是 tools/call 的参数，需包在 JSON-RPC 消息中。
+MCP 地址为 `$BASE/mcp`。客户端先发送 initialize，协商版本，后续按协商值发送 `MCP-Protocol-Version`，Accept 为 `application/json, text/event-stream`。同样使用 Bearer API Key。服务器支持标准 MCP 工具发现；下列示例是 tools/call 的参数，需包在 JSON-RPC 消息中。在 Claude Code、Codex 中添加 Reliquary MCP 的配置写法见 [技能包连接说明](../skills/reliquary/SKILL.md#连接本机-mcp)；握手返回的 instructions 即技能包中的使用规则。
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"Grok Bot","version":"1"}}}
