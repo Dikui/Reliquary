@@ -479,6 +479,10 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 		if tool.Name == "search" || tool.Name == "follow_feed" {
 			require.NotContains(t, tool.Description, "incomplete=true")
 		}
+		// Retired terms (CONTEXT.md) mislead agents choosing tools and arguments.
+		definition, err := json.Marshal(tool)
+		require.NoError(t, err)
+		require.NotRegexp(t, `文章|本人文档|用户文档|整理结果|摘要加链接|event、opinion`, string(definition), tool.Name)
 	}
 	require.ElementsMatch(t, []string{"list_libraries", "search", "get_entry", "list_topics", "create_topic", "update_topic", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "update_entry_content", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "check_urls", "list_ingest_failures", "get_ingest_failure", "read_ingest_failure_material"}, names)
 	_, err = client.CallTool(context.Background(), &mcp.CallToolParams{Name: "write_report", Arguments: map[string]any{"title": "Removed report entry point", "markdown": "# Report"}})
