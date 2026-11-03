@@ -127,6 +127,8 @@ func TestAliyunMultimodalRerankerPreservesImageAndScores(t *testing.T) {
 }
 
 func TestAliyunMultimodalRerankerRejectsTextModel(t *testing.T) {
+	// 默认地址只用于构造，白名单让测试不依赖本机 DNS（代理 fake-IP 会解析到保留网段）
+	withRerankSSRFWhitelist(t, "dashscope.aliyuncs.com")
 	r, err := NewReranker(&RerankerConfig{Provider: "aliyun", ModelName: "qwen3-rerank"})
 	if err != nil {
 		t.Fatal(err)
