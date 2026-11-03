@@ -314,6 +314,9 @@ func vaultImageExtension(ref, mediaType string) string {
 			return ext
 		}
 	}
+	if mediaType == "image/jpeg" {
+		return ".jpg"
+	}
 	if extensions, _ := mime.ExtensionsByType(mediaType); len(extensions) > 0 {
 		sort.Strings(extensions)
 		return extensions[0]

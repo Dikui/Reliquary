@@ -1,7 +1,13 @@
 package service
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"io"
+	"mime"
+	"net/http"
 	"testing"
 
 	"reliquary/internal/types"
@@ -9,6 +15,23 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+func TestVaultStoresJPEGWithGeneratedExtension(t *testing.T) {
+	require.NoError(t, mime.AddExtensionType(".jfif", "image/jpeg"))
+	var data bytes.Buffer
+	require.NoError(t, jpeg.Encode(&data, image.NewRGBA(image.Rect(0, 0, 1, 1)), nil))
+	v := &VaultService{root: t.TempDir()}
+	k := &types.Entry{ID: uuid.NewString(), VaultPath: "library/article.md"}
+	name := "image" + vaultImageExtension("resource://image", http.DetectContentType(data.Bytes()))
+	ref, err := v.StoreArticleAttachment(k, name, data.Bytes())
+	require.NoError(t, err)
+	stored, err := v.ReadImage(k, ref)
+	require.NoError(t, err)
+	defer stored.Close()
+	actual, err := io.ReadAll(stored)
+	require.NoError(t, err)
+	require.Equal(t, data.Bytes(), actual)
+}
 
 func TestVaultArticlePreservesBrowserBlobImages(t *testing.T) {
 	h, v := newVaultArticleHarness(t)

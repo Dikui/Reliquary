@@ -100,6 +100,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	body.inner = resp.Body
 	body.stream = strings.Contains(resp.Header.Get("Content-Type"), "event-stream") || strings.Contains(resp.Header.Get("Content-Type"), "ndjson")
+	// ChatGPT always requests SSE; its response can omit Content-Type.
+	if m.Source == types.ModelSourceChatGPT && call.Success {
+		body.stream = true
+	}
 	resp.Body = body
 	// Cancellation can occur while a stream producer is blocked sending a chunk.
 	// Persist the interrupted request even if it never reads or closes again.
