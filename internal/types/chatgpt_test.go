@@ -3,10 +3,22 @@ package types
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestChatGPTErrorPreservesCauseWithoutRequestURL(t *testing.T) {
+	cause := errors.New("dial tcp: connection reset by peer")
+	err := &ChatGPTError{Kind: "transport", Message: "ChatGPT request could not be sent", Cause: &url.Error{
+		Op: "Post", URL: "https://example.test/private-path?query=private-value", Err: cause,
+	}}
+	require.ErrorContains(t, err, cause.Error())
+	require.NotContains(t, err.Error(), "private-path")
+	require.NotContains(t, err.Error(), "private-value")
+	require.ErrorIs(t, err, cause)
+}
 
 func TestChatGPTPermanentErrorCodes(t *testing.T) {
 	for _, code := range []string{

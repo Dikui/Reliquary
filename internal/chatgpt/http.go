@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"reliquary/internal/types"
 )
 
 const maxOAuthResponseBytes = 2 * 1024 * 1024
@@ -60,7 +62,7 @@ func (m *Manager) request(ctx context.Context, method, endpoint string, form url
 	}
 	response, err := m.client.Do(req)
 	if err != nil {
-		return nil, 0, "", fmt.Errorf("chatgpt: upstream connection failed")
+		return nil, 0, "", &types.ChatGPTError{Kind: "transport", Message: "ChatGPT authorization request could not be sent", Cause: err}
 	}
 	defer response.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(response.Body, maxOAuthResponseBytes+1))

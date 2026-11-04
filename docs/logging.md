@@ -35,7 +35,7 @@ Reliquary 的日志由 `internal/logger` 统一管理，所有行为通过环境
 | --- | --- | --- | --- |
 | `LOG_LEVEL` | 否 | `debug` | 日志级别，取值 `debug` / `info` / `warn`(`warning`) / `error` / `fatal`，无效值回退到 `debug` |
 | `LOG_PATH`  | 否 | 空（仅打到 stdout） | 落盘路径，启用后同时写 stdout 与该文件，文件按 lumberjack 滚动（单文件 50MB / 3 份 / 28 天 / 压缩归档） |
-| `LOG_FORMAT` | 否 | 空（沿用内置默认格式） | 自定义日志输出模板，支持下列占位符 |
+| `LOG_FORMAT` | 否 | 空（沿用内置默认格式） | `json` 输出结构化 JSON；其他值为自定义模板，支持下列占位符 |
 
 > 终端环境下 ANSI 颜色自动启用；非 TTY（容器日志采集、`docker logs` 重定向等）会自动关闭颜色，避免日志聚合/检索异常。
 
@@ -47,7 +47,9 @@ Reliquary 的日志由 `internal/logger` 统一管理，所有行为通过环境
 INFO [2026-05-21 10:20:30.123] [req-abc k1=v1] file.go:42[fn] | message body
 ```
 
-配置 `LOG_FORMAT` 后启用模板模式，支持如下占位符：
+`LOG_FORMAT=json` 输出结构化 JSON，保留级别、时间、消息与请求编号等字段。
+
+其他非空值启用模板模式，支持如下占位符：
 
 | 占位符 | 含义 |
 | --- | --- |
@@ -74,5 +76,5 @@ export LOG_FORMAT='[%d] %level %thread %logger %traceId | %msg'
 
 - 占位符替换使用 `strings.NewReplacer` 单趟扫描，前一个占位符的值即使包含其它占位符字面串（如 `request_id=%msg`）也不会被二次替换。
 - 级别染色在 `%level` 替换阶段直接注入 ANSI 颜色，**不会**误染消息正文中字面出现的 `INFO` / `ERROR` 等字符串。
-- 结构化字段（`logger.WithField` / `WithFields`）会被拼接到 `%msg` 之后，模板模式下暂不支持把任意字段抽出为独立占位符 — 若需 K/V 结构化检索，请直接关闭 `LOG_FORMAT` 使用默认格式。
+- 结构化字段（`logger.WithField` / `WithFields`）会被拼接到 `%msg` 之后。需要独立字段检索时，使用 `LOG_FORMAT=json`。
 - `LOG_LEVEL` 与 `LOG_PATH` 的设置会在 `main` 加载 `.env` 后由 `logger.ConfigureFromEnv()` 重新生效。

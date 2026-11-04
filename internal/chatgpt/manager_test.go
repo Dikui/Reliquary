@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"reliquary/internal/testutil/pgtest"
+	"reliquary/internal/types"
 	"reliquary/internal/utils"
 )
 
@@ -494,6 +495,9 @@ func TestTemporaryRefreshNetworkFailureKeepsCredentials(t *testing.T) {
 	f.server.Close()
 	_, err := m.AccessToken(context.Background(), account.ID)
 	require.Error(t, err)
+	var connectionError *types.ChatGPTError
+	require.ErrorAs(t, err, &connectionError)
+	require.NotNil(t, connectionError.Cause)
 	var row accountRecord
 	require.NoError(t, db.First(&row, "id = ?", account.ID).Error)
 	require.Equal(t, StatusNeedsLogin, row.Status)

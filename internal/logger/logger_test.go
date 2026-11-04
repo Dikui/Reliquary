@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -11,6 +12,24 @@ import (
 
 	"reliquary/internal/types"
 )
+
+func TestConfigureFromEnvJSONPreservesMessageAndFields(t *testing.T) {
+	t.Cleanup(ConfigureFromEnv)
+	t.Setenv("LOG_PATH", "")
+	t.Setenv("LOG_FORMAT", "json")
+	ConfigureFromEnv()
+	output, err := appLogger.Formatter.Format(newEntry(logrus.ErrorLevel, "connection failed", logrus.Fields{"request_id": "request-fixture"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(output, &fields); err != nil {
+		t.Fatalf("invalid JSON log: %v", err)
+	}
+	if fields["msg"] != "connection failed" || fields["request_id"] != "request-fixture" || fields["level"] != "error" {
+		t.Fatalf("missing log details: %v", fields)
+	}
+}
 
 func TestEntryAndIngestContentDoesNotEnterSharedModelDebugFiles(t *testing.T) {
 	oldEnabled, oldDir := llmDebug.enabled, llmDebug.dir

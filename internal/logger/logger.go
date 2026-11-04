@@ -271,11 +271,15 @@ func ConfigureFromEnv() {
 
 	// 设置日志格式而不修改全局时区
 	tmpl := resolveLogFormatFromEnv()
-	appLogger.SetFormatter(&CustomFormatter{
-		ForceColor:   forceColor,
-		Template:     tmpl,
-		threadNeeded: strings.Contains(tmpl, "%thread"),
-	})
+	if strings.EqualFold(tmpl, "json") {
+		appLogger.SetFormatter(&logrus.JSONFormatter{})
+	} else {
+		appLogger.SetFormatter(&CustomFormatter{
+			ForceColor:   forceColor,
+			Template:     tmpl,
+			threadNeeded: strings.Contains(tmpl, "%thread"),
+		})
+	}
 	appLogger.SetReportCaller(false)
 }
 
@@ -348,7 +352,7 @@ func resolveLogPathFromEnv() string {
 }
 
 // resolveLogFormatFromEnv 从环境变量 LOG_FORMAT 读取自定义日志格式模板。
-// 为空则使用内置默认格式；非空则作为模板，支持占位符：
+// 为空则使用内置默认格式；json 使用结构化日志；其他值作为模板，支持占位符：
 // %d=时间 %level=级别 %thread=goroutine %logger=caller %traceId=请求ID %msg=消息+结构化字段
 func resolveLogFormatFromEnv() string {
 	return strings.TrimSpace(os.Getenv("LOG_FORMAT"))

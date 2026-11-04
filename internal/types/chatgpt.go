@@ -3,6 +3,7 @@ package types
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -15,7 +16,20 @@ type ChatGPTError struct {
 }
 
 func (e *ChatGPTError) Error() string {
-	return fmt.Sprintf("ChatGPT %s (status=%d, code=%s, request_id=%s): %s", e.Kind, e.Status, e.Code, e.RequestID, e.Message)
+	message := fmt.Sprintf("ChatGPT %s (status=%d, code=%s, request_id=%s): %s", e.Kind, e.Status, e.Code, e.RequestID, e.Message)
+	cause := e.Cause
+	// net/http includes the full request URL in url.Error, which may contain credentials.
+	for cause != nil {
+		var requestError *url.Error
+		if !errors.As(cause, &requestError) {
+			break
+		}
+		cause = requestError.Err
+	}
+	if cause != nil {
+		message += ": " + cause.Error()
+	}
+	return message
 }
 func (e *ChatGPTError) Unwrap() error { return e.Cause }
 func IsChatGPTQuotaError(err error) bool {
