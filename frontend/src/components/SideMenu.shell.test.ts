@@ -34,7 +34,10 @@ async function fixture(path = '/platform/libraries', collapsed = false, mobileOv
     '@/stores/pendingCounts': { usePendingCountsStore: () => pending },
     '@/stores/commandPalette': { useCommandPaletteStore: () => ({ openPalette: () => opened++ }) },
     '@/api/library': { listLibraries: async () => { if (delayCatalog) await new Promise(() => {}); return { success: !failed, data: catalog } } },
-    '@/api/ingest-diagnostics': { listIngestFailures: async () => ({ success: !failed, data: { total: 3 } }) },
+    '@/api/ingest-diagnostics': { listIngestFailures: async (query: any) => {
+      assert.equal(query.resolved, false)
+      return { success: !failed, data: { total: 3 } }
+    } },
     '@/components/ui': { LibMark: loadUiComponent('LibMark'), Tooltip: loadUiComponent('Tooltip') },
     '@/components/PendingCountBadge.vue': { __esModule: true, default: loadComponent(new URL('./PendingCountBadge.vue', import.meta.url), {
       '@/stores/pendingCounts': { usePendingCountsStore: () => pending },

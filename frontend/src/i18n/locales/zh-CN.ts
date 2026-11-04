@@ -2077,6 +2077,10 @@ export default {
     details: '其他字段'
   },
   ingestDiagnostics: {
+    resolution: '解决状态',
+    unresolved: '未解决',
+    resolved: '已解决',
+    noUnresolved: '暂无未解决的接收故障。',
     rangeCount: '第 {start}–{end} 条，共 {total} 条',
     requestParameters: '参数',
     originalInput: '原始输入',

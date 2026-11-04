@@ -103,7 +103,7 @@ MCP 将同一对象作为 `ingest` 的 `arguments`。AI产出与其他资料共�
 | 故障详情与材料清单 | `GET /diagnostics/ingest-failures/:id` | `get_ingest_failure` |
 | 读取材料 | `GET /diagnostics/ingest-failures/:id/materials/:material_id` | `read_ingest_failure_material` |
 
-列表参数：`page` 默认 1，`page_size` 默认 20、最大 100；`from`、`to` 使用 RFC3339 时间；可按 `api_key_id`、`library_id`、`error_code`、`request_id`、`id` 筛选。不限定库时也能找到尚未解析出目标库的故障。HTTP 返回 `success/data`，列表的 `data` 为 `{items,total,page,page_size}`。MCP 按已有 `structuredContent` 和 `isError` 规则返回。
+列表参数：`page` 默认 1，`page_size` 默认 20、最大 100；`from`、`to` 使用 RFC3339 时间；可按 `api_key_id`、`library_id`、`error_code`、`request_id`、`id` 筛选。`resolved=false` 只查未解决记录，`resolved=true` 只查已解决记录，省略时包含全部历史记录。成功关联修复提交，或同库同来源在故障后有成功收录日志时，记录标为已解决；后台 AI 处理状态独立显示。不限定库时也能找到尚未解析出目标库的故障。HTTP 返回 `success/data`，列表的 `data` 为 `{items,total,page,page_size}`。MCP 按已有 `structuredContent` 和 `isError` 规则返回。
 
 详情包括执行阶段、错误、结果判断、关联请求/资料、非敏感执行条件、材料清单和过期时间。包状态为 `available`（输入与已知条件可用）、`partial`（查看 `missing`）、`unavailable`、`expired`。`available` 不承诺外部服务和模型输出可逐字复现。`outcome=rolled_back` 表示已知回滚；`unknown` 表示应先核对资料与任务，不能盲目重试。
 

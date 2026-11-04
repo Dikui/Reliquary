@@ -419,6 +419,10 @@ export default {
     day6: 'Saturday'
   },
   ingestDiagnostics: {
+    resolution: 'Resolution',
+    unresolved: 'Unresolved',
+    resolved: 'Resolved',
+    noUnresolved: 'No unresolved ingest failures.',
     rangeCount: '{start}–{end} of {total}',
     requestParameters: 'Parameters',
     originalInput: 'Original input',

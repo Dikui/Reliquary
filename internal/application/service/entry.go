@@ -64,8 +64,6 @@ type entryService struct {
 // ingestion interface or requiring unrelated callers to implement new methods.
 func (s *entryService) SetVault(v *VaultService) { s.vault = v }
 
-func (s *entryService) SetIngestDiagnostics(d *diagnostics.Service) { s.diagnostics = d }
-
 const (
 	manualContentMaxLength = types.MaxIngestContentRunes
 	manualFileExtension    = ".md"

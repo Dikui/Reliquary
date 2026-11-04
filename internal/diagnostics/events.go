@@ -41,6 +41,10 @@ func (s *Service) eventsLocked(ctx context.Context) (map[string]types.IngestFail
 			f.Missing = []string{"diagnostic package was not saved or is no longer retained"}
 			f.Materials = []types.FailureMaterial{}
 			f.Config = nil
+			if previous := rows[f.ID]; f.RecoveryEntryID == "" {
+				f.RecoveryEntryID = previous.RecoveryEntryID
+				f.RecoveryRequestID = previous.RecoveryRequestID
+			}
 			rows[f.ID] = f
 		}
 		err = errors.Join(scanner.Err(), file.Close())

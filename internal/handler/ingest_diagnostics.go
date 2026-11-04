@@ -42,6 +42,14 @@ func diagnosticError(c *gin.Context, err error) {
 func (h *IngestDiagnosticsHandler) List(c *gin.Context) {
 	c.Header("Cache-Control", "private, no-store")
 	q := types.FailureQuery{APIKeyID: c.Query("api_key_id"), LibraryID: c.Query("library_id"), ErrorCode: c.Query("error_code"), RequestID: c.Query("request_id"), ID: c.Query("id")}
+	if raw, present := c.GetQuery("resolved"); present {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			c.Error(apperrors.NewBadRequestError("resolved must be a boolean"))
+			return
+		}
+		q.Resolved = &value
+	}
 	for name, dest := range map[string]*int{"page": &q.Page, "page_size": &q.PageSize} {
 		if raw := c.Query(name); raw != "" {
 			n, e := strconv.Atoi(raw)

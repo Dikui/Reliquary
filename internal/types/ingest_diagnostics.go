@@ -56,6 +56,7 @@ type IngestFailure struct {
 	RecoveryEntryID   string            `json:"recovery_entry_id,omitempty"`
 	RecoveryRequestID string            `json:"recovery_request_id,omitempty"`
 	RecoveryFailureID string            `json:"recovery_failure_id,omitempty"`
+	Resolved          bool              `json:"resolved"`
 }
 
 type FailureQuery struct {
@@ -68,6 +69,7 @@ type FailureQuery struct {
 	ErrorCode string     `json:"error_code,omitempty"`
 	RequestID string     `json:"request_id,omitempty"`
 	ID        string     `json:"id,omitempty"`
+	Resolved  *bool      `json:"resolved,omitempty"`
 }
 
 type FailurePage struct {

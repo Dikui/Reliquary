@@ -34,6 +34,7 @@ test('failure inspection keeps URL paging and reads segmented text and authentic
   URL.createObjectURL = () => 'blob:failure'; URL.revokeObjectURL = value => released.push(value)
   try {
     await settle(); assert.match(visibleText(env.root), /Database offline/)
+    assert.equal(env.calls.find(c => c[0] === 'list')[1].resolved, false)
     await click(env.button('Next'));  await settle()
     assert.equal(env.route.query.page, '2'); assert.equal(env.calls.filter(c => c[0] === 'list').at(-1)[1].page, 2)
     await click(env.button('View details')); assert.equal(env.route.query.failure, 'f1')
@@ -80,7 +81,7 @@ test('failure filters retain every existing API field, validate exclusive dates 
     descendants(env.root).filter(n => n.tag === 'input').forEach((node, i) => node.props.onInput({ target: { value: values[i] } }))
     await settle(); descendants(env.root).find(n => n.tag === 'form')!.props.onSubmit({ preventDefault() {} }); await settle()
     assert.equal(env.route.query.page, undefined)
-    assert.deepEqual(env.calls.filter(c => c[0] === 'list').at(-1)[1], { page: 1, page_size: 20, from: new Date('2026-10-01T00:00:00').toISOString(), to: new Date('2026-10-29T00:00:00').toISOString(), api_key_id: 'key-id', library_id: 'library-id', error_code: 'image_error', request_id: 'request-filter', id: 'failure-filter' })
+    assert.deepEqual(env.calls.filter(c => c[0] === 'list').at(-1)[1], { page: 1, page_size: 20, resolved: false, from: new Date('2026-10-01T00:00:00').toISOString(), to: new Date('2026-10-29T00:00:00').toISOString(), api_key_id: 'key-id', library_id: 'library-id', error_code: 'image_error', request_id: 'request-filter', id: 'failure-filter' })
     const before = env.calls.length
     descendants(env.root).find(n => n.tag === 'input')!.props.onInput({ target: { value: '2026-10-30' } }); await settle()
     descendants(env.root).find(n => n.tag === 'form')!.props.onSubmit({ preventDefault() {} }); await settle()
@@ -88,6 +89,14 @@ test('failure filters retain every existing API field, validate exclusive dates 
     assert.equal(env.calls.length, before)
     await click(env.button('Reset filters'))
     assert.deepEqual(env.route.query, {})
+    const resolution = descendants(env.root).find(n => n.tag === 'select')!
+    resolution.props.onChange({ target: { value: 'all' } }); await settle()
+    descendants(env.root).find(n => n.tag === 'form')!.props.onSubmit({ preventDefault() {} }); await settle()
+    assert.equal(env.route.query.resolution, 'all')
+    assert.equal(env.calls.filter(c => c[0] === 'list').at(-1)[1].resolved, undefined)
+    resolution.props.onChange({ target: { value: 'resolved' } }); await settle()
+    descendants(env.root).find(n => n.tag === 'form')!.props.onSubmit({ preventDefault() {} }); await settle()
+    assert.equal(env.calls.filter(c => c[0] === 'list').at(-1)[1].resolved, true)
     assert.deepEqual(env.errors, [])
   } finally { env.app.unmount() }
 })

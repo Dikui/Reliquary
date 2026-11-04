@@ -14,7 +14,7 @@ const pageSize = 20
 const libraries = ref<LibraryCatalogItem[]>([])
 const focused = ref(''), materialTab = ref('parameters')
 const failedEntries = ref<InstanceType<typeof FailedProcessingEntries>>()
-const emptyFilters = () => ({ from: '', to: '', api_key_id: '', library_id: '', error_code: '', request_id: '', id: '' })
+const emptyFilters = () => ({ from: '', to: '', api_key_id: '', library_id: '', error_code: '', request_id: '', id: '', resolution: 'unresolved' })
 const filters = ref(emptyFilters()), applied = ref(emptyFilters()), page = ref(1)
 const items = ref<IngestFailure[]>([]), total = ref(0), loading = ref(false), error = ref('')
 const detail = ref<IngestFailure | null>(null), detailLoading = ref(false), detailError = ref('')
@@ -30,14 +30,14 @@ const fields = computed(() => [
   { key: 'request_id' as const, label: t('ingestDiagnostics.requestId') },
   { key: 'id' as const, label: t('ingestDiagnostics.failureId') },
 ])
-const hasFilters = computed(() => Object.values(applied.value).some(Boolean))
+const hasFilters = computed(() => Object.entries(applied.value).some(([key, value]) => value !== emptyFilters()[key as keyof ReturnType<typeof emptyFilters>]))
 const statuses = computed<Record<string, string>>(() => ({ available: t('ingestDiagnostics.available'), partial: t('ingestDiagnostics.partial'), unavailable: t('ingestDiagnostics.unavailable'), expired: t('ingestDiagnostics.expired') }))
 const outcomes = computed<Record<string, string>>(() => ({ rolled_back: t('ingestDiagnostics.rolledBack'), unknown: t('ingestDiagnostics.unknown') }))
 const timestamp = (value: string) => new Date(value).toLocaleString(locale.value, { timeZoneName: 'short' })
 const namedID = (name?: string, id?: string) => name && id ? `${name} (${id})` : name || id || '—'
 const entryURL = entryDetailHref
 const shortID = (id: string) => id.length > 12 ? `${id.slice(0, 8)}…` : id
-const columns = computed(() => ['createdAt', 'requestId', 'library', 'stage', 'reason', 'outcome', 'retryable', 'packageStatus', 'view'].map(key => ({ key, label: t(`ingestDiagnostics.${key}`) })))
+const columns = computed(() => ['createdAt', 'requestId', 'library', 'stage', 'reason', 'resolution', 'outcome', 'retryable', 'packageStatus', 'view'].map(key => ({ key, label: t(`ingestDiagnostics.${key}`) })))
 const materialGroups = computed(() => {
   const materials = detail.value?.materials || []
   return { parameters: materials.filter(m => m.source === 'request' || m.name === 'input.json'), input: materials.filter(m => m.source !== 'request' && m.name !== 'input.json' && m.source !== 'model_call' && m.source !== 'log'), logs: materials.filter(m => m.source === 'model_call' || m.source === 'log') }
@@ -70,7 +70,9 @@ async function load() {
   loading.value = true; error.value = ''
   try {
     const query: FailureQuery = { page: page.value, page_size: pageSize }
+    if (applied.value.resolution !== 'all') query.resolved = applied.value.resolution === 'resolved'
     for (const key of Object.keys(applied.value) as (keyof ReturnType<typeof emptyFilters>)[]) {
+      if (key === 'resolution') continue
       const value = applied.value[key]
       if (value) query[key] = key === 'from' || key === 'to' ? new Date(`${value}T00:00:00`).toISOString() : value
     }
@@ -126,7 +128,7 @@ function apply(reset = false) {
   const query = { ...route.query }
   for (const key of Object.keys(emptyFilters())) delete query[key]
   delete query.page; delete query.failure
-  for (const [key, value] of Object.entries(filters.value)) if (value.trim()) query[key] = value.trim()
+  for (const [key, value] of Object.entries(filters.value)) if (value.trim() && value !== emptyFilters()[key as keyof ReturnType<typeof emptyFilters>]) query[key] = value.trim()
   if (JSON.stringify(query) === JSON.stringify(route.query)) { applied.value = { ...filters.value }; void load() }
   else void router.replace({ query })
 }
@@ -135,6 +137,7 @@ function selectFailure(id?: string) { void router.push({ query: { ...route.query
 watch(() => route.query, () => {
   const next = emptyFilters()
   for (const key of Object.keys(next) as (keyof typeof next)[]) if (typeof route.query[key] === 'string') next[key] = route.query[key] as string
+  if (!['unresolved', 'resolved', 'all'].includes(next.resolution)) next.resolution = 'unresolved'
   const valuePage = Number(route.query.page), nextPage = Number.isInteger(valuePage) && valuePage > 0 ? valuePage : 1
   const changed = JSON.stringify(next) !== JSON.stringify(applied.value) || nextPage !== page.value
   filters.value = { ...next }; applied.value = next; page.value = nextPage
@@ -155,6 +158,11 @@ onUnmounted(() => { disposed = true; listVersion++; detailVersion++; releaseMate
       <header class="diagnostics-heading"><h1>{{ t('ingestDiagnostics.title') }}</h1><Button :loading="loading" @click="load(); failedEntries?.refresh()">{{ t('ingestDiagnostics.refresh') }}</Button></header>
       <p class="diagnostics-muted">{{ t('ingestDiagnostics.description') }} {{ t('ingestDiagnostics.retention') }}</p>
       <form novalidate class="diagnostics-filters" :aria-label="t('ingestDiagnostics.parameters')" @submit.prevent="apply()">
+        <Field :label="t('ingestDiagnostics.resolution')"><Select v-model="filters.resolution">
+          <option value="unresolved">{{ t('ingestDiagnostics.unresolved') }}</option>
+          <option value="resolved">{{ t('ingestDiagnostics.resolved') }}</option>
+          <option value="all">{{ t('common.all') }}</option>
+        </Select></Field>
         <Field :label="t('ingestDiagnostics.from')"><Input v-model="filters.from" type="date" /></Field>
         <Field :label="t('ingestDiagnostics.to')"><Input v-model="filters.to" type="date" /></Field>
         <Field v-for="field in fields" :key="field.key" :label="field.label">
@@ -172,6 +180,7 @@ onUnmounted(() => { disposed = true; listVersion++; detailVersion++; releaseMate
         <p v-if="loading && !items.length" role="status">{{ t('common.loading') }}</p>
         <DataTable v-if="items.length" class="failure-table" :rows="items" :columns="columns" :label="t('ingestDiagnostics.title')" v-model:focused="focused" @activate="selectFailure($event.id)">
           <template #cell-createdAt="{ row }"><time class="diagnostics-mono diagnostics-nowrap" :datetime="row.created_at">{{ timestamp(row.created_at) }}</time></template>
+          <template #cell-resolution="{ row }"><Tag :variant="row.resolved ? 'success' : 'plain'">{{ t(row.resolved ? 'ingestDiagnostics.resolved' : 'ingestDiagnostics.unresolved') }}</Tag></template>
           <template #cell-requestId="{ row }"><span class="diagnostics-mono" :title="row.request_id">{{ shortID(row.request_id) }}</span></template>
           <template #cell-library="{ row }"><span class="diagnostics-library" :title="row.library_id"><LibMark v-if="libraryColor(row)" :color="libraryColor(row)!" />{{ libraryName(row) }}</span></template>
           <template #cell-stage="{ row }"><strong :title="row.error_code">{{ row.stage }}</strong></template>
@@ -181,7 +190,7 @@ onUnmounted(() => { disposed = true; listVersion++; detailVersion++; releaseMate
           <template #cell-packageStatus="{ row }">{{ statuses[packageStatus(row)] || row.package_status }}</template>
           <template #cell-view="{ row }"><Button variant="ghost" @click="selectFailure(row.id)">{{ t('ingestDiagnostics.view') }}</Button></template>
         </DataTable>
-        <EmptyState v-else-if="!loading && !error" :title="hasFilters ? t('ingestDiagnostics.noResults') : t('ingestDiagnostics.empty')" />
+        <EmptyState v-else-if="!loading && !error" :title="t(hasFilters ? 'ingestDiagnostics.noResults' : 'ingestDiagnostics.noUnresolved')" />
         <nav v-if="total > 0" class="diagnostics-pagination" :aria-label="t('entries.pagination')"><span>{{ t('ingestDiagnostics.rangeCount', { start: (page - 1) * pageSize + 1, end: Math.min(page * pageSize, total), total }) }}</span><Button :disabled="page <= 1 || loading" @click="changePage(page - 1)">{{ t('entries.previous') }}</Button><Button :disabled="page * pageSize >= total || loading" @click="changePage(page + 1)">{{ t('entries.next') }}</Button></nav>
       </section>
       <FailedProcessingEntries ref="failedEntries" :libraries="libraries" :library-id="applied.library_id" />

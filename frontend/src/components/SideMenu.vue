@@ -72,7 +72,7 @@ async function refreshCatalog(current: number) {
 async function refreshFailures(current: number) {
   failureCount.value = null
   try {
-    const response = await listIngestFailures({ page: 1, page_size: 1 })
+    const response = await listIngestFailures({ page: 1, page_size: 1, resolved: false })
     if (current === request && response.success && validCount(response.data?.total)) failureCount.value = response.data.total
   } catch { /* An unavailable count stays hidden. */ }
 }

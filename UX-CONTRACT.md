@@ -147,6 +147,8 @@ Personal documents arrive through ingest with kind=mine. Pending intake and miss
 
 ## Ingest failure diagnostics
 
+The sidebar count and default failure list include unresolved ingest failures only. The resolution filter preserves access to resolved and all historical records and is stored in the URL. A successful linked recovery or a later committed ingest for the same library and exact source resolves a failure; existing entries and unrelated edits do not. Background processing failures remain in their independent section.
+
 Source: .scratch/agent-operations-diagnostics/spec.md (local only) and internal/types/ingest_diagnostics.go. The read-only /platform/diagnostics page lists technical ingest failures, with URL-backed committed filters and pagination. Selecting a failure preserves the list query in the URL. List, detail and material requests ignore stale responses and teardown. Refresh failures retain the current readable list. Filters use explicit apply; clear immediately applies the new filter. TDesign owns date entry and localization.
 
 Details distinguish unknown outcomes, partial inputs, unavailable materials and expiry. Raw text is escaped and read in server-defined Unicode segments. Image reads use the authenticated request owner, never a public file path; Blob URLs are released when replaced or unmounted. Reading does not replay, modify or delete content. Recovery entry/request associations are links, not claims of completed repair. Existing failed processing, timeline, model calls, queues, operation log, vault and evaluation owners remain accessible. The default retention hint is 7 days / 512 MiB and explains capacity eviction. Visual intent and token ownership are documented in DESIGN.md.

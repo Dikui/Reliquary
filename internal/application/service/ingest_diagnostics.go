@@ -15,6 +15,45 @@ import (
 	"reliquary/internal/types"
 )
 
+func (s *entryService) SetIngestDiagnostics(d *diagnostics.Service) {
+	s.diagnostics = d
+	if d != nil {
+		d.SetRecoveryLookup(s.lookupIngestRecovery)
+	}
+}
+
+func (s *entryService) lookupIngestRecovery(ctx context.Context, failure *types.IngestFailure, input []byte) (string, error) {
+	var request types.IngestRequest
+	if failure.LibraryID == "" || json.Unmarshal(input, &request) != nil {
+		return "", nil
+	}
+	if validateLibraryIngest(&request, nil) != nil {
+		return "", nil
+	}
+	entry, err := s.findExactIngestSource(ctx, &types.Entry{
+		SpaceID: failure.SpaceID, LibraryID: failure.LibraryID,
+		SourceRef: request.SourceRef, Identifier: request.Identifier,
+		NormalizedURL: normalizeMessageURL(request.URL),
+	})
+	var conflict *apperrors.AppError
+	if errors.As(err, &conflict) && conflict.HTTPCode == http.StatusConflict {
+		return "", nil
+	}
+	if err != nil || entry == nil {
+		return "", err
+	}
+	// Only a committed ingest after the failure proves recovery. Background
+	// processing or an unrelated edit must not clear a failed submission.
+	var recovered bool
+	err = s.db.WithContext(ctx).Model(&types.OperationLog{}).Select("count(*) > 0").
+		Where("space_id = ? AND object_id = ? AND operation_type = ? AND created_at > ?",
+			failure.SpaceID, entry.ID, "ingest", failure.CreatedAt).Scan(&recovered).Error
+	if err != nil || !recovered {
+		return "", err
+	}
+	return entry.ID, nil
+}
+
 func technicalIngestError(err error) bool {
 	if err == nil {
 		return false

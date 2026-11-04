@@ -28,14 +28,15 @@ var ErrNotFound = errors.New("diagnostic material not found")
 var ErrExpired = errors.New("diagnostic material expired")
 
 type Service struct {
-	root      string
-	retention time.Duration
-	maxBytes  int64
-	mu        sync.Mutex
-	version   string
-	active    map[string]*Attempt
-	now       func() time.Time
-	events    *lumberjack.Logger
+	root           string
+	retention      time.Duration
+	maxBytes       int64
+	mu             sync.Mutex
+	version        string
+	active         map[string]*Attempt
+	now            func() time.Time
+	events         *lumberjack.Logger
+	recoveryLookup func(context.Context, *types.IngestFailure, []byte) (string, error)
 }
 
 func New(root string, retention time.Duration, maxBytes int64) (*Service, error) {
@@ -152,6 +153,7 @@ func (s *Service) loadLocked(ctx context.Context, id string) (*types.IngestFailu
 }
 
 func (s *Service) viewLocked(f *types.IngestFailure) *types.IngestFailure {
+	f.Resolved = f.RecoveryEntryID != ""
 	if f.PackageStatus == "available" || f.PackageStatus == "partial" {
 		for _, m := range f.Materials {
 			info, err := os.Stat(filepath.Join(s.failureDir(f.ID), m.ID))
@@ -184,6 +186,15 @@ func (s *Service) getLocked(ctx context.Context, id string) (*types.IngestFailur
 
 func (s *Service) Get(ctx context.Context, id string) (*types.IngestFailure, error) {
 	s.mu.Lock()
+	f, err := s.loadLocked(ctx, id)
+	s.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	if err := s.resolveRecovery(ctx, f); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.getLocked(ctx, id)
 }
@@ -199,15 +210,24 @@ func (s *Service) List(ctx context.Context, q types.FailureQuery) (*types.Failur
 		return nil, fmt.Errorf("invalid diagnostic pagination or time range")
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	failures, err := s.failuresLocked(ctx)
+	s.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
 	rows := []types.IngestFailure{}
 	for _, stored := range failures {
-		f := s.viewLocked(&stored)
+		f := &stored
 		if q.ID != "" && q.ID != f.ID || q.RequestID != "" && q.RequestID != f.RequestID || q.APIKeyID != "" && q.APIKeyID != f.APIKeyID || q.LibraryID != "" && q.LibraryID != f.LibraryID || q.ErrorCode != "" && q.ErrorCode != f.ErrorCode || q.From != nil && f.CreatedAt.Before(*q.From) || q.To != nil && f.CreatedAt.After(*q.To) {
+			continue
+		}
+		if err := s.resolveRecovery(ctx, f); err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		f = s.viewLocked(f)
+		s.mu.Unlock()
+		if q.Resolved != nil && f.Resolved != *q.Resolved {
 			continue
 		}
 		f.Materials = nil
@@ -305,16 +325,21 @@ func (s *Service) ReadText(ctx context.Context, id, materialID string, offset, l
 func (s *Service) LinkRecovery(ctx context.Context, id, entryID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	f, err := s.loadLocked(ctx, id)
-	if err != nil {
-		return err
+	seen := map[string]bool{}
+	for id != "" && !seen[id] {
+		seen[id] = true
+		f, err := s.loadLocked(ctx, id)
+		if err != nil {
+			return err
+		}
+		f.RecoveryEntryID = entryID
+		f.RecoveryRequestID, _ = ctx.Value(types.RequestIDContextKey).(string)
+		if err := s.saveRecoveryLocked(f); err != nil {
+			return err
+		}
+		id = f.RecoveryFailureID
 	}
-	f.RecoveryEntryID = entryID
-	f.RecoveryRequestID, _ = ctx.Value(types.RequestIDContextKey).(string)
-	if err := os.MkdirAll(s.failureDir(id), 0700); err != nil {
-		return err
-	}
-	return atomicJSON(filepath.Join(s.failureDir(id), "manifest.json"), f)
+	return nil
 }
 
 func (s *Service) RemoveFailureMaterials(ctx context.Context, id string) error {

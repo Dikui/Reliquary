@@ -49,6 +49,14 @@ func TestFailurePackageLifecycle(t *testing.T) {
 	_, _, err = s.Read(ctx, f.ID, "../manifest.json")
 	require.ErrorIs(t, err, ErrNotFound)
 	require.NoError(t, s.LinkRecovery(ctx, f.ID, "recovered-entry"))
+	unresolved := false
+	page, err := s.List(ctx, types.FailureQuery{Resolved: &unresolved})
+	require.NoError(t, err)
+	require.Zero(t, page.Total)
+	page, err = s.List(ctx, types.FailureQuery{})
+	require.NoError(t, err)
+	require.Equal(t, 1, page.Total)
+	require.True(t, page.Items[0].Resolved)
 	_, data, err = s.Read(ctx, f.ID, f.Materials[0].ID)
 	require.NoError(t, err)
 	require.Equal(t, input, data, "recovery cannot edit the original snapshot")
@@ -78,6 +86,33 @@ func TestFailurePackageLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(log), "甲乙丙丁")
 	require.NotContains(t, string(log), "secret-credential")
+}
+
+func TestRecoveryLookupDoesNotBlockRetention(t *testing.T) {
+	s, err := New(t.TempDir(), DefaultRetention, DefaultMaxBytes)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.events.Close() })
+	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
+	_, attempt := s.Begin(ctx, []byte(`{"content":"fixture"}`), 0, "official", "")
+	attempt.Record(errors.New("write failed"), "ingest_failed", false, "")
+	started, release := make(chan struct{}), make(chan struct{})
+	s.SetRecoveryLookup(func(context.Context, *types.IngestFailure, []byte) (string, error) {
+		close(started)
+		<-release
+		return "", nil
+	})
+	done := make(chan error, 1)
+	go func() { _, err := s.List(ctx, types.FailureQuery{}); done <- err }()
+	defer func() { close(release); require.NoError(t, <-done) }()
+	<-started
+	pruned := make(chan error, 1)
+	go func() { pruned <- s.Prune() }()
+	select {
+	case err := <-pruned:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("database lookup blocked diagnostic retention")
+	}
 }
 
 func TestFailurePackageCapacityAndWriteFailure(t *testing.T) {

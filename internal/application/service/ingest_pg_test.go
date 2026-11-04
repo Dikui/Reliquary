@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -48,6 +49,58 @@ func newIngestHarness(t *testing.T) (*articleProcessingHarness, *VaultService) {
 	require.NoError(t, h.db.Create(&types.APIKey{ID: 1, SpaceID: &space, Name: "Fixture collector", KeyHash: "fixture-ingest-key"}).Error)
 	h.ctx = types.WithPrincipal(h.ctx, types.Principal{Type: types.PrincipalAPIKey, ID: "1"})
 	return h, vault
+}
+
+func TestIngestFailureResolutionUsesLaterCommittedSource(t *testing.T) {
+	h, _ := newIngestHarness(t)
+	diag, err := diagnostics.New(t.TempDir(), diagnostics.DefaultRetention, diagnostics.DefaultMaxBytes)
+	require.NoError(t, err)
+	closeDiagnostics := diag.Start(context.Background())
+	t.Cleanup(func() { require.NoError(t, closeDiagnostics()) })
+	h.service.SetIngestDiagnostics(diag)
+	request := types.IngestRequest{Library: h.library.ID, SourceRef: "recovered-source", Content: "Original measurement."}
+	first, err := h.service.Ingest(h.ctx, &request)
+	require.NoError(t, err)
+	request.Content = "Updated measurement after the failed submission."
+	input, err := json.Marshal(request)
+	require.NoError(t, err)
+	for i := 0; i < 2; i++ {
+		ctx, attempt := diag.Begin(h.ctx, input, i, request.Library, "")
+		diagnostics.SetLibrary(ctx, h.library)
+		require.True(t, attempt.Record(errors.New("storage failed"), "ingest_failed", false, "rolled_back").Recorded)
+	}
+	unresolved := false
+	page, err := diag.List(h.ctx, types.FailureQuery{Resolved: &unresolved})
+	require.NoError(t, err)
+	require.Equal(t, 2, page.Total, "an entry saved before the failures does not resolve them")
+
+	unrelated := request
+	unrelated.SourceRef = "another-source"
+	_, err = h.service.Ingest(h.ctx, &unrelated)
+	require.NoError(t, err)
+	page, err = diag.List(h.ctx, types.FailureQuery{Resolved: &unresolved})
+	require.NoError(t, err)
+	require.Equal(t, 2, page.Total)
+
+	recovered, err := h.service.Ingest(h.ctx, &request)
+	require.NoError(t, err)
+	require.Equal(t, first.EntryID, recovered.EntryID)
+	page, err = diag.List(h.ctx, types.FailureQuery{Resolved: &unresolved})
+	require.NoError(t, err)
+	require.Zero(t, page.Total)
+	resolved := true
+	page, err = diag.List(h.ctx, types.FailureQuery{Resolved: &resolved})
+	require.NoError(t, err)
+	require.Equal(t, 2, page.Total)
+	for _, failure := range page.Items {
+		require.True(t, failure.Resolved)
+		require.Equal(t, recovered.EntryID, failure.RecoveryEntryID)
+	}
+	// Resolution survives the lookup becoming unavailable after reconciliation.
+	diag.SetRecoveryLookup(nil)
+	page, err = diag.List(h.ctx, types.FailureQuery{Resolved: &resolved})
+	require.NoError(t, err)
+	require.Equal(t, 2, page.Total)
 }
 
 func TestIngestRequiredFieldsAndStructuredValidation(t *testing.T) {
