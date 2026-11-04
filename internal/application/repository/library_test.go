@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS libraries (
     embedding_model_id VARCHAR(64) NOT NULL,
     summary_model_id VARCHAR(64) NOT NULL,
     model_tiers JSONB NOT NULL DEFAULT '{}',
+    prompt_overrides JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(prompt_overrides) = 'object'),
     indexing_strategy JSONB,
     creator_id VARCHAR(36),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,

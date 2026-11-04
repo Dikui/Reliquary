@@ -28,6 +28,10 @@ Issues 和 specs 使用本地 Markdown，存放于 `.scratch/<feature-slug>/`。
 - 清库、删除数据卷、覆盖存储或大规模不可逆改写前，先明确是否需要保留操作前的恢复能力；需要时单独备份并确认校验通过。普通业务读写和数据库迁移本身不触发强制备份。
 - 定时备份按独立月度计划执行，不与每次部署绑定；跳过部署前备份不应关闭或修改定时备份和恢复演练计划。无本次备份时，不得声称能恢复到本次操作前的最新状态。
 
+### Testing
+
+开发中只运行受影响的测试，按 `/local-test` 做：后端 `make test-pkg PKG="<包> ..." [RUN='<用例正则>']`，前端 `cd frontend && npm test -- <测试文件>`。需要 PostgreSQL 或 Redis 的用例先设置 `docs/development.md` 中的 `RELIQUARY_TEST_PG_DSN`、`RELIQUARY_TEST_REDIS_ADDR`（本机容器 `reliquary-test-pg`、`reliquary-test-redis`）。开发中不加 `-count=1`，改过的包不会命中缓存。全量测试（`make test-pg` 连本机测试库，约 6 分钟，加前端检查）由 `.githooks/pre-push` 在版本号（`VERSION`）前两位变化时运行。
+
 ### Commit rules
 
 禁止 `--no-verify`、`git add -A` / `git add .` 和强推。

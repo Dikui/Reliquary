@@ -8,6 +8,7 @@ help:
 	@echo "  build             构建应用"
 	@echo "  run               运行应用"
 	@echo "  test              运行测试"
+	@echo "  test-pkg          只运行指定包的测试（PKG=./internal/x，可加 RUN=用例正则）"
 	@echo "  test-integration  运行 PostgreSQL、Redis 与 Neo4j 集成测试"
 	@echo "  test-pg           运行含 PostgreSQL 集成用例的测试（设置 RELIQUARY_TEST_PG_DSN）"
 	@echo "  clean             清理构建文件"
@@ -87,6 +88,12 @@ run: build
 # Run tests
 test:
 	go test -p 1 -v ./...
+
+# Run only the given packages while developing, e.g. make test-pkg PKG="./internal/router ./internal/mcpserver" RUN='MCP|Ingest'
+.PHONY: test-pkg
+test-pkg:
+	@test -n "$(PKG)" || (echo "Set PKG, e.g. make test-pkg PKG=./internal/router"; exit 1)
+	go test -p 1 $(if $(RUN),-run '$(RUN)') $(PKG)
 
 .PHONY: test-pg
 export RELIQUARY_TEST_PG_DSN RELIQUARY_TEST_REDIS_ADDR RELIQUARY_TEST_NEO4J_URI RELIQUARY_TEST_NEO4J_USERNAME RELIQUARY_TEST_NEO4J_PASSWORD RELIQUARY_TEST_NEO4J_CONTAINER
