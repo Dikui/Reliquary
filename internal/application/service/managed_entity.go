@@ -388,7 +388,7 @@ func (s *EntityService) DeleteManagedEntity(ctx context.Context, id string, revi
 		}
 		var referenced bool
 		if err := tx.Raw(`SELECT
-			EXISTS (SELECT 1 FROM entry_entities WHERE entity_id=?) OR
+			EXISTS (SELECT 1 FROM entry_entities WHERE entity_id=? AND excluded=false) OR
 			EXISTS (SELECT 1 FROM relations WHERE subject_id=? OR object_id=?) OR
 			EXISTS (SELECT 1 FROM relation_suppressions WHERE subject_id=? OR object_id=?) OR
 			EXISTS (SELECT 1 FROM entity_reorganizations WHERE source_id=? OR target_id=?) OR
@@ -397,7 +397,7 @@ func (s *EntityService) DeleteManagedEntity(ctx context.Context, id string, revi
 			return err
 		}
 		if referenced {
-			return apperrors.NewConflictError("only products without documents, relationships or reorganization history can be deleted")
+			return apperrors.NewConflictError("only products without documents, relationships or reorganization history can be deleted; exclude document links or archive the product first")
 		}
 		referenced, err := managedValueReferenced(tx, spaceID, id, id)
 		if err != nil {
@@ -408,6 +408,15 @@ func (s *EntityService) DeleteManagedEntity(ctx context.Context, id string, revi
 		}
 		if err := graph.Lock(tx, spaceID); err != nil {
 			return err
+		}
+		var excludedLinks []types.EntryEntity
+		if err := tx.Where("entity_id=? AND space_id=? AND excluded=true", id, spaceID).Order("entry_id").Find(&excludedLinks).Error; err != nil {
+			return err
+		}
+		if len(excludedLinks) > 0 {
+			if err := tx.Where("entity_id=? AND space_id=? AND excluded=true", id, spaceID).Delete(&types.EntryEntity{}).Error; err != nil {
+				return err
+			}
 		}
 		if err := tx.Where("entity_id=? AND space_id=?", id, spaceID).Delete(&types.EntityAttributeVersion{}).Error; err != nil {
 			return err
@@ -421,7 +430,13 @@ func (s *EntityService) DeleteManagedEntity(ctx context.Context, id string, revi
 		if err := tx.Delete(&entity).Error; err != nil {
 			return err
 		}
-		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "delete_entity", id, entity, nil); err != nil {
+		// Avoid promoting Entity.MarshalJSON, which would omit the excluded links.
+		type entityValue types.Entity
+		before := struct {
+			entityValue
+			ExcludedLinks []types.EntryEntity `json:"excluded_links,omitempty"`
+		}{entityValue: entityValue(entity), ExcludedLinks: excludedLinks}
+		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "delete_entity", id, before, nil); err != nil {
 			return err
 		}
 		now := time.Now()

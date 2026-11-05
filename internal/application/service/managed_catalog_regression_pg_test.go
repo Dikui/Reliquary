@@ -78,6 +78,8 @@ func TestManagedEntityDeletionAndArchivedNameReuse(t *testing.T) {
 	db, ctx, svc := managedHistoryFixture(t)
 	entity, err := svc.CreateManagedEntity(ctx, "entity-library", types.ManagedEntityInput{Name: "Reusable product", Kind: "product"})
 	require.NoError(t, err)
+	entry := entityArticle(t, db, "referenced-product")
+	require.NoError(t, svc.SetEntryEntityLink(ctx, entry.ID, entity.ID, false))
 	archived := true
 	entity, err = svc.UpdateManagedEntity(ctx, entity.ID, types.ManagedEntityPatch{Revision: entity.Revision, Archived: &archived})
 	require.NoError(t, err)
@@ -86,8 +88,6 @@ func TestManagedEntityDeletionAndArchivedNameReuse(t *testing.T) {
 	archived = false
 	_, err = svc.UpdateManagedEntity(ctx, entity.ID, types.ManagedEntityPatch{Revision: entity.Revision, Archived: &archived})
 	require.Error(t, err)
-	entry := entityArticle(t, db, "referenced-product")
-	require.NoError(t, svc.SetEntryEntityLink(ctx, entry.ID, entity.ID, true))
 	require.ErrorContains(t, svc.DeleteManagedEntity(ctx, entity.ID, entity.Revision), "without documents")
 	require.NoError(t, svc.DeleteManagedEntity(ctx, replacement.ID, replacement.Revision))
 	var count int64
