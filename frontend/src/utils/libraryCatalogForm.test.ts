@@ -60,3 +60,22 @@ test('cleared inactive parent sizes produce numeric defaults without mutating th
   assert.equal(body.chunking_config?.token_limit, 0)
   assert.equal(draft.chunking_config.parent_chunk_size, '')
 })
+
+// MEL-06 (small regression): only edited catalog configuration requests exclusive locking.
+test('catalog patches include each changed field and omit changes reverted to the loaded baseline', () => {
+  const baseline = { name: 'Products', content_types: [], entity_mode: 'managed', entity_schema: { kinds: [{ key: 'model', name: 'Model' }], fields: [] }, relation_types: [{ name: 'related', enabled: true, position: 0 }] } as unknown as LibraryCatalogItem
+  const changedValues = {
+    entity_mode: 'extracted',
+    entity_schema: { ...baseline.entity_schema, fields: [{ key: 'size', name: 'Size', type: 'number' }] },
+    relation_types: [],
+  }
+  for (const key of ['entity_mode', 'entity_schema', 'relation_types'] as const) {
+    const draft = structuredClone(baseline)
+    Object.assign(draft, { [key]: changedValues[key] })
+    const payload = librarySettingsPayload(draft, baseline)
+    assert.deepEqual(payload[key], changedValues[key], key)
+    for (const other of ['entity_mode', 'entity_schema', 'relation_types'] as const) if (other !== key) assert.equal(other in payload, false, other)
+    Object.assign(draft, { [key]: structuredClone(baseline[key]) })
+    assert.equal(key in librarySettingsPayload(draft, baseline), false, `reverted ${key}`)
+  }
+})
