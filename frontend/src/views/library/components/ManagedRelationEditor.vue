@@ -6,11 +6,13 @@ import { listEntities, type Entity } from '@/api/entities'
 import { createManagedRelation, updateManagedRelation, type EntityRelation } from '@/api/relations'
 import ManagedAttributes from './ManagedAttributes.vue'
 import type { LibraryCatalogItem } from '@/api/library'
+import { localDateTimeISO } from '@/utils/dateTime'
 const props = defineProps<{ library: LibraryCatalogItem; entity: Entity; relation?: EntityRelation }>()
 const emit = defineEmits<{ saved: [] }>()
 const { t } = useI18n()
 const open = ref(false), busy = ref(false), loading = ref(false), error = ref(''), peers = ref<Entity[]>([]), more = ref(false)
 const attributes = ref<Record<string, unknown>>({})
+const effectiveAt = ref('')
 const fields = computed(() => props.library.relation_types.find(r => r.name === type.value)?.fields || [])
 const peer = ref(''), type = ref(''), outgoing = ref(true)
 const options = computed(() => peers.value.filter(e => e.id !== props.entity.id).map(e => ({ value: e.id, label: e.canonical_name })))
@@ -21,12 +23,16 @@ async function load(append = false) {
   catch (cause: any) { if (current === request) error.value = cause.message || t('common.operationFailed') }
   finally { if (current === request) loading.value = false }
 }
-function begin() { attributes.value = { ...props.relation?.attributes }; peer.value = props.relation?.peer.id || ''; type.value = props.relation?.relation_type || props.library.relation_types.find(r => r.enabled)?.name || ''; outgoing.value = props.relation?.direction !== 'incoming'; error.value = ''; open.value = true; void load() }
+function begin() { effectiveAt.value = ''; attributes.value = { ...props.relation?.attributes }; peer.value = props.relation?.peer.id || ''; type.value = props.relation?.relation_type || props.library.relation_types.find(r => r.enabled)?.name || ''; outgoing.value = props.relation?.direction !== 'incoming'; error.value = ''; open.value = true; void load() }
 async function save() {
   if (busy.value || !peer.value || !type.value) return
   busy.value = true; error.value = ''
-  const data = { subject_id: outgoing.value ? props.entity.id : peer.value, object_id: outgoing.value ? peer.value : props.entity.id, relation_type: type.value, attributes: attributes.value }
-  try { const result = props.relation ? await updateManagedRelation(props.relation.id, { ...data, version: props.relation.version! }) : await createManagedRelation(props.library.id, data); if (!result.success) throw new Error(result.message); open.value = false; emit('saved'); toast.success(t('common.save')) }
+  try {
+    const data = { subject_id: outgoing.value ? props.entity.id : peer.value, object_id: outgoing.value ? peer.value : props.entity.id, relation_type: type.value, attributes: attributes.value, ...(effectiveAt.value ? { valid_from: localDateTimeISO(effectiveAt.value) } : {}) }
+    const result = props.relation ? await updateManagedRelation(props.relation.id, { ...data, version: props.relation.version! }) : await createManagedRelation(props.library.id, data)
+    if (!result.success) throw new Error(result.message)
+    open.value = false; emit('saved'); toast.success(t('common.save'))
+  }
   catch (cause: any) { error.value = cause.message || t('common.operationFailed') }
   finally { busy.value = false }
 }
@@ -39,6 +45,8 @@ onBeforeUnmount(() => { request++ })
       <p>{{ entity.canonical_name }}</p><label>{{ t('managed.direction') }}<Select :model-value="outgoing ? 'outgoing' : 'incoming'" @update:model-value="outgoing = $event === 'outgoing'"><option value="outgoing">{{ t('managed.outgoing') }}</option><option value="incoming">{{ t('managed.incoming') }}</option></Select></label>
       <label>{{ t('ikb18.relations') }}<Select v-model="type"><option v-for="r in library.relation_types.filter(r => r.enabled)" :key="r.name" :value="r.name">{{ r.name }}</option></Select></label>
       <label>{{ t('managed.peer') }}<Combobox v-model="peer" :options="options" :disabled="loading" /></label>
+      <label>{{ t('managed.effectiveAt') }}<input v-model="effectiveAt" class="rq-control" type="datetime-local"></label>
+      <p>{{ t('managed.relationTimeHint') }}</p>
       <ManagedAttributes v-model="attributes" :fields="fields" :library-id="library.id" />
       <p v-if="loading" role="status">{{ t('common.loading') }}</p><Button v-if="more" :loading="loading" @click="load(true)">{{ t('workbench.loadMore') }}</Button>
       <p v-if="error" role="alert">{{ error }} <Button @click="load()">{{ t('common.retry') }}</Button></p>

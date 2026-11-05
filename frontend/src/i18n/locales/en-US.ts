@@ -1,5 +1,7 @@
 export default {
   managed: {
+    relationEndAt: "End date and time",
+    relationTimeHint: "Leave blank to use the current time. Future times are not allowed.",
     endRelationHint: "This relation remains available in history.",
     relationEnded: "Relation ended",
     delete: "Delete entity",

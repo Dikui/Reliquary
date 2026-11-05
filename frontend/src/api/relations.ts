@@ -5,8 +5,13 @@ export interface RelationSource { entry_id: string; title: string; body_hash: st
 export interface EntityRelation { id: string; version?: number; valid_from?: string; valid_to?: string | null; attributes?: Record<string, unknown>; relation_type: string; direction: 'incoming' | 'outgoing'; peer: Entity; library_id: string; library_name: string; source_count: number; sources: RelationSource[] }
 export interface RelationGroup { relation_type: string; relations: EntityRelation[] }
 export const listEntityRelations = (id: string, asOf?: string) => get<{ success: boolean; data: RelationGroup[]; message?: string }>(`/api/v1/entities/${encodeURIComponent(id)}/relations${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`)
-export const deleteEntityRelation = (id: string, version?: number) => del<{ success: boolean; message?: string }>(`/api/v1/relations/${encodeURIComponent(id)}${version === undefined ? '' : `?version=${version}`}`)
+export const deleteEntityRelation = (id: string, version?: number, validTo?: string) => {
+  const query = new URLSearchParams()
+  if (version !== undefined) query.set('version', String(version))
+  if (validTo) query.set('valid_to', validTo)
+  return del<{ success: boolean; message?: string }>(`/api/v1/relations/${encodeURIComponent(id)}${query.size ? `?${query}` : ''}`)
+}
 
-export interface ManagedRelationInput { subject_id: string; object_id: string; relation_type: string; attributes?: Record<string, unknown> }
+export interface ManagedRelationInput { subject_id: string; object_id: string; relation_type: string; attributes?: Record<string, unknown>; valid_from?: string }
 export const createManagedRelation = (library: string, data: ManagedRelationInput) => post<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(library)}/relations`, data)
 export const updateManagedRelation = (id: string, data: ManagedRelationInput & { version: number }) => patch<{ success: boolean; message?: string }>(`/api/v1/relations/${encodeURIComponent(id)}`, data)

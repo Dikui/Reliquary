@@ -39,18 +39,24 @@ func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types
 		return nil
 	}
 	var count int64
-	if err := tx.Table("relations r").Where("r.library_id=? AND r.subject_id=? AND r.relation_type=? AND r.id<>? AND r.valid_to IS NULL", library.ID, relation.SubjectID, relation.RelationType, excludeID).Count(&count).Error; err != nil {
+	if err := tx.Table("relations r").Where("r.library_id=? AND r.subject_id=? AND r.relation_type=? AND r.id<>?", library.ID, relation.SubjectID, relation.RelationType, excludeID).
+		Where("(r.valid_to IS NULL OR r.valid_to>?) AND (?::timestamptz IS NULL OR r.valid_from<?)", relation.ValidFrom, relation.ValidTo, relation.ValidTo).Count(&count).Error; err != nil {
 		return err
 	}
 	if count > 0 {
 		return apperrors.NewBadRequestError("an entity can have only one hierarchy parent")
 	}
 	var cycle bool
-	err := tx.Raw(`WITH RECURSIVE ancestors(id) AS (
- SELECT ?::varchar UNION
- SELECT r.object_id FROM relations r JOIN ancestors a ON r.subject_id=a.id
- WHERE r.library_id=? AND r.relation_type=? AND r.id<>? AND r.valid_to IS NULL
-) SELECT EXISTS (SELECT 1 FROM ancestors WHERE id=?)`, relation.ObjectID, library.ID, relation.RelationType, excludeID, relation.SubjectID).Scan(&cycle).Error
+	// Carry the common interval along each path: individually overlapping edges
+	// need not have been active together, and therefore need not form a cycle.
+	err := tx.Raw(`WITH RECURSIVE ancestors(id,valid_from,valid_to) AS (
+	 SELECT ?::varchar,?::timestamptz,?::timestamptz UNION
+	 SELECT r.object_id,GREATEST(a.valid_from,r.valid_from),LEAST(a.valid_to,r.valid_to)
+	 FROM relations r JOIN ancestors a ON r.subject_id=a.id
+	 WHERE r.library_id=? AND r.relation_type=? AND r.id<>?
+	 AND (r.valid_to IS NULL OR r.valid_to>a.valid_from)
+	 AND (a.valid_to IS NULL OR r.valid_from<a.valid_to)
+	) SELECT EXISTS (SELECT 1 FROM ancestors WHERE id=?)`, relation.ObjectID, relation.ValidFrom, relation.ValidTo, library.ID, relation.RelationType, excludeID, relation.SubjectID).Scan(&cycle).Error
 	if err != nil {
 		return err
 	}
@@ -99,6 +105,16 @@ func (s *EntityService) SaveManagedRelation(ctx context.Context, libraryID, id s
 			return err
 		}
 		before := row
+		row.UpdatedAt = time.Now()
+		row.ValidFrom = row.UpdatedAt
+		if input.ValidFrom != nil {
+			if input.ValidFrom.IsZero() || input.ValidFrom.After(row.UpdatedAt) {
+				return apperrors.NewBadRequestError("valid_from must be a nonzero time no later than now")
+			}
+			row.ValidFrom = *input.ValidFrom
+		}
+		// PostgreSQL stores timestamps at microsecond precision.
+		row.ValidFrom = row.ValidFrom.Truncate(time.Microsecond)
 		row.LibraryID, row.SpaceID = libraryID, spaceID
 		row.SubjectID, row.RelationType, row.ObjectID = input.SubjectID, input.RelationType, input.ObjectID
 		if input.Attributes != nil {
@@ -114,18 +130,17 @@ func (s *EntityService) SaveManagedRelation(ctx context.Context, libraryID, id s
 				}
 			}
 		}
-		if err := validateManagedRelation(tx, library, row, id); err != nil {
-			return err
-		}
-		row.UpdatedAt = time.Now()
 		operation := "create_relation"
 		if id != "" {
 			operation = "update_relation"
-			if err := endManagedRelation(tx, before, row.UpdatedAt); err != nil {
+			if err := endManagedRelation(tx, before, row.ValidFrom); err != nil {
 				return err
 			}
 		}
-		row.ID, row.CreatedAt, row.ValidFrom, row.Version = uuid.NewString(), row.UpdatedAt, row.UpdatedAt, 1
+		if err := validateManagedRelation(tx, library, row, id); err != nil {
+			return err
+		}
+		row.ID, row.CreatedAt, row.Version = uuid.NewString(), row.UpdatedAt, 1
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
@@ -142,7 +157,7 @@ func (s *EntityService) SaveManagedRelation(ctx context.Context, libraryID, id s
 	return &row, managedWriteError(err)
 }
 
-func (s *EntityService) DeleteManagedRelation(ctx context.Context, id string, version int64) error {
+func (s *EntityService) DeleteManagedRelation(ctx context.Context, id string, version int64, validTo ...time.Time) error {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return err
@@ -168,7 +183,14 @@ func (s *EntityService) DeleteManagedRelation(ctx context.Context, id string, ve
 			return err
 		}
 		before := row
-		if err := endManagedRelation(tx, row, time.Now()); err != nil {
+		at := time.Now()
+		if len(validTo) > 0 {
+			if validTo[0].IsZero() || validTo[0].After(at) {
+				return apperrors.NewBadRequestError("valid_to must be a nonzero time no later than now")
+			}
+			at = validTo[0]
+		}
+		if err := endManagedRelation(tx, row, at); err != nil {
 			return err
 		}
 		return NewOperationLogService(tx).RecordTx(ctx, tx, "delete_relation", id, before, nil)
@@ -177,7 +199,11 @@ func (s *EntityService) DeleteManagedRelation(ctx context.Context, id string, ve
 
 // Ending a row preserves the structure and evidence visible before this change.
 func endManagedRelation(tx *gorm.DB, row types.Relation, at time.Time) error {
-	row.ValidTo, row.UpdatedAt = &at, at
+	at = at.Truncate(time.Microsecond)
+	if !at.After(row.ValidFrom) {
+		return apperrors.NewBadRequestError("valid_to must be after valid_from")
+	}
+	row.ValidTo, row.UpdatedAt = &at, time.Now()
 	row.Version++
 	if err := tx.Model(&row).Select("valid_to", "updated_at", "version").Updates(&row).Error; err != nil {
 		return err

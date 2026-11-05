@@ -1,5 +1,7 @@
 export default {
   managed: {
+    relationEndAt: "结束时间",
+    relationTimeHint: "留空使用当前时间，不允许未来时间。",
     endRelationHint: "该关系仍保留在历史记录中。",
     relationEnded: "关系已结束",
     delete: "删除实体",

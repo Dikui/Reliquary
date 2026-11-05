@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deleteEntityRelation, type RelationGroup, type EntityRelation, type RelationSource } from '@/api/relations'
 import { formatDateTime, localDateTimeISO } from '@/utils/dateTime'
@@ -8,7 +8,7 @@ import ManagedRelationEditor from './ManagedRelationEditor.vue'
 import type { LibraryCatalogItem } from '@/api/library'
 import type { Entity } from '@/api/entities'
 import type { SourceLocation } from '@/types/search'
-import { Button, EmptyState, ErrorState } from '@/components/ui'
+import { Button, Dialog, EmptyState, ErrorState } from '@/components/ui'
 import { confirm, toast, type ConfirmHandle } from '@/components/ui/feedback'
 const props = defineProps<{ entityId: string; entityName: string; groups: RelationGroup[]; managedLibrary?: LibraryCatalogItem; entity?: Entity; loading?: boolean; error?: string; asOf?: string }>()
 const emit = defineEmits<{ 'open-source': [id: string, location?: SourceLocation]; 'open-entity': [id: string]; changed: []; retry: []; 'query-time': [value: string] }>()
@@ -17,31 +17,72 @@ const at = ref('')
 watch(() => props.entityId, () => { at.value = '' })
 watch(() => props.asOf, value => { if (!value) at.value = '' })
 const busy = ref(false)
+const ending = ref<EntityRelation>(), endAt = ref(''), endError = ref('')
+watch(() => props.entityId, () => { ending.value = undefined })
 const relations = computed(() => props.groups.flatMap(group => group.relations))
 let confirmation: ConfirmHandle | undefined
+let endOpener: HTMLElement | null = null
+function focusCancel(event: Event) {
+  const button = (event.target as HTMLElement)?.querySelector<HTMLElement>('[data-cancel]')
+  if (button) { event.preventDefault(); button.focus() }
+}
+function restoreEndFocus(event: Event) {
+  event.preventDefault()
+  const opener = endOpener
+  void nextTick(() => { if (opener?.isConnected) opener.focus() })
+}
 function locationFor(source: RelationSource, location?: SourceLocation) { return location ? { ...location, body_hash: location.body_hash || source.body_hash } : undefined }
 function remove(relation: EntityRelation) {
   if (busy.value) return
+  if (props.managedLibrary) {
+    endOpener = document.activeElement as HTMLElement | null
+    ending.value = relation; endAt.value = ''; endError.value = ''
+    return
+  }
   const entity = props.entityId
   confirmation?.destroy()
   confirmation = confirm({
-    header: t(props.managedLibrary ? 'managed.endRelation' : 'ikb18.deleteRelation'), body: `${relation.relation_type} · ${relation.peer.canonical_name}\n${t(props.managedLibrary ? 'managed.endRelationHint' : 'ikb18.suppressHint')}`,
+    header: t('ikb18.deleteRelation'), body: `${relation.relation_type} · ${relation.peer.canonical_name}\n${t('ikb18.suppressHint')}`,
     confirmBtn: t('common.confirm'), cancelBtn: t('common.cancel'), theme: 'danger',
     onConfirm: async () => {
       busy.value = true
       try {
-        const response = await deleteEntityRelation(relation.id, props.managedLibrary ? relation.version : undefined)
+        const response = await deleteEntityRelation(relation.id)
         if (!response.success) throw new Error(response.message || t('common.operationFailed'))
-        toast.success(t(props.managedLibrary ? 'managed.relationEnded' : 'entityPage.relationDeleted'))
+        toast.success(t('entityPage.relationDeleted'))
         if (entity === props.entityId) emit('changed')
       } finally { busy.value = false }
     },
   })
 }
+async function endRelation() {
+  if (busy.value || !ending.value) return
+  const entity = props.entityId, relation = ending.value
+  busy.value = true; endError.value = ''
+  try {
+    const response = await deleteEntityRelation(relation.id, relation.version, endAt.value ? localDateTimeISO(endAt.value) : undefined)
+    if (!response.success) throw new Error(response.message || t('common.operationFailed'))
+    toast.success(t('managed.relationEnded'))
+    ending.value = undefined
+    if (entity === props.entityId) emit('changed')
+  } catch (cause: any) { endError.value = cause.message || t('common.operationFailed') }
+  finally { busy.value = false }
+}
 onBeforeUnmount(() => confirmation?.destroy())
 </script>
 <template>
   <section class="entity-relations" :aria-label="t('ikb18.relations')" :aria-busy="loading">
+    <Dialog v-if="managedLibrary" :model-value="!!ending" :title="t('managed.endRelation')" :closable="!busy" :close-on-esc-keydown="false" :close-on-overlay-click="false" @update:model-value="!$event && (ending = undefined)" @open-auto-focus="focusCancel" @close-auto-focus="restoreEndFocus">
+      <form class="relation-end" novalidate @submit.prevent="endRelation"><fieldset :disabled="busy">
+        <p>{{ ending?.relation_type }} · {{ ending?.peer.canonical_name }}</p>
+        <p>{{ t('managed.endRelationHint') }}</p>
+        <label>{{ t('managed.relationEndAt') }}<input v-model="endAt" class="rq-control" type="datetime-local"></label>
+        <p>{{ t('managed.relationTimeHint') }}</p>
+        <p v-if="endError" role="alert">{{ endError }}</p>
+        <Button data-cancel type="button" :disabled="busy" @click="ending = undefined">{{ t('common.cancel') }}</Button>
+        <Button type="submit" variant="danger" :loading="busy">{{ t('common.confirm') }}</Button>
+      </fieldset></form>
+    </Dialog>
     <form v-if="managedLibrary" class="relation-time" novalidate @submit.prevent="emit('query-time', at ? localDateTimeISO(at) : '')"><label>{{ t('managed.asOf') }}<input v-model="at" class="rq-control" type="datetime-local"></label><Button type="submit" :loading="loading">{{ t('managed.queryRelations') }}</Button></form>
     <ErrorState v-if="error" :title="error"><Button @click="emit('retry')">{{ t('common.retry') }}</Button></ErrorState>
     <p v-else-if="loading" role="status">{{ t('common.loading') }}</p>
@@ -87,4 +128,5 @@ tbody tr:hover :deep(.rq-button), tbody tr:focus-within :deep(.rq-button) { colo
 summary { cursor: pointer; margin-block: var(--space-2); }
 .entity-link:focus-visible, summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .relation-time { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: end; margin-block: var(--space-3); } .relation-time label { display: grid; gap: var(--space-1); }
+.relation-end fieldset { display: grid; gap: var(--space-3); border: 0; padding: 0; } .relation-end label { display: grid; gap: var(--space-1); } .relation-end [role='alert'] { color: var(--danger); }
 </style>
