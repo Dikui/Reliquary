@@ -111,6 +111,11 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 				copy[table] = rule
 			}
 		}
+		if migration.Version < 40 {
+			rule := copy["relations"]
+			rule.Sidecar = strings.TrimSpace(strings.ReplaceAll(rule.Sidecar, " valid_from valid_to", ""))
+			copy["relations"] = rule
+		}
 		if migration.Version < 39 {
 			rule := copy["entities"]
 			rule.Sidecar = strings.TrimSpace(strings.ReplaceAll(" "+rule.Sidecar+" ", " auto_match ", " "))

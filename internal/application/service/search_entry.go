@@ -349,7 +349,7 @@ func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, lib
 					AND e.archived_at IS NULL AND l.deleted_at IS NULL
 					UNION
 					SELECT child.id, child.library_id FROM descendants d
-					JOIN relations r ON r.object_id=d.id AND r.library_id=d.library_id AND r.space_id=?
+					JOIN relations r ON r.object_id=d.id AND r.library_id=d.library_id AND r.space_id=? AND r.valid_to IS NULL
 					JOIN library_relation_types rt ON rt.library_id=r.library_id AND rt.name=r.relation_type AND rt.enabled=true AND rt.hierarchical=true
 					JOIN entities child ON child.id=r.subject_id AND child.library_id=d.library_id AND child.space_id=r.space_id AND child.archived_at IS NULL
 				) SELECT id FROM descendants)))`, f.request.EntityIDs, spaceID, f.request.EntityIDs, spaceID)

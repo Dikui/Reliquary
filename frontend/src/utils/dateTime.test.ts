@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { formatDateTime } from './dateTime'
+import { formatDateTime, localDateTimeISO } from './dateTime'
+
+// Regression #8: date-only history queries start at local midnight.
+test('history dates use the viewer local midnight', () => {
+  const previous = process.env.TZ
+  process.env.TZ = 'Asia/Shanghai'
+  try {
+    assert.equal(localDateTimeISO('2026-11-06'), '2026-11-05T16:00:00.000Z')
+    assert.equal(localDateTimeISO('2026-11-06T09:30'), '2026-11-06T01:30:00.000Z')
+  } finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous }
+})
 
 test('calendar dates keep their day in negative and positive time zones', () => {
   for (const timeZone of ['America/New_York', 'Pacific/Honolulu', 'Asia/Tokyo']) {

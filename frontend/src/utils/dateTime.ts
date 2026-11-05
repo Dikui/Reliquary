@@ -1,3 +1,8 @@
+/** Convert a local form value, including a calendar day, to an instant. */
+export function localDateTimeISO(value: string): string {
+  return new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value).toISOString()
+}
+
 /** Format instants in the viewer's zone, preserving date-only calendar values. */
 export function formatDateTime(
   value: string | undefined | null,

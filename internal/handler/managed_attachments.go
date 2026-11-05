@@ -45,6 +45,14 @@ func (h *EntityHandler) EntityAttachment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": row})
 }
 
+func (h *EntityHandler) DeleteEntityAttachment(c *gin.Context) {
+	if err := h.service.DeleteEntityAttachment(c.Request.Context(), c.Param("attachment_id")); err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 func (h *EntityHandler) DownloadEntityAttachment(c *gin.Context) {
 	row, reader, err := h.service.OpenEntityAttachment(c.Request.Context(), c.Param("attachment_id"))
 	if err != nil {

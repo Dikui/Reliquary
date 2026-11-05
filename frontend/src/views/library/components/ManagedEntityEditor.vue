@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button, Dialog, Input, Select, Textarea, confirm, toast } from '@/components/ui'
-import { createManagedEntity, updateManagedEntity, entityHistory, type Entity, type ManagedEntityInput } from '@/api/entities'
+import { createManagedEntity, updateManagedEntity, deleteManagedEntity, entityHistory, type Entity, type ManagedEntityInput } from '@/api/entities'
 import type { LibraryCatalogItem } from '@/api/library'
 import { OPERATION_TYPES, type OperationLogsData } from '@/api/operation-logs'
 import { currentNameOverrides } from '@/utils/entityAutoMatch'
@@ -11,13 +11,13 @@ import ManagedAttributes from './ManagedAttributes.vue'
 import ManagedAttributeHistory from './ManagedAttributeHistory.vue'
 import { formatDateTime } from '@/utils/dateTime'
 const props = defineProps<{ library: LibraryCatalogItem; entity?: Entity | null }>()
-const emit = defineEmits<{ saved: [entity: Entity] }>()
+const emit = defineEmits<{ saved: [entity: Entity]; deleted: [] }>()
 const { t, locale } = useI18n()
 function operationName(value: string) { return OPERATION_TYPES.includes(value as typeof OPERATION_TYPES[number]) ? t(`operationLogs.types.${value}`) : value }
 const open = ref(false), busy = ref(false), error = ref(''), attempted = ref(false)
 const draft = ref<ManagedEntityInput>({ name: '', kind: '', code: '', description: '', aliases: [], attributes: {} })
 const effectiveAt = ref('')
-const aliases = ref(''), baseline = ref('')
+const aliases = ref(''), baseline = ref(''), originalAttributes = ref('')
 const history = ref<OperationLogsData | null>(null), historyPage = ref(1), historyOpen = ref(false), historyBusy = ref(false)
 let request = 0
 const fields = computed(() => (props.library.entity_schema?.fields || []).filter(field => !field.archived && (!field.kinds?.length || field.kinds.includes(draft.value.kind))))
@@ -25,6 +25,7 @@ function begin() {
   const e = props.entity
   effectiveAt.value = ''
   draft.value = { name: e?.canonical_name || '', kind: e?.kind || props.library.entity_schema?.kinds?.[0]?.key || '', code: e?.code || '', description: e?.description || '', aliases: [...(e?.aliases || [])], attributes: { ...e?.attributes }, auto_match: { ...e?.auto_match } }
+  originalAttributes.value = JSON.stringify(Object.entries(draft.value.attributes).sort())
   aliases.value = draft.value.aliases.join('\n'); baseline.value = JSON.stringify(draft.value) + aliases.value + effectiveAt.value; error.value = ''; attempted.value = false; open.value = true
 }
 const invalid = computed(() => !draft.value.name.trim() || !draft.value.kind)
@@ -36,7 +37,9 @@ async function save() {
   try {
     const attributes = Object.fromEntries(Object.entries(draft.value.attributes).filter(([, value]) => value !== '' && value !== null && value !== undefined))
     const data = { ...draft.value, auto_match: currentNameOverrides([draft.value.name, draft.value.code, ...aliases.value.split('\n')], draft.value.auto_match), ...(effectiveAt.value ? { effective_at: new Date(effectiveAt.value).toISOString() } : {}), attributes, aliases: aliases.value.split('\n').map(s => s.trim()).filter(Boolean) }
-    const response = props.entity ? await updateManagedEntity(props.entity.id, { ...data, revision: props.entity.revision! }) : await createManagedEntity(props.library.id, data)
+    const { attributes: savedAttributes, effective_at: effective, ...identity } = data
+    const attributePatch = JSON.stringify(Object.entries(savedAttributes).sort()) === originalAttributes.value ? {} : { attributes: savedAttributes, ...(effective ? { effective_at: effective } : {}) }
+    const response = props.entity ? await updateManagedEntity(props.entity.id, { ...identity, ...attributePatch, revision: props.entity.revision! }) : await createManagedEntity(props.library.id, data)
     if (!response.success) throw new Error(response.error || t('common.operationFailed'))
     emit('saved', response.data); open.value = false; toast.success(t('common.save'))
   } catch (cause: any) { error.value = cause.message || t('common.operationFailed') }
@@ -56,6 +59,21 @@ function archive() {
     finally { busy.value = false }
   } })
 }
+function remove() {
+  const entity = props.entity
+  if (!entity || busy.value) return
+  confirm({ header: t('managed.delete'), body: t('managed.deleteHint', { name: entity.canonical_name }), theme: 'danger', confirmBtn: t('managed.delete'), onConfirm: async () => {
+    busy.value = true; error.value = ''
+    try { const result = await deleteManagedEntity(entity.id, entity.revision!); if (!result.success) throw new Error(result.error); emit('deleted'); toast.success(t('managed.deleted')) }
+    catch (cause: any) { error.value = cause.message || t('common.operationFailed') }
+    finally { busy.value = false }
+  } })
+}
+watch(() => draft.value.kind, (kind, before) => {
+  if (!open.value || kind === before) return
+  const allowed = new Set((props.library.entity_schema?.fields || []).filter(field => !field.kinds?.length || field.kinds.includes(kind)).map(field => field.key))
+  draft.value.attributes = Object.fromEntries(Object.entries(draft.value.attributes).filter(([key]) => allowed.has(key)))
+}, { flush: 'sync' })
 async function loadHistory(page = 1) {
   if (!props.entity) return
   const current = ++request; historyOpen.value = true; historyBusy.value = true; error.value = ''
@@ -69,7 +87,8 @@ onBeforeUnmount(() => { request++ })
 <template>
   <div class="managed-actions">
     <Button :disabled="busy" @click="begin">{{ t(entity ? 'managed.edit' : 'managed.create') }}</Button>
-    <template v-if="entity"><ManagedAttributeHistory :entity="entity" :library="library" /><Button :disabled="busy" @click="archive">{{ t(entity.archived_at ? 'managed.restore' : 'managed.archive') }}</Button><Button @click="loadHistory()">{{ t('managed.history') }}</Button></template>
+    <template v-if="entity"><ManagedAttributeHistory :entity="entity" :library="library" /><Button :disabled="busy" @click="archive">{{ t(entity.archived_at ? 'managed.restore' : 'managed.archive') }}</Button><Button @click="loadHistory()">{{ t('managed.history') }}</Button><Button variant="danger" :disabled="busy" @click="remove">{{ t('managed.delete') }}</Button></template>
+    <p v-if="error && !open && !historyOpen" role="alert">{{ error }}</p>
     <Dialog :model-value="open" :title="t(entity ? 'managed.edit' : 'managed.create')" :closable="!busy" :close-on-overlay-click="false" :close-on-esc-keydown="false" @update:model-value="close">
       <form class="managed-form" novalidate @submit.prevent="save"><fieldset :disabled="busy">
         <label>{{ t('ikb18.name') }}<Input v-model="draft.name" :aria-invalid="attempted && !draft.name.trim()" /></label>

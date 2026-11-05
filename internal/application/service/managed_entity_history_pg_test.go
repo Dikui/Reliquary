@@ -41,7 +41,7 @@ func TestManagedEntityAttributeTimeline(t *testing.T) {
 		at    time.Time
 		known bool
 		value int
-	}{{first.Add(-time.Second), false, 0}, {first, true, 1}, {backdated, true, 3}, {current, true, 5}, {future, true, 4}} {
+	}{{first.Add(-time.Second), false, 0}, {first, true, 1}, {backdated, true, 3}, {current, true, 5}, {future, true, 5}} {
 		result, err := svc.EntityAttributes(ctx, entity.ID, point.at)
 		require.NoError(t, err)
 		require.Equal(t, point.known, result.Known)
@@ -55,7 +55,7 @@ func TestManagedEntityAttributeTimeline(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 5, detail.Entity.Attributes["capacity"])
 	require.NoError(t, hydrateManagedEntityAttributes(ctx, db, []*types.Entity{entity}, future))
-	require.EqualValues(t, 4, entity.Attributes["capacity"])
+	require.EqualValues(t, 5, entity.Attributes["capacity"])
 	history, err := svc.EntityAttributeHistory(ctx, entity.ID, 1, 20)
 	require.NoError(t, err)
 	require.EqualValues(t, 5, history.Total)
@@ -64,7 +64,7 @@ func TestManagedEntityAttributeTimeline(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Model(&types.EntityAttributeVersion{}).Where("entity_id=?", entity.ID).Count(&count).Error)
 	require.EqualValues(t, 5, count)
-	// A currently empty field may still be used by a scheduled snapshot.
+	// Past attributes keep their field definitions without acquiring today's category.
 	empty := map[string]any{}
 	_, err = svc.UpdateManagedEntity(ctx, entity.ID, types.ManagedEntityPatch{Revision: entity.Revision, Attributes: &empty})
 	require.NoError(t, err)
@@ -74,11 +74,13 @@ func TestManagedEntityAttributeTimeline(t *testing.T) {
 	after.EntitySchema.Kinds = append(append([]types.EntityKind{}, before.EntitySchema.Kinds...), types.EntityKind{Key: "other", Name: "Other"})
 	after.EntitySchema.Fields = append([]types.EntityFieldDefinition{}, before.EntitySchema.Fields...)
 	after.EntitySchema.Fields[0].Kinds = []string{"other"}
+	require.NoError(t, validateManagedCatalogChange(db, &before, &after))
+	after.EntitySchema.Fields = nil
 	require.ErrorContains(t, validateManagedCatalogChange(db, &before, &after), "attribute history")
 }
 
 // Spec: managed catalog evolution. Reorganizations retain source timelines,
-// preserve moved evidence/relationship identities and roll back conflicts.
+// preserve historical relationship endpoints and roll back conflicts.
 func TestManagedEntityReorganizationPreservesProvenance(t *testing.T) {
 	db, ctx, svc := managedHistoryFixture(t)
 	create := func(name string) *types.Entity {
@@ -107,6 +109,10 @@ func TestManagedEntityReorganizationPreservesProvenance(t *testing.T) {
 	require.EqualValues(t, 2, futureTarget.Attributes["capacity"])
 	var moved types.Relation
 	require.NoError(t, db.First(&moved, "id=?", edge.ID).Error)
+	require.Equal(t, source.ID, moved.SubjectID)
+	require.NotNil(t, moved.ValidTo)
+	moved = types.Relation{}
+	require.NoError(t, db.Where("subject_id=? AND valid_to IS NULL", target.ID).First(&moved).Error)
 	require.Equal(t, target.ID, moved.SubjectID)
 	require.EqualValues(t, 7, moved.Attributes["strength"])
 	var link types.EntryEntity
@@ -114,9 +120,10 @@ func TestManagedEntityReorganizationPreservesProvenance(t *testing.T) {
 	require.Equal(t, "manual", link.Origin)
 	require.Equal(t, "original-body", link.BodyHash)
 	require.Len(t, link.Evidence, 1)
-	split, err := svc.SplitManagedEntity(ctx, target.ID, types.ManagedEntitySplitInput{Revision: target.Revision, NewEntity: types.ManagedEntityInput{Name: "Split product", Kind: "product", Attributes: map[string]any{"capacity": 3}}, EntryIDs: []string{entry.ID}, RelationIDs: []string{edge.ID}})
+	split, err := svc.SplitManagedEntity(ctx, target.ID, types.ManagedEntitySplitInput{Revision: target.Revision, NewEntity: types.ManagedEntityInput{Name: "Split product", Kind: "product", Attributes: map[string]any{"capacity": 3}}, EntryIDs: []string{entry.ID}, RelationIDs: []string{moved.ID}})
 	require.NoError(t, err)
-	require.NoError(t, db.First(&moved, "id=?", edge.ID).Error)
+	moved = types.Relation{}
+	require.NoError(t, db.Where("subject_id=? AND valid_to IS NULL", split.ID).First(&moved).Error)
 	require.Equal(t, split.ID, moved.SubjectID)
 	require.EqualValues(t, 7, moved.Attributes["strength"])
 	require.NoError(t, db.First(&link, "entry_id=? AND entity_id=?", entry.ID, split.ID).Error)
@@ -190,14 +197,14 @@ func TestManagedEntityMergeDropsChosenSourceRelations(t *testing.T) {
 	require.Equal(t, f.target.ID, result.ID)
 	require.Equal(t, map[string]bool{"source": false, "target": true}, result.AutoMatch)
 	var rows []types.Relation
-	require.NoError(t, f.db.Order("id").Find(&rows).Error)
+	require.NoError(t, f.db.Where("valid_to IS NULL").Order("id").Find(&rows).Error)
 	require.Len(t, rows, 3)
 	for _, row := range rows {
 		require.NotEqual(t, f.source.ID, row.SubjectID)
 		require.NotEqual(t, f.source.ID, row.ObjectID)
 	}
 	var kept types.Relation
-	require.NoError(t, f.db.First(&kept, "id=?", f.keep.ID).Error)
+	require.NoError(t, f.db.Where("subject_id=? AND object_id=? AND valid_to IS NULL", f.target.ID, f.keep.ObjectID).First(&kept).Error)
 	require.Equal(t, f.target.ID, kept.SubjectID)
 	for _, dropped := range []*types.Relation{f.sourceParent, f.sourceDuplicate} {
 		var log types.OperationLog
@@ -239,4 +246,77 @@ func TestManagedEntityMergeDropRollback(t *testing.T) {
 		require.Empty(t, source.MergedIntoID)
 		require.Equal(t, f.source.Revision, source.Revision)
 	}
+}
+
+// Regression: each hierarchy is independent; edits and split copies retain the
+// prior structure, while document type conflicts accept an explicit preference.
+func TestManagedRelationsRetainHistoryAcrossIndependentHierarchies(t *testing.T) {
+	db, ctx, svc := managedHistoryFixture(t)
+	create := func(name string) *types.Entity {
+		row, err := svc.CreateManagedEntity(ctx, "entity-library", types.ManagedEntityInput{Name: name, Kind: "product", Attributes: map[string]any{}})
+		require.NoError(t, err)
+		return row
+	}
+	model, line, platform := create("Model"), create("Line"), create("Platform")
+	rules := []types.LibraryRelationType{{LibraryID: "entity-library", Name: "line", Enabled: true, Hierarchical: true}, {LibraryID: "entity-library", Name: "platform", Enabled: true, Hierarchical: true}}
+	library := types.Library{EntityMode: "managed", RelationTypes: rules}
+	require.NoError(t, types.ValidateEntitySchema(&library))
+	require.NoError(t, db.Create(&rules).Error)
+	lineEdge, err := svc.SaveManagedRelation(ctx, "entity-library", "", types.ManagedRelationInput{SubjectID: model.ID, ObjectID: line.ID, RelationType: "line"})
+	require.NoError(t, err)
+	_, err = svc.SaveManagedRelation(ctx, "entity-library", "", types.ManagedRelationInput{SubjectID: model.ID, ObjectID: platform.ID, RelationType: "platform"})
+	require.NoError(t, err)
+	_, err = svc.SaveManagedRelation(ctx, "entity-library", "", types.ManagedRelationInput{SubjectID: platform.ID, ObjectID: model.ID, RelationType: "line"})
+	require.NoError(t, err, "cross-type cycles are permitted")
+	_, err = svc.SaveManagedRelation(ctx, "entity-library", "", types.ManagedRelationInput{SubjectID: line.ID, ObjectID: model.ID, RelationType: "line"})
+	require.Error(t, err, "same-type cycles are rejected")
+	_, err = svc.SaveManagedRelation(ctx, "entity-library", "", types.ManagedRelationInput{SubjectID: model.ID, ObjectID: platform.ID, RelationType: "line"})
+	require.Error(t, err, "a second parent in one hierarchy is rejected")
+	before := time.Now()
+	split, err := svc.SplitManagedEntity(ctx, model.ID, types.ManagedEntitySplitInput{Revision: model.Revision, NewEntity: types.ManagedEntityInput{Name: "Split model", Kind: "product", Attributes: map[string]any{}}, CopyRelationIDs: []string{lineEdge.ID}})
+	require.NoError(t, err)
+	original, err := svc.ListRelations(ctx, model.ID, "")
+	require.NoError(t, err)
+	require.Len(t, original, 2)
+	copied, err := svc.ListRelations(ctx, split.ID, "")
+	require.NoError(t, err)
+	require.Len(t, copied, 1)
+	require.Equal(t, line.ID, copied[0].Relations[0].ObjectID)
+	copyTime := time.Now()
+	updated, err := svc.SaveManagedRelation(ctx, "entity-library", copied[0].Relations[0].ID, types.ManagedRelationInput{SubjectID: split.ID, ObjectID: platform.ID, RelationType: "line", Version: copied[0].Relations[0].Version})
+	require.NoError(t, err)
+	priorCopy, err := svc.ListRelations(ctx, split.ID, "", copyTime)
+	require.NoError(t, err)
+	require.Equal(t, line.ID, priorCopy[0].Relations[0].ObjectID)
+	require.NotEqual(t, copied[0].Relations[0].ID, updated.ID)
+	_, err = svc.SaveManagedRelation(ctx, "entity-library", copied[0].Relations[0].ID, types.ManagedRelationInput{SubjectID: split.ID, ObjectID: platform.ID, RelationType: "line", Version: copied[0].Relations[0].Version})
+	require.ErrorContains(t, err, "relationship changed")
+	require.NoError(t, svc.DeleteManagedRelation(ctx, lineEdge.ID, lineEdge.Version))
+	historical, err := svc.ListRelations(ctx, model.ID, "", before)
+	require.NoError(t, err)
+	require.Len(t, historical, 2)
+	var old *types.Relation
+	for _, group := range historical {
+		for _, relation := range group.Relations {
+			if relation.ID == lineEdge.ID {
+				copy := relation.Relation
+				old = &copy
+			}
+		}
+	}
+	require.NotNil(t, old)
+	require.NotNil(t, old.ValidTo)
+	replacement, err := svc.SaveManagedRelation(ctx, "entity-library", "", types.ManagedRelationInput{SubjectID: model.ID, ObjectID: line.ID, RelationType: "line"})
+	require.NoError(t, err, "an ended triple can be recreated")
+	require.NotEqual(t, lineEdge.ID, replacement.ID)
+
+	entry := entityArticle(t, db, "merge-types")
+	require.NoError(t, db.Create(&[]types.EntryEntity{{SpaceID: 1, EntryID: entry.ID, EntityID: model.ID, Origin: "manual", RelationType: "references"}, {SpaceID: 1, EntryID: entry.ID, EntityID: split.ID, Origin: "manual", RelationType: "specification"}}).Error)
+	detail, err := svc.EntityDetail(ctx, model.ID)
+	require.NoError(t, err)
+	_, err = svc.MergeManagedEntities(ctx, model.ID, types.ManagedEntityMergeInput{Revision: detail.Entity.Revision, SourceID: split.ID, SourceRevision: split.Revision, Attributes: map[string]any{}, DropRelationIDs: []string{updated.ID}, DocumentRelationPreference: "source"})
+	require.NoError(t, err)
+	var link types.EntryEntity
+	require.NoError(t, db.Where("entry_id=? AND entity_id=?", entry.ID, model.ID).Take(&link).Error)
+	require.Equal(t, "specification", link.RelationType)
 }

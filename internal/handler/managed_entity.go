@@ -53,6 +53,21 @@ func (h *EntityHandler) ManagedEntityHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
 }
 
+func (h *EntityHandler) DeleteManagedEntity(c *gin.Context) {
+	var input struct {
+		Revision int64 `json:"revision"`
+	}
+	if err := decodeLibraryRequest(c, &input); err != nil {
+		c.Error(err)
+		return
+	}
+	if err := h.service.DeleteManagedEntity(c.Request.Context(), c.Param("entity_id"), input.Revision); err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 func (h *EntityHandler) SaveManagedRelation(c *gin.Context) {
 	var input types.ManagedRelationInput
 	if err := decodeLibraryRequest(c, &input); err != nil {
@@ -106,7 +121,7 @@ func (h *EntityHandler) EntityAttributes(c *gin.Context) {
 		var err error
 		at, err = time.Parse(time.RFC3339Nano, raw)
 		if err != nil {
-			at, err = time.Parse(time.DateOnly, raw)
+			at, err = time.ParseInLocation(time.DateOnly, raw, time.Local)
 		}
 		if err != nil {
 			c.Error(apperrors.NewBadRequestError("at must be RFC3339 or YYYY-MM-DD"))

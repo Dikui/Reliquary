@@ -45,7 +45,7 @@ function values(event: Event) { return (event.target as HTMLInputElement).value.
       <h3>{{ t('managed.kinds') }}</h3><p>{{ t('managed.keysHint') }}</p>
       <fieldset v-for="(kind, index) in schema.kinds" :key="index">
         <label>{{ t('managed.key') }}<input v-model="kind.key"></label><label>{{ t('ikb18.name') }}<input v-model="kind.name"></label>
-        <label>{{ t('managed.parents') }}<input :value="kind.parent_kinds.join(', ')" @input="kind.parent_kinds = values($event)"></label>
+        <fieldset class="kind-choices"><legend>{{ t('managed.parents') }}</legend><label v-for="option in schema.kinds.filter(k => k.key)" :key="option.key"><input v-model="kind.parent_kinds" type="checkbox" :value="option.key">{{ option.name || option.key }}</label></fieldset>
       <Button @click="schema.kinds.splice(index, 1)">{{ t('ikb18.remove') }}</Button></fieldset>
       <Button @click="schema.kinds.push({ key: '', name: '', parent_kinds: [] })">{{ t('managed.addKind') }}</Button>
       <h3>{{ t('managed.fields') }}</h3>
@@ -54,8 +54,8 @@ function values(event: Event) { return (event.target as HTMLInputElement).value.
       <fieldset v-for="(relation, index) in library.relation_types" :key="index">
         <label>{{ t('ikb18.name') }}<input v-model="relation.name"></label>
         <label><input v-model="relation.enabled" type="checkbox">{{ t('ikb18.enabled') }}</label><label><input v-model="relation.hierarchical" type="checkbox">{{ t('managed.hierarchical') }}</label>
-        <label>{{ t('managed.subjectKinds') }}<input :value="relation.subject_kinds?.join(', ')" @input="relation.subject_kinds = values($event)"></label>
-        <label>{{ t('managed.objectKinds') }}<input :value="relation.object_kinds?.join(', ')" @input="relation.object_kinds = values($event)"></label>
+        <fieldset class="kind-choices"><legend>{{ t('managed.subjectKinds') }}</legend><label v-for="option in schema.kinds.filter(k => k.key)" :key="option.key"><input type="checkbox" :checked="relation.subject_kinds?.includes(option.key)" @change="relation.subject_kinds = ($event.target as HTMLInputElement).checked ? [...(relation.subject_kinds || []), option.key] : (relation.subject_kinds || []).filter(key => key !== option.key)">{{ option.name || option.key }}</label></fieldset>
+        <fieldset class="kind-choices"><legend>{{ t('managed.objectKinds') }}</legend><label v-for="option in schema.kinds.filter(k => k.key)" :key="option.key"><input type="checkbox" :checked="relation.object_kinds?.includes(option.key)" @change="relation.object_kinds = ($event.target as HTMLInputElement).checked ? [...(relation.object_kinds || []), option.key] : (relation.object_kinds || []).filter(key => key !== option.key)">{{ option.name || option.key }}</label></fieldset>
       <ManagedFieldSchema relationship :model-value="relation.fields || []" @update:model-value="relation.fields = $event" /><Button @click="library.relation_types.splice(index, 1)">{{ t('ikb18.remove') }}</Button></fieldset>
       <Button @click="library.relation_types.push({ name: '', enabled: true, position: library.relation_types.length, hierarchical: false, subject_kinds: [], object_kinds: [] })">{{ t('managed.addRelation') }}</Button>
     </template>
@@ -65,4 +65,5 @@ function values(event: Event) { return (event.target as HTMLInputElement).value.
 .managed-settings { border-top: 2px solid var(--rule); padding-block: var(--space-4); }
 fieldset { display: flex; flex-wrap: wrap; gap: var(--space-3); border: 1px solid var(--border); padding: var(--space-3); margin-block: var(--space-3); }
 label { display: grid; gap: var(--space-2); flex: 1 1 160px; } input, select { min-height: var(--control); min-width: 0; border: 1px solid var(--border); padding: var(--space-2); background: var(--bg); color: var(--text); font: inherit; } input[type='checkbox'] { min-height: auto; } p { color: var(--muted); }
+.kind-choices { flex: 1 1 200px; margin: 0; } .kind-choices label { display: flex; align-items: center; flex: 0 1 auto; }
 </style>

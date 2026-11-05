@@ -26,7 +26,7 @@ func (s *GraphSearchService) hydrate(ctx context.Context, space uint64, librarie
 		ids = append(ids, e.ID)
 	}
 	var relations []types.Relation
-	if err := s.db.WithContext(ctx).Where("space_id=? AND library_id IN ? AND id IN ?", space, libIDs, ids).Find(&relations).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("space_id=? AND library_id IN ? AND id IN ? AND valid_to IS NULL", space, libIDs, ids).Find(&relations).Error; err != nil {
 		return nil, err
 	}
 	rows := map[string]types.Relation{}

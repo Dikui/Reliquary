@@ -455,7 +455,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 					entity.EmbeddingNeedsRebuild = true
 				}
 			}
-			created := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "entity_type"}, {Name: "normalized_name"}}, DoNothing: true}).Create(&entity)
+			created := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "entity_type"}, {Name: "normalized_name"}}, TargetWhere: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "archived_at IS NULL AND merged_into_id=''"}}}, DoNothing: true}).Create(&entity)
 			if created.Error != nil {
 				return nil, created.Error
 			}
@@ -513,7 +513,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 			if alias.ResolutionMethod == "" {
 				alias.ResolutionMethod = "exact"
 			}
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "entity_type"}, {Name: "normalized_alias"}}, DoNothing: true}).Create(&alias).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "entity_id"}, {Name: "normalized_alias"}}, DoNothing: true}).Create(&alias).Error; err != nil {
 				return nil, err
 			}
 		}

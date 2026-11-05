@@ -25,20 +25,22 @@ type EntityReorganization struct {
 }
 
 type ManagedEntityMergeInput struct {
-	DropRelationIDs []string       `json:"drop_relation_ids,omitempty"`
-	Revision        int64          `json:"revision"`
-	SourceID        string         `json:"source_id"`
-	SourceRevision  int64          `json:"source_revision"`
-	Attributes      map[string]any `json:"attributes"`
-	EffectiveAt     *time.Time     `json:"effective_at,omitempty"`
+	DocumentRelationPreference string         `json:"document_relation_preference,omitempty"`
+	DropRelationIDs            []string       `json:"drop_relation_ids,omitempty"`
+	Revision                   int64          `json:"revision"`
+	SourceID                   string         `json:"source_id"`
+	SourceRevision             int64          `json:"source_revision"`
+	Attributes                 map[string]any `json:"attributes"`
+	EffectiveAt                *time.Time     `json:"effective_at,omitempty"`
 }
 
 type ManagedEntitySplitInput struct {
-	Revision    int64              `json:"revision"`
-	NewEntity   ManagedEntityInput `json:"new_entity"`
-	EntryIDs    []string           `json:"entry_ids"`
-	RelationIDs []string           `json:"relation_ids"`
-	EffectiveAt *time.Time         `json:"effective_at,omitempty"`
+	CopyRelationIDs []string           `json:"copy_relation_ids,omitempty"`
+	Revision        int64              `json:"revision"`
+	NewEntity       ManagedEntityInput `json:"new_entity"`
+	EntryIDs        []string           `json:"entry_ids"`
+	RelationIDs     []string           `json:"relation_ids"`
+	EffectiveAt     *time.Time         `json:"effective_at,omitempty"`
 }
 
 // Attachments are owned by their library. Keeping them independently of a

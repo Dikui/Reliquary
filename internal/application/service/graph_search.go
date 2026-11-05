@@ -305,7 +305,7 @@ func (s *GraphSearchService) finish(ctx context.Context, space uint64, limit int
 func (s *GraphSearchService) allEdges(ctx context.Context, space uint64, libraries []types.Library, request types.GraphSearchRequest, out *types.GraphSearchResponse) ([]types.GraphSearchEdge, error) {
 	live := "EXISTS (SELECT 1 FROM entities e WHERE e.space_id=relations.space_id AND e.id=relations.%s AND coalesce(e.merged_into_id,'')='' AND e.archived_at IS NULL)"
 	sourced := "FROM relation_sources rs JOIN entries en ON en.id=rs.entry_id WHERE rs.relation_id=relations.id AND en.space_id=relations.space_id AND en.library_id=relations.library_id AND en.deleted_at IS NULL"
-	q := s.db.WithContext(ctx).Model(&types.Relation{}).Where("space_id=? AND library_id IN ?", space, request.Libraries).
+	q := s.db.WithContext(ctx).Model(&types.Relation{}).Where("space_id=? AND library_id IN ? AND valid_to IS NULL", space, request.Libraries).
 		Where(fmt.Sprintf(live, "subject_id")).Where(fmt.Sprintf(live, "object_id")).Where("(EXISTS (SELECT 1 " + sourced + ") OR EXISTS (SELECT 1 FROM libraries l WHERE l.id=relations.library_id AND l.entity_mode='managed'))")
 	if len(request.RelationTypes) > 0 {
 		q = q.Where("relation_type IN ?", request.RelationTypes)

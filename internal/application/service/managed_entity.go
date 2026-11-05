@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -76,10 +77,10 @@ func saveManagedAliases(tx *gorm.DB, entity *types.Entity, aliases []string) err
 		}
 		seen[key] = true
 		var count int64
-		if err := tx.Model(&types.Entity{}).Where("space_id=? AND library_id=? AND entity_type=? AND normalized_name=? AND id<>? AND merged_into_id=''", entity.SpaceID, entity.LibraryID, entity.EntityType, key, entity.ID).Count(&count).Error; err != nil {
+		if err := tx.Model(&types.Entity{}).Where("space_id=? AND library_id=? AND normalized_name=? AND id<>? AND merged_into_id='' AND archived_at IS NULL", entity.SpaceID, entity.LibraryID, key, entity.ID).Count(&count).Error; err != nil {
 			return err
 		}
-		if count > 0 {
+		if count > 0 && entity.ArchivedAt == nil {
 			return apperrors.NewConflictError("alias conflicts with another entity name")
 		}
 		if err := saveEntityAlias(tx, *entity, alias, "manual"); err != nil {
@@ -167,6 +168,7 @@ func (s *EntityService) CreateManagedEntity(ctx context.Context, libraryID strin
 		if err := validateManagedAttributeReferences(tx, library, entity.Attributes); err != nil {
 			return err
 		}
+
 		if err := tx.Create(&entity).Error; err != nil {
 			return err
 		}
@@ -248,13 +250,30 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 			return err
 		}
 		if entity.Kind != before.Kind {
-			var versions []types.EntityAttributeVersion
-			if err := tx.Where("entity_id=? AND space_id=?", id, spaceID).Find(&versions).Error; err != nil {
+			var pending []types.EntityAttributeVersion
+			if err := tx.Where("entity_id=? AND effective_at>?", id, time.Now()).Find(&pending).Error; err != nil {
 				return err
 			}
-			for _, version := range versions {
-				if err := library.EntitySchema.ValidateAttributes(entity.Kind, version.Attributes); err != nil {
-					return apperrors.NewBadRequestError("kind change would invalidate attribute history: " + err.Error())
+			allowed := map[string]bool{}
+			for _, field := range library.EntitySchema.Fields {
+				allowed[field.Key] = len(field.Kinds) == 0 || slices.Contains(field.Kinds, entity.Kind)
+			}
+			for _, version := range pending {
+				attributes := map[string]any{}
+				for key, value := range version.Attributes {
+					if allowed[key] {
+						attributes[key] = value
+					}
+				}
+				if !equalManagedAttributes(version.Attributes, attributes) {
+					beforeVersion := version
+					version.Attributes = attributes
+					if err := tx.Model(&version).Select("attributes").Updates(&version).Error; err != nil {
+						return err
+					}
+					if err := NewOperationLogService(tx).RecordTx(ctx, tx, "update_pending_entity_attributes", id, beforeVersion, version); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -268,7 +287,7 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		}
 		if patch.Archived != nil && *patch.Archived && entity.ArchivedAt == nil {
 			var children int64
-			if err := tx.Table("relations r").Joins("JOIN library_relation_types t ON t.library_id=r.library_id AND t.name=r.relation_type AND t.hierarchical").Joins("JOIN entities e ON e.id=r.subject_id AND e.archived_at IS NULL").Where("r.object_id=? AND r.library_id=?", id, entity.LibraryID).Count(&children).Error; err != nil {
+			if err := tx.Table("relations r").Joins("JOIN library_relation_types t ON t.library_id=r.library_id AND t.name=r.relation_type AND t.hierarchical").Joins("JOIN entities e ON e.id=r.subject_id AND e.archived_at IS NULL").Where("r.object_id=? AND r.library_id=? AND r.valid_to IS NULL", id, entity.LibraryID).Count(&children).Error; err != nil {
 				return err
 			}
 			if children > 0 {
@@ -303,7 +322,7 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 			return err
 		}
 		var relations []types.Relation
-		if err := tx.Where("space_id=? AND (subject_id=? OR object_id=?)", spaceID, id, id).Find(&relations).Error; err != nil {
+		if err := tx.Where("space_id=? AND (subject_id=? OR object_id=?) AND valid_to IS NULL", spaceID, id, id).Find(&relations).Error; err != nil {
 			return err
 		}
 		if entity.ArchivedAt == nil {
@@ -343,6 +362,73 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		err = s.refreshArticleHeadersForEntity(ctx, spaceID, id)
 	}
 	return &entity, managedWriteError(err)
+}
+
+func (s *EntityService) DeleteManagedEntity(ctx context.Context, id string, revision int64) error {
+	spaceID, err := s.requireSpace(ctx)
+	if err != nil {
+		return err
+	}
+	if _, ok := types.PrincipalFromContext(ctx); !ok {
+		return apperrors.NewUnauthorizedError("entity editor required")
+	}
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockEntitySpace(tx, spaceID); err != nil {
+			return err
+		}
+		var entity types.Entity
+		if err := tx.Where("id=? AND space_id=?", id, spaceID).First(&entity).Error; err != nil {
+			return err
+		}
+		if _, err := managedLibrary(tx, spaceID, entity.LibraryID); err != nil {
+			return err
+		}
+		if revision != entity.Revision {
+			return apperrors.NewConflictError("entity changed; reload before deleting")
+		}
+		var referenced bool
+		if err := tx.Raw(`SELECT
+			EXISTS (SELECT 1 FROM entry_entities WHERE entity_id=?) OR
+			EXISTS (SELECT 1 FROM relations WHERE subject_id=? OR object_id=?) OR
+			EXISTS (SELECT 1 FROM relation_suppressions WHERE subject_id=? OR object_id=?) OR
+			EXISTS (SELECT 1 FROM entity_reorganizations WHERE source_id=? OR target_id=?) OR
+			EXISTS (SELECT 1 FROM entity_merge_records WHERE keep_entity_id=? OR merge_entity_id=?) OR
+			EXISTS (SELECT 1 FROM entities WHERE merged_into_id=?)`, id, id, id, id, id, id, id, id, id, id).Scan(&referenced).Error; err != nil {
+			return err
+		}
+		if referenced {
+			return apperrors.NewConflictError("only products without documents, relationships or reorganization history can be deleted")
+		}
+		referenced, err := managedValueReferenced(tx, spaceID, id, id)
+		if err != nil {
+			return err
+		}
+		if referenced {
+			return apperrors.NewConflictError("another product or relationship still references this product")
+		}
+		if err := graph.Lock(tx, spaceID); err != nil {
+			return err
+		}
+		if err := tx.Where("entity_id=? AND space_id=?", id, spaceID).Delete(&types.EntityAttributeVersion{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("space_id=? AND (new_entity_id=? OR candidate_entity_id=?)", spaceID, id, id).Delete(&types.EntityMergeSuggestion{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("space_id=? AND target_type='entity' AND target_id=?", spaceID, id).Delete(&types.Follow{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&entity).Error; err != nil {
+			return err
+		}
+		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "delete_entity", id, entity, nil); err != nil {
+			return err
+		}
+		now := time.Now()
+		entity.ArchivedAt = &now
+		return queueManagedEntity(tx, &entity)
+	})
+	return managedWriteError(err)
 }
 
 func (s *EntityService) ManagedEntityHistory(ctx context.Context, id string, page, pageSize int) (*types.OperationLogPage, error) {

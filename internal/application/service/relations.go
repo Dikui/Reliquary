@@ -61,10 +61,14 @@ type RelationGroup struct {
 	Relations    []EntityRelationView `json:"relations"`
 }
 
-func (s *EntityService) ListRelations(ctx context.Context, id, libraryID string) ([]RelationGroup, error) {
+func (s *EntityService) ListRelations(ctx context.Context, id, libraryID string, asOf ...time.Time) ([]RelationGroup, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
+	}
+	at := time.Now()
+	if len(asOf) > 0 {
+		at = asOf[0]
 	}
 	groups := []RelationGroup{}
 	// One repeatable read snapshot keeps counts, versions and source rows coherent.
@@ -78,13 +82,13 @@ func (s *EntityService) ListRelations(ctx context.Context, id, libraryID string)
 		} else if err != nil {
 			return err
 		}
-		for entity.MergedIntoID != "" {
+		for len(asOf) == 0 && entity.MergedIntoID != "" {
 			id = entity.MergedIntoID
 			if err := tx.Where("space_id=? AND id=?", spaceID, id).First(&entity).Error; err != nil {
 				return err
 			}
 		}
-		q := tx.Where("space_id=? AND library_id=? AND (subject_id=? OR object_id=?)", spaceID, entity.LibraryID, id, id)
+		q := tx.Where("space_id=? AND library_id=? AND (subject_id=? OR object_id=?)", spaceID, entity.LibraryID, id, id).Where("valid_from<=? AND (valid_to IS NULL OR valid_to>?)", at, at)
 		if libraryID != "" {
 			var count int64
 			if err := tx.Model(&types.Library{}).Where("space_id=? AND id=?", spaceID, libraryID).Count(&count).Error; err != nil {
@@ -138,7 +142,7 @@ func (s *EntityService) ListRelations(ctx context.Context, id, libraryID string)
 				peers = append(peers, &groups[i].Relations[j].Peer)
 			}
 		}
-		return hydrateManagedEntityAttributes(ctx, tx, peers, time.Now())
+		return hydrateManagedEntityAttributes(ctx, tx, peers, at)
 	})
 	return groups, err
 }

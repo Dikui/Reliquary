@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -54,6 +56,22 @@ func convertLibraryEntities(ctx context.Context, tx *gorm.DB, library *types.Lib
 	var entities []types.Entity
 	if err := tx.Where("library_id=? AND space_id=?", library.ID, library.SpaceID).Find(&entities).Error; err != nil {
 		return err
+	}
+	names := map[string][]string{}
+	for _, entity := range entities {
+		if entity.ArchivedAt == nil && entity.MergedIntoID == "" {
+			names[entity.NormalizedName] = append(names[entity.NormalizedName], fmt.Sprintf("%s (%s, %s)", entity.CanonicalName, entity.EntityType, entity.ID))
+		}
+	}
+	var conflicts []string
+	for _, items := range names {
+		if len(items) > 1 {
+			conflicts = append(conflicts, strings.Join(items, ", "))
+		}
+	}
+	if len(conflicts) > 0 {
+		slices.Sort(conflicts)
+		return apperrors.NewConflictError("resolve duplicate names before conversion: " + strings.Join(conflicts, "; "))
 	}
 	if err := graph.Lock(tx, library.SpaceID); err != nil {
 		return err

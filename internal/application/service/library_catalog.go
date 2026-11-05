@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -77,7 +78,11 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 	}
 	var result *types.Library
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockEntitySpace(tx, types.MustSpaceIDFromContext(ctx)); err != nil {
+		lock := lockEntitySpaceShared
+		if patch.EntityMode != nil || patch.EntitySchema != nil || patch.RelationTypes != nil {
+			lock = lockEntitySpace
+		}
+		if err := lock(tx, types.MustSpaceIDFromContext(ctx)); err != nil {
 			return err
 		}
 		var locked types.Library
@@ -153,8 +158,10 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 		if err := types.ValidateLibrary(library); err != nil {
 			return apperrors.NewBadRequestError(err.Error())
 		}
-		if err := validateProductLibraries(tx, library); err != nil {
-			return err
+		if previous.EntityMode != library.EntityMode || !slices.Equal(previous.ProductLibraryIDs, library.ProductLibraryIDs) || !slices.Equal(previous.DocumentRelationTypes, library.DocumentRelationTypes) {
+			if err := validateProductLibraries(tx, library); err != nil {
+				return err
+			}
 		}
 		if !previous.ManagesEntities() && library.ManagesEntities() {
 			if err := convertLibraryEntities(ctx, tx, library, patch.EntityKindMapping); err != nil {

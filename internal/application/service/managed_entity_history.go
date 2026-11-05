@@ -1,7 +1,9 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -10,6 +12,15 @@ import (
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 )
+
+func equalManagedAttributes(a, b map[string]any) bool {
+	left, err := json.Marshal(a)
+	if err != nil {
+		return false
+	}
+	right, err := json.Marshal(b)
+	return err == nil && bytes.Equal(left, right)
+}
 
 type EntityAttributesResult struct {
 	EntityID    string         `json:"entity_id"`
@@ -70,6 +81,50 @@ func saveManagedAttributeVersion(ctx context.Context, tx *gorm.DB, entity *types
 	}
 	if effective.IsZero() {
 		return apperrors.NewBadRequestError("effective_at must be a valid date")
+	}
+	var previous types.EntityAttributeVersion
+	err := tx.Where("entity_id=? AND effective_at<=?", entity.ID, effective).Order("effective_at DESC,revision DESC").First(&previous).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if err == nil && equalManagedAttributes(previous.Attributes, entity.Attributes) {
+		if err := hydrateManagedEntityAttributes(ctx, tx, []*types.Entity{entity}, now); err != nil {
+			return err
+		}
+		return tx.Model(entity).Select("attributes").Updates(entity).Error
+	}
+	// Carry this edit into pending snapshots without replacing their other fields.
+	var pending []types.EntityAttributeVersion
+	if err := tx.Where("entity_id=? AND effective_at>? AND effective_at>?", entity.ID, now, effective).Find(&pending).Error; err != nil {
+		return err
+	}
+	for _, next := range pending {
+		before := next
+		updated := make(map[string]any, len(next.Attributes))
+		for key, value := range next.Attributes {
+			updated[key] = value
+		}
+		for key, value := range entity.Attributes {
+			old, exists := previous.Attributes[key]
+			if !exists || !equalManagedAttributes(map[string]any{key: old}, map[string]any{key: value}) {
+				updated[key] = value
+			}
+		}
+		for key := range previous.Attributes {
+			if _, exists := entity.Attributes[key]; !exists {
+				delete(updated, key)
+			}
+		}
+		if equalManagedAttributes(next.Attributes, updated) {
+			continue
+		}
+		next.Attributes = updated
+		if err := tx.Model(&next).Select("attributes").Updates(&next).Error; err != nil {
+			return err
+		}
+		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "update_pending_entity_attributes", entity.ID, before, next); err != nil {
+			return err
+		}
 	}
 	version := types.EntityAttributeVersion{ID: uuid.NewString(), SpaceID: entity.SpaceID, EntityID: entity.ID, Revision: entity.Revision, EffectiveAt: effective, RecordedAt: now, Attributes: entity.Attributes}
 	if err := tx.Create(&version).Error; err != nil {

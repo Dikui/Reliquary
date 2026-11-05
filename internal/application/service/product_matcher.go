@@ -50,8 +50,9 @@ func (c *productMatcherCache) load(tx *gorm.DB, library *types.Library) (*produc
 		}
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if cached := c.items[key]; cached != nil {
+	cached := c.items[key]
+	c.mu.Unlock()
+	if cached != nil {
 		return cached, nil
 	}
 	var products []types.Entity
@@ -78,6 +79,11 @@ func (c *productMatcherCache) load(tx *gorm.DB, library *types.Library) (*produc
 	matcher, err := compileProductMatcher(products)
 	if err != nil {
 		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if cached := c.items[key]; cached != nil {
+		return cached, nil
 	}
 	// Bound retained catalog versions without a background eviction worker.
 	if len(c.items) >= 32 || c.items == nil {
@@ -159,22 +165,43 @@ func (m *productMatcher) matches(body string) []productMention {
 		return nil
 	}
 	var result []productMention
-	for _, span := range m.pattern.FindAllStringIndex(body, -1) {
-		name := body[span[0]:span[1]]
-		owner := m.owners[productNameKey(name)]
-		// Disabled and ambiguous longer names still consume their span, preventing
-		// a shorter product name inside them from becoming a false association.
-		if owner.id == "" || !owner.enabled {
+	coveredEnd := 0
+	for offset := 0; offset < len(body); {
+		span := m.pattern.FindStringIndex(body[offset:])
+		if span == nil {
+			break
+		}
+		start, end := offset+span[0], offset+span[1]
+		first, size := utf8.DecodeRuneInString(body[start:])
+		// Advance from the start so partially overlapping names are also visited.
+		offset = start + size
+		before, _ := utf8.DecodeLastRuneInString(body[:start])
+		if productWordRune(first) && productWordRune(before) {
 			continue
 		}
-		first, _ := utf8.DecodeRuneInString(name)
-		last, _ := utf8.DecodeLastRuneInString(name)
-		before, _ := utf8.DecodeLastRuneInString(body[:span[0]])
-		after, _ := utf8.DecodeRuneInString(body[span[1]:])
-		if productWordRune(first) && productWordRune(before) || productWordRune(last) && productWordRune(after) {
-			continue
+		for end > start {
+			last, size := utf8.DecodeLastRuneInString(body[start:end])
+			after, _ := utf8.DecodeRuneInString(body[end:])
+			if productWordRune(last) && productWordRune(after) {
+				// An invalid longer name must not hide a valid shorter prefix.
+				shorter := m.pattern.FindStringIndex(body[start : end-size])
+				if shorter == nil || shorter[0] != 0 {
+					break
+				}
+				end = start + shorter[1]
+				continue
+			}
+			// Only the longest valid name at each start can survive containment.
+			// Disabled or ambiguous names still suppress fully contained names.
+			if end > coveredEnd {
+				coveredEnd = end
+				owner := m.owners[productNameKey(body[start:end])]
+				if owner.id != "" && owner.enabled {
+					result = append(result, productMention{id: owner.id, start: start, end: end})
+				}
+			}
+			break
 		}
-		result = append(result, productMention{id: owner.id, start: span[0], end: span[1]})
 	}
 	return result
 }
@@ -191,7 +218,7 @@ func (m *productMatcher) evidence(body string) map[string][]types.SourceLocation
 		runeOffset += utf8.RuneCountInString(body[byteOffset:mention.start])
 		end := runeOffset + utf8.RuneCountInString(body[mention.start:mention.end])
 		chunks = append(chunks, &types.Chunk{Content: body[mention.start:mention.end], StartAt: runeOffset, EndAt: end})
-		byteOffset, runeOffset = mention.end, end
+		byteOffset = mention.start
 	}
 	if len(chunks) > 0 {
 		types.AssignSourceLocations(body, chunks)

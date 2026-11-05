@@ -404,4 +404,9 @@ func TestManagedSnapshotExcludesArchivedEndpoints(t *testing.T) {
 	restored, err := readPG(db, 0, "")
 	require.NoError(t, err)
 	require.Equal(t, before.Hash(), restored.Hash())
+	require.NoError(t, db.Model(&types.Relation{}).Where("id=?", "managed-edge").Update("valid_to", time.Now()).Error)
+	ended, err := readPG(db, 0, "")
+	require.NoError(t, err)
+	require.Len(t, ended.Nodes, 2)
+	require.Empty(t, ended.Edges, "historical relationships must not reappear in the graph replica")
 }

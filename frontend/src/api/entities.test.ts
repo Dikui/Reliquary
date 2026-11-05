@@ -11,7 +11,7 @@ function loadAPI(requests: Request[]) {
   new Function('require', 'module', 'exports', code)((name: string) => {
     if (name === './entity-types') return scope
     assert.equal(name, '@/utils/request')
-    return Object.fromEntries(['get', 'post', 'patch', 'put'].map(method => [method, (url: string, body?: unknown) => { requests.push({ method, url, ...(body === undefined ? {} : { body }) }); return Promise.resolve({ success: true, data: [] }) }]))
+    return Object.fromEntries(['get', 'post', 'patch', 'put', 'del'].map(method => [method, (url: string, body?: unknown) => { requests.push({ method, url, ...(body === undefined ? {} : { body }) }); return Promise.resolve({ success: true, data: [] }) }]))
   }, module, module.exports)
   return module.exports
 }
@@ -60,17 +60,17 @@ test('effective attributes and split selections retain their typed payloads', as
   const effective_at = '2026-11-01T00:00:00.000Z'
   const attributes = { tags: ['solar', 'storage'], links: ['one', 'two'], website: 'https://example.org', product: 'related-product', file: 'attachment-id' }
   await api.updateManagedEntity('product', { revision: 4, attributes, effective_at })
-  await api.splitManagedEntity('product', { revision: 5, new_entity: { name: 'Variant', kind: 'model', code: 'V2', description: '', aliases: [], attributes }, entry_ids: ['document'], relation_ids: ['edge'], effective_at })
+  await api.splitManagedEntity('product', { revision: 5, new_entity: { name: 'Variant', kind: 'model', code: 'V2', description: '', aliases: [], attributes }, entry_ids: ['document'], relation_ids: ['edge'], copy_relation_ids: ['parent'], effective_at })
   await api.setEntryEntityLink('document', 'another-library-product', false, 'test_report')
   assert.deepEqual(requests, [
     { method: 'patch', url: '/api/v1/entities/product', body: { revision: 4, attributes, effective_at } },
-    { method: 'post', url: '/api/v1/entities/product/split', body: { revision: 5, new_entity: { name: 'Variant', kind: 'model', code: 'V2', description: '', aliases: [], attributes }, entry_ids: ['document'], relation_ids: ['edge'], effective_at } },
+    { method: 'post', url: '/api/v1/entities/product/split', body: { revision: 5, new_entity: { name: 'Variant', kind: 'model', code: 'V2', description: '', aliases: [], attributes }, entry_ids: ['document'], relation_ids: ['edge'], copy_relation_ids: ['parent'], effective_at } },
     { method: 'put', url: '/api/v1/entries/document/entity-links/another-library-product', body: { excluded: false, relation_type: 'test_report' } },
   ])
 })
 
 test('managed merge sends explicitly discarded relation IDs', async () => {
   const requests: Request[] = [], api = loadAPI(requests)
-  await api.mergeManagedEntity('target', { revision: 3, source_id: 'source', source_revision: 2, attributes: {}, drop_relation_ids: ['source-edge'] })
-  assert.deepEqual(requests, [{ method: 'post', url: '/api/v1/entities/target/merge', body: { revision: 3, source_id: 'source', source_revision: 2, attributes: {}, drop_relation_ids: ['source-edge'] } }])
+  await api.mergeManagedEntity('target', { revision: 3, source_id: 'source', source_revision: 2, attributes: {}, drop_relation_ids: ['source-edge'], document_relation_preference: 'target' })
+  assert.deepEqual(requests, [{ method: 'post', url: '/api/v1/entities/target/merge', body: { revision: 3, source_id: 'source', source_revision: 2, attributes: {}, drop_relation_ids: ['source-edge'], document_relation_preference: 'target' } }])
 })

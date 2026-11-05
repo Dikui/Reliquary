@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"reliquary/internal/application/service"
@@ -163,7 +164,19 @@ func (h *EntityHandler) RebuildNameEmbeddings(c *gin.Context) {
 }
 
 func (h *EntityHandler) Relations(c *gin.Context) {
-	items, err := h.service.ListRelations(c.Request.Context(), c.Param("entity_id"), c.Query("library_id"))
+	var asOf []time.Time
+	if raw := c.Query("as_of"); raw != "" {
+		at, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			at, err = time.ParseInLocation(time.DateOnly, raw, time.Local)
+		}
+		if err != nil {
+			c.Error(werrors.NewBadRequestError("invalid relationship as_of time"))
+			return
+		}
+		asOf = append(asOf, at)
+	}
+	items, err := h.service.ListRelations(c.Request.Context(), c.Param("entity_id"), c.Query("library_id"), asOf...)
 	if err != nil {
 		c.Error(err)
 		return

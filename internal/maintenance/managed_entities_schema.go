@@ -16,10 +16,15 @@ var entityAutoMatchDefaults = map[string]map[string]any{
 	"entities": {"auto_match": map[string]any{}},
 }
 
+var relationValidityDefaults = map[string]map[string]any{
+	"relations": {"valid_from": nil, "valid_to": nil},
+}
+
 func projectManagedEntitiesSnapshot(snapshot *Snapshot, targetVersion int64) {
 	projectEntityDefaultsSnapshot(snapshot, targetVersion, 37, managedEntityDefaults)
 	projectManagedEvolutionSnapshot(snapshot, targetVersion)
 	projectEntityDefaultsSnapshot(snapshot, targetVersion, 39, entityAutoMatchDefaults)
+	projectEntityDefaultsSnapshot(snapshot, targetVersion, 40, relationValidityDefaults)
 }
 
 func projectEntityDefaultsSnapshot(snapshot *Snapshot, targetVersion, version int64, defaults map[string]map[string]any) {
@@ -29,6 +34,9 @@ func projectEntityDefaultsSnapshot(snapshot *Snapshot, targetVersion, version in
 	for table, columns := range defaults {
 		for _, row := range snapshot.Tables[table] {
 			for column, value := range columns {
+				if table == "relations" && column == "valid_from" {
+					value = row["updated_at"]
+				}
 				row[column] = value
 			}
 		}
@@ -38,7 +46,8 @@ func projectEntityDefaultsSnapshot(snapshot *Snapshot, targetVersion, version in
 func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 37, managedEntityDefaults)
 	expected, actual = projectManagedEvolutionManifest(expected, actual)
-	return projectEntityDefaultsManifest(expected, actual, 39, entityAutoMatchDefaults)
+	expected, actual = projectEntityDefaultsManifest(expected, actual, 39, entityAutoMatchDefaults)
+	return projectEntityDefaultsManifest(expected, actual, 40, relationValidityDefaults)
 }
 
 func projectEntityDefaultsManifest(expected, actual *Manifest, version int64, defaults map[string]map[string]any) (*Manifest, *Manifest) {
@@ -69,6 +78,9 @@ func projectEntityDefaultsManifest(expected, actual *Manifest, version int64, de
 		for _, row := range item.Data {
 			copy := catalogCopy(row)
 			for column, value := range columns {
+				if table == "relations" && column == "valid_from" {
+					value = row["updated_at"]
+				}
 				copy[column] = value
 			}
 			rows = append(rows, copy)

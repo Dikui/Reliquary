@@ -7,14 +7,14 @@ import zh from '../../../i18n/locales/zh-CN'
 import { click, descendants, element, loadComponent, renderer, settle, visibleText } from '../componentTestHarness'
 
 test('ordinary documents link to the selected product library and keep the selection after failure', async t => {
-  const writes: unknown[] = [], listLibraries: string[] = []
+  const writes: unknown[] = [], listLibraries: string[] = [], searches: string[] = []
   let fail = true
-  const select = defineComponent({ props: ['modelValue', 'options', 'disabled'], emits: ['update:modelValue'], setup: (props, { emit, slots }) => () => h('select', { value: props.modelValue, disabled: props.disabled, onChange: (event: any) => emit('update:modelValue', event.target.value) }, slots.default?.() || props.options?.map((option: any) => h('option', { value: option.value }, option.label))) })
+  const select = defineComponent({ props: ['modelValue', 'options', 'disabled'], emits: ['update:modelValue', 'search'], setup: (props, { emit, slots }) => () => h('select', { value: props.modelValue, disabled: props.disabled, onSearch: (query: string) => emit('search', query), onChange: (event: any) => emit('update:modelValue', event.target.value) }, slots.default?.() || props.options?.map((option: any) => h('option', { value: option.value }, option.label))) })
   const component = loadComponent(new URL('./ManagedDocumentLinks.vue', import.meta.url), {
     '@/components/ui': { Select: select, Combobox: select, Button: defineComponent({ props: ['disabled'], setup: (props, { slots, attrs }) => () => h('button', { ...attrs, disabled: props.disabled }, slots.default?.()) }) },
     '@/api/library': { listLibraries: async () => ({ success: true, data: [{ id: 'documents', entity_mode: 'extracted' }, { id: 'products-a', name: 'Products A', entity_mode: 'managed', document_relation_types: ['references', 'test_report'] }, { id: 'products-b', name: 'Products B', entity_mode: 'managed', document_relation_types: ['references', 'specification'] }] }) },
     '@/api/entities': {
-      listEntities: async (input: any) => { listLibraries.push(input.library_id); return { success: true, data: [{ id: `${input.library_id}-entity`, canonical_name: 'Model', library_id: input.library_id }] } },
+      listEntities: async (input: any) => { listLibraries.push(input.library_id); searches.push(input.entity); return { success: true, data: [{ id: `${input.library_id}-entity`, canonical_name: 'Model', library_id: input.library_id }] } },
       listEntryEntityLinks: async () => ({ success: true, data: [] }),
       setEntryEntityLink: async (...args: unknown[]) => { writes.push(args); if (fail) throw new Error('Conflict: retry'); return { success: true } },
     },
@@ -23,6 +23,8 @@ test('ordinary documents link to the selected product library and keep the selec
   app.use(createI18n({ legacy: false, locale: 'en-US', messages: { 'en-US': en, 'zh-CN': zh } })); app.mount(root); t.after(() => app.unmount()); await settle()
   let controls = descendants(root).filter(n => n.tag === 'select')
   controls[0]!.props.onChange({ target: { value: 'products-b' } }); await settle()
+  controls = descendants(root).filter(n => n.tag === 'select')
+  controls[2]!.props.onSearch('Model'); await settle(); assert.equal(searches.at(-1), 'Model')
   controls = descendants(root).filter(n => n.tag === 'select')
   controls[1]!.props.onChange({ target: { value: 'specification' } }); controls[2]!.props.onChange({ target: { value: 'products-b-entity' } }); await settle()
   const link = () => descendants(root).find(n => n.tag === 'button' && visibleText(n) === 'Link entity')!

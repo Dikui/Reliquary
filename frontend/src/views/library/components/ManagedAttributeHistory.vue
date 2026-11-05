@@ -5,7 +5,7 @@ import { Button, Dialog } from '@/components/ui'
 import { getEntityAttributes, getAttributeHistory, getEntityReorganizations, type Entity, type AttributeSnapshot, type AttributeVersion, type EntityReorganization } from '@/api/entities'
 import type { LibraryCatalogItem } from '@/api/library'
 import ManagedAttributes from './ManagedAttributes.vue'
-import { formatDateTime } from '@/utils/dateTime'
+import { formatDateTime, localDateTimeISO } from '@/utils/dateTime'
 const props = defineProps<{ entity: Entity; library: LibraryCatalogItem }>()
 const { t, locale } = useI18n()
 const queriedId = ref(props.entity.id)
@@ -15,7 +15,7 @@ let request = 0
 async function load(nextPage = 1) {
   const current = ++request; open.value = true; loading.value = true; error.value = ''
   try {
-    const date = at.value ? new Date(at.value).toISOString() : undefined
+    const date = at.value ? localDateTimeISO(at.value) : undefined
     const [values, history, origins] = await Promise.all([getEntityAttributes(queriedId.value, date), getAttributeHistory(queriedId.value, nextPage), getEntityReorganizations(queriedId.value)])
     if (!values.success || !history.success || !origins.success) throw new Error(t('common.operationFailed'))
     if (current !== request) return
@@ -32,9 +32,9 @@ onBeforeUnmount(() => { request++ })
     <p>{{ t('managed.historyEntity') }}: {{ queriedId }} <Button v-if="queriedId !== entity.id" @click="navigate(entity.id)">{{ t('managed.returnCurrent') }}</Button></p>
     <form class="history-form" novalidate @submit.prevent="load()"><label>{{ t('managed.asOf') }}<input v-model="at" class="rq-control" type="datetime-local"></label><Button type="submit" :loading="loading">{{ t('managed.queryValues') }}</Button></form>
     <p v-if="error" role="alert">{{ error }}</p><p v-if="loading" role="status">{{ t('common.loading') }}</p>
-    <section v-if="snapshot"><h3>{{ t(at ? 'managed.historicalValues' : 'managed.currentValues') }}</h3><p v-if="!snapshot.known">{{ t('managed.unknownValues') }}</p><ManagedAttributes v-else :model-value="snapshot.attributes" :fields="library.entity_schema?.fields || []" :library-id="library.id" :kind="queriedId === entity.id ? entity.kind : undefined" readonly /></section>
+    <section v-if="snapshot"><h3>{{ t(at ? 'managed.historicalValues' : 'managed.currentValues') }}</h3><p v-if="!snapshot.known">{{ t('managed.unknownValues') }}</p><ManagedAttributes v-else :model-value="snapshot.attributes" :fields="library.entity_schema?.fields || []" :library-id="library.id" readonly /></section>
     <h3>{{ t('managed.attributeHistory') }}</h3><p v-if="!versions.length && !loading">{{ t('managed.noHistory') }}</p>
-    <details v-for="version in versions" :key="version.id"><summary>{{ t('managed.effectiveAt') }}: {{ formatDateTime(version.effective_at, locale, { dateStyle: 'medium', timeStyle: 'short' }) }} · {{ t('managed.recordedAt') }}: {{ formatDateTime(version.recorded_at, locale, { dateStyle: 'medium', timeStyle: 'short' }) }} · {{ version.revision }}</summary><ManagedAttributes :model-value="version.attributes" :fields="library.entity_schema?.fields || []" :library-id="library.id" :kind="queriedId === entity.id ? entity.kind : undefined" readonly /></details>
+    <details v-for="version in versions" :key="version.id"><summary>{{ t('managed.effectiveAt') }}: {{ formatDateTime(version.effective_at, locale, { dateStyle: 'medium', timeStyle: 'short' }) }} · {{ t('managed.recordedAt') }}: {{ formatDateTime(version.recorded_at, locale, { dateStyle: 'medium', timeStyle: 'short' }) }} · {{ version.revision }}</summary><ManagedAttributes :model-value="version.attributes" :fields="library.entity_schema?.fields || []" :library-id="library.id" readonly /></details>
     <div class="history-form"><Button :disabled="loading || page === 1" @click="load(page - 1)">{{ t('follows.previousPage') }}</Button><span>{{ page }}</span><Button :disabled="loading || page * 20 >= total" @click="load(page + 1)">{{ t('follows.nextPage') }}</Button></div>
     <h3>{{ t('managed.lineage') }}</h3><p v-if="!lineage.length">{{ t('managed.noHistory') }}</p><p v-for="item in lineage" :key="item.id">{{ t(item.kind === 'merge' ? 'managed.merge' : 'managed.split') }} · <Button variant="ghost" @click="navigate(item.source_id)">{{ item.source_id }}</Button> → <Button variant="ghost" @click="navigate(item.target_id)">{{ item.target_id }}</Button> · {{ formatDateTime(item.created_at, locale) }}</p>
   </Dialog>

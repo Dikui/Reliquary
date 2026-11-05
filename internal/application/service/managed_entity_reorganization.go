@@ -32,11 +32,10 @@ func loadReorganizationEntity(tx *gorm.DB, spaceID uint64, id string, revision i
 	return &entity, nil
 }
 
-// Keep relation identities and their evidence. Duplicate triples are rejected,
-// because choosing one would discard either relation's attributes or history.
-func moveManagedRelations(tx *gorm.DB, library *types.Library, source, target string, ids []string, all bool) error {
+// End moved relationships and create their successors so past structures remain queryable.
+func moveManagedRelations(tx *gorm.DB, library *types.Library, source, target string, ids []string, all, copyRelations bool) error {
 	var rows []types.Relation
-	query := tx.Where("space_id=? AND (subject_id=? OR object_id=?)", library.SpaceID, source, source)
+	query := tx.Where("space_id=? AND valid_to IS NULL AND (subject_id=? OR object_id=?)", library.SpaceID, source, source)
 	if !all {
 		if len(ids) == 0 {
 			return nil
@@ -62,18 +61,23 @@ func moveManagedRelations(tx *gorm.DB, library *types.Library, source, target st
 			return apperrors.NewConflictError("reorganization would create a self relationship")
 		}
 		var count int64
-		if err := tx.Model(&types.Relation{}).Where("space_id=? AND library_id=? AND subject_id=? AND relation_type=? AND object_id=? AND id<>?", library.SpaceID, library.ID, row.SubjectID, row.RelationType, row.ObjectID, row.ID).Count(&count).Error; err != nil {
+		if err := tx.Model(&types.Relation{}).Where("space_id=? AND library_id=? AND subject_id=? AND relation_type=? AND object_id=? AND id<>? AND valid_to IS NULL", library.SpaceID, library.ID, row.SubjectID, row.RelationType, row.ObjectID, row.ID).Count(&count).Error; err != nil {
 			return err
 		}
 		if count > 0 {
 			return apperrors.NewConflictError("reorganization would merge distinct relationship histories")
 		}
-		row.Version++
 		row.UpdatedAt = time.Now()
-		if err := tx.Save(row).Error; err != nil {
+		if !copyRelations {
+			if err := endManagedRelation(tx, before, row.UpdatedAt); err != nil {
+				return err
+			}
+		}
+		row.ID, row.Version, row.CreatedAt, row.ValidFrom = uuid.NewString(), 1, row.UpdatedAt, row.UpdatedAt
+		if err := tx.Create(row).Error; err != nil {
 			return err
 		}
-		if err := queueManagedRelation(tx, before, false); err != nil {
+		if err := copyManagedRelationSources(tx, before.ID, row.ID); err != nil {
 			return err
 		}
 		if err := queueManagedRelation(tx, *row, false); err != nil {
@@ -95,19 +99,15 @@ func dropManagedMergeRelations(ctx context.Context, tx *gorm.DB, library *types.
 		return nil
 	}
 	var rows []types.Relation
-	if err := tx.Where("space_id=? AND library_id=? AND (subject_id=? OR object_id=?) AND id IN ?", library.SpaceID, library.ID, source, source, ids).Find(&rows).Error; err != nil {
+	if err := tx.Where("space_id=? AND library_id=? AND (subject_id=? OR object_id=?) AND id IN ? AND valid_to IS NULL", library.SpaceID, library.ID, source, source, ids).Find(&rows).Error; err != nil {
 		return err
 	}
 	if len(rows) != len(ids) {
 		return apperrors.NewBadRequestError("drop_relation_ids must name distinct relationships of the source entity")
 	}
 	for _, row := range rows {
-		if err := tx.Delete(&row).Error; err != nil {
-			return err
-		}
 		before := row
-		row.Version++
-		if err := queueManagedRelation(tx, row, true); err != nil {
+		if err := endManagedRelation(tx, row, time.Now()); err != nil {
 			return err
 		}
 		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "delete_relation", row.ID, before, nil); err != nil {
@@ -117,7 +117,7 @@ func dropManagedMergeRelations(ctx context.Context, tx *gorm.DB, library *types.
 	return nil
 }
 
-func mergeManagedEntryLinks(tx *gorm.DB, spaceID uint64, source, target string) error {
+func mergeManagedEntryLinks(tx *gorm.DB, spaceID uint64, source, target, preference string) error {
 	var links []types.EntryEntity
 	if err := tx.Where("space_id=? AND entity_id=?", spaceID, source).Find(&links).Error; err != nil {
 		return err
@@ -134,8 +134,17 @@ func mergeManagedEntryLinks(tx *gorm.DB, spaceID uint64, source, target string) 
 		if err != nil {
 			return err
 		}
-		if existing.Excluded != link.Excluded || existing.RelationType != link.RelationType {
+		if existing.Excluded != link.Excluded {
 			return apperrors.NewConflictError("document associations disagree; resolve them before merging")
+		}
+		if existing.RelationType != link.RelationType {
+			switch preference {
+			case "source":
+				existing.RelationType = link.RelationType
+			case "target":
+			default:
+				return apperrors.NewConflictError("document relationship types disagree; choose source or target preference")
+			}
 		}
 		if existing.BodyHash != link.BodyHash && len(existing.Evidence) > 0 && len(link.Evidence) > 0 {
 			return apperrors.NewConflictError("document evidence comes from different body versions")
@@ -158,7 +167,7 @@ func mergeManagedEntryLinks(tx *gorm.DB, spaceID uint64, source, target string) 
 		if link.Origin == "manual" {
 			existing.Origin = "manual"
 		}
-		if err := tx.Model(&types.EntryEntity{}).Where("space_id=? AND entity_id=? AND entry_id=?", spaceID, target, link.EntryID).Select("origin", "evidence", "body_hash").Updates(&existing).Error; err != nil {
+		if err := tx.Model(&types.EntryEntity{}).Where("space_id=? AND entity_id=? AND entry_id=?", spaceID, target, link.EntryID).Select("origin", "evidence", "body_hash", "relation_type").Updates(&existing).Error; err != nil {
 			return err
 		}
 		if err := tx.Where("space_id=? AND entity_id=? AND entry_id=?", spaceID, source, link.EntryID).Delete(&types.EntryEntity{}).Error; err != nil {
@@ -178,6 +187,9 @@ func (s *EntityService) MergeManagedEntities(ctx context.Context, id string, inp
 	}
 	if id == input.SourceID || input.SourceID == "" || input.Attributes == nil {
 		return nil, apperrors.NewBadRequestError("distinct source_id and explicit resulting attributes are required")
+	}
+	if input.DocumentRelationPreference != "" && input.DocumentRelationPreference != "source" && input.DocumentRelationPreference != "target" {
+		return nil, apperrors.NewBadRequestError("document_relation_preference must be source or target")
 	}
 	if err := reorganizationTime(input.EffectiveAt); err != nil {
 		return nil, err
@@ -248,10 +260,10 @@ func (s *EntityService) MergeManagedEntities(ctx context.Context, id string, inp
 		if err := saveManagedAttributeVersion(ctx, tx, target, input.EffectiveAt); err != nil {
 			return err
 		}
-		if err := mergeManagedEntryLinks(tx, spaceID, source.ID, target.ID); err != nil {
+		if err := mergeManagedEntryLinks(tx, spaceID, source.ID, target.ID, input.DocumentRelationPreference); err != nil {
 			return err
 		}
-		if err := moveManagedRelations(tx, library, source.ID, target.ID, nil, true); err != nil {
+		if err := moveManagedRelations(tx, library, source.ID, target.ID, nil, true, false); err != nil {
 			return err
 		}
 		var aliases []string
@@ -366,7 +378,10 @@ func (s *EntityService) SplitManagedEntity(ctx context.Context, id string, input
 				return err
 			}
 		}
-		if err := moveManagedRelations(tx, library, id, target.ID, input.RelationIDs, false); err != nil {
+		if err := moveManagedRelations(tx, library, id, target.ID, input.RelationIDs, false, false); err != nil {
+			return err
+		}
+		if err := moveManagedRelations(tx, library, id, target.ID, input.CopyRelationIDs, false, true); err != nil {
 			return err
 		}
 		source.Revision++

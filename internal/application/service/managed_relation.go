@@ -23,7 +23,7 @@ func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types
 	if err := types.ValidateFieldAttributes(rule.Fields, relation.Attributes); err != nil {
 		return apperrors.NewBadRequestError(err.Error())
 	}
-	if err := validateAttributeReferences(tx, library.SpaceID, rule.Fields, relation.Attributes); err != nil {
+	if err := validateAttributeReferences(tx, library.SpaceID, library.ID, rule.Fields, relation.Attributes); err != nil {
 		return err
 	}
 	var subject, object types.Entity
@@ -39,7 +39,7 @@ func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types
 		return nil
 	}
 	var count int64
-	if err := tx.Table("relations r").Joins("JOIN library_relation_types t ON t.library_id=r.library_id AND t.name=r.relation_type AND t.hierarchical").Where("r.library_id=? AND r.subject_id=? AND r.id<>?", library.ID, relation.SubjectID, excludeID).Count(&count).Error; err != nil {
+	if err := tx.Table("relations r").Where("r.library_id=? AND r.subject_id=? AND r.relation_type=? AND r.id<>? AND r.valid_to IS NULL", library.ID, relation.SubjectID, relation.RelationType, excludeID).Count(&count).Error; err != nil {
 		return err
 	}
 	if count > 0 {
@@ -49,9 +49,8 @@ func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types
 	err := tx.Raw(`WITH RECURSIVE ancestors(id) AS (
  SELECT ?::varchar UNION
  SELECT r.object_id FROM relations r JOIN ancestors a ON r.subject_id=a.id
- JOIN library_relation_types t ON t.library_id=r.library_id AND t.name=r.relation_type AND t.hierarchical
- WHERE r.library_id=? AND r.id<>?
-) SELECT EXISTS (SELECT 1 FROM ancestors WHERE id=?)`, relation.ObjectID, library.ID, excludeID, relation.SubjectID).Scan(&cycle).Error
+ WHERE r.library_id=? AND r.relation_type=? AND r.id<>? AND r.valid_to IS NULL
+) SELECT EXISTS (SELECT 1 FROM ancestors WHERE id=?)`, relation.ObjectID, library.ID, relation.RelationType, excludeID, relation.SubjectID).Scan(&cycle).Error
 	if err != nil {
 		return err
 	}
@@ -88,7 +87,7 @@ func (s *EntityService) SaveManagedRelation(ctx context.Context, libraryID, id s
 				return err
 			}
 			libraryID = row.LibraryID
-			if row.Version != input.Version {
+			if row.ValidTo != nil || row.Version != input.Version {
 				return apperrors.NewConflictError("relationship changed; reload before saving")
 			}
 		}
@@ -119,18 +118,19 @@ func (s *EntityService) SaveManagedRelation(ctx context.Context, libraryID, id s
 			return err
 		}
 		row.UpdatedAt = time.Now()
-		operation := "update_relation"
-		if id == "" {
-			row.ID, row.CreatedAt, row.Version = uuid.NewString(), row.UpdatedAt, 1
-			operation = "create_relation"
-		} else {
-			row.Version++
+		operation := "create_relation"
+		if id != "" {
+			operation = "update_relation"
+			if err := endManagedRelation(tx, before, row.UpdatedAt); err != nil {
+				return err
+			}
 		}
-		if err := tx.Save(&row).Error; err != nil {
+		row.ID, row.CreatedAt, row.ValidFrom, row.Version = uuid.NewString(), row.UpdatedAt, row.UpdatedAt, 1
+		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
 		if id != "" {
-			if err := queueManagedRelation(tx, before, false); err != nil {
+			if err := copyManagedRelationSources(tx, before.ID, row.ID); err != nil {
 				return err
 			}
 		}
@@ -161,20 +161,40 @@ func (s *EntityService) DeleteManagedRelation(ctx context.Context, id string, ve
 		if _, err := managedLibrary(tx, spaceID, row.LibraryID); err != nil {
 			return err
 		}
-		if row.Version != version {
+		if row.ValidTo != nil || row.Version != version {
 			return apperrors.NewConflictError("relationship changed; reload before deleting")
 		}
 		if err := graph.Lock(tx, spaceID); err != nil {
 			return err
 		}
-		if err := tx.Delete(&row).Error; err != nil {
-			return err
-		}
 		before := row
-		row.Version++
-		if err := queueManagedRelation(tx, row, true); err != nil {
+		if err := endManagedRelation(tx, row, time.Now()); err != nil {
 			return err
 		}
 		return NewOperationLogService(tx).RecordTx(ctx, tx, "delete_relation", id, before, nil)
 	}))
+}
+
+// Ending a row preserves the structure and evidence visible before this change.
+func endManagedRelation(tx *gorm.DB, row types.Relation, at time.Time) error {
+	row.ValidTo, row.UpdatedAt = &at, at
+	row.Version++
+	if err := tx.Model(&row).Select("valid_to", "updated_at", "version").Updates(&row).Error; err != nil {
+		return err
+	}
+	return queueManagedRelation(tx, row, true)
+}
+
+func copyManagedRelationSources(tx *gorm.DB, sourceID, targetID string) error {
+	var sources []types.RelationSource
+	if err := tx.Where("relation_id=?", sourceID).Find(&sources).Error; err != nil {
+		return err
+	}
+	for _, source := range sources {
+		source.RelationID = targetID
+		if err := tx.Create(&source).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }

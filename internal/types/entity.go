@@ -38,10 +38,10 @@ func (Entity) TableName() string { return "entities" }
 // EntityAlias stores normalized names used to resolve future mentions.
 type EntityAlias struct {
 	LibraryID        string    `json:"library_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_alias"`
-	EntityType       string    `json:"entity_type" gorm:"type:varchar(128);not null;default:'';uniqueIndex:idx_entity_alias"`
+	EntityType       string    `json:"entity_type" gorm:"type:varchar(128);not null;default:''"`
 	ID               string    `json:"id" gorm:"type:varchar(36);primaryKey"`
 	SpaceID          uint64    `json:"space_id" gorm:"not null;uniqueIndex:idx_entity_alias"`
-	EntityID         string    `json:"entity_id" gorm:"type:varchar(36);not null;index"`
+	EntityID         string    `json:"entity_id" gorm:"type:varchar(36);not null;index;uniqueIndex:idx_entity_alias"`
 	Alias            string    `json:"alias" gorm:"type:varchar(512);not null"`
 	NormalizedAlias  string    `json:"normalized_alias" gorm:"type:varchar(512);not null;uniqueIndex:idx_entity_alias"`
 	ResolutionMethod string    `json:"resolution_method" gorm:"type:varchar(16);not null;default:'exact'"`

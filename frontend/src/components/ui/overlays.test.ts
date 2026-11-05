@@ -83,6 +83,26 @@ test('Combobox filters by label and Enter selects the remaining option', async t
   await mounted.unmount()
 })
 
+// Regression #15: product searches reach the server after IME commits.
+test('remote Combobox debounces committed text and keeps server matches', async t => {
+  const searches: string[] = [], Combobox = loadUiComponent('Combobox')
+  const mounted = mount({ setup: () => () => h(Combobox, { remote: true, options: [{ value: 'model', label: 'Server match' }], onSearch: (value: string) => searches.push(value) }) })
+  t.after(() => mounted.unmount())
+  const input = doc.querySelector('[role="combobox"]')!
+  input.focus()
+  await send(input, 'compositionstart')
+  input.value = '型号'
+  await send(input, 'input')
+  await new Promise(resolve => setTimeout(resolve, 320))
+  assert.deepEqual(searches, [])
+  await send(input, 'compositionend')
+  await new Promise(resolve => setTimeout(resolve, 320))
+  assert.deepEqual(searches, ['型号'])
+  assert.deepEqual(doc.querySelectorAll('[role="option"]').map((node: any) => node.textContent), ['Server match'])
+  await send(doc.querySelector('[aria-label="Clear selection"]')!, 'click')
+  assert.equal(searches.at(-1), '')
+})
+
 test('DropdownMenu skips a disabled action and selects an enabled action with the keyboard', async t => {
   const DropdownMenu = loadUiComponent('DropdownMenu'), selections: string[] = []
   const mounted = mount({ setup: () => () => h(DropdownMenu, { items: [{ value: 'a', label: 'Unavailable', disabled: true }, { value: 'b', label: 'Open' }], onSelect: (value: string) => selections.push(value) }, () => h('button', { id: 'menu-trigger' }, 'Actions')) })

@@ -34,7 +34,7 @@ func (s *EntityService) EntryEntityLinks(ctx context.Context, entryID string) ([
 		return nil, managedWriteError(err)
 	}
 	var links []types.EntryEntity
-	if err := s.db.WithContext(ctx).Where("entry_id=? AND space_id=?", entryID, spaceID).Order("entity_id").Find(&links).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table("entry_entities ee").Select("ee.*").Joins("JOIN entities e ON e.id=ee.entity_id AND e.space_id=ee.space_id").Joins("JOIN libraries l ON l.id=e.library_id AND l.space_id=e.space_id").Where("ee.entry_id=? AND ee.space_id=? AND l.entity_mode=? AND l.deleted_at IS NULL", entryID, spaceID, types.EntityModeManaged).Order("ee.entity_id").Find(&links).Error; err != nil {
 		return nil, err
 	}
 	result := make([]ManagedEntityLink, 0, len(links))

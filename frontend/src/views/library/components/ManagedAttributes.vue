@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Button, Combobox, Select, Textarea } from '@/components/ui'
+import { Button, Combobox, Select, Textarea, toast } from '@/components/ui'
 import { listLibraries, type EntityField, type LibraryCatalogItem } from '@/api/library'
-import { getEntity, listEntities, getEntityAttachment, uploadEntityAttachment, attachmentDownloadURL, type Entity, type EntityAttachment } from '@/api/entities'
+import { getEntity, listEntities, getEntityAttachment, uploadEntityAttachment, deleteEntityAttachment, attachmentDownloadURL, type Entity, type EntityAttachment } from '@/api/entities'
 import { getDown } from '@/utils/request'
 const props = withDefaults(defineProps<{ fields: EntityField[]; libraryId: string; kind?: string; readonly?: boolean }>(), { readonly: false })
 const model = defineModel<Record<string, unknown>>({ required: true })
@@ -14,7 +14,12 @@ const visible = computed(() => (props.fields || []).filter(f => (!f.archived || 
 const libraries = ref<LibraryCatalogItem[]>([]), referenceLibrary = ref(''), entities = ref<Entity[]>([]), more = ref(false), loading = ref(false), error = ref(''), uploading = ref('')
 const attachments = ref<Record<string, EntityAttachment>>({})
 const entityOptions = computed(() => entities.value.map(e => ({ value: e.id, label: e.canonical_name })))
-let request = 0, metadataRequest = 0
+let request = 0, metadataRequest = 0, active = true
+const uploaded = new Set<string>()
+async function releaseUpload(id: string) {
+  try { const result = await deleteEntityAttachment(id); if (!result.success) throw new Error(result.error) }
+  catch (cause: any) { if (cause.status !== 409) toast.error(cause.message || t('common.operationFailed')) }
+}
 async function loadEntities(append = false) {
   const current = ++request; loading.value = true
   try { const result = await listEntities({ library_id: referenceLibrary.value, limit: 100, offset: append ? entities.value.length : 0 }); if (!result.success) throw new Error(result.error); if (current === request) { entities.value = append ? [...entities.value, ...result.data] : result.data; more.value = result.data.length === 100 } }
@@ -27,7 +32,7 @@ function lines(value: unknown) { return Array.isArray(value) ? value.join('\n') 
 async function upload(key: string, event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]; if (!file) return
   uploading.value = key; error.value = ''
-  try { const response = await uploadEntityAttachment(props.libraryId, file); if (!response.success) throw new Error(response.error); attachments.value[response.data.id] = response.data; setValue(key, response.data.id) }
+  try { const response = await uploadEntityAttachment(props.libraryId, file); if (!response.success) throw new Error(response.error); uploaded.add(response.data.id); if (!active) { void releaseUpload(response.data.id); return }; attachments.value[response.data.id] = response.data; setValue(key, response.data.id) }
   catch (cause: any) { error.value = cause.message || t('common.operationFailed') }
   finally { uploading.value = ''; (event.target as HTMLInputElement).value = '' }
 }
@@ -49,7 +54,7 @@ watch(() => visible.value.filter(f => f.type === 'attachment').map(f => model.va
 watch(() => visible.value.filter(f => f.type === 'entity_ref').map(f => model.value[f.key]), async ids => {
   await Promise.all(ids.filter((id): id is string => typeof id === 'string' && !!id).map(async id => { try { const response = await getEntity(id); if (response.success) referenceNames.value[id] = response.data.entity.canonical_name } catch { /* An unavailable reference retains its ID. */ } }))
 }, { immediate: true })
-onBeforeUnmount(() => { request++; metadataRequest++ })
+onBeforeUnmount(() => { active = false; request++; metadataRequest++; for (const id of uploaded) void releaseUpload(id) })
 </script>
 <template>
   <div class="managed-attributes">

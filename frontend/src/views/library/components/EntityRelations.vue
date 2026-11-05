@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deleteEntityRelation, type RelationGroup, type EntityRelation, type RelationSource } from '@/api/relations'
+import { formatDateTime, localDateTimeISO } from '@/utils/dateTime'
 import ManagedAttributes from './ManagedAttributes.vue'
 import ManagedRelationEditor from './ManagedRelationEditor.vue'
 import type { LibraryCatalogItem } from '@/api/library'
@@ -9,9 +10,12 @@ import type { Entity } from '@/api/entities'
 import type { SourceLocation } from '@/types/search'
 import { Button, EmptyState, ErrorState } from '@/components/ui'
 import { confirm, toast, type ConfirmHandle } from '@/components/ui/feedback'
-const props = defineProps<{ entityId: string; entityName: string; groups: RelationGroup[]; managedLibrary?: LibraryCatalogItem; entity?: Entity; loading?: boolean; error?: string }>()
-const emit = defineEmits<{ 'open-source': [id: string, location?: SourceLocation]; 'open-entity': [id: string]; changed: []; retry: [] }>()
-const { t } = useI18n()
+const props = defineProps<{ entityId: string; entityName: string; groups: RelationGroup[]; managedLibrary?: LibraryCatalogItem; entity?: Entity; loading?: boolean; error?: string; asOf?: string }>()
+const emit = defineEmits<{ 'open-source': [id: string, location?: SourceLocation]; 'open-entity': [id: string]; changed: []; retry: []; 'query-time': [value: string] }>()
+const { t, locale } = useI18n()
+const at = ref('')
+watch(() => props.entityId, () => { at.value = '' })
+watch(() => props.asOf, value => { if (!value) at.value = '' })
 const busy = ref(false)
 const relations = computed(() => props.groups.flatMap(group => group.relations))
 let confirmation: ConfirmHandle | undefined
@@ -21,14 +25,14 @@ function remove(relation: EntityRelation) {
   const entity = props.entityId
   confirmation?.destroy()
   confirmation = confirm({
-    header: t('ikb18.deleteRelation'), body: `${relation.relation_type} · ${relation.peer.canonical_name}\n${props.managedLibrary ? '' : t('ikb18.suppressHint')}`,
+    header: t(props.managedLibrary ? 'managed.endRelation' : 'ikb18.deleteRelation'), body: `${relation.relation_type} · ${relation.peer.canonical_name}\n${t(props.managedLibrary ? 'managed.endRelationHint' : 'ikb18.suppressHint')}`,
     confirmBtn: t('common.confirm'), cancelBtn: t('common.cancel'), theme: 'danger',
     onConfirm: async () => {
       busy.value = true
       try {
         const response = await deleteEntityRelation(relation.id, props.managedLibrary ? relation.version : undefined)
         if (!response.success) throw new Error(response.message || t('common.operationFailed'))
-        toast.success(t('entityPage.relationDeleted'))
+        toast.success(t(props.managedLibrary ? 'managed.relationEnded' : 'entityPage.relationDeleted'))
         if (entity === props.entityId) emit('changed')
       } finally { busy.value = false }
     },
@@ -38,6 +42,7 @@ onBeforeUnmount(() => confirmation?.destroy())
 </script>
 <template>
   <section class="entity-relations" :aria-label="t('ikb18.relations')" :aria-busy="loading">
+    <form v-if="managedLibrary" class="relation-time" novalidate @submit.prevent="emit('query-time', at ? localDateTimeISO(at) : '')"><label>{{ t('managed.asOf') }}<input v-model="at" class="rq-control" type="datetime-local"></label><Button type="submit" :loading="loading">{{ t('managed.queryRelations') }}</Button></form>
     <ErrorState v-if="error" :title="error"><Button @click="emit('retry')">{{ t('common.retry') }}</Button></ErrorState>
     <p v-else-if="loading" role="status">{{ t('common.loading') }}</p>
     <EmptyState v-else-if="!relations.length" :title="t('ikb18.noRelations')" />
@@ -45,7 +50,7 @@ onBeforeUnmount(() => confirmation?.destroy())
       <table><thead><tr><th>{{ t('entityPage.subject') }}</th><th>{{ t('ikb18.relations') }}</th><th>{{ t('entityPage.object') }}</th><th>{{ t('ikb18.relationSources') }}</th><th>{{ t('ikb18.speaker') }}</th><th>{{ t('entityPage.actions') }}</th></tr></thead>
         <tbody><tr v-for="relation in relations" :key="relation.id">
           <td><span v-if="relation.direction === 'outgoing'">{{ entityName }}</span><button v-else type="button" class="entity-link" @click="emit('open-entity', relation.peer.id)">{{ relation.peer.canonical_name }}</button></td>
-          <td><strong>{{ relation.relation_type }}</strong><ManagedAttributes v-if="managedLibrary && relation.attributes" :model-value="relation.attributes" :fields="managedLibrary.relation_types.find(r => r.name === relation.relation_type)?.fields || []" :library-id="managedLibrary.id" readonly /></td>
+          <td><strong>{{ relation.relation_type }}</strong><p v-if="managedLibrary && relation.valid_from">{{ formatDateTime(relation.valid_from, locale, { dateStyle: 'medium', timeStyle: 'short' }) }} → {{ relation.valid_to ? formatDateTime(relation.valid_to, locale, { dateStyle: 'medium', timeStyle: 'short' }) : t('managed.ongoing') }}</p><ManagedAttributes v-if="managedLibrary && relation.attributes" :model-value="relation.attributes" :fields="managedLibrary.relation_types.find(r => r.name === relation.relation_type)?.fields || []" :library-id="managedLibrary.id" readonly /></td>
           <td><span v-if="relation.direction === 'incoming'">{{ entityName }}</span><button v-else type="button" class="entity-link" @click="emit('open-entity', relation.peer.id)">{{ relation.peer.canonical_name }}</button></td>
           <td><span>{{ t('ikb18.sources', { count: relation.source_count }) }}</span>
             <details><summary>{{ t('ikb18.relationSources') }}</summary>
@@ -59,7 +64,7 @@ onBeforeUnmount(() => confirmation?.destroy())
             </details>
           </td>
           <td>{{ [...new Set(relation.sources.flatMap(source => (source.evidence || []).flatMap(evidence => evidence.speaker?.name ? [evidence.speaker.name] : [])))].join(' · ') }}</td>
-          <td><ManagedRelationEditor v-if="managedLibrary && entity" :library="managedLibrary" :entity="entity" :relation="relation" @saved="emit('changed')" /><Button variant="danger" :disabled="busy" @click="remove(relation)">{{ t('ikb18.deleteRelation') }}</Button></td>
+          <td><template v-if="!asOf"><ManagedRelationEditor v-if="managedLibrary && entity" :library="managedLibrary" :entity="entity" :relation="relation" @saved="emit('changed')" /><Button variant="danger" :disabled="busy" @click="remove(relation)">{{ t(managedLibrary ? 'managed.endRelation' : 'ikb18.deleteRelation') }}</Button></template></td>
         </tr></tbody>
       </table>
     </div>
@@ -81,4 +86,5 @@ tbody tr:hover .entity-link, tbody tr:focus-within .entity-link { color: var(--o
 tbody tr:hover :deep(.rq-button), tbody tr:focus-within :deep(.rq-button) { color: var(--on-select); }
 summary { cursor: pointer; margin-block: var(--space-2); }
 .entity-link:focus-visible, summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.relation-time { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: end; margin-block: var(--space-3); } .relation-time label { display: grid; gap: var(--space-1); }
 </style>

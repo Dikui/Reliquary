@@ -4,6 +4,8 @@ import "time"
 
 // Relation is the PostgreSQL authority for a directed, library-scoped triple.
 type Relation struct {
+	ValidFrom    time.Time      `json:"valid_from" gorm:"not null;default:CURRENT_TIMESTAMP"`
+	ValidTo      *time.Time     `json:"valid_to"`
 	Attributes   map[string]any `json:"attributes" gorm:"serializer:json;type:jsonb;not null;default:'{}'"`
 	ID           string         `json:"id" gorm:"primaryKey"`
 	SpaceID      uint64         `json:"space_id"`

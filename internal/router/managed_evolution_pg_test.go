@@ -57,6 +57,11 @@ func TestManagedLibraryEvolution(t *testing.T) {
 	var unchanged types.Library
 	require.NoError(t, f.db.First(&unchanged, "id=?", library.ID).Error)
 	require.Equal(t, "extracted", unchanged.EntityMode)
+	// Conversion cannot make previously distinct entity types ambiguous by name.
+	duplicate := types.Entity{ID: "same-name-organization", SpaceID: 1, LibraryID: library.ID, CanonicalName: child.CanonicalName, NormalizedName: child.NormalizedName, EntityType: "organization"}
+	require.NoError(t, f.db.Create(&duplicate).Error)
+	request(http.MethodPut, "/libraries/"+library.ID, map[string]any{"entity_mode": "managed", "entity_schema": schema, "entity_kind_mapping": map[string]string{"product": "model", "organization": "model"}}, http.StatusConflict, nil)
+	require.NoError(t, f.db.Delete(&duplicate).Error)
 	request(http.MethodPut, "/libraries/"+library.ID, map[string]any{"entity_mode": "managed", "entity_schema": schema, "entity_kind_mapping": map[string]string{"product": "model"}}, http.StatusOK, &library)
 	var detail types.EntityDetail
 	request(http.MethodGet, "/entities/"+child.ID, nil, http.StatusOK, &detail)
@@ -100,6 +105,9 @@ func TestManagedLibraryEvolution(t *testing.T) {
 	request(http.MethodPost, "/libraries", map[string]any{"name": "Papers", "directory": "evolution-papers", "product_library_ids": []string{library.ID}}, http.StatusCreated, &papers)
 	external := types.Entry{ID: "external-specification", SpaceID: 1, LibraryID: papers.ID, Type: types.EntryTypeManual, Title: "External test report", VaultBody: "Existing model was tested", ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled"}
 	require.NoError(t, f.db.Create(&external).Error)
+	localEntity := types.Entity{ID: "paper-local-entity", SpaceID: 1, LibraryID: papers.ID, CanonicalName: "Local extracted entity", NormalizedName: "local extracted entity", EntityType: "company"}
+	require.NoError(t, f.db.Create(&localEntity).Error)
+	require.NoError(t, f.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: external.ID, EntityID: localEntity.ID}).Error)
 	request(http.MethodPut, "/entries/"+external.ID+"/entity-links/"+child.ID, map[string]any{"excluded": false, "relation_type": "test_report"}, http.StatusOK, nil)
 	var links []service.ManagedEntityLink
 	request(http.MethodGet, "/entries/"+external.ID+"/entity-links", nil, http.StatusOK, &links)

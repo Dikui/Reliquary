@@ -42,7 +42,7 @@ func (s Snapshot) Hash() string {
 }
 func readPG(tx *gorm.DB, space uint64, entity string) (Snapshot, error) {
 	s := Snapshot{Nodes: []Node{}, Edges: []Edge{}}
-	edges := tx.Table("relations r").Select("r.space_id,r.id,r.subject_id,r.object_id,r.relation_type,r.library_id,r.version,count(src.entry_id) AS source_count").Joins("LEFT JOIN relation_sources src ON src.relation_id=r.id").Group("r.id").Where("EXISTS (SELECT 1 FROM entities e WHERE e.id=r.subject_id AND e.archived_at IS NULL) AND EXISTS (SELECT 1 FROM entities e WHERE e.id=r.object_id AND e.archived_at IS NULL)")
+	edges := tx.Table("relations r").Select("r.space_id,r.id,r.subject_id,r.object_id,r.relation_type,r.library_id,r.version,count(src.entry_id) AS source_count").Joins("LEFT JOIN relation_sources src ON src.relation_id=r.id").Group("r.id").Where("r.valid_to IS NULL AND EXISTS (SELECT 1 FROM entities e WHERE e.id=r.subject_id AND e.archived_at IS NULL) AND EXISTS (SELECT 1 FROM entities e WHERE e.id=r.object_id AND e.archived_at IS NULL)")
 	if entity != "" {
 		edges = edges.Where("r.space_id=? AND (r.subject_id=? OR r.object_id=?)", space, entity, entity)
 	}

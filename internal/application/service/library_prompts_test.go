@@ -35,3 +35,16 @@ func TestLibraryPromptsUseOverridesAndKeepProtocols(t *testing.T) {
 	require.Error(t, types.ValidateLibraryPromptOverrides(map[string]string{"article_processing": " \n"}))
 	require.Error(t, types.ValidateLibraryPromptOverrides(map[string]string{"article_processing": strings.Repeat("字", types.MaxLibraryPromptChars+1)}))
 }
+
+// Regression: managed catalogs use deterministic matching, not model extraction.
+func TestManagedLibraryProcessingSkipsEntityExtraction(t *testing.T) {
+	library := &types.Library{EntityMode: types.EntityModeManaged, PromptOverrides: map[string]string{"article_entities": "不应出现的抽取规则"}}
+	prompt := libraryProcessingPrompt(library, &types.Entry{})
+	require.Contains(t, prompt, "entities 和 relations 必须返回空数组")
+	require.NotContains(t, prompt, "不应出现的抽取规则")
+	kind, contentType := "product", "other"
+	result := &articleProcessingResult{ContentType: &contentType, Entities: []articleProcessingEntity{{Name: "Model", Type: &kind}}, Relations: []extractedRelation{{Subject: "Model", Type: "part of", Object: "Line"}}}
+	qualifySegmentOutput(library, &types.Entry{}, "Model", types.ProcessingSegment{End: 5}, result)
+	require.Empty(t, result.Entities)
+	require.Empty(t, result.Relations)
+}

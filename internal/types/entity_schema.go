@@ -102,7 +102,6 @@ func ValidateEntitySchema(l *Library) error {
 	if err := validateFieldDefinitions(l.EntitySchema.Fields, validateKinds); err != nil {
 		return err
 	}
-	hierarchies := 0
 	for _, r := range l.RelationTypes {
 		if err := validateFieldDefinitions(r.Fields, func(keys []string) error {
 			if len(keys) > 0 {
@@ -122,12 +121,6 @@ func ValidateEntitySchema(l *Library) error {
 		if err := validateKinds(r.ObjectKinds); err != nil {
 			return err
 		}
-		if r.Hierarchical && r.Enabled {
-			hierarchies++
-		}
-	}
-	if hierarchies > 1 {
-		return fmt.Errorf("only one enabled hierarchy relation is allowed")
 	}
 	return nil
 }

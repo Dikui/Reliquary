@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -74,6 +76,51 @@ func (s *EntityService) EntityAttachment(ctx context.Context, id string) (*types
 	var row types.EntityAttachment
 	err = s.db.WithContext(ctx).Where("id=? AND space_id=?", id, spaceID).First(&row).Error
 	return &row, managedWriteError(err)
+}
+
+func (s *EntityService) DeleteEntityAttachment(ctx context.Context, id string) error {
+	spaceID, err := s.requireSpace(ctx)
+	if err != nil {
+		return err
+	}
+	if _, ok := types.PrincipalFromContext(ctx); !ok {
+		return apperrors.NewUnauthorizedError("attachment editor required")
+	}
+	if s.files == nil {
+		return apperrors.NewBadRequestError("file storage is unavailable")
+	}
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockEntitySpace(tx, spaceID); err != nil {
+			return err
+		}
+		var row types.EntityAttachment
+		if err := tx.Where("id=? AND space_id=?", id, spaceID).First(&row).Error; err != nil {
+			return err
+		}
+		if _, err := managedLibrary(tx, spaceID, row.LibraryID); err != nil {
+			return err
+		}
+		referenced, err := managedValueReferenced(tx, spaceID, id, "")
+		if err != nil {
+			return err
+		}
+		if referenced {
+			return apperrors.NewConflictError("attachment is still referenced by a product snapshot or relationship")
+		}
+		catalog := NewResourceCatalog(repository.NewResourceRepository(tx))
+		remaining, err := catalog.Release(ctx, row.Path, "entity_attachment", row.ID)
+		if err != nil {
+			return err
+		}
+		if remaining <= 0 {
+			files := fileService.WithResourceCatalog(s.files, catalog, nil)
+			if err := files.DeleteFile(ctx, row.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+		return tx.Delete(&row).Error
+	})
+	return managedWriteError(err)
 }
 
 func (s *EntityService) OpenEntityAttachment(ctx context.Context, id string) (*types.EntityAttachment, io.ReadCloser, error) {

@@ -36,7 +36,7 @@
       <template v-else>
         <div class="entity-eyebrow"><LibMark v-if="selectedLibrary" :color="selectedLibrary.color" />{{ selectedLibrary?.display_name || selectedLibrary?.name || selectedEntity.library_id }} · {{ entityTypeLabel(selectedEntity.entity_type) }} · <span class="mono">{{ selectedEntity.id }}</span></div>
         <div class="entity-head"><h2>{{ selectedEntity.canonical_name }}</h2><div class="entity-actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><Button v-if="!managed" @click="openMerge">{{ t('workbench.entities.merge') }}</Button></div></div>
-        <ManagedEntityEditor v-if="managed && selectedLibrary" :key="selectedEntity.id" :library="selectedLibrary" :entity="selectedEntity" @saved="managedSaved" />
+        <ManagedEntityEditor v-if="managed && selectedLibrary" :key="selectedEntity.id" :library="selectedLibrary" :entity="selectedEntity" @saved="managedSaved" @deleted="managedDeleted" />
         <ManagedReorganization v-if="managed && selectedLibrary" :key="`${selectedEntity.id}-reorganization`" :library="selectedLibrary" :entity="selectedEntity" @saved="managedSaved" />
         <ManagedRelationEditor v-if="managed && selectedLibrary && !selectedEntity.archived_at" :key="`${selectedEntity.id}-relation`" :library="selectedLibrary" :entity="selectedEntity" @saved="loadRelations()" />
         <dl v-if="managed" class="entity-facts"><div><dt>{{ t('managed.kind') }}</dt><dd>{{ selectedLibrary?.entity_schema?.kinds?.find(k => k.key === selectedEntity?.kind)?.name || selectedEntity.kind }}</dd></div><div><dt>{{ t('managed.code') }}</dt><dd>{{ selectedEntity.code || '—' }}</dd></div></dl>
@@ -45,10 +45,10 @@
         <dl class="entity-facts"><div><dt>{{ t('workbench.entities.aliasLabel') }}</dt><dd>{{ selectedEntity.aliases?.join(' · ') || t('workbench.entities.noAliases') }}</dd></div><div><dt>{{ t('entityPage.materials') }}</dt><dd class="mono">{{ entityEntries.length }}</dd></div><div><dt>{{ t('ikb18.relations') }}</dt><dd class="mono">{{ relationsLoading || relationError ? t('workbench.nameEmbeddings.unknown') : relationCount }}</dd></div></dl>
         <Tabs v-model="relationView" :items="detailTabs" :label="t('entityGraph.view')">
           <template #graph><EntityGraph :managed="managed" :entity="selectedEntity" :relation-type-options="graphRelationTypes" :active="relationView === 'graph'" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @relation-types-changed="loadCatalog" /></template>
-          <template #list><EntityRelations :entity-id="selectedEntity.id" :entity-name="selectedEntity.canonical_name" :groups="relations" :managed-library="managed ? selectedLibrary : undefined" :entity="selectedEntity" :loading="relationsLoading" :error="relationError" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @retry="loadRelations()" @changed="loadRelations()" /></template>
+          <template #list><EntityRelations :entity-id="selectedEntity.id" :entity-name="selectedEntity.canonical_name" :groups="relations" :as-of="relationAsOf" @query-time="queryRelationTime" :managed-library="managed ? selectedLibrary : undefined" :entity="selectedEntity" :loading="relationsLoading" :error="relationError" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @retry="loadRelations()" @changed="loadRelations()" /></template>
           <template #entries>
             <section class="entity-articles">
-              <a :href="`/platform/entries?libraries=${encodeURIComponent(selectedEntity.library_id)}&entity_ids=${encodeURIComponent(selectedEntity.id)}`">{{ t('entryBatch.manageRelated') }}</a>
+              <a :href="`/platform/entries?entity_ids=${encodeURIComponent(selectedEntity.id)}`">{{ t('entryBatch.manageRelated') }}</a>
               <EmptyState v-if="!entityEntries.length" :title="t('workbench.entities.noArticles')" />
               <div v-else class="entity-table-scroll">
                 <table><thead><tr><th>{{ t('entityPage.number') }}</th><th>{{ t('entityPage.title') }}</th><th>{{ t('entityPage.type') }}</th><th>{{ t('entityPage.collected') }}</th></tr></thead>
@@ -102,6 +102,7 @@ const searchInput = ref<InstanceType<typeof Input>>()
 function clearSearch() { entityFilter.value = ''; searchInput.value?.focus() }
 const includeArchived = ref(false), kindFilter = ref('')
 const managed = computed(() => selectedLibrary.value?.entity_mode === 'managed')
+async function managedDeleted() { emit('select-entity', '', selectedLibraryId.value); resetEntityList(); await followStore.refreshAfterTargetChange() }
 async function managedSaved(entity: Entity) { await loadEntities(); await selectInitialEntity(entity.id) }
 const entityFilter = ref(''), entityTypeFilter = ref<EntityType | ''>(''), entityComposing = ref(false)
 const entityTypeOptions = computed(() => ENTITY_TYPES.map(value => ({ value, label: entityTypeLabel(value) })))
@@ -177,6 +178,7 @@ async function rebuildNameEmbeddings() {
 async function selectInitialEntity(id: string, preview?: Entity) {
   if (!id) return
   overview.value = false
+  relationAsOf.value = ''
   const current = ++detailRequest
   relationRequest++
   relations.value = []; relationError.value = ''; relationsLoading.value = false
@@ -199,6 +201,8 @@ async function selectInitialEntity(id: string, preview?: Entity) {
 const libraries = ref<LibraryCatalogItem[]>([]), catalogLoading = ref(false), catalogError = ref('')
 const selectedLibrary = computed(() => libraries.value.find(item => item.id === selectedLibraryId.value))
 const graphRelationTypes = computed(() => (selectedLibrary.value?.relation_types || []).filter(type => type.enabled).map(type => type.name))
+const relationAsOf = ref('')
+function queryRelationTime(value: string) { relationAsOf.value = value; void loadRelations() }
 const relations = ref<RelationGroup[]>([]), relationsLoading = ref(false), relationError = ref('')
 const relationCount = computed(() => relations.value.reduce((count, group) => count + group.relations.length, 0))
 const entityNotFound = ref(false), pendingCount = ref<number | null>(null)
@@ -227,7 +231,7 @@ async function loadRelations(id = selectedEntity.value?.id) {
   if (!id) return
   relationsLoading.value = true
   try {
-    const response = await listEntityRelations(id)
+    const response = await listEntityRelations(id, relationAsOf.value || undefined)
     if (!response.success) throw new Error(response.message || t('workbench.requestFailed'))
     if (current === relationRequest) relations.value = response.data || []
   } catch (cause) { if (current === relationRequest) relationError.value = errorMessage(cause) }
