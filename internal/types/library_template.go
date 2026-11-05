@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -56,6 +57,23 @@ type LibraryRelationType struct {
 	Name         string                  `json:"name" gorm:"primaryKey"`
 	Position     int                     `json:"position"`
 	Enabled      bool                    `json:"enabled"`
+}
+
+// MarshalJSON keeps optional relation configuration arrays stable before and
+// after persistence, whose defaults are empty JSON arrays.
+func (r LibraryRelationType) MarshalJSON() ([]byte, error) {
+	type response LibraryRelationType
+	out := response(r)
+	if out.Fields == nil {
+		out.Fields = []EntityFieldDefinition{}
+	}
+	if out.SubjectKinds == nil {
+		out.SubjectKinds = []string{}
+	}
+	if out.ObjectKinds == nil {
+		out.ObjectKinds = []string{}
+	}
+	return json.Marshal(out)
 }
 
 // LibraryPatch intentionally includes immutable fields so attempts to write
@@ -201,7 +219,10 @@ func SystemLibraryDefaults() []*Library {
 			l.ContentTypes = append(l.ContentTypes, LibraryContentType{Name: n, Position: i, Enabled: true, ExtractGraph: i < graphCount})
 		}
 		for i, n := range relations {
-			l.RelationTypes = append(l.RelationTypes, LibraryRelationType{Name: n, Position: i, Enabled: true})
+			l.RelationTypes = append(l.RelationTypes, LibraryRelationType{
+				Name: n, Position: i, Enabled: true,
+				Fields: []EntityFieldDefinition{}, SubjectKinds: []string{}, ObjectKinds: []string{},
+			})
 		}
 		l.EnsureDefaults()
 		return l

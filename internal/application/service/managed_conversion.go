@@ -102,7 +102,9 @@ func convertLibraryEntities(ctx context.Context, tx *gorm.DB, library *types.Lib
 			return err
 		}
 	}
-	return NewOperationLogService(tx).RecordTx(ctx, tx, "convert_entity_library", library.ID, nil, map[string]any{"entity_kind_mapping": mapping, "entity_count": len(entities)})
+	return NewOperationLogService(tx).RecordTx(ctx, tx, "switch_entity_library", library.ID, nil, map[string]any{
+		"entity_kind_mapping": mapping, "entity_count": len(entities),
+	})
 }
 
 func validateProductLibraries(tx *gorm.DB, library *types.Library) error {

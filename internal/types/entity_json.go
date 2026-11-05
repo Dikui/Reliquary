@@ -8,6 +8,9 @@ func (e Entity) MarshalJSON() ([]byte, error) {
 	if out.Attributes == nil {
 		out.Attributes = map[string]any{}
 	}
+	if out.AutoMatch == nil {
+		out.AutoMatch = map[string]bool{}
+	}
 	if out.Aliases == nil {
 		out.Aliases = []string{}
 	}
