@@ -433,13 +433,17 @@ owned by the operating system, consistent with the existing settings controls.
 Document links expose both included and excluded decisions. Exclusion persists
 through processing, and Restore link reverses it. History is paged in groups of
 20; related-entity pickers load 100 rows at a time with explicit Load more.
-Document association search uses the shared Combobox remote mode with debounced,
+Document association, relation peer, merge source and product reference pickers
+all use the shared Combobox remote mode with debounced,
 IME-safe server name search. Category changes remove inapplicable draft fields;
 unchanged attributes do not create snapshots. Relation history is queried at a
 local time and displayed read-only. Split can copy selected relations while
 retaining the source; merge lets the user choose a document relation type owner.
 Unused new uploads are released when their editor closes. Deletion requires
 confirmation and is restricted by the server to unreferenced products.
+
+Library settings send entity mode, entity schema and relation types only when
+they changed since load, so ordinary edits do not request the exclusive space lock.
 
 Search optionally includes descendants and retains that choice in URL state.
 Parent context is displayed when supplied, while the click target remains the

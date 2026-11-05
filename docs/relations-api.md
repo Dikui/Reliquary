@@ -17,7 +17,7 @@
 - `PATCH /relations/:relation_id`：相同字段加当前 `version`，在新记录的 `valid_from` 处结束旧记录，并返回新关系 ID、版本和有效区间。省略 `valid_from` 时使用保存时刻；新时间必须晚于旧记录的 `valid_from`，保证旧区间非空。
 - `DELETE /relations/:relation_id?version=N&valid_to=<RFC3339>`：必须传当前版本，可选查询参数 `valid_to` 指定业务结束时间，省略时使用保存时刻；必须晚于该记录的 `valid_from` 且不晚于现在。不生成自动抽取抑制记录。
 
-两端必须为本库活动实体。库关系类型可设 `hierarchical`、`subject_kinds`、`object_kinds` 和属性定义 `fields`，两端类别数组为空表示不限。层级边由子项指向父项，子项类别的 parent_kinds 必须允许父项类别；允许多种层级类型，每种类型内在任意时刻分别禁止多父项及成环。补录会检查已有关系（包括已结束记录）的有效区间；首尾相接的区间不重叠，只有同一时刻生效的路径才构成环。三元组的活动唯一索引保持不变。`GET /entities/:entity_id/relations?as_of=<RFC3339>` 可查看指定时刻的关系，省略时返回当前关系。有效区间为 `[valid_from, valid_to)`，须满足 `valid_from < valid_to`，空结束时间表示未结束。图谱隐藏已结束或归档端点的关系，恢复实体后可重新显示。修改在同一事务写操作日志与图谱同步通知，记录时间仍为实际保存时刻；合并、拆分等结构调整仍立即执行。
+两端必须为本库活动实体。库关系类型可设 `hierarchical`、`subject_kinds`、`object_kinds` 和属性定义 `fields`，两端类别数组为空表示不限。层级边由子项指向父项，子项类别的 parent_kinds 必须允许父项类别；允许多种层级类型，每种类型内在任意时刻分别禁止多父项及成环。补录会检查已有关系（包括已结束记录）的有效区间；首尾相接的区间不重叠，只有同一时刻生效的路径才构成环。三元组的活动唯一索引保持不变。仍有活动关系的关系类型不能停用；只剩已结束关系时可以停用，但字段定义仍受历史值约束，层级标志不能改。关系类型的 `fields`、`subject_kinds`、`object_kinds` 未配置时返回 `[]`，实体 `auto_match` 未配置时返回 `{}`。`GET /entities/:entity_id/relations?as_of=<RFC3339>` 可查看指定时刻的关系，省略时返回当前关系。有效区间为 `[valid_from, valid_to)`，须满足 `valid_from < valid_to`，空结束时间表示未结束。图谱隐藏已结束或归档端点的关系，恢复实体后可重新显示。修改在同一事务写操作日志与图谱同步通知，记录时间仍为实际保存时刻；合并、拆分等结构调整仍立即执行。
 
 ## 自动抽取库的人工动作与副本一致性
 
@@ -28,7 +28,7 @@
 ## 产品属性、文献关联与结构调整
 
 - `GET /libraries/:id/entity-conversion`：返回文献数、按存储类型分组的实体数、关系数。`PUT /libraries/:id` 可带 `entity_mode: "managed"`、`entity_schema`、`entity_kind_mapping`，将已有实体类型映射到库内类别并保留原数据。
-- `POST /libraries/:id/entities`、`PATCH /entities/:entity_id`：属性使用 `attributes`；可选 `effective_at` 为 RFC 3339 时间。PATCH 必须传当前 `revision`。属性是完整快照，不是字段增量；未改属性时省略 attributes。相同快照不重复写入，修改字段同步至已有的未来快照，其他字段保持原安排。
+- `POST /libraries/:id/entities`、`PATCH /entities/:entity_id`：属性使用 `attributes`；可选 `effective_at` 为 RFC 3339 时间。PATCH 必须传当前 `revision`。属性是完整快照，不是字段增量；未改属性时省略 attributes。相同快照不重复写入；修改字段同步到生效时间晚于本次 effective_at 的全部已有快照（包括已生效的），其他字段保持原值。
 - `GET /entities/:entity_id/attributes?at=...`：返回该时刻的 `attributes`、`effective_at`、`revision` 与 `known`。省略 at 查询现在；仅日期按本地时区零点解释，跨时区调用建议发送含时区的完整时间；早于最早已知快照时 known=false。
 - `GET /entities/:entity_id/attribute-history?page=1&page_size=20`：分页返回全部生效快照，包括未来快照。`GET /entities/:entity_id/history` 仍返回操作日志。
 - `POST /libraries/:id/entity-attachments`：multipart 的 `file` 字段上传附件，最多 32 MiB。返回附件 ID、名称、类型和大小。`GET /entity-attachments/:attachment_id` 读取元数据；追加 `/download` 下载。属性中的附件值为该 ID，必须与实体或关系在同一库。`DELETE /entity-attachments/:attachment_id` 仅删除无当前或历史引用的附件。
@@ -36,7 +36,7 @@
 - 文献库的 `product_library_ids` 配置自动匹配范围；产品库的 `document_relation_types` 配置关联类型，必须保留 references。自动匹配不推断规格书、测试报告等语义类型。
 - `POST /entities/:entity_id/merge`：目标 ID 在路径中，请求 `{revision,source_id,source_revision,attributes,effective_at?,drop_relation_ids?,document_relation_preference?}`。必须显式给出合并后的完整属性。关联类型冲突可用 document_relation_preference 指定 source 或 target；相反的排除决定仍拒绝。
 - `POST /entities/:entity_id/split`：请求 `{revision,new_entity,entry_ids,relation_ids,copy_relation_ids?,effective_at?}`，其中 new_entity 使用创建实体结构。原实体保留，指定的文献和 relation_ids 移动到新实体，copy_relation_ids 复制给新实体；同一关系不能同时迁移和复制。
-- `DELETE /entities/:entity_id`：请求 `{revision}`，仅无文献、关系（含历史）或其他受保护引用的产品可删除。
+- `DELETE /entities/:entity_id`：请求 `{revision}`，仅没有未排除文献关联、关系（含历史）或其他受保护引用的产品可删除；只剩排除记录时可以删除，排除记录随产品一并清理并写入操作日志。
 - `GET /entities/:entity_id/reorganizations`：查看合并、拆分的来源与目标。结构变化立即生效；仅结果属性支持过去或当前生效时间。原实体的时间线及未来快照不迁移。
 
 冲突返回 409；非法字段、跨空间引用或层级返回 400。失败不保留部分合并、拆分或转换结果。字段定义详见 [产品库演进决策](adr/0022-managed-catalog-evolution.md)。
