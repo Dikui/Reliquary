@@ -32,7 +32,9 @@ func (s *entryService) associateProductMentions(ctx context.Context, entry *type
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", entry.ID, entry.SpaceID).First(&current).Error; err != nil {
 			return err
 		}
-		if current.VaultBody != body {
+		// Libraries without product names still need automatic-link cleanup,
+		// including rebuilds that do not publish a body.
+		if matcher.pattern != nil && current.VaultBody != body {
 			return fmt.Errorf("entry body changed during product matching")
 		}
 		evidence := matcher.evidence(body)
