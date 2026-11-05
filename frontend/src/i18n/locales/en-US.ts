@@ -25,7 +25,7 @@ export default {
     autoProductLibraries: "Product libraries for automatic matching",
     documentRelationTypes: "Document relation types (comma-separated)",
     documentRelationType: "Document relation type",
-    conversionHint: "Existing entities can be converted with a kind mapping. Documents and relations are retained.",
+    conversionHint: "Existing entities can switch to managed mode with a kind mapping. Documents and relations are retained.",
     conversionMapping: "Existing entity type mapping",
     chooseKind: "Choose target kind",
     attributeHistory: "Attribute history",
@@ -1212,7 +1212,7 @@ export default {
     loadFailed: 'Could not load the operation log. Try again.',
     empty: 'No operations match these filters.',
     types: {
-      convert_entity_library: 'Convert entity library',
+      switch_entity_library: 'Switch entity library mode',
       merge_managed_entities: 'Merge managed entities',
       split_managed_entity: 'Split managed entity',
 
