@@ -147,6 +147,14 @@ func (s *EntityService) ListRelations(ctx context.Context, id, libraryID string,
 	return groups, err
 }
 func (s *EntityService) DeleteRelation(ctx context.Context, id string, versions ...int64) error {
+	var version int64
+	if len(versions) > 0 {
+		version = versions[0]
+	}
+	return s.DeleteRelationAt(ctx, id, version)
+}
+
+func (s *EntityService) DeleteRelationAt(ctx context.Context, id string, version int64, validTo ...time.Time) error {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return err
@@ -156,11 +164,10 @@ func (s *EntityService) DeleteRelation(ctx context.Context, id string, versions 
 		return err
 	}
 	if managed {
-		var version int64
-		if len(versions) > 0 {
-			version = versions[0]
-		}
-		return s.DeleteManagedRelation(ctx, id, version)
+		return s.DeleteManagedRelation(ctx, id, version, validTo...)
+	}
+	if len(validTo) > 0 {
+		return werrors.NewBadRequestError("valid_to is only available for managed relationships")
 	}
 	actor, ok := types.PrincipalFromContext(ctx)
 	if !ok {

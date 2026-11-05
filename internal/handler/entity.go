@@ -189,7 +189,16 @@ func (h *EntityHandler) DeleteRelation(c *gin.Context) {
 		c.Error(werrors.NewBadRequestError("invalid relationship version"))
 		return
 	}
-	if err := h.service.DeleteRelation(c.Request.Context(), c.Param("relation_id"), version); err != nil {
+	var validTo []time.Time
+	if raw, present := c.GetQuery("valid_to"); present {
+		at, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			c.Error(werrors.NewBadRequestError("valid_to must be RFC3339"))
+			return
+		}
+		validTo = append(validTo, at)
+	}
+	if err := h.service.DeleteRelationAt(c.Request.Context(), c.Param("relation_id"), version, validTo...); err != nil {
 		c.Error(err)
 		return
 	}

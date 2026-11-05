@@ -13,11 +13,11 @@
 
 `entity_mode=managed` 时关系由网页或 HTTP 维护，可以没有文档来源。资料删除或重新处理不会删除这些关系。该模式使用下述专用合并、拆分接口；禁用关系类型合并及旧的实体名称/简介单独修改接口。
 
-- `POST /libraries/:id/relations`：`{subject_id,relation_type,object_id,attributes}`，返回创建的关系及 version。
-- `PATCH /relations/:relation_id`：相同字段加当前 `version`，结束旧记录并返回新关系 ID、版本和有效区间。
-- `DELETE /relations/:relation_id?version=N`：必须传当前版本，填写 valid_to 结束关系，不生成自动抽取抑制记录。
+- `POST /libraries/:id/relations`：`{subject_id,relation_type,object_id,attributes,valid_from?}`，返回创建的关系及 version。可选 `valid_from` 为 RFC 3339 业务生效时间，省略时使用保存时刻，可补录过去时间，不允许未来时间或零时间。
+- `PATCH /relations/:relation_id`：相同字段加当前 `version`，在新记录的 `valid_from` 处结束旧记录，并返回新关系 ID、版本和有效区间。省略 `valid_from` 时使用保存时刻；新时间必须晚于旧记录的 `valid_from`，保证旧区间非空。
+- `DELETE /relations/:relation_id?version=N&valid_to=<RFC3339>`：必须传当前版本，可选查询参数 `valid_to` 指定业务结束时间，省略时使用保存时刻；必须晚于该记录的 `valid_from` 且不晚于现在。不生成自动抽取抑制记录。
 
-两端必须为本库活动实体。库关系类型可设 `hierarchical`、`subject_kinds`、`object_kinds` 和属性定义 `fields`，两端类别数组为空表示不限。层级边由子项指向父项，子项类别的 parent_kinds 必须允许父项类别；允许多种层级类型，每种类型内分别禁止多父项及成环。`GET /entities/:entity_id/relations?as_of=<RFC3339>` 可查看指定时刻的关系，省略时返回当前关系。有效区间为 `[valid_from, valid_to)`，空结束时间表示未结束。图谱隐藏已结束或归档端点的关系，恢复实体后可重新显示。修改在同一事务写操作日志与图谱同步通知。
+两端必须为本库活动实体。库关系类型可设 `hierarchical`、`subject_kinds`、`object_kinds` 和属性定义 `fields`，两端类别数组为空表示不限。层级边由子项指向父项，子项类别的 parent_kinds 必须允许父项类别；允许多种层级类型，每种类型内在任意时刻分别禁止多父项及成环。补录会检查已有关系（包括已结束记录）的有效区间；首尾相接的区间不重叠，只有同一时刻生效的路径才构成环。三元组的活动唯一索引保持不变。`GET /entities/:entity_id/relations?as_of=<RFC3339>` 可查看指定时刻的关系，省略时返回当前关系。有效区间为 `[valid_from, valid_to)`，须满足 `valid_from < valid_to`，空结束时间表示未结束。图谱隐藏已结束或归档端点的关系，恢复实体后可重新显示。修改在同一事务写操作日志与图谱同步通知，记录时间仍为实际保存时刻；合并、拆分等结构调整仍立即执行。
 
 ## 自动抽取库的人工动作与副本一致性
 

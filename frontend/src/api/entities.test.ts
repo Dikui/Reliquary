@@ -5,9 +5,9 @@ import ts from 'typescript'
 import * as scope from './entity-types'
 
 type Request = { method: string; url: string; body?: unknown }
-function loadAPI(requests: Request[]) {
+function loadAPI(requests: Request[], source = './entities.ts') {
   const module = { exports: {} as any }
-  const code = ts.transpileModule(readFileSync(new URL('./entities.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  const code = ts.transpileModule(readFileSync(new URL(source, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   new Function('require', 'module', 'exports', code)((name: string) => {
     if (name === './entity-types') return scope
     assert.equal(name, '@/utils/request')
@@ -73,4 +73,21 @@ test('managed merge sends explicitly discarded relation IDs', async () => {
   const requests: Request[] = [], api = loadAPI(requests)
   await api.mergeManagedEntity('target', { revision: 3, source_id: 'source', source_revision: 2, attributes: {}, drop_relation_ids: ['source-edge'], document_relation_preference: 'target' })
   assert.deepEqual(requests, [{ method: 'post', url: '/api/v1/entities/target/merge', body: { revision: 3, source_id: 'source', source_revision: 2, attributes: {}, drop_relation_ids: ['source-edge'], document_relation_preference: 'target' } }])
+})
+
+// Spec (small), MEL-04: relation writes carry the caller's business timestamps.
+test('managed relation requests preserve business start and end times', async () => {
+  const requests: Request[] = [], api = loadAPI(requests, './relations.ts')
+  const valid_from = '2025-03-01T09:30:00.000Z', valid_to = '2025-04-01T09:30:00+08:00'
+  const data = { subject_id: 'model', object_id: 'line', relation_type: 'belongs', valid_from }
+  await api.createManagedRelation('products/a', data)
+  await api.updateManagedRelation('relation/a', { ...data, version: 2 })
+  await api.deleteEntityRelation('relation/a', 2, valid_to)
+  await api.deleteEntityRelation('relation/b', 3)
+  assert.deepEqual(requests, [
+    { method: 'post', url: '/api/v1/libraries/products%2Fa/relations', body: data },
+    { method: 'patch', url: '/api/v1/relations/relation%2Fa', body: { ...data, version: 2 } },
+    { method: 'del', url: '/api/v1/relations/relation%2Fa?version=2&valid_to=2025-04-01T09%3A30%3A00%2B08%3A00' },
+    { method: 'del', url: '/api/v1/relations/relation%2Fb?version=3' },
+  ])
 })

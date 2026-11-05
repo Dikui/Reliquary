@@ -251,6 +251,7 @@ type ManagedEntityPatch struct {
 }
 
 type ManagedRelationInput struct {
+	ValidFrom    *time.Time     `json:"valid_from"`
 	Attributes   map[string]any `json:"attributes"`
 	Version      int64          `json:"version"`
 	SubjectID    string         `json:"subject_id"`
