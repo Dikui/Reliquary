@@ -37,8 +37,10 @@
         <div class="entity-eyebrow"><LibMark v-if="selectedLibrary" :color="selectedLibrary.color" />{{ selectedLibrary?.display_name || selectedLibrary?.name || selectedEntity.library_id }} · {{ entityTypeLabel(selectedEntity.entity_type) }} · <span class="mono">{{ selectedEntity.id }}</span></div>
         <div class="entity-head"><h2>{{ selectedEntity.canonical_name }}</h2><div class="entity-actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><Button v-if="!managed" @click="openMerge">{{ t('workbench.entities.merge') }}</Button></div></div>
         <ManagedEntityEditor v-if="managed && selectedLibrary" :key="selectedEntity.id" :library="selectedLibrary" :entity="selectedEntity" @saved="managedSaved" />
+        <ManagedReorganization v-if="managed && selectedLibrary" :key="`${selectedEntity.id}-reorganization`" :library="selectedLibrary" :entity="selectedEntity" @saved="managedSaved" />
         <ManagedRelationEditor v-if="managed && selectedLibrary && !selectedEntity.archived_at" :key="`${selectedEntity.id}-relation`" :library="selectedLibrary" :entity="selectedEntity" @saved="loadRelations()" />
-        <dl v-if="managed" class="entity-facts"><div><dt>{{ t('managed.kind') }}</dt><dd>{{ selectedLibrary?.entity_schema?.kinds?.find(k => k.key === selectedEntity?.kind)?.name || selectedEntity.kind }}</dd></div><div><dt>{{ t('managed.code') }}</dt><dd>{{ selectedEntity.code || '—' }}</dd></div><div v-for="(value, key) in selectedEntity.attributes" :key="key"><dt>{{ selectedLibrary?.entity_schema?.fields?.find(f => f.key === key)?.name || key }}</dt><dd>{{ typeof value === 'boolean' ? t(value ? 'managed.yes' : 'managed.no') : value }} {{ selectedLibrary?.entity_schema?.fields?.find(f => f.key === key)?.unit }}</dd></div></dl>
+        <dl v-if="managed" class="entity-facts"><div><dt>{{ t('managed.kind') }}</dt><dd>{{ selectedLibrary?.entity_schema?.kinds?.find(k => k.key === selectedEntity?.kind)?.name || selectedEntity.kind }}</dd></div><div><dt>{{ t('managed.code') }}</dt><dd>{{ selectedEntity.code || '—' }}</dd></div></dl>
+        <ManagedAttributes v-if="managed && selectedLibrary" :model-value="selectedEntity.attributes || {}" :fields="selectedLibrary.entity_schema?.fields || []" :library-id="selectedLibrary.id" :kind="selectedEntity.kind" readonly />
         <p v-if="selectedEntity.description" class="entity-intro">{{ selectedEntity.description }}</p>
         <dl class="entity-facts"><div><dt>{{ t('workbench.entities.aliasLabel') }}</dt><dd>{{ selectedEntity.aliases?.join(' · ') || t('workbench.entities.noAliases') }}</dd></div><div><dt>{{ t('entityPage.materials') }}</dt><dd class="mono">{{ entityEntries.length }}</dd></div><div><dt>{{ t('ikb18.relations') }}</dt><dd class="mono">{{ relationsLoading || relationError ? t('workbench.nameEmbeddings.unknown') : relationCount }}</dd></div></dl>
         <Tabs v-model="relationView" :items="detailTabs" :label="t('entityGraph.view')">
@@ -78,6 +80,8 @@ import { listLibraries, type LibraryCatalogItem } from '@/api/library'
 import { listEntityRelations, type RelationGroup } from '@/api/relations'
 import { searchErrorCode } from '@/utils/search'
 import { ENTITY_TYPES, listEntityMergeSuggestions, getEntity, getEntityNameEmbeddingRebuildStatus, listEntities, mergeEntities, rebuildEntityNameEmbeddings, type Entity, type EntityEntry, type EntityNameEmbeddingRebuildStatus, type EntityType } from '@/api/entities'
+import ManagedAttributes from './ManagedAttributes.vue'
+import ManagedReorganization from './ManagedReorganization.vue'
 import ManagedEntityEditor from './ManagedEntityEditor.vue'
 import ManagedRelationEditor from './ManagedRelationEditor.vue'
 import EntityRelations from './EntityRelations.vue'

@@ -198,4 +198,4 @@ HTTP 为 `POST /api/v1/graph/search`，MCP 工具为 `graph_search`。两者复�
 
 主题列表 `GET /api/v1/topics?library_id=...` 和创建请求都必须指定唯一 `library_id`。主题更新只修改名称、说明，不能换库。资料归入主题时只接受本库主题 ID。MCP 的 `list_entities`、`list_topics` 和 `create_topic` 使用相同的 `library_id` 规则，不再使用 `library_ids`。
 
-`GET /api/v1/search/options?libraries=库ID1,库ID2` 返回所选库的实体、主题和内容类别；省略时返回全部库选项。选择多个库不会合并同名实体或主题。
+`GET /api/v1/search/options?libraries=库ID1,库ID2` 返回所选库及其配置或已关联产品库的实体、所选库的主题和内容类别；省略时返回全部库选项。选择多个库不会合并同名实体或主题。

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +19,12 @@ func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types
 	rule, ok := managedRelationType(library, relation.RelationType)
 	if !ok || !rule.Enabled {
 		return apperrors.NewBadRequestError("relationship type is not enabled in this library")
+	}
+	if err := types.ValidateFieldAttributes(rule.Fields, relation.Attributes); err != nil {
+		return apperrors.NewBadRequestError(err.Error())
+	}
+	if err := validateAttributeReferences(tx, library.SpaceID, rule.Fields, relation.Attributes); err != nil {
+		return err
 	}
 	var subject, object types.Entity
 	for id, entity := range map[string]*types.Entity{relation.SubjectID: &subject, relation.ObjectID: &object} {
@@ -95,6 +102,19 @@ func (s *EntityService) SaveManagedRelation(ctx context.Context, libraryID, id s
 		before := row
 		row.LibraryID, row.SpaceID = libraryID, spaceID
 		row.SubjectID, row.RelationType, row.ObjectID = input.SubjectID, input.RelationType, input.ObjectID
+		if input.Attributes != nil {
+			row.Attributes = input.Attributes
+		}
+		if row.Attributes == nil {
+			row.Attributes = map[string]any{}
+		}
+		if rule, ok := managedRelationType(library, row.RelationType); ok {
+			for _, field := range rule.Fields {
+				if field.Archived && !reflect.DeepEqual(before.Attributes[field.Key], row.Attributes[field.Key]) {
+					return apperrors.NewBadRequestError("archived relationship fields cannot be changed")
+				}
+			}
+		}
 		if err := validateManagedRelation(tx, library, row, id); err != nil {
 			return err
 		}

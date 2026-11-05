@@ -48,34 +48,38 @@ type LibraryContentType struct {
 }
 
 type LibraryRelationType struct {
-	Hierarchical bool     `json:"hierarchical" gorm:"not null;default:false"`
-	SubjectKinds []string `json:"subject_kinds" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
-	ObjectKinds  []string `json:"object_kinds" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
-	LibraryID    string   `json:"-" gorm:"primaryKey"`
-	Name         string   `json:"name" gorm:"primaryKey"`
-	Position     int      `json:"position"`
-	Enabled      bool     `json:"enabled"`
+	Fields       []EntityFieldDefinition `json:"fields" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
+	Hierarchical bool                    `json:"hierarchical" gorm:"not null;default:false"`
+	SubjectKinds []string                `json:"subject_kinds" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
+	ObjectKinds  []string                `json:"object_kinds" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
+	LibraryID    string                  `json:"-" gorm:"primaryKey"`
+	Name         string                  `json:"name" gorm:"primaryKey"`
+	Position     int                     `json:"position"`
+	Enabled      bool                    `json:"enabled"`
 }
 
 // LibraryPatch intentionally includes immutable fields so attempts to write
 // them are rejected instead of silently ignored by JSON decoding.
 type LibraryPatch struct {
-	EntityMode         *string                `json:"entity_mode"`
-	EntitySchema       *EntitySchema          `json:"entity_schema"`
-	PromptOverrides    *map[string]string     `json:"prompt_overrides"`
-	Color              *int                   `json:"color"`
-	Name               *string                `json:"name"`
-	Description        *string                `json:"description"`
-	ReviewCriteria     *string                `json:"review_criteria"`
-	ModelTiers         *ModelTierConfig       `json:"model_tiers"`
-	ChunkingConfig     *ChunkingConfig        `json:"chunking_config"`
-	SourceEvidenceRule *string                `json:"source_evidence_rule"`
-	FeedEnabled        *bool                  `json:"feed_enabled"`
-	ContentTypes       *[]LibraryContentType  `json:"content_types"`
-	RelationTypes      *[]LibraryRelationType `json:"relation_types"`
-	Template           *string                `json:"template"`
-	Directory          *string                `json:"directory"`
-	SystemRole         *string                `json:"system_role"`
+	ProductLibraryIDs     *[]string              `json:"product_library_ids"`
+	DocumentRelationTypes *[]string              `json:"document_relation_types"`
+	EntityKindMapping     map[string]string      `json:"entity_kind_mapping"`
+	EntityMode            *string                `json:"entity_mode"`
+	EntitySchema          *EntitySchema          `json:"entity_schema"`
+	PromptOverrides       *map[string]string     `json:"prompt_overrides"`
+	Color                 *int                   `json:"color"`
+	Name                  *string                `json:"name"`
+	Description           *string                `json:"description"`
+	ReviewCriteria        *string                `json:"review_criteria"`
+	ModelTiers            *ModelTierConfig       `json:"model_tiers"`
+	ChunkingConfig        *ChunkingConfig        `json:"chunking_config"`
+	SourceEvidenceRule    *string                `json:"source_evidence_rule"`
+	FeedEnabled           *bool                  `json:"feed_enabled"`
+	ContentTypes          *[]LibraryContentType  `json:"content_types"`
+	RelationTypes         *[]LibraryRelationType `json:"relation_types"`
+	Template              *string                `json:"template"`
+	Directory             *string                `json:"directory"`
+	SystemRole            *string                `json:"system_role"`
 }
 
 const MaxLibraryPromptChars = 16000
@@ -116,13 +120,15 @@ func (l *Library) ProcessingModelTiers() []ModelTier {
 }
 
 type CreateLibraryRequest struct {
-	EntityMode   string       `json:"entity_mode"`
-	EntitySchema EntitySchema `json:"entity_schema"`
-	Color        *int         `json:"color"`
-	Template     string       `json:"template"`
-	Directory    string       `json:"directory"`
-	Name         string       `json:"name"`
-	Description  string       `json:"description"`
+	ProductLibraryIDs     []string     `json:"product_library_ids"`
+	DocumentRelationTypes []string     `json:"document_relation_types"`
+	EntityMode            string       `json:"entity_mode"`
+	EntitySchema          EntitySchema `json:"entity_schema"`
+	Color                 *int         `json:"color"`
+	Template              string       `json:"template"`
+	Directory             string       `json:"directory"`
+	Name                  string       `json:"name"`
+	Description           string       `json:"description"`
 }
 
 var libraryDirectoryPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)

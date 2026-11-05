@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deleteEntityRelation, type RelationGroup, type EntityRelation, type RelationSource } from '@/api/relations'
+import ManagedAttributes from './ManagedAttributes.vue'
 import ManagedRelationEditor from './ManagedRelationEditor.vue'
 import type { LibraryCatalogItem } from '@/api/library'
 import type { Entity } from '@/api/entities'
@@ -44,7 +45,7 @@ onBeforeUnmount(() => confirmation?.destroy())
       <table><thead><tr><th>{{ t('entityPage.subject') }}</th><th>{{ t('ikb18.relations') }}</th><th>{{ t('entityPage.object') }}</th><th>{{ t('ikb18.relationSources') }}</th><th>{{ t('ikb18.speaker') }}</th><th>{{ t('entityPage.actions') }}</th></tr></thead>
         <tbody><tr v-for="relation in relations" :key="relation.id">
           <td><span v-if="relation.direction === 'outgoing'">{{ entityName }}</span><button v-else type="button" class="entity-link" @click="emit('open-entity', relation.peer.id)">{{ relation.peer.canonical_name }}</button></td>
-          <td><strong>{{ relation.relation_type }}</strong></td>
+          <td><strong>{{ relation.relation_type }}</strong><ManagedAttributes v-if="managedLibrary && relation.attributes" :model-value="relation.attributes" :fields="managedLibrary.relation_types.find(r => r.name === relation.relation_type)?.fields || []" :library-id="managedLibrary.id" readonly /></td>
           <td><span v-if="relation.direction === 'incoming'">{{ entityName }}</span><button v-else type="button" class="entity-link" @click="emit('open-entity', relation.peer.id)">{{ relation.peer.canonical_name }}</button></td>
           <td><span>{{ t('ikb18.sources', { count: relation.source_count }) }}</span>
             <details><summary>{{ t('ikb18.relationSources') }}</summary>

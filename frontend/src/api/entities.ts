@@ -1,4 +1,4 @@
-import { get, post, patch, put } from '@/utils/request'
+import { get, post, patch, put, postUpload } from '@/utils/request'
 
 import { ENTITY_TYPES, type EntityType } from './entity-types'
 export { ENTITY_TYPES } from './entity-types'
@@ -88,10 +88,23 @@ const rebuildPath = `${base}/name-embeddings/rebuild`
 export const getEntityNameEmbeddingRebuildStatus = () => get<EntityEnvelope<EntityNameEmbeddingRebuildStatus>>(rebuildPath)
 export const rebuildEntityNameEmbeddings = () => post<EntityEnvelope<EntityNameEmbeddingRebuildStatus>>(rebuildPath, {})
 
-export interface ManagedEntityInput { name: string; kind: string; code: string; description: string; aliases: string[]; attributes: Record<string, unknown> }
+export interface ManagedEntityInput { name: string; kind: string; code: string; description: string; aliases: string[]; attributes: Record<string, unknown>; effective_at?: string }
 export const createManagedEntity = (library: string, data: ManagedEntityInput) => post<EntityEnvelope<Entity>>(`/api/v1/libraries/${encodeURIComponent(library)}/entities`, data)
 export const updateManagedEntity = (id: string, data: Partial<ManagedEntityInput> & { revision: number; archived?: boolean }) => patch<EntityEnvelope<Entity>>(`${base}/${encodeURIComponent(id)}`, data)
 export const entityHistory = (id: string, page: number) => get<EntityEnvelope<import('./operation-logs').OperationLogsData>>(`${base}/${encodeURIComponent(id)}/history?page=${page}&page_size=20`)
-export interface EntryEntityLink { entity: Entity; origin: string; excluded: boolean; evidence: import('@/types/search').SourceLocation[]; body_hash: string }
+export interface EntryEntityLink { entity: Entity; origin: string; relation_type?: string; library_id?: string; library_name?: string; excluded: boolean; evidence: import('@/types/search').SourceLocation[]; body_hash: string }
 export const listEntryEntityLinks = (id: string) => get<EntityEnvelope<EntryEntityLink[]>>(`/api/v1/entries/${encodeURIComponent(id)}/entity-links`)
-export const setEntryEntityLink = (id: string, entity: string, excluded: boolean) => put<EntityActionEnvelope>(`/api/v1/entries/${encodeURIComponent(id)}/entity-links/${encodeURIComponent(entity)}`, { excluded })
+export const setEntryEntityLink = (id: string, entity: string, excluded: boolean, relation_type?: string) => put<EntityActionEnvelope>(`/api/v1/entries/${encodeURIComponent(id)}/entity-links/${encodeURIComponent(entity)}`, { excluded, ...(relation_type ? { relation_type } : {}) })
+
+export interface AttributeVersion { id: string; entity_id: string; revision: number; effective_at: string; recorded_at: string; attributes: Record<string, unknown> }
+export interface AttributeSnapshot { entity_id: string; at: string; known: boolean; attributes: Record<string, unknown>; revision?: number; effective_at?: string }
+export interface EntityReorganization { id: string; kind: string; source_id: string; target_id: string; created_at: string }
+export const getEntityAttributes = (id: string, at?: string) => get<EntityEnvelope<AttributeSnapshot>>(`${base}/${encodeURIComponent(id)}/attributes${at ? `?at=${encodeURIComponent(at)}` : ''}`)
+export const getAttributeHistory = (id: string, page = 1) => get<EntityEnvelope<{ items: AttributeVersion[]; total: number; page: number; page_size: number }>>(`${base}/${encodeURIComponent(id)}/attribute-history?page=${page}&page_size=20`)
+export const getEntityReorganizations = (id: string) => get<EntityEnvelope<EntityReorganization[]>>(`${base}/${encodeURIComponent(id)}/reorganizations`)
+export const mergeManagedEntity = (id: string, data: { revision: number; source_id: string; source_revision: number; attributes: Record<string, unknown>; effective_at?: string }) => post<EntityEnvelope<Entity>>(`${base}/${encodeURIComponent(id)}/merge`, data)
+export const splitManagedEntity = (id: string, data: { revision: number; new_entity: ManagedEntityInput; entry_ids: string[]; relation_ids: string[]; effective_at?: string }) => post<EntityEnvelope<Entity>>(`${base}/${encodeURIComponent(id)}/split`, data)
+export interface EntityAttachment { id: string; name: string; mime_type: string; size: number }
+export const uploadEntityAttachment = (library: string, file: File): Promise<EntityEnvelope<EntityAttachment>> => { const data = new FormData(); data.append('file', file); return postUpload(`/api/v1/libraries/${encodeURIComponent(library)}/entity-attachments`, data) }
+export const getEntityAttachment = (id: string) => get<EntityEnvelope<EntityAttachment>>(`/api/v1/entity-attachments/${encodeURIComponent(id)}`)
+export const attachmentDownloadURL = (id: string) => `/api/v1/entity-attachments/${encodeURIComponent(id)}/download`

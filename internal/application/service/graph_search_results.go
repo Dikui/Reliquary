@@ -74,7 +74,7 @@ func (s *GraphSearchService) hydrate(ctx context.Context, space uint64, librarie
 		if !ok || r.LibraryID != e.LibraryID || r.SubjectID != e.SubjectID || r.ObjectID != e.ObjectID || r.RelationType != e.RelationType || !slices.Contains(liveIDs, r.SubjectID) || !slices.Contains(liveIDs, r.ObjectID) || (len(sourceMap[e.ID]) == 0 && libMap[r.LibraryID].EntityMode != types.EntityModeManaged) {
 			continue
 		}
-		out = append(out, types.GraphSearchEdge{ID: r.ID, SubjectID: r.SubjectID, ObjectID: r.ObjectID, LibraryID: r.LibraryID, RelationType: r.RelationType, Version: r.Version, Sources: sourceMap[r.ID], SourceCount: len(sourceMap[r.ID])})
+		out = append(out, types.GraphSearchEdge{ID: r.ID, SubjectID: r.SubjectID, ObjectID: r.ObjectID, LibraryID: r.LibraryID, RelationType: r.RelationType, Attributes: r.Attributes, Version: r.Version, Sources: sourceMap[r.ID], SourceCount: len(sourceMap[r.ID])})
 	}
 	return out, nil
 }

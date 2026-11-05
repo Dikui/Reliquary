@@ -18,14 +18,14 @@ export function updateEntryContent(id: string, data: { content: string; base_bod
 export type LibraryTemplate = 'standard';
 export type LibraryColor = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export interface LibraryContentType { name: string; position: number; enabled: boolean; extract_graph: boolean }
-export interface LibraryRelationType { name: string; position: number; enabled: boolean; hierarchical?: boolean; subject_kinds?: string[]; object_kinds?: string[] }
+export interface LibraryRelationType { name: string; position: number; enabled: boolean; hierarchical?: boolean; subject_kinds?: string[]; object_kinds?: string[]; fields?: EntityField[] }
 export interface EntityKind { key: string; name: string; parent_kinds: string[] }
-export interface EntityField { key: string; name: string; type: 'text' | 'number' | 'boolean' | 'date' | 'select'; unit?: string; options?: string[]; kinds: string[]; archived?: boolean }
+export interface EntityField { key: string; name: string; type: 'text' | 'number' | 'boolean' | 'date' | 'select' | 'multiselect' | 'list' | 'entity_ref' | 'url' | 'attachment'; unit?: string; options?: string[]; kinds: string[]; archived?: boolean }
 export interface EntitySchema { kinds: EntityKind[]; fields: EntityField[] }
 export type LibraryPromptID = 'article_processing' | 'library_summary' | 'article_entities' | 'article_relations' | 'summary_merge' | 'topic_backfill';
 export type LibraryPromptOverrides = Partial<Record<LibraryPromptID, string>>;
 export interface LibraryCatalogItem {
-  entity_mode?: 'extracted' | 'managed'; entity_schema?: EntitySchema;
+  entity_mode?: 'extracted' | 'managed'; entity_schema?: EntitySchema; product_library_ids?: string[]; document_relation_types?: string[]; entity_kind_mapping?: Record<string, string>;
   prompt_overrides?: LibraryPromptOverrides; prompt_defaults?: Record<LibraryPromptID, string>; prompt_max_chars?: number;
   color: LibraryColor;
   id: string; directory: string; name: string; display_name: string; system_role: string;
@@ -41,7 +41,7 @@ export interface LibraryCatalogItem {
 export function listLibraries() { return get<{ success: boolean; data: LibraryCatalogItem[]; message?: string }>('/api/v1/libraries'); }
 export const getCatalogLibrary = (id: string) => get<{ success: boolean; data: LibraryCatalogItem; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
 export interface CreateLibraryRequest { template?: LibraryTemplate; directory: string; name: string; description: string; color?: LibraryColor }
-export type LibraryPatch = Partial<Pick<LibraryCatalogItem, 'name' | 'description' | 'color' | 'model_tiers' | 'chunking_config' | 'feed_enabled' | 'content_types' | 'relation_types' | 'prompt_overrides' | 'entity_mode' | 'entity_schema'>>;
+export type LibraryPatch = Partial<Pick<LibraryCatalogItem, 'name' | 'description' | 'color' | 'model_tiers' | 'chunking_config' | 'feed_enabled' | 'content_types' | 'relation_types' | 'prompt_overrides' | 'entity_mode' | 'entity_schema' | 'product_library_ids' | 'document_relation_types' | 'entity_kind_mapping'>>;
 export const createCatalogLibrary = (data: CreateLibraryRequest) => post<{ success: boolean; data: LibraryCatalogItem; message?: string }>('/api/v1/libraries', data)
 export const saveCatalogLibrary = (id: string, data: LibraryPatch) => put<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`, data)
 export const deleteCatalogLibrary = (id: string) => del<{ success: boolean; message?: string }>(`/api/v1/libraries/${encodeURIComponent(id)}`)
@@ -204,3 +204,5 @@ export function batchReparseEntry(ids: string[], processConfig?: EntryProcessOve
 }
 
 export interface EntryRepostSource { id: string; entry_id: string; original_url?: string; publisher?: string; author?: string; published_at?: string; published_at_missing?: boolean; match_method: string }
+
+export const getEntityConversion = (id: string) => get<{ success: boolean; data: { entry_count: number; entity_counts: Record<string, number>; relation_count: number } }>(`/api/v1/libraries/${encodeURIComponent(id)}/entity-conversion`)

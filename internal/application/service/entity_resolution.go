@@ -398,6 +398,13 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 		if err := lockEntitySpaceShared(tx, entities[0].SpaceID); err != nil {
 			return nil, err
 		}
+		var library types.Library
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND space_id=?", entities[0].LibraryID, entities[0].SpaceID).First(&library).Error; err != nil {
+			return nil, err
+		}
+		if library.ManagesEntities() {
+			return nil, errors.New("managed entity catalog cannot be changed by extraction")
+		}
 		keys := []string{}
 		for _, entity := range entities {
 			for _, name := range append([]string{entity.CanonicalName}, entity.Aliases...) {

@@ -20,18 +20,20 @@ const (
 
 // Library represents a library entity
 type Library struct {
-	EntityMode         string                `json:"entity_mode" gorm:"not null;default:extracted"`
-	EntitySchema       EntitySchema          `json:"entity_schema" gorm:"serializer:json;type:jsonb;not null;default:'{}'"`
-	Color              int                   `json:"color" gorm:"not null;default:1"`
-	SystemRole         string                `json:"system_role"`
-	Template           string                `json:"template" gorm:"default:standard"`
-	Directory          string                `json:"directory"`
-	ReviewCriteria     string                `json:"review_criteria"`
-	SourceEvidenceRule string                `json:"source_evidence_rule"`
-	FeedEnabled        bool                  `json:"feed_enabled"`
-	ContentTypes       []LibraryContentType  `json:"content_types" gorm:"foreignKey:LibraryID"`
-	RelationTypes      []LibraryRelationType `json:"relation_types" gorm:"foreignKey:LibraryID"`
-	ModelTiers         ModelTierConfig       `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
+	ProductLibraryIDs     []string              `json:"product_library_ids" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
+	DocumentRelationTypes []string              `json:"document_relation_types" gorm:"serializer:json;type:jsonb;not null;default:'[\"references\",\"specification\",\"test_report\",\"comparison\"]'"`
+	EntityMode            string                `json:"entity_mode" gorm:"not null;default:extracted"`
+	EntitySchema          EntitySchema          `json:"entity_schema" gorm:"serializer:json;type:jsonb;not null;default:'{}'"`
+	Color                 int                   `json:"color" gorm:"not null;default:1"`
+	SystemRole            string                `json:"system_role"`
+	Template              string                `json:"template" gorm:"default:standard"`
+	Directory             string                `json:"directory"`
+	ReviewCriteria        string                `json:"review_criteria"`
+	SourceEvidenceRule    string                `json:"source_evidence_rule"`
+	FeedEnabled           bool                  `json:"feed_enabled"`
+	ContentTypes          []LibraryContentType  `json:"content_types" gorm:"foreignKey:LibraryID"`
+	RelationTypes         []LibraryRelationType `json:"relation_types" gorm:"foreignKey:LibraryID"`
+	ModelTiers            ModelTierConfig       `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
 	// Unique identifier of the library
 	ID string `yaml:"id"                      json:"id"                      gorm:"type:varchar(36);primaryKey"`
 	// Name of the library
@@ -176,6 +178,12 @@ func (library *Library) EnsureDefaults() {
 	}
 	if library.EntityMode == "" {
 		library.EntityMode = EntityModeExtracted
+	}
+	if library.ProductLibraryIDs == nil {
+		library.ProductLibraryIDs = []string{}
+	}
+	if library.DocumentRelationTypes == nil {
+		library.DocumentRelationTypes = []string{"references", "specification", "test_report", "comparison"}
 	}
 	library.Type = LibraryTypeDocument
 	if library.PromptOverrides == nil {

@@ -69,6 +69,7 @@ func (EntityMergeSuggestion) TableName() string {
 
 // EntryEntity associates an article with a canonical entity.
 type EntryEntity struct {
+	RelationType string `json:"relation_type" gorm:"not null;default:references"`
 	Origin    string           `json:"origin" gorm:"not null;default:extracted"`
 	Excluded  bool             `json:"excluded" gorm:"not null;default:false"`
 	Evidence  []SourceLocation `json:"evidence" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`

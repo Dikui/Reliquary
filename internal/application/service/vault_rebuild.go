@@ -242,7 +242,9 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 					}
 				}
 			}
-			return nil
+			if len(header.EntityLinks) == 0 {
+				return nil
+			}
 		}
 		for _, name := range sortedUniqueNames(header.Topics) {
 			var topic types.Topic
@@ -260,6 +262,33 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 				TopicID: topic.ID, Source: types.TopicSourceUser, CreatedAt: collected.UTC()}).Error; err != nil {
 				return err
 			}
+		}
+		if len(header.EntityLinks) > 0 {
+			for _, link := range header.EntityLinks {
+				var entity types.Entity
+				if err := tx.Where("id=? AND library_id=? AND space_id=?", link.EntityID, link.LibraryID, library.SpaceID).First(&entity).Error; err != nil {
+					return fmt.Errorf("restore entity link: %w", err)
+				}
+				var target types.Library
+				if err := tx.Where("id=? AND space_id=?", entity.LibraryID, library.SpaceID).First(&target).Error; err != nil {
+					return err
+				}
+				if entity.LibraryID != library.ID && !target.ManagesEntities() {
+					return fmt.Errorf("cross-library entity link target must be managed")
+				}
+				relationType := link.RelationType
+				if relationType == "" {
+					relationType = "references"
+				}
+				origin := link.Origin
+				if origin == "" {
+					origin = "extracted"
+				}
+				if err := tx.Create(&types.EntryEntity{SpaceID: library.SpaceID, EntryID: entry.ID, EntityID: entity.ID, RelationType: relationType, Origin: origin, Excluded: link.Excluded, CreatedAt: collected.UTC()}).Error; err != nil {
+					return err
+				}
+			}
+			return nil
 		}
 		for _, link := range sortedUniqueNames(header.Entities) {
 			name := strings.TrimSpace(link[2 : len(link)-2])

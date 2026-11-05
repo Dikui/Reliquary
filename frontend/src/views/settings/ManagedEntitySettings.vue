@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui'
-import type { LibraryCatalogItem } from '@/api/library'
+import { listLibraries, getEntityConversion, type LibraryCatalogItem } from '@/api/library'
+import ManagedFieldSchema from './ManagedFieldSchema.vue'
 const library = defineModel<LibraryCatalogItem>({ required: true })
 const { t } = useI18n()
 const schema = computed(() => {
@@ -11,14 +12,36 @@ const schema = computed(() => {
   value.kinds.forEach(kind => { kind.parent_kinds ||= [] }); value.fields.forEach(field => { field.kinds ||= [] })
   return value
 })
+const needsConversion = ref(false)
+const libraries = ref<LibraryCatalogItem[]>([]), conversion = ref<Record<string, number>>({}), conversionError = ref('')
+let sequence = 0
+watch(() => library.value.id, async () => {
+  const current = ++sequence
+  conversion.value = {}; conversionError.value = ''; needsConversion.value = library.value.entity_mode !== 'managed'
+  try {
+    const [catalog, counts] = await Promise.all([listLibraries(), getEntityConversion(library.value.id)])
+    if (current !== sequence) return
+    if (!catalog.success || !counts.success) throw new Error(t('common.operationFailed'))
+    libraries.value = catalog.data.filter(l => l.entity_mode === 'managed' && l.id !== library.value.id)
+    conversion.value = counts.data.entity_counts || {}
+  } catch (cause: any) { if (current === sequence) conversionError.value = cause.message || t('common.operationFailed') }
+}, { immediate: true })
+onBeforeUnmount(() => { sequence++ })
 function values(event: Event) { return (event.target as HTMLInputElement).value.split(',').map(s => s.trim()).filter(Boolean) }
 </script>
 <template>
   <section class="managed-settings">
     <h2>{{ t('managed.title') }}</h2>
     <label>{{ t('managed.mode') }}<select v-model="library.entity_mode"><option value="extracted">{{ t('managed.extracted') }}</option><option value="managed">{{ t('managed.managed') }}</option></select></label>
-    <p>{{ t('managed.modeHint') }}</p>
+    <p>{{ t('managed.conversionHint') }}</p>
+    <p v-if="conversionError" role="alert">{{ conversionError }}</p>
+    <template v-if="library.entity_mode === 'extracted'">
+      <h3>{{ t('managed.autoProductLibraries') }}</h3>
+      <label v-for="target in libraries" :key="target.id"><input type="checkbox" :checked="library.product_library_ids?.includes(target.id)" @change="library.product_library_ids = ($event.target as HTMLInputElement).checked ? [...(library.product_library_ids || []), target.id] : (library.product_library_ids || []).filter(id => id !== target.id)">{{ target.name }}</label>
+    </template>
     <template v-if="library.entity_mode === 'managed'">
+      <h3 v-if="needsConversion">{{ t('managed.conversionMapping') }}</h3><label v-for="(count, type) in needsConversion ? conversion : {}" :key="type">{{ type }} ({{ count }})<select :value="library.entity_kind_mapping?.[type] || ''" @change="library.entity_kind_mapping = { ...library.entity_kind_mapping, [type]: ($event.target as HTMLSelectElement).value }"><option value="">{{ t('managed.chooseKind') }}</option><option v-for="kind in schema.kinds" :key="kind.key" :value="kind.key">{{ kind.name || kind.key }}</option></select></label>
+      <label>{{ t('managed.documentRelationTypes') }}<input :value="(library.document_relation_types || ['references', 'specification', 'test_report', 'comparison']).join(', ')" @input="library.document_relation_types = values($event)"></label>
       <h3>{{ t('managed.kinds') }}</h3><p>{{ t('managed.keysHint') }}</p>
       <fieldset v-for="(kind, index) in schema.kinds" :key="index">
         <label>{{ t('managed.key') }}<input v-model="kind.key"></label><label>{{ t('ikb18.name') }}<input v-model="kind.name"></label>
@@ -26,22 +49,14 @@ function values(event: Event) { return (event.target as HTMLInputElement).value.
       <Button @click="schema.kinds.splice(index, 1)">{{ t('ikb18.remove') }}</Button></fieldset>
       <Button @click="schema.kinds.push({ key: '', name: '', parent_kinds: [] })">{{ t('managed.addKind') }}</Button>
       <h3>{{ t('managed.fields') }}</h3>
-      <fieldset v-for="(field, index) in schema.fields" :key="index">
-        <label>{{ t('managed.key') }}<input v-model="field.key"></label><label>{{ t('ikb18.name') }}<input v-model="field.name"></label>
-        <label>{{ t('managed.fieldType') }}<select v-model="field.type"><option v-for="type in ['text', 'number', 'boolean', 'date', 'select']" :key="type" :value="type">{{ t(type === 'number' ? 'managed.types.number' : type === 'boolean' ? 'managed.types.boolean' : type === 'date' ? 'managed.types.date' : type === 'select' ? 'managed.types.select' : 'managed.types.text') }}</option></select></label>
-        <label>{{ t('managed.unit') }}<input v-model="field.unit"></label>
-        <label>{{ t('managed.appliesTo') }}<input :value="field.kinds.join(', ')" @input="field.kinds = values($event)"></label>
-        <label v-if="field.type === 'select'">{{ t('managed.options') }}<input :value="field.options?.join(', ')" @input="field.options = values($event)"></label>
-        <label><input v-model="field.archived" type="checkbox">{{ t('managed.archived') }}</label>
-      <Button @click="schema.fields.splice(index, 1)">{{ t('ikb18.remove') }}</Button></fieldset>
-      <Button @click="schema.fields.push({ key: '', name: '', type: 'text', kinds: [] })">{{ t('managed.addField') }}</Button>
+      <ManagedFieldSchema v-model="schema.fields" />
       <h3>{{ t('ikb18.relations') }}</h3><p>{{ t('managed.hierarchyHint') }}</p>
       <fieldset v-for="(relation, index) in library.relation_types" :key="index">
         <label>{{ t('ikb18.name') }}<input v-model="relation.name"></label>
         <label><input v-model="relation.enabled" type="checkbox">{{ t('ikb18.enabled') }}</label><label><input v-model="relation.hierarchical" type="checkbox">{{ t('managed.hierarchical') }}</label>
         <label>{{ t('managed.subjectKinds') }}<input :value="relation.subject_kinds?.join(', ')" @input="relation.subject_kinds = values($event)"></label>
         <label>{{ t('managed.objectKinds') }}<input :value="relation.object_kinds?.join(', ')" @input="relation.object_kinds = values($event)"></label>
-      <Button @click="library.relation_types.splice(index, 1)">{{ t('ikb18.remove') }}</Button></fieldset>
+      <ManagedFieldSchema relationship :model-value="relation.fields || []" @update:model-value="relation.fields = $event" /><Button @click="library.relation_types.splice(index, 1)">{{ t('ikb18.remove') }}</Button></fieldset>
       <Button @click="library.relation_types.push({ name: '', enabled: true, position: library.relation_types.length, hierarchical: false, subject_kinds: [], object_kinds: [] })">{{ t('managed.addRelation') }}</Button>
     </template>
   </section>

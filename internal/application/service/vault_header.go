@@ -16,8 +16,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type VaultEntityLink struct {
+	EntityID     string `yaml:"entity_id" json:"entity_id"`
+	LibraryID    string `yaml:"library_id" json:"library_id"`
+	RelationType string `yaml:"relation_type" json:"relation_type"`
+	Origin       string `yaml:"origin" json:"origin"`
+	Excluded     bool   `yaml:"excluded" json:"excluded"`
+}
+
 // VaultArticleHeader is the portable article metadata used by vault rebuild.
 type VaultArticleHeader struct {
+	EntityLinks       []VaultEntityLink       `yaml:"entity_links,omitempty" json:"entity_links,omitempty"`
 	LibraryID         string                  `yaml:"library_id,omitempty" json:"library_id,omitempty"`
 	Library           string                  `yaml:"library,omitempty" json:"library,omitempty"`
 	SourceRef         string                  `yaml:"source_ref,omitempty" json:"source_ref,omitempty"`
@@ -70,6 +79,16 @@ func RenderVaultArticleHeader(h VaultArticleHeader) []byte {
 	scalar("content_type", h.ContentType)
 	if len(h.Entities) > 0 {
 		writeVaultList(&b, "entities", h.Entities, true)
+	}
+	if len(h.EntityLinks) > 0 {
+		b.WriteString("entity_links:\n")
+		for _, link := range h.EntityLinks {
+			scalar("  - entity_id", link.EntityID)
+			scalar("    library_id", link.LibraryID)
+			scalar("    relation_type", link.RelationType)
+			scalar("    origin", link.Origin)
+			fmt.Fprintf(&b, "    excluded: %t\n", link.Excluded)
+		}
 	}
 	if len(h.Topics) > 0 {
 		writeVaultList(&b, "topics", h.Topics, true)

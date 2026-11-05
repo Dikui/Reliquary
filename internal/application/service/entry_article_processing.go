@@ -445,6 +445,11 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		for _, entity := range resolved {
 			ids = append(ids, entity.ID)
 		}
+		productIDs, err := s.associateProductMentions(ctx, k, body)
+		if err != nil {
+			return err
+		}
+		ids = append(ids, productIDs...)
 		query := s.db.WithContext(ctx).Where("space_id=? AND entry_id=? AND origin<>?", k.SpaceID, k.ID, "manual")
 		if len(ids) > 0 {
 			query = query.Where("entity_id NOT IN ?", ids)

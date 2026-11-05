@@ -4,15 +4,16 @@ import "time"
 
 // Relation is the PostgreSQL authority for a directed, library-scoped triple.
 type Relation struct {
-	ID           string    `json:"id" gorm:"primaryKey"`
-	SpaceID      uint64    `json:"space_id"`
-	LibraryID    string    `json:"library_id"`
-	SubjectID    string    `json:"subject_id"`
-	RelationType string    `json:"relation_type"`
-	ObjectID     string    `json:"object_id"`
-	Version      int64     `json:"version"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	Attributes   map[string]any `json:"attributes" gorm:"serializer:json;type:jsonb;not null;default:'{}'"`
+	ID           string         `json:"id" gorm:"primaryKey"`
+	SpaceID      uint64         `json:"space_id"`
+	LibraryID    string         `json:"library_id"`
+	SubjectID    string         `json:"subject_id"`
+	RelationType string         `json:"relation_type"`
+	ObjectID     string         `json:"object_id"`
+	Version      int64          `json:"version"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 }
 type RelationSource struct {
 	RelationID string             `json:"relation_id" gorm:"primaryKey"`

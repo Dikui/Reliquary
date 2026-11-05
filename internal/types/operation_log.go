@@ -20,7 +20,7 @@ type OperationLog struct {
 func (OperationLog) TableName() string { return "operation_logs" }
 
 var OperationTypes = []string{
-	"create_entity", "update_entity", "create_relation", "update_relation", "set_entity_link",
+	"create_entity", "update_entity", "create_relation", "update_relation", "set_entity_link", "convert_entity_library", "merge_managed_entities", "split_managed_entity",
 	"ingest", "write_report", "delete_document",
 	"ingest_discard",
 	"review_approve", "review_reject", "review_retry", "review_discard",

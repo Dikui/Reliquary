@@ -216,7 +216,7 @@ func (s *searchService) entrySearchAssociations(ctx context.Context, spaceID uin
 	err := s.db.WithContext(ctx).Table("entities e").
 		Joins("JOIN entry_entities ke ON ke.entity_id=e.id AND ke.space_id=e.space_id AND ke.excluded=false").
 		Where("e.space_id=? AND ke.entry_id IN ?", spaceID, ids).
-		Select("ke.entry_id,e.id,e.canonical_name,e.entity_type").
+		Select("ke.entry_id,e.id,e.canonical_name,e.entity_type,e.library_id,ke.relation_type").
 		Order("e.canonical_name,e.id").Scan(&rows).Error
 	if err != nil {
 		return nil, nil, err
@@ -279,12 +279,17 @@ func (s *searchService) Options(ctx context.Context, libraries []string) (*types
 	contentTypesQuery := s.db.WithContext(ctx).Table("library_content_types ct").Joins("JOIN libraries l ON l.id=ct.library_id").Where("l.space_id=? AND l.deleted_at IS NULL AND ct.enabled=true", spaceID)
 	topicsQuery := s.db.WithContext(ctx).Table("topics").Where("space_id=?", spaceID)
 	if len(libraries) > 0 {
-		entitiesQuery = entitiesQuery.Where("library_id IN ?", libraries)
+		entitiesQuery = entitiesQuery.Where(`library_id IN ? OR library_id IN (
+ SELECT jsonb_array_elements_text(l.product_library_ids) FROM libraries l WHERE l.space_id=? AND l.id IN ? AND l.deleted_at IS NULL
+) OR id IN (
+ SELECT links.entity_id FROM entry_entities links JOIN entries e ON e.id=links.entry_id AND e.space_id=links.space_id
+ WHERE links.space_id=? AND e.library_id IN ? AND links.excluded=false AND e.deleted_at IS NULL
+)`, libraries, spaceID, libraries, spaceID, libraries)
 		contentTypesQuery = contentTypesQuery.Where("ct.library_id IN ?", libraries)
 		topicsQuery = topicsQuery.Where("library_id IN ?", libraries)
 	}
 	if err := entitiesQuery.
-		Select("id,canonical_name,entity_type").Order("canonical_name,id").Scan(&options.Entities).Error; err != nil {
+		Select("id,canonical_name,entity_type,library_id").Order("canonical_name,id").Scan(&options.Entities).Error; err != nil {
 		return nil, err
 	}
 	if err := contentTypesQuery.Distinct().Order("ct.name").Pluck("ct.name", &options.ContentTypes).Error; err != nil {

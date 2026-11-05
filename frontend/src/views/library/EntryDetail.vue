@@ -226,7 +226,7 @@ onBeforeUnmount(() => { activeConfirm?.destroy(); document.title = 'Reliquary' }
             <dl v-if="entry.custom_metadata && Object.keys(entry.custom_metadata).length" class="entry-detail__metadata"><template v-for="(value, key) in entry.custom_metadata" :key="key"><dt>{{ key }}</dt><dd>{{ value }}</dd></template></dl>
           </template>
           <template #entities>
-            <ManagedDocumentLinks v-if="library?.entity_mode === 'managed'" :key="entry.id" :entry-id="entry.id" :library-id="entry.library_id || library.id" @changed="state.loadRelations" />
+            <ManagedDocumentLinks v-if="library" :key="entry.id" :entry-id="entry.id" :library-id="entry.library_id || library.id" @changed="state.loadRelations" />
             <Skeleton v-if="relationsLoading" :label="t('common.loading')" />
             <ErrorState v-if="relationsError" :title="t('entryDetail.relationsFailed')"><Button @click="state.loadRelations">{{ t('common.retry') }}</Button></ErrorState>
             <div v-for="entity in entities" :key="entity.id" class="entry-detail__entity"><div><RouterLink :to="entityLocation(entity.id)">{{ entity.canonical_name }}</RouterLink><span>{{ t(`workbench.entities.types.${entity.entity_type}`) }}</span></div><p v-if="entity.description">{{ entity.description }}</p><FollowToggle target-type="entity" :target-id="entity.id" :name="entity.canonical_name" /></div>

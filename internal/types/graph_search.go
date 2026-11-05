@@ -27,14 +27,15 @@ type GraphSource struct {
 	Evidence         []RelationEvidence `json:"evidence"`
 }
 type GraphSearchEdge struct {
-	ID           string        `json:"id"`
-	SubjectID    string        `json:"subject_id"`
-	ObjectID     string        `json:"object_id"`
-	LibraryID    string        `json:"library_id"`
-	RelationType string        `json:"relation_type"`
-	Version      int64         `json:"version"`
-	Sources      []GraphSource `json:"sources"`
-	SourceCount  int           `json:"source_count"`
+	Attributes   map[string]any `json:"attributes"`
+	ID           string         `json:"id"`
+	SubjectID    string         `json:"subject_id"`
+	ObjectID     string         `json:"object_id"`
+	LibraryID    string         `json:"library_id"`
+	RelationType string         `json:"relation_type"`
+	Version      int64          `json:"version"`
+	Sources      []GraphSource  `json:"sources"`
+	SourceCount  int            `json:"source_count"`
 }
 type GraphSearchPath struct {
 	EntityIDs   []string `json:"entity_ids"`

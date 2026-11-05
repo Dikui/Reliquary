@@ -42,7 +42,7 @@ async function mountDetail(locale: string, kind = 'article', starAction?: (starr
     '@/api/entry-judgments': { correctEntryContentType: async (_id: string, content_type: string) => { requests.push(content_type); return result({ content_type }) }, setEntryStar: async (_id: string, starred: boolean) => starAction ? starAction(starred) : result({ starred }) },
     '@/components/ui': { ...ui, Tabs, Dialog, confirm: (options: any) => { confirmations.push(options); return { destroy() {} } }, toast: { success() {} } },
     '@/components/DocContent.vue': { __esModule: true, default: defineComponent({ props: ['details'], setup: props => () => h('div', { 'data-body': '' }, props.details.md[0]?.content) }) },
-    '@/components/FollowToggle.vue': empty, './components/RepostSources.vue': empty,
+    '@/components/FollowToggle.vue': empty, './components/RepostSources.vue': empty, './components/ManagedDocumentLinks.vue': empty,
     './useEntryDetail': detail, '@/utils/bodyReference': references, '@/utils/entryProcessingStatus': status, '@/utils/entrySourceLabels': source, '@/utils/externalUrl': external, '@/utils/markdownPlainText': markdown, '@/utils/processingSpanLabel': spans,
   })
   const root = element('root'), app = renderer.createApp(Component)

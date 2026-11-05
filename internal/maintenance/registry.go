@@ -22,9 +22,13 @@ type PersistentTable struct {
 const RegistryVersion = 1
 
 var PersistentTables = map[string]PersistentTable{
+	"entity_attribute_versions": {Columns: Rule{Sidecar: "id space_id entity_id revision effective_at recorded_at attributes"}, File: "data/entity_attribute_versions.json", After: []string{"spaces", "entities"}, Since: 38},
+	"entity_reorganizations":    {Columns: Rule{Sidecar: "id space_id library_id kind source_id target_id created_at"}, File: "data/entity_reorganizations.json", After: []string{"spaces", "libraries", "entities"}, Since: 38},
+	"entity_attachments":        {Columns: Rule{Sidecar: "id space_id library_id name mime_type size path created_at"}, File: "data/entity_attachments.json", After: []string{"spaces", "libraries", "resources"}, Since: 38},
+
 	"content_check_settings": {Columns: Rule{Configuration: "space_id enabled model_id weekday time next_run_at scan_after"}, File: "config/content_check_settings.json", After: []string{"spaces", "models"}, Since: 32},
 	"content_check_runs":     {Columns: Rule{Sidecar: "id space_id model_id previous_id status window_from window_to targets completed results error created_at finished_at"}, File: "data/content_check_runs.json", After: []string{"content_check_settings"}, Since: 32},
-	"relations":              {Columns: Rule{Sidecar: "id space_id library_id subject_id relation_type object_id version created_at updated_at"}, File: "data/relations.json", After: []string{"spaces", "libraries", "entities", "library_relation_types"}, Since: 18},
+	"relations":              {Columns: Rule{Sidecar: "id space_id library_id subject_id relation_type object_id version created_at updated_at attributes"}, File: "data/relations.json", After: []string{"spaces", "libraries", "entities", "library_relation_types"}, Since: 18},
 	"relation_sources":       {Columns: Rule{Sidecar: "relation_id entry_id evidence run_id body_hash"}, File: "data/relation_sources.json", After: []string{"relations", "entries"}, Since: 18},
 	"relation_suppressions":  {Columns: Rule{Sidecar: "space_id library_id subject_id relation_type object_id actor created_at"}, File: "data/relation_suppressions.json", After: []string{"spaces", "libraries", "entities", "library_relation_types"}, Since: 18},
 	"relation_type_merges":   {Columns: Rule{Configuration: "library_id from_type to_type created_at"}, File: "data/relation_type_merges.json", After: []string{"library_relation_types"}, Since: 18},
@@ -56,7 +60,7 @@ var PersistentTables = map[string]PersistentTable{
 	"libraries": {
 		Columns: Rule{Configuration: "system_role template directory review_criteria source_evidence_rule " +
 			"feed_enabled model_tiers id name description space_id chunking_config embedding_model_id " +
-			"summary_model_id created_at updated_at deleted_at type indexing_strategy creator_id color prompt_overrides entity_mode entity_schema"},
+			"summary_model_id created_at updated_at deleted_at type indexing_strategy creator_id color prompt_overrides entity_mode entity_schema product_library_ids document_relation_types"},
 		File: "config/libraries.json", After: []string{"spaces", "users"}, Since: 0,
 	},
 	"library_content_types": {
@@ -64,7 +68,7 @@ var PersistentTables = map[string]PersistentTable{
 		File:    "data/library_content_types.json", After: []string{"libraries"}, Since: 10,
 	},
 	"library_relation_types": {
-		Columns: Rule{Configuration: "library_id name position enabled hierarchical subject_kinds object_kinds"},
+		Columns: Rule{Configuration: "library_id name position enabled hierarchical subject_kinds object_kinds fields"},
 		File:    "data/library_relation_types.json", After: []string{"libraries"}, Since: 10,
 	},
 }

@@ -23,7 +23,7 @@ func (s *FollowService) eligibleFeed(ctx context.Context, spaceID uint64, cutoff
 	query = query.Joins(`JOIN LATERAL (
  SELECT MAX(matches.entered_at) AS entered_at, COUNT(*) AS match_count, ARRAY_AGG(matches.target_id) AS target_ids FROM (
  SELECT GREATEST(COALESCE(k.follow_ready_at,k.processed_at,k.created_at),ke.created_at) AS entered_at, f.target_id
- FROM entry_entities ke JOIN entities scoped_entity ON scoped_entity.id=ke.entity_id AND scoped_entity.space_id=ke.space_id AND scoped_entity.library_id=k.library_id JOIN follows f ON f.space_id=ke.space_id AND f.target_type='entity' AND f.target_id=ke.entity_id
+ FROM entry_entities ke JOIN entities scoped_entity ON scoped_entity.id=ke.entity_id AND scoped_entity.space_id=ke.space_id JOIN follows f ON f.space_id=ke.space_id AND f.target_type='entity' AND f.target_id=ke.entity_id
  WHERE ke.excluded=false AND ke.space_id=k.space_id AND ke.entry_id=k.id AND ke.created_at<=? AND f.created_at<=?
  UNION ALL
  SELECT CASE WHEN kt.is_historical THEN NULL ELSE GREATEST(COALESCE(k.follow_ready_at,k.processed_at,k.created_at),kt.created_at) END, f.target_id

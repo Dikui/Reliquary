@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -131,7 +132,13 @@ func (s *EntityService) ListRelations(ctx context.Context, id, libraryID string)
 			i := len(groups) - 1
 			groups[i].Relations = append(groups[i].Relations, item)
 		}
-		return nil
+		peers := []*types.Entity{}
+		for i := range groups {
+			for j := range groups[i].Relations {
+				peers = append(peers, &groups[i].Relations[j].Peer)
+			}
+		}
+		return hydrateManagedEntityAttributes(ctx, tx, peers, time.Now())
 	})
 	return groups, err
 }

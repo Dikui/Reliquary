@@ -13,10 +13,15 @@ var managedEntityDefaults = map[string]map[string]any{
 }
 
 func projectManagedEntitiesSnapshot(snapshot *Snapshot, targetVersion int64) {
-	if snapshot.schemaVersion >= 37 || targetVersion < 37 {
+	projectEntityDefaultsSnapshot(snapshot, targetVersion, 37, managedEntityDefaults)
+	projectManagedEvolutionSnapshot(snapshot, targetVersion)
+}
+
+func projectEntityDefaultsSnapshot(snapshot *Snapshot, targetVersion, version int64, defaults map[string]map[string]any) {
+	if snapshot.schemaVersion >= version || targetVersion < version {
 		return
 	}
-	for table, columns := range managedEntityDefaults {
+	for table, columns := range defaults {
 		for _, row := range snapshot.Tables[table] {
 			for column, value := range columns {
 				row[column] = value
@@ -26,7 +31,12 @@ func projectManagedEntitiesSnapshot(snapshot *Snapshot, targetVersion int64) {
 }
 
 func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
-	if expected.SchemaVersion >= 37 || actual.SchemaVersion < 37 {
+	expected, actual = projectEntityDefaultsManifest(expected, actual, 37, managedEntityDefaults)
+	return projectManagedEvolutionManifest(expected, actual)
+}
+
+func projectEntityDefaultsManifest(expected, actual *Manifest, version int64, defaults map[string]map[string]any) (*Manifest, *Manifest) {
+	if expected.SchemaVersion >= version || actual.SchemaVersion < version {
 		return expected, actual
 	}
 	left := *expected
@@ -38,7 +48,7 @@ func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Man
 	for group, files := range expected.Files {
 		left.Files[group] = append([]File{}, files...)
 	}
-	for table, columns := range managedEntityDefaults {
+	for table, columns := range defaults {
 		item, ok := expected.Tables[table]
 		if !ok || item.Data == nil {
 			continue

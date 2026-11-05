@@ -15,6 +15,7 @@ import (
 
 // EntityService owns library-scoped canonical identities and article mentions.
 type EntityService struct {
+	files                  interfaces.FileService
 	db                     *gorm.DB
 	models                 interfaces.ModelService
 	nameEmbeddingRebuilder *EntityNameEmbeddingRebuilder
@@ -105,6 +106,9 @@ func (s *EntityService) resolveEntityCandidates(ctx context.Context, entryID str
 	resolvedIDs := []string{}
 	resolvedMentions := map[string]string{}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockEntitySpaceShared(tx, spaceID); err != nil {
+			return err
+		}
 		// Recheck the article while writing so a concurrent deletion cannot leave mentions.
 		var current types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id").Where("id=? AND space_id=? AND library_id=?", entryID, spaceID, article.LibraryID).First(&current).Error; err != nil {
@@ -210,7 +214,17 @@ func (s *EntityService) ListEntities(ctx context.Context, q types.EntityQuery) (
 	if err := query.Order("entities.canonical_name,entities.id").Limit(entityQueryLimit(q.Limit)).Offset(max(q.Offset, 0)).Find(&entities).Error; err != nil {
 		return nil, err
 	}
-	return entities, s.loadAliases(ctx, spaceID, entities)
+	if err := s.loadAliases(ctx, spaceID, entities); err != nil {
+		return nil, err
+	}
+	pointers := make([]*types.Entity, len(entities))
+	for i := range entities {
+		pointers[i] = &entities[i]
+	}
+	if err := hydrateManagedEntityAttributes(ctx, s.db, pointers, time.Now()); err != nil {
+		return nil, err
+	}
+	return entities, nil
 }
 func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.EntityDetail, error) {
 	spaceID, err := s.requireSpace(ctx)
@@ -230,8 +244,11 @@ func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.Ent
 	if err := s.loadAliases(ctx, spaceID, entities); err != nil {
 		return nil, err
 	}
+	if err := hydrateManagedEntityAttributes(ctx, s.db, []*types.Entity{&entities[0]}, time.Now()); err != nil {
+		return nil, err
+	}
 	result := &types.EntityDetail{Entity: entities[0], Entries: []types.Entry{}, LibraryGroups: []types.EntityLibraryGroup{}}
-	err = s.db.WithContext(ctx).Model(&types.Entry{}).Joins("JOIN entry_entities links ON links.entry_id=entries.id AND links.space_id=entries.space_id").Where("entries.space_id=? AND entries.library_id=? AND links.entity_id=? AND links.excluded=false", spaceID, entity.LibraryID, entity.ID).Order("entries.created_at DESC,entries.id").Find(&result.Entries).Error
+	err = s.db.WithContext(ctx).Model(&types.Entry{}).Joins("JOIN entry_entities links ON links.entry_id=entries.id AND links.space_id=entries.space_id").Where("entries.space_id=? AND links.entity_id=? AND links.excluded=false", spaceID, entity.ID).Order("entries.created_at DESC,entries.id").Find(&result.Entries).Error
 	if err == nil {
 		entries := make([]*types.Entry, len(result.Entries))
 		for i := range result.Entries {
@@ -289,7 +306,7 @@ func (s *EntityService) resolveManagedEntityCandidates(ctx context.Context, arti
 			for _, alias := range candidate.Aliases {
 				names = append(names, normalizeEntityName(alias))
 			}
-			entity, err := findManagedEntity(tx, article.SpaceID, article.LibraryID, names)
+			entity, err := findManagedEntityInLibraries(tx, article.SpaceID, appendUniqueEntityString(append([]string{}, library.ProductLibraryIDs...), library.ID), names)
 			if err != nil {
 				return err
 			}
@@ -323,9 +340,13 @@ func (s *EntityService) resolveManagedEntityCandidates(ctx context.Context, arti
 
 // Callers hold the entity barrier while matching and storing links.
 func findManagedEntity(tx *gorm.DB, spaceID uint64, libraryID string, names []string) (*types.Entity, error) {
+	return findManagedEntityInLibraries(tx, spaceID, []string{libraryID}, names)
+}
+
+func findManagedEntityInLibraries(tx *gorm.DB, spaceID uint64, libraryIDs []string, names []string) (*types.Entity, error) {
 	var matches []types.Entity
-	if err := tx.Where("space_id=? AND library_id=? AND merged_into_id='' AND archived_at IS NULL", spaceID, libraryID).
-		Where("normalized_name IN ? OR lower(code) IN ? OR id IN (SELECT entity_id FROM entity_aliases WHERE space_id=? AND library_id=? AND normalized_alias IN ?)", names, names, spaceID, libraryID, names).
+	if err := tx.Where("space_id=? AND library_id IN ? AND merged_into_id='' AND archived_at IS NULL", spaceID, libraryIDs).
+		Where("normalized_name IN ? OR lower(code) IN ? OR id IN (SELECT entity_id FROM entity_aliases WHERE space_id=? AND library_id IN ? AND normalized_alias IN ?)", names, names, spaceID, libraryIDs, names).
 		Limit(2).Find(&matches).Error; err != nil {
 		return nil, err
 	}

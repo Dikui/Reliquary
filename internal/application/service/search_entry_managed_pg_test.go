@@ -92,3 +92,26 @@ func TestEntrySearchParentContextFailurePreservesHits(t *testing.T) {
 	require.NotEmpty(t, response.Results[0].Snippets[0].Content)
 	require.Empty(t, response.Results[0].Snippets[0].Context)
 }
+
+// Document library scopes do not restrict which product library may own a
+// selected product or hierarchy root.
+func TestEntrySearchCrossLibraryProductDescendants(t *testing.T) {
+	h := newEntrySearchFixture(t)
+	products := &types.Library{ID: "product-catalog", SpaceID: 1, Name: "Products", Directory: "products", EntityMode: types.EntityModeManaged}
+	require.NoError(t, h.db.Create(products).Error)
+	require.NoError(t, h.db.Model(h.library).Update("product_library_ids", types.JSON(`["product-catalog"]`)).Error)
+	for _, id := range []string{"product-parent", "product-child"} {
+		require.NoError(t, h.db.Create(&types.Entity{ID: id, SpaceID: 1, LibraryID: products.ID, CanonicalName: id, NormalizedName: id, EntityType: "product"}).Error)
+	}
+	require.NoError(t, h.db.Create(&types.LibraryRelationType{LibraryID: products.ID, Name: "belongs", Enabled: true, Hierarchical: true}).Error)
+	require.NoError(t, h.db.Create(&types.Relation{ID: "cross-library-hierarchy", SpaceID: 1, LibraryID: products.ID, SubjectID: "product-child", ObjectID: "product-parent", RelationType: "belongs", Version: 1}).Error)
+	h.add(t, "cross-library-document", "article", "2026-10-01", "reference", "semanticlaunch", 1)
+	require.NoError(t, h.db.Create(&types.EntryEntity{SpaceID: 1, EntryID: "cross-library-document", EntityID: "product-child", RelationType: "test_report"}).Error)
+	response := h.search(t, types.EntrySearchRequest{Query: "searchfixture", EntityIDs: []string{"product-parent"}, IncludeDescendants: true, CollapseSimilar: entrySearchNoCollapse()})
+	require.Equal(t, []string{"cross-library-document"}, entrySearchIDs(response))
+	require.Equal(t, products.ID, response.Results[0].Entities[0].LibraryID)
+	require.Equal(t, "test_report", response.Results[0].Entities[0].RelationType)
+	options, err := h.svc.Options(h.ctx, []string{h.library.ID})
+	require.NoError(t, err)
+	require.Len(t, options.Entities, 2)
+}

@@ -686,3 +686,68 @@ func TestManagedEntityMatchingPreservesCatalogAndManualDecisions(t *testing.T) {
 	require.NoError(t, db.Model(&types.Entity{}).Count(&count).Error)
 	require.EqualValues(t, 5, count, "restoring headers must not extend the managed catalog")
 }
+
+// Cross-library document links retain manual type/negative decisions and never
+// turn ambiguous names or partial product codes into product associations.
+func TestCrossLibraryProductLinksPreserveTypedDecisions(t *testing.T) {
+	db, ctx, entities := entityFixture(t)
+	products := &types.Library{ID: "products", SpaceID: 1, Name: "Products", Directory: "products", EntityMode: types.EntityModeManaged}
+	require.NoError(t, db.Create(products).Error)
+	require.NoError(t, db.Model(&types.Library{}).Where("id=?", "entity-library").Update("product_library_ids", types.JSON(`["products"]`)).Error)
+	product := entityRecord("widget-product", "Widget", "product")
+	product.LibraryID, product.Code = products.ID, "W-1"
+	other := entityRecord("ambiguous-product", "Other", "product")
+	other.LibraryID, other.Code = products.ID, "Widget"
+	require.NoError(t, db.Create(&[]types.Entity{product, other}).Error)
+	entry := entityArticle(t, db, "cross-library-document")
+	entry.VaultBody = "正文 W-1 has specifications. Widget is ambiguous. XW-1Y is another code."
+	require.NoError(t, db.Save(entry).Error)
+	service := &entryService{db: db}
+	ids, err := service.associateProductMentions(ctx, entry, entry.VaultBody)
+	require.NoError(t, err)
+	require.Equal(t, []string{product.ID}, ids)
+	typeName := "specification"
+	require.NoError(t, entities.SetEntryEntityLink(ctx, entry.ID, product.ID, false, &typeName))
+	links, err := entities.EntryEntityLinks(ctx, entry.ID)
+	require.NoError(t, err)
+	require.Len(t, links, 1)
+	require.Equal(t, products.ID, links[0].Entity.LibraryID)
+	require.Equal(t, "specification", links[0].RelationType)
+	positive, err := entities.EntityDetail(ctx, product.ID)
+	require.NoError(t, err)
+	require.Len(t, positive.Entries, 1)
+	require.Equal(t, entry.LibraryID, positive.LibraryGroups[0].LibraryID)
+	require.NoError(t, service.loadEntryAssociations(ctx, 1, []*types.Entry{entry}))
+	require.Len(t, entry.Entities, 1)
+	require.Equal(t, products.ID, entry.Entities[0].LibraryID)
+	bad := "not_configured"
+	require.Error(t, entities.SetEntryEntityLink(ctx, entry.ID, product.ID, false, &bad))
+	require.NoError(t, entities.SetEntryEntityLink(ctx, entry.ID, product.ID, true))
+	_, err = service.associateProductMentions(ctx, entry, entry.VaultBody)
+	require.NoError(t, err)
+	links, err = entities.EntryEntityLinks(ctx, entry.ID)
+	require.NoError(t, err)
+	require.True(t, links[0].Excluded)
+	require.Equal(t, "specification", links[0].RelationType)
+	detail, err := entities.EntityDetail(ctx, product.ID)
+	require.NoError(t, err)
+	require.Empty(t, detail.Entries)
+
+	vault := &VaultService{db: db}
+	header, err := vault.articleHeader(ctx, entry)
+	require.NoError(t, err)
+	require.Len(t, header.EntityLinks, 1)
+	rendered := append(RenderVaultArticleHeader(header), []byte(entry.VaultBody)...)
+	parsed, body, err := ParseVaultArticle(rendered)
+	require.NoError(t, err)
+	parsed.ID = uuid.NewString()
+	var docLibrary types.Library
+	require.NoError(t, db.First(&docLibrary, "id=?", entry.LibraryID).Error)
+	restored, err := (&VaultDocumentService{db: db}).restoreVaultArticle(ctx, &docLibrary, "restored.md", parsed, body)
+	require.NoError(t, err)
+	links, err = entities.EntryEntityLinks(ctx, restored.ID)
+	require.NoError(t, err)
+	require.Len(t, links, 1)
+	require.True(t, links[0].Excluded)
+	require.Equal(t, "specification", links[0].RelationType)
+}

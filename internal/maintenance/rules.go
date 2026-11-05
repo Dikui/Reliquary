@@ -19,7 +19,7 @@ var Rules = map[string]Rule{
 	"follow_feed_states":            {Sidecar: "space_id last_viewed_at"},
 	"follows":                       {Sidecar: "space_id target_type target_id created_at", Regenerated: "entity_id topic_id"},
 	"image_embeddings":              {Regenerated: "entry_id space_id library_id attachment_path model_id dimension embedding content_hash created_at updated_at"},
-	"entry_entities":                {Sidecar: "space_id entry_id entity_id created_at origin excluded evidence body_hash"},
+	"entry_entities":                {Sidecar: "space_id entry_id entity_id created_at origin excluded evidence body_hash relation_type"},
 	"entry_processing_spans":        {Sidecar: "id entry_id attempt span_id parent_span_id name kind status input output metadata error_code error_message error_detail started_at finished_at duration_ms created_at updated_at"},
 	"entry_repost_sources":          {Sidecar: "id space_id library_id entry_id original_url normalized_url source_fingerprint author publisher published_at published_at_missing match_method sim_hash_distance created_at"},
 	"entry_topics":                  {Sidecar: "space_id entry_id topic_id source is_historical created_at"},

@@ -16,6 +16,7 @@ test('relation table preserves subject direction and evidence hash, and deletion
   const deleted: string[] = [], opened: unknown[] = [], notices: string[] = []
   let changed = 0, destroyed = 0, fail = true
   const component = loadComponent(new URL('./EntityRelations.vue', import.meta.url), {
+    './ManagedAttributes.vue': { __esModule: true, default: defineComponent({ render: () => null }) },
     './ManagedRelationEditor.vue': { __esModule: true, default: defineComponent({ render: () => null }) },
     '@/api/relations': { deleteEntityRelation: async (id: string) => { deleted.push(id); if (fail) throw new Error('Unavailable'); return { success: true } } },
     '@/components/ui/feedback': { confirm: (options: ConfirmOptions) => { confirmation = options; return { destroy: () => destroyed++ } }, toast: { success: (value: string) => notices.push(value) } },

@@ -54,3 +54,17 @@ test('managed entities keep revision and manual exclusion in their write request
     { method: 'put', url: '/api/v1/entries/entry%2Fa/entity-links/entity%2Fa', body: { excluded: true } },
   ])
 })
+
+test('effective attributes and split selections retain their typed payloads', async () => {
+  const requests: Request[] = [], api = loadAPI(requests)
+  const effective_at = '2026-11-01T00:00:00.000Z'
+  const attributes = { tags: ['solar', 'storage'], links: ['one', 'two'], website: 'https://example.org', product: 'related-product', file: 'attachment-id' }
+  await api.updateManagedEntity('product', { revision: 4, attributes, effective_at })
+  await api.splitManagedEntity('product', { revision: 5, new_entity: { name: 'Variant', kind: 'model', code: 'V2', description: '', aliases: [], attributes }, entry_ids: ['document'], relation_ids: ['edge'], effective_at })
+  await api.setEntryEntityLink('document', 'another-library-product', false, 'test_report')
+  assert.deepEqual(requests, [
+    { method: 'patch', url: '/api/v1/entities/product', body: { revision: 4, attributes, effective_at } },
+    { method: 'post', url: '/api/v1/entities/product/split', body: { revision: 5, new_entity: { name: 'Variant', kind: 'model', code: 'V2', description: '', aliases: [], attributes }, entry_ids: ['document'], relation_ids: ['edge'], effective_at } },
+    { method: 'put', url: '/api/v1/entries/document/entity-links/another-library-product', body: { excluded: false, relation_type: 'test_report' } },
+  ])
+})

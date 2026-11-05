@@ -85,6 +85,12 @@ async function load(id?: string) {
     if (current !== sequence) return
     draft.value = { ...response.data, model_tiers: copyModelTiers({ ...response.data.model_tiers, generation: response.data.model_tiers?.generation || response.data.summary_model_id || '' }), description: catalogDescription(response.data, t('ikb18.systemMediaDescription')), chunking_config: response.data.chunking_config ? { ...response.data.chunking_config, strategy: response.data.chunking_config.strategy ?? '', token_limit: response.data.chunking_config.token_limit ?? 0, languages: response.data.chunking_config.languages ?? [] } : response.data.chunking_config, content_types: response.data.content_types || [], relation_types: response.data.relation_types || [] }
     draft.value.entity_mode ||= 'extracted'
+    if (draft.value.entity_schema) {
+      draft.value.entity_schema.kinds ||= []
+      draft.value.entity_schema.fields ||= []
+      draft.value.entity_schema.kinds.forEach(kind => { kind.parent_kinds ||= [] })
+      draft.value.entity_schema.fields.forEach(field => { field.kinds ||= [] })
+    }
     draft.value.prompt_overrides = { ...draft.value.prompt_overrides }
     toggleParentChild()
     validationAttempted.value = false

@@ -18,8 +18,12 @@ func TestIKB07RegistryLibraryConfigurationRoundTrip(t *testing.T) {
 	// Product master data and manual exclusions are authoritative export data.
 	require.NoError(t, db.Exec(`UPDATE libraries SET entity_mode='managed', entity_schema='{"kinds":[{"key":"model","name":"Model"}],"fields":[]}' WHERE id='library';
 	 UPDATE entities SET kind='model',code='MODEL-1',attributes='{"status":"available"}',revision=4,archived_at=now() WHERE id='entity-a';
-	 UPDATE entry_entities SET origin='manual',excluded=true,evidence='[{"paragraph":1}]',body_hash='old-body' WHERE entity_id='entity-a';
-	 UPDATE library_relation_types SET hierarchical=true,subject_kinds='["model"]',object_kinds='["model"]' WHERE library_id='library' AND name='引用'`).Error)
+	 UPDATE entry_entities SET origin='manual',relation_type='test_report',excluded=true,evidence='[{"paragraph":1}]',body_hash='old-body' WHERE entity_id='entity-a';
+	 UPDATE library_relation_types SET hierarchical=true,subject_kinds='["model"]',object_kinds='["model"]',fields='[{"key":"quantity","name":"Quantity","type":"number"}]' WHERE library_id='library' AND name='引用'`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO entity_attribute_versions(id,space_id,entity_id,revision,effective_at,recorded_at,attributes) VALUES('version-fixture',1,'entity-a',4,now(),now(),'{"status":"available"}');
+ INSERT INTO entity_reorganizations(id,space_id,library_id,kind,source_id,target_id,created_at) VALUES('reorganization-fixture',1,'library','merge','entity-b','entity-a',now());
+ INSERT INTO entity_attachments(id,space_id,library_id,name,mime_type,size,path,created_at) VALUES('attachment-fixture',1,'library','manual.txt','text/plain',12,'resource://1234567890123456789012',now());
+ INSERT INTO relations(id,space_id,library_id,subject_id,object_id,relation_type,version,attributes) VALUES('relation-fixture',1,'library','entity-a','entity-b','引用',1,'{"quantity":2}')`).Error)
 	ctx := context.Background()
 	root := t.TempDir()
 	snapshot, err := Capture(ctx, db)

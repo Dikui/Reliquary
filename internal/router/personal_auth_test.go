@@ -17,6 +17,7 @@ import (
 	"gorm.io/gorm"
 	apprepo "reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
+	"reliquary/internal/application/service/file"
 	"reliquary/internal/config"
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
@@ -74,6 +75,8 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	require.NoError(t, err)
 	settings := service.NewSystemSettingService(apprepo.NewSystemSettingRepository(db), cfg)
 	system := handler.NewSystemHandler(cfg, spaceSvc, users, settings, keys, nil, nil)
+	entities := service.NewEntityService(db, nil)
+	entities.SetEntityFileService(file.NewResourceCatalogFileService(file.NewLocalFileService(t.TempDir(), ""), service.NewResourceCatalog(apprepo.NewResourceRepository(db))))
 	params := RouterParams{
 		Config: cfg, UserService: users, SpaceService: spaceSvc,
 		APIKeyService: keys, LibraryService: library, EntryService: entry,
@@ -81,7 +84,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 		EntryHandler:   handler.NewEntryHandler(cfg, entry, library, nil, nil),
 		SearchHandler:  &handler.SearchHandler{},
 		ModelHandler:   handler.NewModelHandler(models),
-		EntityHandler:  handler.NewEntityHandler(service.NewEntityService(db, nil)),
+		EntityHandler:  handler.NewEntityHandler(entities),
 		SpaceHandler:   handler.NewSpaceHandler(spaceSvc, keys, users, library, cfg, settings),
 		AuthHandler:    handler.NewAuthHandler(users, spaceSvc), SystemHandler: system,
 	}

@@ -93,7 +93,7 @@ func (s *entryService) loadEntryAssociations(ctx context.Context, spaceID uint64
 		return err
 	}
 	for _, row := range entityRows {
-		if entry := byID[row.EntryID]; entry != nil && entry.LibraryID == row.Entity.LibraryID {
+		if entry := byID[row.EntryID]; entry != nil {
 			entry.Entities = append(entry.Entities, row.Entity)
 		}
 	}

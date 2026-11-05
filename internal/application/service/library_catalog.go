@@ -26,6 +26,7 @@ func (s *libraryService) CreateLibrary(ctx context.Context, request types.Create
 	}
 	library := &types.Library{ID: uuid.NewString(), SpaceID: types.MustSpaceIDFromContext(ctx), Name: request.Name, Description: request.Description, Template: request.Template, Directory: request.Directory, CreatedAt: time.Now(), UpdatedAt: time.Now(), ContentTypes: []types.LibraryContentType{}, RelationTypes: []types.LibraryRelationType{}}
 	library.EntityMode, library.EntitySchema = request.EntityMode, request.EntitySchema
+	library.ProductLibraryIDs, library.DocumentRelationTypes = request.ProductLibraryIDs, request.DocumentRelationTypes
 	if request.Color != nil {
 		if err := types.ValidateLibraryColor(*request.Color); err != nil {
 			return nil, apperrors.NewBadRequestError(err.Error())
@@ -37,6 +38,9 @@ func (s *libraryService) CreateLibrary(ctx context.Context, request types.Create
 	library.ReviewCriteria = library.DefaultReviewCriteria()
 	if err := types.ValidateLibrary(library); err != nil {
 		return nil, apperrors.NewBadRequestError(err.Error())
+	}
+	if err := validateProductLibraries(s.db.WithContext(ctx), library); err != nil {
+		return nil, err
 	}
 	if err := s.repo.CreateLibrary(ctx, library); err != nil {
 		return nil, libraryWriteError(err)
@@ -86,6 +90,12 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 			return err
 		}
 		previous := *library
+		if patch.ProductLibraryIDs != nil {
+			library.ProductLibraryIDs = *patch.ProductLibraryIDs
+		}
+		if patch.DocumentRelationTypes != nil {
+			library.DocumentRelationTypes = *patch.DocumentRelationTypes
+		}
 		if patch.EntityMode != nil {
 			library.EntityMode = *patch.EntityMode
 		}
@@ -143,6 +153,14 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 		if err := types.ValidateLibrary(library); err != nil {
 			return apperrors.NewBadRequestError(err.Error())
 		}
+		if err := validateProductLibraries(tx, library); err != nil {
+			return err
+		}
+		if !previous.ManagesEntities() && library.ManagesEntities() {
+			if err := convertLibraryEntities(ctx, tx, library, patch.EntityKindMapping); err != nil {
+				return err
+			}
+		}
 		if err := validateManagedCatalogChange(tx, &previous, library); err != nil {
 			return err
 		}
@@ -185,6 +203,18 @@ func (s *libraryService) DeleteLibrary(ctx context.Context, id string) error {
 			}
 			if count > 0 {
 				return apperrors.NewBadRequestError("library contains managed entities, including archived entities")
+			}
+			if err := tx.Model(&types.EntityAttachment{}).Where("library_id=?", id).Count(&count).Error; err != nil {
+				return err
+			}
+			if count > 0 {
+				return apperrors.NewBadRequestError("library contains product attachments")
+			}
+			if err := tx.Model(&types.Library{}).Where("id<>? AND product_library_ids @> jsonb_build_array(?::text)", id, id).Count(&count).Error; err != nil {
+				return err
+			}
+			if count > 0 {
+				return apperrors.NewBadRequestError("other libraries still use this product library")
 			}
 		}
 		if err := graph.Lock(tx, spaceID); err != nil {

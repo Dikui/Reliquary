@@ -101,6 +101,16 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 				copy[table] = rule
 			}
 		}
+		if migration.Version < 38 {
+			for table, columns := range managedEvolutionDefaults {
+				rule := copy[table]
+				for column := range columns {
+					rule.Sidecar = strings.TrimSpace(strings.ReplaceAll(" "+rule.Sidecar+" ", " "+column+" ", " "))
+					rule.Configuration = strings.TrimSpace(strings.ReplaceAll(" "+rule.Configuration+" ", " "+column+" ", " "))
+				}
+				copy[table] = rule
+			}
+		}
 		result = copy
 	}()
 	if migration.Dirty {

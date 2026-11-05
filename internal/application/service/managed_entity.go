@@ -134,7 +134,13 @@ func (s *EntityService) CreateManagedEntity(ctx context.Context, libraryID strin
 				return apperrors.NewBadRequestError("archived fields cannot be assigned")
 			}
 		}
+		if err := validateManagedAttributeReferences(tx, library, entity.Attributes); err != nil {
+			return err
+		}
 		if err := tx.Create(&entity).Error; err != nil {
+			return err
+		}
+		if err := saveManagedAttributeVersion(ctx, tx, &entity, input.EffectiveAt); err != nil {
 			return err
 		}
 		if err := saveManagedAliases(tx, &entity, input.Aliases); err != nil {
@@ -162,6 +168,9 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, apperrors.NewUnauthorizedError("entity editor required")
 	}
+	if patch.EffectiveAt != nil && patch.Attributes == nil {
+		return nil, apperrors.NewBadRequestError("effective_at requires attributes")
+	}
 	var entity types.Entity
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
@@ -178,6 +187,9 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 			return apperrors.NewConflictError("entity changed; reload before saving")
 		}
 		if err := tx.Model(&types.EntityAlias{}).Where("entity_id=? AND space_id=?", id, spaceID).Order("alias").Pluck("alias", &entity.Aliases).Error; err != nil {
+			return err
+		}
+		if err := hydrateManagedEntityAttributes(ctx, tx, []*types.Entity{&entity}, time.Now()); err != nil {
 			return err
 		}
 		before := entity
@@ -198,6 +210,20 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		}
 		if err := validateManagedEntity(library, &entity); err != nil {
 			return err
+		}
+		if err := validateManagedAttributeReferences(tx, library, entity.Attributes); err != nil {
+			return err
+		}
+		if entity.Kind != before.Kind {
+			var versions []types.EntityAttributeVersion
+			if err := tx.Where("entity_id=? AND space_id=?", id, spaceID).Find(&versions).Error; err != nil {
+				return err
+			}
+			for _, version := range versions {
+				if err := library.EntitySchema.ValidateAttributes(entity.Kind, version.Attributes); err != nil {
+					return apperrors.NewBadRequestError("kind change would invalidate attribute history: " + err.Error())
+				}
+			}
 		}
 		for _, f := range library.EntitySchema.Fields {
 			if f.Archived && !reflect.DeepEqual(before.Attributes[f.Key], entity.Attributes[f.Key]) {
@@ -227,6 +253,11 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		entity.UpdatedAt = time.Now()
 		if err := tx.Save(&entity).Error; err != nil {
 			return err
+		}
+		if patch.Attributes != nil {
+			if err := saveManagedAttributeVersion(ctx, tx, &entity, patch.EffectiveAt); err != nil {
+				return err
+			}
 		}
 		aliases := before.Aliases
 		if patch.Aliases != nil {
@@ -294,7 +325,7 @@ func (s *EntityService) ManagedEntityHistory(ctx context.Context, id string, pag
 		return nil, apperrors.NewBadRequestError("invalid history page")
 	}
 	query := s.db.WithContext(ctx).Model(&types.OperationLog{}).Where("space_id=?", spaceID).
-		Where("object_id=? OR before_value->>'subject_id'=? OR before_value->>'object_id'=? OR after_value->>'subject_id'=? OR after_value->>'object_id'=? OR after_value->>'entity_id'=?", id, id, id, id, id, id)
+		Where("object_id=? OR before_value->>'subject_id'=? OR before_value->>'object_id'=? OR after_value->>'subject_id'=? OR after_value->>'object_id'=? OR after_value->>'entity_id'=? OR before_value->>'source_id'=? OR before_value->>'target_id'=? OR after_value->>'source_id'=? OR after_value->>'target_id'=?", id, id, id, id, id, id, id, id, id, id)
 	result := &types.OperationLogPage{Items: []types.OperationLog{}, Page: page, PageSize: pageSize}
 	if err := query.Count(&result.Total).Error; err != nil {
 		return nil, err

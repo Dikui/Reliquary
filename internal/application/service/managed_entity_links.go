@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -14,11 +16,12 @@ import (
 )
 
 type ManagedEntityLink struct {
-	Entity   types.Entity           `json:"entity"`
-	Origin   string                 `json:"origin"`
-	Excluded bool                   `json:"excluded"`
-	Evidence []types.SourceLocation `json:"evidence"`
-	BodyHash string                 `json:"body_hash"`
+	RelationType string                 `json:"relation_type"`
+	Entity       types.Entity           `json:"entity"`
+	Origin       string                 `json:"origin"`
+	Excluded     bool                   `json:"excluded"`
+	Evidence     []types.SourceLocation `json:"evidence"`
+	BodyHash     string                 `json:"body_hash"`
 }
 
 func (s *EntityService) EntryEntityLinks(ctx context.Context, entryID string) ([]ManagedEntityLink, error) {
@@ -37,18 +40,25 @@ func (s *EntityService) EntryEntityLinks(ctx context.Context, entryID string) ([
 	result := make([]ManagedEntityLink, 0, len(links))
 	for _, link := range links {
 		var entity types.Entity
-		if err := s.db.WithContext(ctx).Where("id=? AND library_id=? AND space_id=?", link.EntityID, entry.LibraryID, spaceID).First(&entity).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("id=? AND space_id=?", link.EntityID, spaceID).First(&entity).Error; err != nil {
 			return nil, err
 		}
 		if link.Evidence == nil || link.BodyHash != fmt.Sprintf("%x", sha256.Sum256([]byte(entry.VaultBody))) {
 			link.Evidence = []types.SourceLocation{}
 		}
-		result = append(result, ManagedEntityLink{Entity: entity, Origin: link.Origin, Excluded: link.Excluded, Evidence: link.Evidence, BodyHash: link.BodyHash})
+		result = append(result, ManagedEntityLink{RelationType: link.RelationType, Entity: entity, Origin: link.Origin, Excluded: link.Excluded, Evidence: link.Evidence, BodyHash: link.BodyHash})
+	}
+	pointers := make([]*types.Entity, len(result))
+	for i := range result {
+		pointers[i] = &result[i].Entity
+	}
+	if err := hydrateManagedEntityAttributes(ctx, s.db, pointers, time.Now()); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
 
-func (s *EntityService) SetEntryEntityLink(ctx context.Context, entryID, entityID string, excluded bool) error {
+func (s *EntityService) SetEntryEntityLink(ctx context.Context, entryID, entityID string, excluded bool, relationTypes ...*string) error {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return err
@@ -64,27 +74,38 @@ func (s *EntityService) SetEntryEntityLink(ctx context.Context, entryID, entityI
 		if err := tx.Where("id=? AND space_id=?", entryID, spaceID).First(&entry).Error; err != nil {
 			return err
 		}
-		if _, err := managedLibrary(tx, spaceID, entry.LibraryID); err != nil {
-			return err
-		}
 		// The entity barrier precedes the entry lock, matching reprocessing.
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", entryID, spaceID).First(&entry).Error; err != nil {
 			return err
 		}
 		var entity types.Entity
-		if err := tx.Where("id=? AND space_id=? AND library_id=? AND merged_into_id=''", entityID, spaceID, entry.LibraryID).First(&entity).Error; err != nil {
+		if err := tx.Where("id=? AND space_id=? AND merged_into_id=''", entityID, spaceID).First(&entity).Error; err != nil {
+			return err
+		}
+		target, err := managedLibrary(tx, spaceID, entity.LibraryID)
+		if err != nil {
 			return err
 		}
 		if !excluded && entity.ArchivedAt != nil {
 			return apperrors.NewBadRequestError("archived entities cannot receive new document associations")
 		}
 		var before types.EntryEntity
-		err := tx.Where("entry_id=? AND entity_id=? AND space_id=?", entryID, entityID, spaceID).First(&before).Error
+		err = tx.Where("entry_id=? AND entity_id=? AND space_id=?", entryID, entityID, spaceID).First(&before).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		link := types.EntryEntity{SpaceID: spaceID, EntryID: entryID, EntityID: entityID, Origin: "manual", Excluded: excluded, Evidence: []types.SourceLocation{}, BodyHash: fmt.Sprintf("%x", sha256.Sum256([]byte(entry.VaultBody))), CreatedAt: time.Now()}
-		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "entry_id"}, {Name: "entity_id"}}, DoUpdates: clause.AssignmentColumns([]string{"origin", "excluded", "evidence", "body_hash"})}).Create(&link).Error; err != nil {
+		relationType := before.RelationType
+		if relationType == "" {
+			relationType = "references"
+		}
+		if len(relationTypes) > 0 && relationTypes[0] != nil {
+			relationType = strings.TrimSpace(*relationTypes[0])
+		}
+		if !slices.Contains(target.DocumentRelationTypes, relationType) {
+			return apperrors.NewBadRequestError("document relation type is not configured in the product library")
+		}
+		link := types.EntryEntity{SpaceID: spaceID, EntryID: entryID, EntityID: entityID, RelationType: relationType, Origin: "manual", Excluded: excluded, Evidence: []types.SourceLocation{}, BodyHash: fmt.Sprintf("%x", sha256.Sum256([]byte(entry.VaultBody))), CreatedAt: time.Now()}
+		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "entry_id"}, {Name: "entity_id"}}, DoUpdates: clause.AssignmentColumns([]string{"origin", "excluded", "evidence", "body_hash", "relation_type"})}).Create(&link).Error; err != nil {
 			return err
 		}
 		return NewOperationLogService(tx).RecordTx(ctx, tx, "set_entity_link", entryID, before, link)

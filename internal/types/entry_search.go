@@ -25,6 +25,8 @@ type EntrySearchRequest struct {
 }
 
 type EntrySearchEntity struct {
+	LibraryID     string   `json:"library_id"`
+	RelationType  string   `json:"relation_type,omitempty"`
 	ID            string   `json:"id"`
 	CanonicalName string   `json:"canonical_name"`
 	EntityType    string   `json:"entity_type"`

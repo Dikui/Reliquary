@@ -430,10 +430,12 @@ func TestManagedArticleProcessingOnlyAssociatesExistingEntities(t *testing.T) {
 	require.Equal(t, types.ParseStatusCompleted, entry.ParseStatus, entry.ErrorMessage)
 	var links []types.EntryEntity
 	require.NoError(t, h.db.Where("entry_id=?", entry.ID).Find(&links).Error)
-	require.Len(t, links, 1)
-	require.Equal(t, widget.ID, links[0].EntityID)
-	require.NotEmpty(t, links[0].Evidence)
-	require.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte(entry.VaultBody))), links[0].BodyHash)
+	require.Len(t, links, 2)
+	for _, link := range links {
+		require.Contains(t, []string{widget.ID, parent.ID}, link.EntityID)
+		require.NotEmpty(t, link.Evidence)
+		require.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte(entry.VaultBody))), link.BodyHash)
+	}
 	var saved types.Entity
 	require.NoError(t, h.db.First(&saved, "id=?", widget.ID).Error)
 	require.Equal(t, widget.Description, saved.Description)
