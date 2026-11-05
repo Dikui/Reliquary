@@ -408,7 +408,10 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 		keys := []string{}
 		for _, entity := range entities {
 			for _, name := range append([]string{entity.CanonicalName}, entity.Aliases...) {
-				keys = append(keys, fmt.Sprintf("%q:%s", entity.LibraryID, entityNameKey(entity.EntityType, name)))
+				// A merge between planning and persistence can change the entity's
+				// type. Lock names across types so its redirected aliases still
+				// serialize with writers planned for the target type.
+				keys = append(keys, fmt.Sprintf("%q:%q", entity.LibraryID, normalizeEntityName(name)))
 			}
 		}
 		if err := lockEntityIdentities(tx, entities[0].SpaceID, keys); err != nil {

@@ -183,7 +183,9 @@ func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string)
 			return err
 		}
 		var collisions int64
-		if err := tx.Model(&types.Entity{}).Where("space_id=? AND library_id=? AND entity_type=? AND normalized_name=? AND id<>? AND merged_into_id=''", spaceID, entity.LibraryID, entity.EntityType, normalizeEntityName(name), entity.ID).Count(&collisions).Error; err != nil {
+		// Extracted names remain reserved by merged identities, including when
+		// their aliases moved to a target of another type.
+		if err := tx.Model(&types.Entity{}).Where("space_id=? AND library_id=? AND entity_type=? AND normalized_name=? AND id<>?", spaceID, entity.LibraryID, entity.EntityType, normalizeEntityName(name), entity.ID).Count(&collisions).Error; err != nil {
 			return err
 		}
 		if collisions > 0 {
