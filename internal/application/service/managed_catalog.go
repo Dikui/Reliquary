@@ -126,11 +126,11 @@ func validateManagedCatalogChange(tx *gorm.DB, before, after *types.Library) err
 	for _, r := range relations {
 		old, oldOK := oldRules[r.RelationType]
 		next, nextOK := nextRules[r.RelationType]
-		if !nextOK || !next.Enabled {
+		if !nextOK || (!next.Enabled && r.ValidTo == nil) {
 			return apperrors.NewBadRequestError("a relationship type is still in use")
 		}
 		if oldOK && old.Hierarchical != next.Hierarchical {
-			return apperrors.NewBadRequestError("the hierarchy role of a used relationship cannot change")
+			return apperrors.NewBadRequestError("the hierarchy role of a used relationship cannot change because it would alter historical structure")
 		}
 		if err := types.ValidateFieldAttributes(next.Fields, r.Attributes); err != nil {
 			return apperrors.NewBadRequestError("schema would invalidate relationship attributes: " + err.Error())
