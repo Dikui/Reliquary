@@ -39,25 +39,35 @@ func TestManagedEntityEditsPreservePendingValues(t *testing.T) {
 	require.EqualValues(t, 200, result.Attributes["price"])
 }
 
-// Regression: issue 7. Old category fields stay in history but cannot return from a pending snapshot.
+// Regression (medium): issue 7 / MEL-03. Backdated category changes preserve
+// earlier history while removing old-category fields from all later snapshots.
 func TestManagedEntityKindChangePreservesHistory(t *testing.T) {
 	db, ctx, svc := managedHistoryFixture(t)
 	schema := types.EntitySchema{Kinds: []types.EntityKind{{Key: "product", Name: "Product"}, {Key: "platform", Name: "Platform"}}, Fields: []types.EntityFieldDefinition{{Key: "capacity", Name: "Capacity", Type: "number", Kinds: []string{"product"}}}}
 	encoded, err := json.Marshal(schema)
 	require.NoError(t, err)
 	require.NoError(t, db.Model(&types.Library{}).Where("id=?", "entity-library").Update("entity_schema", string(encoded)).Error)
-	past, future := time.Now().Add(-time.Hour), time.Now().Add(time.Hour)
+	now := time.Now().UTC().Truncate(time.Second)
+	past, backdated, current, future := now.Add(-40*24*time.Hour), now.Add(-35*24*time.Hour), now.Add(-5*24*time.Hour), now.Add(5*24*time.Hour)
 	entity, err := svc.CreateManagedEntity(ctx, "entity-library", types.ManagedEntityInput{Name: "Changing category", Kind: "product", Attributes: map[string]any{"capacity": 1}, EffectiveAt: &past})
 	require.NoError(t, err)
 	attrs := map[string]any{"capacity": 2}
+	entity, err = svc.UpdateManagedEntity(ctx, entity.ID, types.ManagedEntityPatch{Revision: entity.Revision, Attributes: &attrs, EffectiveAt: &current})
+	require.NoError(t, err)
+	attrs = map[string]any{"capacity": 3}
 	entity, err = svc.UpdateManagedEntity(ctx, entity.ID, types.ManagedEntityPatch{Revision: entity.Revision, Attributes: &attrs, EffectiveAt: &future})
 	require.NoError(t, err)
 	kind, empty := "platform", map[string]any{}
-	entity, err = svc.UpdateManagedEntity(ctx, entity.ID, types.ManagedEntityPatch{Revision: entity.Revision, Kind: &kind, Attributes: &empty})
+	entity, err = svc.UpdateManagedEntity(ctx, entity.ID, types.ManagedEntityPatch{Revision: entity.Revision, Kind: &kind, Attributes: &empty, EffectiveAt: &backdated})
 	require.NoError(t, err)
+	require.Equal(t, "platform", entity.Kind)
+	require.Empty(t, entity.Attributes)
 	old, err := svc.EntityAttributes(ctx, entity.ID, past)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, old.Attributes["capacity"])
+	latest, err := svc.EntityAttributes(ctx, entity.ID, current)
+	require.NoError(t, err)
+	require.Empty(t, latest.Attributes)
 	pending, err := svc.EntityAttributes(ctx, entity.ID, future)
 	require.NoError(t, err)
 	require.Empty(t, pending.Attributes)

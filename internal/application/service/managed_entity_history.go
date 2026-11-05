@@ -93,12 +93,12 @@ func saveManagedAttributeVersion(ctx context.Context, tx *gorm.DB, entity *types
 		}
 		return tx.Model(entity).Select("attributes").Updates(entity).Error
 	}
-	// Carry this edit into pending snapshots without replacing their other fields.
-	var pending []types.EntityAttributeVersion
-	if err := tx.Where("entity_id=? AND effective_at>? AND effective_at>?", entity.ID, now, effective).Find(&pending).Error; err != nil {
+	// Carry this edit into all later snapshots without replacing their other fields.
+	var later []types.EntityAttributeVersion
+	if err := tx.Where("entity_id=? AND effective_at>?", entity.ID, effective).Find(&later).Error; err != nil {
 		return err
 	}
-	for _, next := range pending {
+	for _, next := range later {
 		before := next
 		updated := make(map[string]any, len(next.Attributes))
 		for key, value := range next.Attributes {
