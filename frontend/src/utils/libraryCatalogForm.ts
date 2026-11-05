@@ -5,7 +5,8 @@ export function validTypes(rows: Array<{ name: string }>) {
   const names = rows.map(row => row.name.trim())
   return names.every(name => !!name && Array.from(name).length <= 100) && new Set(names).size === names.length
 }
-export function librarySettingsPayload(draft: LibraryCatalogItem) {
+export function librarySettingsPayload(draft: LibraryCatalogItem, baseline?: LibraryCatalogItem) {
+  const changed = (key: 'entity_mode' | 'entity_schema' | 'relation_types') => !baseline || JSON.stringify(draft[key]) !== JSON.stringify(baseline[key])
   const chunking = draft.chunking_config ? { ...draft.chunking_config, token_limit: Number(draft.chunking_config.token_limit || 0) } : undefined
   if (chunking) fillParentChunkDefaults(chunking)
   return {
@@ -17,9 +18,9 @@ export function librarySettingsPayload(draft: LibraryCatalogItem) {
     ...(draft.document_relation_types ? { document_relation_types: draft.document_relation_types } : {}),
     ...(draft.entity_kind_mapping ? { entity_kind_mapping: draft.entity_kind_mapping } : {}),
     feed_enabled: draft.feed_enabled,
-    ...(draft.entity_mode ? { entity_mode: draft.entity_mode } : {}),
-    ...(draft.entity_schema ? { entity_schema: draft.entity_schema } : {}),
-    ...(draft.entity_mode === 'managed' ? { relation_types: draft.relation_types } : {}),
+    ...(draft.entity_mode && changed('entity_mode') ? { entity_mode: draft.entity_mode } : {}),
+    ...(draft.entity_schema && changed('entity_schema') ? { entity_schema: draft.entity_schema } : {}),
+    ...(draft.entity_mode === 'managed' && changed('relation_types') ? { relation_types: draft.relation_types } : {}),
     content_types: draft.content_types.map((row, position) => ({ ...row, name: row.name.trim(), position })),
   }
 }

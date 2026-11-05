@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { ComboboxRoot, ComboboxAnchor, ComboboxInput, ComboboxTrigger, ComboboxCancel, ComboboxPortal, ComboboxContent, ComboboxItem, ComboboxEmpty } from 'reka-ui'
 import { useFieldAttrs } from './field'
 defineOptions({ inheritAttrs: false })
@@ -9,7 +9,10 @@ const emit = defineEmits<{ 'update:modelValue': [value: string]; search: [value:
 const attrs = useFieldAttrs()
 const { t } = useI18n()
 const search = ref('')
+const open = ref(false)
 const displayValue = (value: unknown) => props.options.find(option => option.value === value)?.label ?? ''
+// Selected names may arrive after the initial value (for example, saved product references).
+watch(() => displayValue(props.modelValue), label => { if (!open.value) search.value = label })
 const composing = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
 function beginComposition() { composing.value = true; if (timer) clearTimeout(timer) }
@@ -24,7 +27,7 @@ function scheduleSearch(event?: Event) {
 onBeforeUnmount(() => { if (timer) clearTimeout(timer) })
 </script>
 <template>
-  <ComboboxRoot class="rq-combobox" :model-value="modelValue" :disabled="disabled" :name="name" :ignore-filter="remote" open-on-focus open-on-click :reset-model-value-on-clear="clearable" @update:model-value="emit('update:modelValue', String($event ?? ''))">
+  <ComboboxRoot v-model:open="open" class="rq-combobox" :model-value="modelValue" :disabled="disabled" :name="name" :ignore-filter="remote" open-on-focus open-on-click :reset-model-value-on-clear="clearable" @update:model-value="emit('update:modelValue', String($event ?? ''))">
     <ComboboxAnchor class="rq-combobox__anchor">
       <ComboboxInput v-model="search" v-bind="attrs" class="rq-control" :disabled="disabled" :placeholder="placeholder" :display-value="displayValue" @input="scheduleSearch" @compositionstart="beginComposition" @compositionend="composing = false; scheduleSearch($event)" />
       <ComboboxCancel v-if="clearable && (search || modelValue)" class="rq-icon-button" :disabled="disabled" :tabindex="0" :aria-label="t('ui.clearSelection')" @click="search = ''; scheduleSearch()">×</ComboboxCancel>

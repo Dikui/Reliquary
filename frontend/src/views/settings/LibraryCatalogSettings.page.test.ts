@@ -26,14 +26,16 @@ const library = (id = 'research', count = 2) => ({ id, name: id, directory: id, 
 
 async function fixture(items = [library()], fail = false, locale = 'en-US') {
   const requests: any[] = [], events: any[] = [], dialogs: any[] = []
+  let shouldFail = fail
   const saved = (event: Event) => events.push((event as CustomEvent).detail)
   window.addEventListener('reliquary:library-settings-saved', saved)
   const component = loadComponent(new URL('./LibraryCatalogSettings.vue', import.meta.url), {
-    './ManagedEntitySettings.vue': { __esModule: true, default: defineComponent({ render: () => null }) },
+    // Replace the catalog editor with one public schema-edit action.
+    './ManagedEntitySettings.vue': { __esModule: true, default: defineComponent({ props: ['modelValue'], setup: props => () => props.modelValue.entity_mode === 'managed' ? h('button', { type: 'button', 'data-add-field': true, onClick: () => props.modelValue.entity_schema.fields.push({ key: 'size', name: 'Size', type: 'number' }) }, 'Add field') : null }) },
     '@/api/library': {
       listLibraries: async () => ({ success: true, data: items }),
       getCatalogLibrary: async (id: string) => ({ success: true, data: structuredClone(items.find(item => item.id === id)) }),
-      saveCatalogLibrary: async (id: string, payload: unknown) => { requests.push({ id, payload }); return { success: !fail, message: 'Reranker was deleted' } },
+      saveCatalogLibrary: async (id: string, payload: unknown) => { requests.push({ id, payload }); return { success: !shouldFail, message: 'Reranker was deleted' } },
       createCatalogLibrary: async () => { throw new Error('not used') },
       deleteCatalogLibrary: async (id: string) => { requests.push({ delete: id }); items = items.filter(item => item.id !== id); return { success: true } },
       mergeLibraryRelationTypes: async () => ({ success: true }),
@@ -52,7 +54,7 @@ async function fixture(items = [library()], fail = false, locale = 'en-US') {
   app.mount(root)
   const mounted = { root, app, async unmount() { app.unmount(); root.remove(); await settle() } }
   await settle()
-  return { ...mounted, requests, events, dialogs,
+  return { ...mounted, requests, events, dialogs, recover() { shouldFail = false },
     async cleanup() { await mounted.unmount(); window.removeEventListener('reliquary:library-settings-saved', saved) },
   }
 }
@@ -183,4 +185,33 @@ test('required numeric fields show associated Chinese errors without native vali
   assert.equal(f.requests[0].payload.chunking_config.chunk_overlap, 0)
   assert.equal(f.requests[0].payload.chunking_config.token_limit, 0)
   assert.equal(f.root.querySelector('[aria-invalid="true"]'), null)
+})
+
+// MEL-06 (small regression): ordinary saves must not request catalog write locks.
+test('renaming a managed library omits unchanged catalog configuration on repeated saves', async t => {
+  const products = { ...library(), entity_mode: 'managed', entity_schema: { kinds: [{ key: 'model', name: 'Model', parent_kinds: [] }], fields: [] }, relation_types: [{ name: 'related', enabled: true, position: 0 }] } as LibraryCatalogItem
+  const f = await fixture([products]); t.after(() => f.cleanup())
+  for (const name of ['Products', 'Renamed products']) {
+    await input(f.root, 'input[name="library-name"]', name)
+    await send(f.root.querySelector('form')!, 'submit')
+    const payload = f.requests.at(-1).payload
+    assert.equal(payload.name, name)
+    for (const key of ['entity_mode', 'entity_schema', 'relation_types']) assert.equal(key in payload, false, key)
+  }
+})
+
+// MEL-06 (small regression): failed writes must preserve both the draft and loaded baseline.
+test('a failed schema save retries the change and advances the baseline only on success', async t => {
+  const products = { ...library(), entity_mode: 'managed', entity_schema: { kinds: [], fields: [] } } as LibraryCatalogItem
+  const f = await fixture([products], true); t.after(() => f.cleanup())
+  await send(f.root.querySelector('button[data-add-field]')!, 'click')
+  await send(f.root.querySelector('form')!, 'submit')
+  assert.deepEqual(f.requests[0].payload.entity_schema.fields, [{ key: 'size', name: 'Size', type: 'number' }])
+  assert.equal(f.root.querySelector('button[type="submit"]')!.disabled, false)
+  f.recover()
+  await send(f.root.querySelector('form')!, 'submit')
+  assert.deepEqual(f.requests[1].payload.entity_schema, f.requests[0].payload.entity_schema)
+  await input(f.root, 'input[name="library-name"]', 'Renamed after schema edit')
+  await send(f.root.querySelector('form')!, 'submit')
+  assert.equal('entity_schema' in f.requests[2].payload, false)
 })

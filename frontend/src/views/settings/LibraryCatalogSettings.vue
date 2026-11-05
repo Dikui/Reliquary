@@ -124,7 +124,7 @@ async function save() {
   if (!validTypes(draft.value.content_types)) { error.value = t('ikb18.invalidTypes'); return }
   saving.value = true; error.value = ''
   try {
-    const payload = librarySettingsPayload(draft.value)
+    const payload = librarySettingsPayload(draft.value, JSON.parse(saved.value))
     const response = await saveCatalogLibrary(draft.value.id, payload)
     if (!response.success) throw new Error(response.message)
     Object.assign(draft.value, payload)
