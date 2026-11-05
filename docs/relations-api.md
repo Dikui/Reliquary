@@ -9,7 +9,17 @@
 
 位置以保存后的 Markdown 正文 Unicode 字符范围为坐标，包含原有标题路径、段落序号与正文哈希。一个来源可以有多个发言人与位置，来源数量仍按资料计数。按实体列关系使用同一 PostgreSQL 只读快照读取版本、来源及数量。
 
-## 人工动作与副本一致性
+## 人工维护库
+
+`entity_mode=managed` 时关系由网页或 HTTP 维护，可以没有文档来源。资料删除或重新处理不会删除这些关系。该模式禁用实体合并、关系类型合并及旧的实体名称/简介单独修改接口。
+
+- `POST /libraries/:id/relations`：`{subject_id,relation_type,object_id}`，返回创建的关系及 version。
+- `PATCH /relations/:relation_id`：相同字段加当前 `version`，返回更新后的关系。
+- `DELETE /relations/:relation_id?version=N`：必须传当前版本，不生成自动抽取抑制记录。
+
+两端必须为本库活动实体。库关系类型可设 `hierarchical`、`subject_kinds`、`object_kinds`，两端类别数组为空表示不限。层级边由子项指向父项，子项类别的 parent_kinds 必须允许父项类别；禁止多父项及成环。图谱隐藏归档端点的关系，恢复实体后可重新显示。修改在同一事务写操作日志与图谱同步通知。
+
+## 自动抽取库的人工动作与副本一致性
 
 修改内容类型使用 `PUT /api/v1/entries/:id/content-type`，请求 `{"content_type":"所属库启用类型"}`。按资料 graph 覆盖和类型默认值决定补抽或撤除关系。实体合并使用 `POST /api/v1/entities/merge`，请求 `{"keep_entity_id":"保留ID","merge_entity_id":"被合并ID"}`。删除资料使用 `DELETE /api/v1/entries/:id`，同时撤除该资料的关系来源，最后一个来源删除后关系也删除。显式更新正文和图片后重新处理会替换该资料的证据，不累加重复来源。
 

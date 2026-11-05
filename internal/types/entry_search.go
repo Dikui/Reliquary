@@ -8,19 +8,20 @@ import (
 // EntrySearchRequest is shared by HTTP and future external retrieval callers.
 // Values within one filter are alternatives; different filters must all match.
 type EntrySearchRequest struct {
-	GraphParameters json.RawMessage `json:"graph_parameters,omitempty"`
-	VectorSet       string          `json:"vector_set,omitempty"`
-	Libraries       []string        `json:"libraries"`
-	Query           string          `json:"query"`
-	ContentTypes    []string        `json:"content_types,omitempty"`
-	EntityIDs       []string        `json:"entity_ids,omitempty"`
-	TopicIDs        []string        `json:"topic_ids,omitempty"`
-	Sources         []string        `json:"sources,omitempty"`
-	Starred         *bool           `json:"starred,omitempty"`
-	PublishedFrom   string          `json:"published_from,omitempty"`
-	PublishedTo     string          `json:"published_to,omitempty"`
-	CollapseSimilar *bool           `json:"collapse_similar,omitempty"`
-	Limit           int             `json:"limit,omitempty"`
+	GraphParameters    json.RawMessage `json:"graph_parameters,omitempty"`
+	VectorSet          string          `json:"vector_set,omitempty"`
+	Libraries          []string        `json:"libraries"`
+	Query              string          `json:"query"`
+	ContentTypes       []string        `json:"content_types,omitempty"`
+	IncludeDescendants bool            `json:"include_descendants,omitempty"`
+	EntityIDs          []string        `json:"entity_ids,omitempty"`
+	TopicIDs           []string        `json:"topic_ids,omitempty"`
+	Sources            []string        `json:"sources,omitempty"`
+	Starred            *bool           `json:"starred,omitempty"`
+	PublishedFrom      string          `json:"published_from,omitempty"`
+	PublishedTo        string          `json:"published_to,omitempty"`
+	CollapseSimilar    *bool           `json:"collapse_similar,omitempty"`
+	Limit              int             `json:"limit,omitempty"`
 }
 
 type EntrySearchEntity struct {
@@ -36,14 +37,16 @@ type EntrySearchTopic struct {
 }
 
 type EntrySearchSnippet struct {
-	ChunkType  string           `json:"chunk_type,omitempty"`
-	Locations  []SourceLocation `json:"locations"`
-	ImagePath  string           `json:"image_path,omitempty"`
-	ChunkID    string           `json:"chunk_id"`
-	Content    string           `json:"content"`
-	ChunkIndex int              `json:"chunk_index"`
-	Score      float64          `json:"score"`
-	MatchType  string           `json:"match_type"`
+	Context          string           `json:"context,omitempty"`
+	ContextLocations []SourceLocation `json:"context_locations,omitempty"`
+	ChunkType        string           `json:"chunk_type,omitempty"`
+	Locations        []SourceLocation `json:"locations"`
+	ImagePath        string           `json:"image_path,omitempty"`
+	ChunkID          string           `json:"chunk_id"`
+	Content          string           `json:"content"`
+	ChunkIndex       int              `json:"chunk_index"`
+	Score            float64          `json:"score"`
+	MatchType        string           `json:"match_type"`
 }
 
 type EntrySearchResult struct {

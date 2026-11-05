@@ -21,7 +21,7 @@ const relatedFilters = computed(() => [
 ])
 const defaults = defaultSearchFilters()
 const hasActiveFilters = computed(() => model.value.content_types.length > 0 || model.value.entity_ids.length > 0 || model.value.topic_ids.length > 0
-  || !!model.value.published_from || !!model.value.published_to || model.value.starred !== undefined
+  || model.value.include_descendants || !!model.value.published_from || !!model.value.published_to || model.value.starred !== undefined
   || model.value.collapse_similar !== defaults.collapse_similar || model.value.limit !== defaults.limit)
 function addRelatedFilter(key: 'entity_ids' | 'topic_ids', event: Event) {
   const select = event.target as HTMLSelectElement
@@ -82,6 +82,7 @@ function toggleType(value: string, selected: boolean) {
           <template v-else><span class="related-filter-label">{{ filter.label }}</span><p class="filter-empty" role="status">{{ loading ? t('common.loading') : filter.empty }}</p></template>
           <div v-if="model[filter.key].length" class="selected-filters"><Button v-for="id in model[filter.key]" :key="id" variant="ghost" :disabled="disabled" :aria-label="t('searchPage.removeFilter', { name: filter.options.find(option => option.value === id)?.label || id })" @click="removeRelatedFilter(filter.key, id)">{{ filter.options.find(option => option.value === id)?.label || id }} <span aria-hidden="true">×</span></Button></div>
         </div>
+        <label class="collapse-check"><Checkbox v-model="model.include_descendants" :disabled="disabled || !model.entity_ids.length" />{{ t('managed.descendants') }}</label>
         <label>{{ t('articleJudgments.starLabel') }}<Select v-model="starFilter" :disabled="disabled" :aria-label="t('articleJudgments.starLabel')"><option v-for="option in starOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select></label>
         <label>{{ t('search.limit') }}<input v-model.number="model.limit" type="number" min="1" max="100" step="1" class="rq-control" :disabled="disabled" :aria-label="t('search.limit')"></label>
       </div>

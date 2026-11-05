@@ -29,6 +29,7 @@ async function fixture(items = [library()], fail = false, locale = 'en-US') {
   const saved = (event: Event) => events.push((event as CustomEvent).detail)
   window.addEventListener('reliquary:library-settings-saved', saved)
   const component = loadComponent(new URL('./LibraryCatalogSettings.vue', import.meta.url), {
+    './ManagedEntitySettings.vue': { __esModule: true, default: defineComponent({ render: () => null }) },
     '@/api/library': {
       listLibraries: async () => ({ success: true, data: items }),
       getCatalogLibrary: async (id: string) => ({ success: true, data: structuredClone(items.find(item => item.id === id)) }),

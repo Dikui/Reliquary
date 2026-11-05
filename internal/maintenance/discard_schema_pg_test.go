@@ -49,6 +49,10 @@ func TestLibraryIntakeMigrationPreservesHistoricalRows(t *testing.T) {
 				delete(row, "color")
 				require.Empty(t, row["prompt_overrides"])
 				delete(row, "prompt_overrides")
+				require.Equal(t, "extracted", row["entity_mode"])
+				require.Empty(t, row["entity_schema"])
+				delete(row, "entity_mode")
+				delete(row, "entity_schema")
 				require.Equal(t, "standard", row["template"])
 				require.Equal(t, "", row["source_evidence_rule"])
 				// Migration 34 intentionally replaces the historical template and source rule.

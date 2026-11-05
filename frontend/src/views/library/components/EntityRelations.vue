@@ -2,10 +2,13 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deleteEntityRelation, type RelationGroup, type EntityRelation, type RelationSource } from '@/api/relations'
+import ManagedRelationEditor from './ManagedRelationEditor.vue'
+import type { LibraryCatalogItem } from '@/api/library'
+import type { Entity } from '@/api/entities'
 import type { SourceLocation } from '@/types/search'
 import { Button, EmptyState, ErrorState } from '@/components/ui'
 import { confirm, toast, type ConfirmHandle } from '@/components/ui/feedback'
-const props = defineProps<{ entityId: string; entityName: string; groups: RelationGroup[]; loading?: boolean; error?: string }>()
+const props = defineProps<{ entityId: string; entityName: string; groups: RelationGroup[]; managedLibrary?: LibraryCatalogItem; entity?: Entity; loading?: boolean; error?: string }>()
 const emit = defineEmits<{ 'open-source': [id: string, location?: SourceLocation]; 'open-entity': [id: string]; changed: []; retry: [] }>()
 const { t } = useI18n()
 const busy = ref(false)
@@ -17,12 +20,12 @@ function remove(relation: EntityRelation) {
   const entity = props.entityId
   confirmation?.destroy()
   confirmation = confirm({
-    header: t('ikb18.deleteRelation'), body: `${relation.relation_type} · ${relation.peer.canonical_name}\n${t('ikb18.suppressHint')}`,
+    header: t('ikb18.deleteRelation'), body: `${relation.relation_type} · ${relation.peer.canonical_name}\n${props.managedLibrary ? '' : t('ikb18.suppressHint')}`,
     confirmBtn: t('common.confirm'), cancelBtn: t('common.cancel'), theme: 'danger',
     onConfirm: async () => {
       busy.value = true
       try {
-        const response = await deleteEntityRelation(relation.id)
+        const response = await deleteEntityRelation(relation.id, props.managedLibrary ? relation.version : undefined)
         if (!response.success) throw new Error(response.message || t('common.operationFailed'))
         toast.success(t('entityPage.relationDeleted'))
         if (entity === props.entityId) emit('changed')
@@ -55,11 +58,11 @@ onBeforeUnmount(() => confirmation?.destroy())
             </details>
           </td>
           <td>{{ [...new Set(relation.sources.flatMap(source => (source.evidence || []).flatMap(evidence => evidence.speaker?.name ? [evidence.speaker.name] : [])))].join(' · ') }}</td>
-          <td><Button variant="danger" :disabled="busy" @click="remove(relation)">{{ t('ikb18.deleteRelation') }}</Button></td>
+          <td><ManagedRelationEditor v-if="managedLibrary && entity" :library="managedLibrary" :entity="entity" :relation="relation" @saved="emit('changed')" /><Button variant="danger" :disabled="busy" @click="remove(relation)">{{ t('ikb18.deleteRelation') }}</Button></td>
         </tr></tbody>
       </table>
     </div>
-    <p v-if="relations.length" class="relation-hint">{{ t('ikb18.suppressHint') }}</p>
+    <p v-if="relations.length && !managedLibrary" class="relation-hint">{{ t('ikb18.suppressHint') }}</p>
   </section>
 </template>
 <style scoped>

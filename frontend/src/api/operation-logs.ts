@@ -1,6 +1,7 @@
 import { get } from '@/utils/request'
 
 export const OPERATION_TYPES = [
+  'create_entity', 'update_entity', 'create_relation', 'update_relation', 'set_entity_link',
   'ingest',
   'write_report',
   'delete_document',

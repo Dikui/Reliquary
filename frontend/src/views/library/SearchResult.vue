@@ -36,6 +36,7 @@ const similarRegionID = computed(() => `similar-reports-${props.article.entry_id
         <SearchImage v-if="snippet.image_path && article.source === 'article'" :article-id="article.entry_id" :path="snippet.image_path" :title="article.title" />
         <span v-if="snippet.chunk_type === 'image_description'">{{ t('articleJudgments.imageDescriptions') }}</span>
         <a v-if="snippet.content" class="snippet-reference" :href="entryDetailHref(article.entry_id, snippet.locations?.[0])" @click.prevent="emit('open-article', article, snippet.locations?.[0])"><span v-html="highlightText(plainText(snippet.content), query)" /></a>
+        <details v-if="snippet.context"><summary>{{ t('managed.parentContext') }}</summary><a class="snippet-reference" :href="entryDetailHref(article.entry_id, snippet.context_locations?.[0] || snippet.locations?.[0])" @click.prevent="emit('open-article', article, snippet.context_locations?.[0] || snippet.locations?.[0])"><span v-html="highlightText(plainText(snippet.context), query)" /></a></details>
         <div v-if="snippet.locations?.length" class="snippet-positions"><a v-for="(location, locationIndex) in snippet.locations" :key="locationIndex" :href="entryDetailHref(article.entry_id, location)" :title="location.heading_path?.join(' / ')" @click.prevent="emit('open-article', article, location)">{{ t('searchPage.hitParagraph', { paragraph: location.paragraph }) }}</a></div>
       </div>
     </div>

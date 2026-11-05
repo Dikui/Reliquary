@@ -247,12 +247,13 @@ func registerTools(server *mcp.Server, services Services) {
 			"libraries":     stringArray("必填，库 ID 或目录名，可选多个"),
 			"content_types": stringArray("内容类型名称，取所选库内容类型清单中的值；先调用 list_libraries 查看"),
 			"entity_ids":    stringArray("实体 ID 列表"), "topic_ids": stringArray("主题 ID 列表"),
-			"sources":          stringArray("来源类别：article（外部收录资料）、report（AI产出，即 acquisition=model_written）、mine（旧版导入的个人资料）"),
-			"starred":          boolean("true 只查星标资料，false 只查未星标，省略查全部"),
-			"published_from":   text("发布时间下限，YYYY-MM-DD 或 RFC3339；缺少发布时间的资料会排除"),
-			"published_to":     text("发布时间上限，YYYY-MM-DD 或 RFC3339"),
-			"collapse_similar": boolean("是否折叠相似报道，省略使用检索服务默认值"),
-			"limit":            integer("最多返回的资料数，省略使用检索服务默认值", 1, 100),
+			"include_descendants": boolean("实体筛选包含所选托管库中层级关系的后代，默认 false"),
+			"sources":             stringArray("来源类别：article（外部收录资料）、report（AI产出，即 acquisition=model_written）、mine（旧版导入的个人资料）"),
+			"starred":             boolean("true 只查星标资料，false 只查未星标，省略查全部"),
+			"published_from":      text("发布时间下限，YYYY-MM-DD 或 RFC3339；缺少发布时间的资料会排除"),
+			"published_to":        text("发布时间上限，YYYY-MM-DD 或 RFC3339"),
+			"collapse_similar":    boolean("是否折叠相似报道，省略使用检索服务默认值"),
+			"limit":               integer("最多返回的资料数，省略使用检索服务默认值", 1, 100),
 		}, "query", "libraries"), func(ctx context.Context, in types.EntrySearchRequest) (any, error) {
 			return services.Search.Search(types.WithSearchSource(ctx, "mcp"), in)
 		})

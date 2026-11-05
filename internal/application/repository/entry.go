@@ -114,7 +114,7 @@ func applyEntryListFilter(query *gorm.DB, filter types.EntryListFilter) *gorm.DB
 		query = query.Where("library_id IN ?", filter.LibraryIDs)
 	}
 	if len(filter.EntityIDs) > 0 {
-		query = query.Where("EXISTS (SELECT 1 FROM entry_entities links WHERE links.space_id=entries.space_id AND links.entry_id=entries.id AND links.entity_id IN ?)", filter.EntityIDs)
+		query = query.Where("EXISTS (SELECT 1 FROM entry_entities links WHERE links.space_id=entries.space_id AND links.entry_id=entries.id AND links.excluded=false AND links.entity_id IN ?)", filter.EntityIDs)
 	}
 	if len(filter.TopicIDs) > 0 {
 		query = query.Where("EXISTS (SELECT 1 FROM entry_topics links WHERE links.space_id=entries.space_id AND links.entry_id=entries.id AND links.topic_id IN ?)", filter.TopicIDs)

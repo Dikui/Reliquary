@@ -10,12 +10,16 @@
   "entity_detail": {
     "entity": {
       "aliases": [],
+      "attributes": {},
       "canonical_name": "",
+      "code": "",
       "created_at": "0001-01-01T00:00:00Z",
       "embedding_needs_rebuild": false,
       "entity_type": "",
       "library_id": "",
       "id": "",
+      "kind": "",
+      "revision": 0,
       "tenant_id": 0,
       "updated_at": "0001-01-01T00:00:00Z"
     },

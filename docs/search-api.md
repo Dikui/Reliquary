@@ -20,6 +20,8 @@ HTTP 为 `POST /api/v1/search`，网页不带凭据，外部工具使用收录 A
 
 `libraries` 必填，1 至 100 个库 ID 或稳定目录名。未知库、空数组和空字符串返回 400。每个库必须属于当前空间。多个库取并集；其他筛选之间取交集，同类筛选数组内取并集。保留 `sources` 兼容字段。`published_to` 支持 RFC3339 或日期；日期包含当天。缺少发布时间的命中排除，并计入 `excluded_missing_published_at`。所有候选通道在排序和截断之前应用库及其他筛选。
 
+`include_descendants:true` 配合 entity_ids，将人工维护库中所选实体的活动下级一并用于筛选。只沿本库启用的层级关系展开，不跨库，自动抽取库仍只匹配所选实体。人工排除的资料关联不参与筛选及返回的实体列表。
+
 结果按资料合并，`results` 的主要字段为：
 
 | 字段 | 含义 |
@@ -35,6 +37,8 @@ HTTP 为 `POST /api/v1/search`，网页不带凭据，外部工具使用收录 A
 同一 source_ref 的旧记录返回 has_update=true 时，网页资料列表、卡片、详情和检索结果显示“有更新的记录”，点击可打开 latest_entry_id 指向的新资料。字段缺失或 has_update=false 时不显示更新标记；旧资料仍可读取与检索。
 
 `snippets` 保留 `chunk_id`, `content`, `chunk_index`, `score`, `match_type`, `image_path`。新增 `locations` 数组；跨段落或标题的分块可能具有多个位置。`mapping=exact` 的文字命中，位置切片按顺序拼接等于分块 `content`。既有分块器把 CRLF 规范为 LF 时，位置仍按原保存正文计数，标为 `normalized_line_endings`；先把切片中的 CRLF 替换成 LF，再与分块文字比较。图片向量命中的 `content` 可以为空，位置范围对应正文图片目标 URL，切片等于 `image_path`，不包含图片说明或 Markdown 括号。纯表头、摘要等生成文本没有正文对应范围时返回空数组，不伪造正文坐标。
+
+启用 `chunking_config.enable_parent_child` 的库可另外返回 `context` 与 `context_locations`，提供命中父块的完整上下文。扩展在最终重排与截断后执行，同资料同父块仅返回一次；不改动 content 和 locations。没有父块或父块读取失败时仍返回原命中。历史资料需要按父子分块重新处理后才有此上下文。
 
 ```json
 {

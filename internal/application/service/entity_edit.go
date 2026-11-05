@@ -47,6 +47,9 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 		if keep.LibraryID != merged.LibraryID {
 			return werrors.NewBadRequestError("entities must belong to the same library")
 		}
+		if err := requireExtractedEntityWriter(tx, keep.LibraryID); err != nil {
+			return err
+		}
 		if merged.MergedIntoID == keep.ID {
 			return closeMergedEntitySuggestions(tx, spaceID, keep.ID, merged.ID)
 		}
@@ -176,6 +179,9 @@ func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string)
 		} else if err != nil {
 			return err
 		}
+		if err := requireExtractedEntityWriter(tx, entity.LibraryID); err != nil {
+			return err
+		}
 		var collisions int64
 		if err := tx.Model(&types.Entity{}).Where("space_id=? AND library_id=? AND entity_type=? AND normalized_name=? AND id<>? AND merged_into_id=''", spaceID, entity.LibraryID, entity.EntityType, normalizeEntityName(name), entity.ID).Count(&collisions).Error; err != nil {
 			return err
@@ -238,6 +244,9 @@ func (s *EntityService) UpdateEntityDescription(ctx context.Context, entityID, d
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=? AND merged_into_id=''", entityID, spaceID).First(&entity).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			return werrors.NewNotFoundError("entity not found")
 		} else if err != nil {
+			return err
+		}
+		if err := requireExtractedEntityWriter(tx, entity.LibraryID); err != nil {
 			return err
 		}
 		if err := tx.Model(&entity).Updates(map[string]any{"description": description, "embedding_needs_rebuild": true, "updated_at": time.Now()}).Error; err != nil {

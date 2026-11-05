@@ -304,6 +304,7 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	if len(merged) > limit {
 		merged = merged[:limit]
 	}
+	s.expandEntryParentContext(ctx, spaceID, selected, merged)
 	response.Results = merged
 	f.request.Limit = limit
 	if f.request.CollapseSimilar == nil {
@@ -339,8 +340,23 @@ func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, lib
 		query = query.Where("k.source_kind IN ?", f.request.Sources)
 	}
 	if len(f.request.EntityIDs) > 0 {
-		query = query.Where(`EXISTS (SELECT 1 FROM entry_entities ke WHERE ke.space_id=k.space_id
-			AND ke.entry_id=k.id AND ke.entity_id IN ?)`, f.request.EntityIDs)
+		if f.request.IncludeDescendants {
+			query = query.Where(`EXISTS (SELECT 1 FROM entry_entities ke WHERE ke.space_id=k.space_id
+				AND ke.entry_id=k.id AND ke.excluded=false AND (ke.entity_id IN ? OR ke.entity_id IN (
+				WITH RECURSIVE descendants(id, library_id) AS (
+					SELECT e.id, e.library_id FROM entities e JOIN libraries l ON l.id=e.library_id AND l.space_id=e.space_id
+					WHERE e.space_id=? AND e.id IN ? AND e.library_id IN ? AND l.entity_mode='managed'
+					AND e.archived_at IS NULL AND l.deleted_at IS NULL
+					UNION
+					SELECT child.id, child.library_id FROM descendants d
+					JOIN relations r ON r.object_id=d.id AND r.library_id=d.library_id AND r.space_id=?
+					JOIN library_relation_types rt ON rt.library_id=r.library_id AND rt.name=r.relation_type AND rt.enabled=true AND rt.hierarchical=true
+					JOIN entities child ON child.id=r.subject_id AND child.library_id=d.library_id AND child.space_id=r.space_id AND child.archived_at IS NULL
+				) SELECT id FROM descendants)))`, f.request.EntityIDs, spaceID, f.request.EntityIDs, f.request.Libraries, spaceID)
+		} else {
+			query = query.Where(`EXISTS (SELECT 1 FROM entry_entities ke WHERE ke.space_id=k.space_id
+			AND ke.entry_id=k.id AND ke.excluded=false AND ke.entity_id IN ?)`, f.request.EntityIDs)
+		}
 	}
 	if len(f.request.TopicIDs) > 0 {
 		query = query.Where(`EXISTS (SELECT 1 FROM entry_topics kt WHERE kt.space_id=k.space_id

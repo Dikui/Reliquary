@@ -154,7 +154,7 @@ func (r *libraryRepository) UpdateLibrary(ctx context.Context, library *types.Li
 				if merged > 0 {
 					row.Enabled = false
 				}
-				if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "library_id"}, {Name: "name"}}, DoUpdates: clause.AssignmentColumns([]string{"position", "enabled"})}).Create(row).Error; err != nil {
+				if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "library_id"}, {Name: "name"}}, DoUpdates: clause.AssignmentColumns([]string{"position", "enabled", "hierarchical", "subject_kinds", "object_kinds"})}).Create(row).Error; err != nil {
 					return err
 				}
 			}

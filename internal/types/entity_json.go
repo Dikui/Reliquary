@@ -5,6 +5,9 @@ import "encoding/json"
 func (e Entity) MarshalJSON() ([]byte, error) {
 	type response Entity
 	out := response(e)
+	if out.Attributes == nil {
+		out.Attributes = map[string]any{}
+	}
 	if out.Aliases == nil {
 		out.Aliases = []string{}
 	}

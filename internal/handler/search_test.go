@@ -60,7 +60,7 @@ func entrySearchHandlerRouter(svc interfaces.SearchService) *gin.Engine {
 func TestEntrySearchHTTPSharedRequestAndArticleResponse(t *testing.T) {
 	svc := &entrySearchHandlerService{}
 	router := entrySearchHandlerRouter(svc)
-	request := httptest.NewRequest(http.MethodPost, "/search", strings.NewReader(`{"query":"query","content_types":["event","tutorial"],"entity_ids":["entity"],"topic_ids":["topic"],"sources":["article","mine"],"published_from":"2026-10-01","published_to":"2026-10-03","collapse_similar":false,"limit":20}`))
+	request := httptest.NewRequest(http.MethodPost, "/search", strings.NewReader(`{"query":"query","content_types":["event","tutorial"],"entity_ids":["entity"],"include_descendants":true,"topic_ids":["topic"],"sources":["article","mine"],"published_from":"2026-10-01","published_to":"2026-10-03","collapse_similar":false,"limit":20}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
@@ -68,6 +68,7 @@ func TestEntrySearchHTTPSharedRequestAndArticleResponse(t *testing.T) {
 	require.Equal(t, "query", svc.request.Query)
 	require.Equal(t, []string{"event", "tutorial"}, svc.request.ContentTypes)
 	require.Equal(t, []string{"entity"}, svc.request.EntityIDs)
+	require.True(t, svc.request.IncludeDescendants)
 	require.Equal(t, []string{"topic"}, svc.request.TopicIDs)
 	require.Equal(t, []string{"article", "mine"}, svc.request.Sources)
 	require.Equal(t, "2026-10-03", svc.request.PublishedTo)

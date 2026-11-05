@@ -48,15 +48,20 @@ type LibraryContentType struct {
 }
 
 type LibraryRelationType struct {
-	LibraryID string `json:"-" gorm:"primaryKey"`
-	Name      string `json:"name" gorm:"primaryKey"`
-	Position  int    `json:"position"`
-	Enabled   bool   `json:"enabled"`
+	Hierarchical bool     `json:"hierarchical" gorm:"not null;default:false"`
+	SubjectKinds []string `json:"subject_kinds" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
+	ObjectKinds  []string `json:"object_kinds" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
+	LibraryID    string   `json:"-" gorm:"primaryKey"`
+	Name         string   `json:"name" gorm:"primaryKey"`
+	Position     int      `json:"position"`
+	Enabled      bool     `json:"enabled"`
 }
 
 // LibraryPatch intentionally includes immutable fields so attempts to write
 // them are rejected instead of silently ignored by JSON decoding.
 type LibraryPatch struct {
+	EntityMode         *string                `json:"entity_mode"`
+	EntitySchema       *EntitySchema          `json:"entity_schema"`
 	PromptOverrides    *map[string]string     `json:"prompt_overrides"`
 	Color              *int                   `json:"color"`
 	Name               *string                `json:"name"`
@@ -111,11 +116,13 @@ func (l *Library) ProcessingModelTiers() []ModelTier {
 }
 
 type CreateLibraryRequest struct {
-	Color       *int   `json:"color"`
-	Template    string `json:"template"`
-	Directory   string `json:"directory"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	EntityMode   string       `json:"entity_mode"`
+	EntitySchema EntitySchema `json:"entity_schema"`
+	Color        *int         `json:"color"`
+	Template     string       `json:"template"`
+	Directory    string       `json:"directory"`
+	Name         string       `json:"name"`
+	Description  string       `json:"description"`
 }
 
 var libraryDirectoryPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
@@ -129,6 +136,9 @@ func ValidateLibraryColor(color int) error {
 }
 
 func ValidateLibrary(l *Library) error {
+	if err := ValidateEntitySchema(l); err != nil {
+		return err
+	}
 	if l.Template != TemplateStandard {
 		return fmt.Errorf("invalid library template")
 	}

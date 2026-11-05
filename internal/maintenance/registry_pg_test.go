@@ -15,6 +15,11 @@ func TestIKB07RegistryLibraryConfigurationRoundTrip(t *testing.T) {
 	seed(t, db)
 	require.NoError(t, db.Exec(`INSERT INTO library_content_types(library_id,name,position,enabled,extract_graph) SELECT id,'项目类型',42,true,false FROM libraries WHERE id='library' ON CONFLICT DO NOTHING`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO library_relation_types(library_id,name,position,enabled) SELECT id,'引用',17,true FROM libraries WHERE id='library' ON CONFLICT DO NOTHING`).Error)
+	// Product master data and manual exclusions are authoritative export data.
+	require.NoError(t, db.Exec(`UPDATE libraries SET entity_mode='managed', entity_schema='{"kinds":[{"key":"model","name":"Model"}],"fields":[]}' WHERE id='library';
+	 UPDATE entities SET kind='model',code='MODEL-1',attributes='{"status":"available"}',revision=4,archived_at=now() WHERE id='entity-a';
+	 UPDATE entry_entities SET origin='manual',excluded=true,evidence='[{"paragraph":1}]',body_hash='old-body' WHERE entity_id='entity-a';
+	 UPDATE library_relation_types SET hierarchical=true,subject_kinds='["model"]',object_kinds='["model"]' WHERE library_id='library' AND name='引用'`).Error)
 	ctx := context.Background()
 	root := t.TempDir()
 	snapshot, err := Capture(ctx, db)

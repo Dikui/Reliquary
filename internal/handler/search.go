@@ -63,6 +63,7 @@ func rewriteEntrySearch(ctx context.Context, rewriter *storageurl.Rewriter, resp
 		copy.Snippets = append([]types.EntrySearchSnippet{}, result.Snippets...)
 		for i := range copy.Snippets {
 			copy.Snippets[i].Content = rewriter.String(ctx, copy.Snippets[i].Content)
+			copy.Snippets[i].Context = rewriter.String(ctx, copy.Snippets[i].Context)
 		}
 		copy.SimilarReports = make([]*types.EntrySearchResult, len(result.SimilarReports))
 		for i, report := range result.SimilarReports {

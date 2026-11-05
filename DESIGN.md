@@ -259,3 +259,11 @@ No component-library theme adapter or icon library remains. Collapsed navigation
 uses short text marks; mobile navigation uses small inline SVGs. Only the reading
 presentation remains in DocContent. Calendar dates preserve their calendar day;
 timestamps retain timezone conversion through `utils/dateTime.ts`.
+
+### Managed entity controls
+
+Managed-library settings, entity editors, association controls and history reuse
+the existing Swiss controls, spacing and tokens. They introduce no new visual
+system. Entity and relation forms use shared Dialog, native select/date controls,
+and the shared feedback service. Wide schema rows wrap on narrow screens;
+entity details retain the existing workbench scroll ownership.

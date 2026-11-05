@@ -524,6 +524,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectLibraryTemplateManifest(expected, actual)
 	expected, actual = projectLibraryColorManifest(expected, actual)
 	expected, actual = projectLibraryPromptsManifest(expected, actual)
+	expected, actual = projectManagedEntitiesManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
 	diffs := []string{}

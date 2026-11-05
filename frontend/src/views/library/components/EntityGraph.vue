@@ -12,7 +12,7 @@ import type { SearchEntity, SourceLocation } from '@/types/search'
 import RelationTypeManager from './RelationTypeManager.vue'
 
 // Without an entity the graph shows every relation in libraryId.
-const props = withDefaults(defineProps<{ entity?: SearchEntity; libraryId?: string; active?: boolean; relationTypeOptions?: string[] }>(), { active: true, relationTypeOptions: () => [] })
+const props = withDefaults(defineProps<{ entity?: SearchEntity; libraryId?: string; active?: boolean; managed?: boolean; relationTypeOptions?: string[] }>(), { active: true, relationTypeOptions: () => [] })
 const emit = defineEmits<{ 'open-source': [id: string, location?: SourceLocation]; 'open-entity': [id: string]; 'relation-types-changed': [] }>()
 const { t, locale } = useI18n()
 const scopeLibrary = computed(() => props.entity ? props.entity.library_id : props.libraryId || '')
@@ -163,7 +163,7 @@ onBeforeUnmount(() => { stopQuery(); resizeObserver?.disconnect(); themeObserver
         </div>
       </details>
       <label class="graph-limit">{{ t('entityGraph.limit') }}<Select :model-value="limit" :aria-label="t('entityGraph.limit')" @update:model-value="limit = Number($event)"><option v-for="count in limitOptions" :key="count" :value="count">{{ count }}</option></Select></label>
-      <Button :disabled="!scopeLibrary" @click="managingTypes = true">{{ t('ikb18.manageRelationTypes') }}</Button>
+      <Button v-if="!managed" :disabled="!scopeLibrary" @click="managingTypes = true">{{ t('ikb18.manageRelationTypes') }}</Button>
       <span v-if="data" class="graph-hint graph-count" role="status">{{ t('entityGraph.count', { nodes: data.entities.length, edges: data.edges.length }) }}</span>
     </div>
     <RelationTypeManager v-if="managingTypes && active" :initial-library-id="scopeLibrary" @close="managingTypes = false" @changed="relationTypesChanged" />

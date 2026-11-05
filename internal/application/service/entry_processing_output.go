@@ -42,6 +42,11 @@ func libraryProcessingPrompt(l *types.Library, k *types.Entry) string {
 		name, _ := json.Marshal(k.ContentType)
 		prompt += "\n用户已经修正 content_type=" + string(name) + "，必须使用该类型，不再重新分类。"
 	}
+	if l.ManagesEntities() {
+		return prompt + `
+本库实体由人工维护。只识别原文明确提及的产品、型号或代码；name 保留原文名称或代码，type 固定为 product，relevance 为 participant，description 为空，aliases 为空。不得推测上级产品、补造实体或抽取实体间关系。relations 必须为空数组。
+实体格式："entities":[{"name":"原文名称或代码","type":"product","aliases":[],"description":"","relevance":"participant","evidence_ids":[1]}]。`
+	}
 	if !l.ExtractsEntities() {
 		return prompt + "\n本库不抽取实体、实体短介绍或实体间关系。entities 和 relations 必须返回空数组，不受 graph_override 或内容类型开关影响。"
 	}
@@ -79,7 +84,7 @@ func libraryContentType(l *types.Library, value string) string {
 	return types.ContentTypeOther
 }
 func libraryGraphEnabled(l *types.Library, value string, override *bool) bool {
-	if !l.ExtractsEntities() {
+	if l.ManagesEntities() || !l.ExtractsEntities() {
 		return false
 	}
 	if override != nil {
@@ -170,8 +175,11 @@ func processingRelationSpeaker(author, name, body string, locations []types.Sour
 }
 
 func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types.ProcessingSegment, result *articleProcessingResult) {
-	if !l.ExtractsEntities() {
+	if !l.ExtractsEntities() && !l.ManagesEntities() {
 		result.Entities = []articleProcessingEntity{}
+		result.Relations = []extractedRelation{}
+	}
+	if l.ManagesEntities() {
 		result.Relations = []extractedRelation{}
 	}
 	ct := libraryContentType(l, *result.ContentType)
@@ -183,7 +191,7 @@ func qualifySegmentOutput(l *types.Library, k *types.Entry, body string, p types
 	_, blocks := articleEvidenceBody(string(runes[p.Start:p.End]))
 	accepted := []articleProcessingEntity{}
 	for _, entity := range result.Entities {
-		if !eligibleProcessingEntity(entity) {
+		if !l.ManagesEntities() && !eligibleProcessingEntity(entity) {
 			continue
 		}
 		entity.Aliases = nil
@@ -348,7 +356,7 @@ func (s *entryService) saveProcessingOutput(ctx context.Context, l *types.Librar
 	// Historical aliases must not restore endpoints excluded from this extraction.
 	allowed := map[string]bool{}
 	for _, entity := range result.Entities {
-		if eligibleProcessingEntity(entity) {
+		if l.ManagesEntities() || eligibleProcessingEntity(entity) {
 			allowed[entityNameKey(*entity.Type, entity.Name)] = true
 		}
 	}

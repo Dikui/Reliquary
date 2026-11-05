@@ -1,0 +1,97 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { Button, Dialog, Input, Select, Textarea, confirm, toast } from '@/components/ui'
+import { createManagedEntity, updateManagedEntity, entityHistory, type Entity, type ManagedEntityInput } from '@/api/entities'
+import type { LibraryCatalogItem } from '@/api/library'
+import { OPERATION_TYPES, type OperationLogsData } from '@/api/operation-logs'
+import { formatDateTime } from '@/utils/dateTime'
+const props = defineProps<{ library: LibraryCatalogItem; entity?: Entity | null }>()
+const emit = defineEmits<{ saved: [entity: Entity] }>()
+const { t, locale } = useI18n()
+function operationName(value: string) { return OPERATION_TYPES.includes(value as typeof OPERATION_TYPES[number]) ? t(`operationLogs.types.${value}`) : value }
+const open = ref(false), busy = ref(false), error = ref(''), attempted = ref(false)
+const draft = ref<ManagedEntityInput>({ name: '', kind: '', code: '', description: '', aliases: [], attributes: {} })
+const aliases = ref(''), baseline = ref('')
+const history = ref<OperationLogsData | null>(null), historyPage = ref(1), historyOpen = ref(false), historyBusy = ref(false)
+let request = 0
+const fields = computed(() => (props.library.entity_schema?.fields || []).filter(field => !field.archived && (!field.kinds?.length || field.kinds.includes(draft.value.kind))))
+function begin() {
+  const e = props.entity
+  draft.value = { name: e?.canonical_name || '', kind: e?.kind || props.library.entity_schema?.kinds?.[0]?.key || '', code: e?.code || '', description: e?.description || '', aliases: [...(e?.aliases || [])], attributes: { ...e?.attributes } }
+  aliases.value = draft.value.aliases.join('\n'); baseline.value = JSON.stringify(draft.value) + aliases.value; error.value = ''; attempted.value = false; open.value = true
+}
+const invalid = computed(() => !draft.value.name.trim() || !draft.value.kind)
+async function save() {
+  if (busy.value) return
+  attempted.value = true
+  if (invalid.value) { error.value = t('managed.required'); return }
+  busy.value = true; error.value = ''
+  try {
+    const attributes = Object.fromEntries(Object.entries(draft.value.attributes).filter(([, value]) => value !== '' && value !== null && value !== undefined))
+    const data = { ...draft.value, attributes, aliases: aliases.value.split('\n').map(s => s.trim()).filter(Boolean) }
+    const response = props.entity ? await updateManagedEntity(props.entity.id, { ...data, revision: props.entity.revision! }) : await createManagedEntity(props.library.id, data)
+    if (!response.success) throw new Error(response.error || t('common.operationFailed'))
+    emit('saved', response.data); open.value = false; toast.success(t('common.save'))
+  } catch (cause: any) { error.value = cause.message || t('common.operationFailed') }
+  finally { busy.value = false }
+}
+function close() {
+  if (busy.value) return
+  if (baseline.value === JSON.stringify(draft.value) + aliases.value) { open.value = false; return }
+  confirm({ header: t('managed.edit'), body: t('ikb18.unsaved'), onConfirm: () => { open.value = false } })
+}
+function archive() {
+  const entity = props.entity
+  if (!entity || busy.value) return
+  confirm({ header: t(entity.archived_at ? 'managed.restore' : 'managed.archive'), body: `${entity.canonical_name}\n${t('managed.archiveHint')}`, onConfirm: async () => {
+    busy.value = true
+    try { const result = await updateManagedEntity(entity.id, { revision: entity.revision!, archived: !entity.archived_at }); if (!result.success) throw new Error(result.error); emit('saved', result.data) }
+    finally { busy.value = false }
+  } })
+}
+async function loadHistory(page = 1) {
+  if (!props.entity) return
+  const current = ++request; historyOpen.value = true; historyBusy.value = true; error.value = ''
+  try { const result = await entityHistory(props.entity.id, page); if (!result.success) throw new Error(result.error); if (current === request) { history.value = result.data; historyPage.value = page } }
+  catch (cause: any) { if (current === request) error.value = cause.message || t('common.operationFailed') }
+  finally { if (current === request) historyBusy.value = false }
+}
+watch(() => props.entity?.id, () => { request++; historyOpen.value = false; open.value = false; history.value = null })
+onBeforeUnmount(() => { request++ })
+</script>
+<template>
+  <div class="managed-actions">
+    <Button :disabled="busy" @click="begin">{{ t(entity ? 'managed.edit' : 'managed.create') }}</Button>
+    <template v-if="entity"><Button :disabled="busy" @click="archive">{{ t(entity.archived_at ? 'managed.restore' : 'managed.archive') }}</Button><Button @click="loadHistory()">{{ t('managed.history') }}</Button></template>
+    <Dialog :model-value="open" :title="t(entity ? 'managed.edit' : 'managed.create')" :closable="!busy" :close-on-overlay-click="false" :close-on-esc-keydown="false" @update:model-value="close">
+      <form class="managed-form" novalidate @submit.prevent="save"><fieldset :disabled="busy">
+        <label>{{ t('ikb18.name') }}<Input v-model="draft.name" :aria-invalid="attempted && !draft.name.trim()" /></label>
+        <label>{{ t('managed.kind') }}<Select v-model="draft.kind" :aria-invalid="attempted && !draft.kind"><option v-for="kind in library.entity_schema?.kinds" :key="kind.key" :value="kind.key">{{ kind.name }}</option></Select></label>
+        <label>{{ t('managed.code') }}<Input v-model="draft.code" /></label>
+        <label>{{ t('ikb18.description') }}<Textarea v-model="draft.description" :rows="4" /></label>
+        <label>{{ t('managed.aliases') }}<Textarea v-model="aliases" :rows="3" /></label>
+        <label v-for="field in fields" :key="field.key">{{ field.name }} {{ field.unit }}
+          <Select v-if="field.type === 'select'" :model-value="String(draft.attributes[field.key] ?? '')" @update:model-value="$event ? draft.attributes[field.key] = $event : delete draft.attributes[field.key]"><option value="">—</option><option v-for="option in field.options" :key="option" :value="option">{{ option }}</option></Select>
+          <input v-else-if="field.type === 'boolean'" v-model="draft.attributes[field.key]" type="checkbox">
+          <input v-else-if="field.type === 'number'" v-model.number="draft.attributes[field.key]" type="number" step="any" class="rq-control">
+          <input v-else v-model="draft.attributes[field.key]" :type="field.type === 'date' ? 'date' : 'text'" class="rq-control">
+          <Button variant="ghost" @click="delete draft.attributes[field.key]">{{ t('common.clear') }}</Button>
+        </label>
+        <p v-if="error" role="alert">{{ error }}</p>
+        <div class="managed-actions"><Button type="submit" variant="primary" :loading="busy">{{ t('common.save') }}</Button><Button @click="close">{{ t('common.cancel') }}</Button></div>
+      </fieldset></form>
+    </Dialog>
+    <Dialog v-model="historyOpen" :title="t('managed.history')">
+      <p v-if="historyBusy" role="status">{{ t('common.loading') }}</p><p v-if="error" role="alert">{{ error }} <Button @click="loadHistory(historyPage)">{{ t('common.retry') }}</Button></p>
+      <p v-if="history && !history.items.length">{{ t('managed.noHistory') }}</p>
+      <ol><li v-for="item in history?.items" :key="item.id"><strong>{{ operationName(item.operation_type) }}</strong> · {{ formatDateTime(item.created_at, locale) }} · {{ item.actor_name || item.actor }}<details><summary>{{ t('managed.changes') }}</summary><pre>{{ JSON.stringify({ before: item.before, after: item.after }, null, 2) }}</pre></details></li></ol>
+      <div class="managed-actions"><Button :disabled="historyBusy || historyPage <= 1" @click="loadHistory(historyPage - 1)">{{ t('follows.previousPage') }}</Button><span>{{ historyPage }}</span><Button :disabled="historyBusy || !history || historyPage * 20 >= history.total" @click="loadHistory(historyPage + 1)">{{ t('follows.nextPage') }}</Button></div>
+    </Dialog>
+  </div>
+</template>
+<style scoped>
+.managed-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.managed-form fieldset { border: 0; padding: 0; display: grid; gap: var(--space-3); min-width: 0; }
+.managed-form label { display: grid; gap: var(--space-1); } pre { white-space: pre-wrap; overflow-wrap: anywhere; } [role='alert'] { color: var(--danger); }
+</style>

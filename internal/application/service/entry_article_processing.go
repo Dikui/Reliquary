@@ -407,7 +407,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		return err
 	}
 	if s.db != nil {
-		if !library.ExtractsEntities() {
+		if !library.ExtractsEntities() && !library.ManagesEntities() {
 			result.Entities = []articleProcessingEntity{}
 			result.Relations = []extractedRelation{}
 			result.ResolvedEntities = nil
@@ -416,7 +416,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		accepted := make([]articleProcessingEntity, 0, len(result.Entities))
 		for _, entity := range result.Entities {
 			// Saved segment results can bypass the current extraction prompt.
-			if !eligibleProcessingEntity(entity) {
+			if !library.ManagesEntities() && !eligibleProcessingEntity(entity) {
 				continue
 			}
 			entity.Aliases = nil
@@ -425,11 +425,17 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		}
 		result.Entities = accepted
 		resolved := []types.Entity{}
-		if library.ExtractsEntities() {
+		if library.ExtractsEntities() || library.ManagesEntities() {
 			var err error
 			resolved, err = s.resolveProcessingEntities(ctx, k, candidates, result)
 			if err != nil {
 				return fmt.Errorf("resolve article entities: %w", err)
+			}
+		}
+		if library.ManagesEntities() {
+			result.Relations = []extractedRelation{}
+			if err := s.saveManagedLinkEvidence(ctx, k, body, result); err != nil {
+				return err
 			}
 		}
 		if err := s.saveProcessingOutput(ctx, library, k, body, result, resolved); err != nil {
@@ -439,7 +445,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		for _, entity := range resolved {
 			ids = append(ids, entity.ID)
 		}
-		query := s.db.WithContext(ctx).Where("space_id=? AND entry_id=?", k.SpaceID, k.ID)
+		query := s.db.WithContext(ctx).Where("space_id=? AND entry_id=? AND origin<>?", k.SpaceID, k.ID, "manual")
 		if len(ids) > 0 {
 			query = query.Where("entity_id NOT IN ?", ids)
 		}

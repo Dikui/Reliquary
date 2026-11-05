@@ -56,7 +56,7 @@ var PersistentTables = map[string]PersistentTable{
 	"libraries": {
 		Columns: Rule{Configuration: "system_role template directory review_criteria source_evidence_rule " +
 			"feed_enabled model_tiers id name description space_id chunking_config embedding_model_id " +
-			"summary_model_id created_at updated_at deleted_at type indexing_strategy creator_id color prompt_overrides"},
+			"summary_model_id created_at updated_at deleted_at type indexing_strategy creator_id color prompt_overrides entity_mode entity_schema"},
 		File: "config/libraries.json", After: []string{"spaces", "users"}, Since: 0,
 	},
 	"library_content_types": {
@@ -64,7 +64,7 @@ var PersistentTables = map[string]PersistentTable{
 		File:    "data/library_content_types.json", After: []string{"libraries"}, Since: 10,
 	},
 	"library_relation_types": {
-		Columns: Rule{Configuration: "library_id name position enabled"},
+		Columns: Rule{Configuration: "library_id name position enabled hierarchical subject_kinds object_kinds"},
 		File:    "data/library_relation_types.json", After: []string{"libraries"}, Since: 10,
 	},
 }

@@ -49,6 +49,10 @@ func TestIngestContractMigrationUpDownUpAndPreservation(t *testing.T) {
 				delete(row, "color")
 				require.Empty(t, row["prompt_overrides"])
 				delete(row, "prompt_overrides")
+				require.Equal(t, "extracted", row["entity_mode"])
+				require.Empty(t, row["entity_schema"])
+				delete(row, "entity_mode")
+				delete(row, "entity_schema")
 				require.Equal(t, "standard", row["template"])
 				row["template"] = "own" // Migration 34 replaces this fixture's old marker.
 			}

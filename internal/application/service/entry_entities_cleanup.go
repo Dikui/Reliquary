@@ -17,6 +17,7 @@ func pruneUnreferencedEntities(tx *gorm.DB, spaceID uint64, ids []string) error 
 	var orphans []string
 	if err := tx.Model(&types.Entity{}).
 		Where("space_id=? AND id IN ? AND merged_into_id=''", spaceID, ids).
+		Where("NOT EXISTS (SELECT 1 FROM libraries l WHERE l.id=entities.library_id AND l.entity_mode='managed')").
 		Where(`NOT EXISTS (SELECT 1 FROM entry_entities links WHERE links.space_id=entities.space_id AND links.entity_id=entities.id)`).
 		Where(`NOT EXISTS (SELECT 1 FROM relations r WHERE r.space_id=entities.space_id AND (r.subject_id=entities.id OR r.object_id=entities.id))`).
 		Where(`NOT EXISTS (SELECT 1 FROM follows f WHERE f.space_id=entities.space_id AND f.target_type='entity' AND f.target_id=entities.id)`).

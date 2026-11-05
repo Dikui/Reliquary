@@ -5,11 +5,14 @@
         <h1>{{ t('workbench.entities.title') }}</h1>
         <div class="entity-filters">
           <Select :model-value="selectedLibraryId" @update:model-value="changeLibrary" :disabled="merging || catalogLoading" :aria-label="t('entityPage.library')"><option value="" disabled>{{ t('searchPage.chooseLibrary') }}</option><option v-for="library in libraries" :key="library.id" :value="library.id">{{ library.display_name || library.name }}</option></Select>
-          <Select v-model="entityTypeFilter" :disabled="merging" :aria-label="t('workbench.entities.type')"><option value="">{{ t('workbench.entities.allTypes') }}</option><option v-for="option in entityTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
+          <Select v-if="managed" v-model="kindFilter" :aria-label="t('managed.kind')"><option value="">{{ t('workbench.entities.allTypes') }}</option><option v-for="kind in selectedLibrary?.entity_schema?.kinds" :key="kind.key" :value="kind.key">{{ kind.name }}</option></Select>
+          <Select v-if="!managed" v-model="entityTypeFilter" :disabled="merging" :aria-label="t('workbench.entities.type')"><option value="">{{ t('workbench.entities.allTypes') }}</option><option v-for="option in entityTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option></Select>
         </div>
         <div class="entity-search"><Input ref="searchInput" v-model="entityFilter" type="search" :disabled="merging" :placeholder="t('workbench.entities.filter')" :aria-label="t('workbench.entities.filter')" @compositionstart="entityComposing = true" @compositionend="endEntityComposition" @keydown.enter="onEntityEnter(undefined, { e: $event })" /><Button v-if="entityFilter" variant="ghost" :aria-label="t('common.clear')" @click="clearSearch">×</Button></div>
       </div>
-      <a class="merge-link" :href="pendingHref">{{ t('mergeSuggestions.title') }}<span v-if="pendingCount !== null" class="mono">{{ pendingCount }}</span></a>
+      <ManagedEntityEditor v-if="managed && selectedLibrary" :library="selectedLibrary" @saved="managedSaved" />
+      <label v-if="managed"><input v-model="includeArchived" type="checkbox">{{ t('managed.includeArchived') }}</label>
+      <a v-if="!managed" class="merge-link" :href="pendingHref">{{ t('mergeSuggestions.title') }}<span v-if="pendingCount !== null" class="mono">{{ pendingCount }}</span></a>
       <button type="button" class="merge-link overview-link" :disabled="!selectedLibraryId || merging" :aria-pressed="overview" @click="overview = true">{{ t('entityGraph.overview') }}</button>
       <ErrorState v-if="catalogError" :title="catalogError"><Button @click="loadCatalog">{{ t('common.retry') }}</Button></ErrorState>
       <ErrorState v-else-if="loadError" :title="loadError"><Button @click="loadEntities()">{{ t('common.retry') }}</Button></ErrorState>
@@ -24,7 +27,7 @@
       <template v-if="overview">
         <div class="entity-eyebrow"><LibMark v-if="selectedLibrary" :color="selectedLibrary.color" />{{ selectedLibrary?.display_name || selectedLibrary?.name || selectedLibraryId }}</div>
         <div class="entity-head"><h2>{{ t('entityGraph.overview') }}</h2></div>
-        <EntityGraph :library-id="selectedLibraryId" :relation-type-options="graphRelationTypes" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @relation-types-changed="loadCatalog" />
+        <EntityGraph :managed="managed" :library-id="selectedLibraryId" :relation-type-options="graphRelationTypes" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @relation-types-changed="loadCatalog" />
       </template>
       <EmptyState v-else-if="entityNotFound" :title="t('entityPage.notFound')" :description="t('entityPage.notFoundHint')" />
       <ErrorState v-else-if="entityDetailError" :title="entityDetailError"><Button @click="selectedEntity ? selectEntity(selectedEntity) : selectInitialEntity(initialEntityId)">{{ t('common.retry') }}</Button></ErrorState>
@@ -32,12 +35,15 @@
       <EmptyState v-else-if="!selectedEntity" :title="t('workbench.entities.choose')" />
       <template v-else>
         <div class="entity-eyebrow"><LibMark v-if="selectedLibrary" :color="selectedLibrary.color" />{{ selectedLibrary?.display_name || selectedLibrary?.name || selectedEntity.library_id }} · {{ entityTypeLabel(selectedEntity.entity_type) }} · <span class="mono">{{ selectedEntity.id }}</span></div>
-        <div class="entity-head"><h2>{{ selectedEntity.canonical_name }}</h2><div class="entity-actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><Button @click="openMerge">{{ t('workbench.entities.merge') }}</Button></div></div>
+        <div class="entity-head"><h2>{{ selectedEntity.canonical_name }}</h2><div class="entity-actions"><FollowToggle target-type="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name" /><Button v-if="!managed" @click="openMerge">{{ t('workbench.entities.merge') }}</Button></div></div>
+        <ManagedEntityEditor v-if="managed && selectedLibrary" :key="selectedEntity.id" :library="selectedLibrary" :entity="selectedEntity" @saved="managedSaved" />
+        <ManagedRelationEditor v-if="managed && selectedLibrary && !selectedEntity.archived_at" :key="`${selectedEntity.id}-relation`" :library="selectedLibrary" :entity="selectedEntity" @saved="loadRelations()" />
+        <dl v-if="managed" class="entity-facts"><div><dt>{{ t('managed.kind') }}</dt><dd>{{ selectedLibrary?.entity_schema?.kinds?.find(k => k.key === selectedEntity?.kind)?.name || selectedEntity.kind }}</dd></div><div><dt>{{ t('managed.code') }}</dt><dd>{{ selectedEntity.code || '—' }}</dd></div><div v-for="(value, key) in selectedEntity.attributes" :key="key"><dt>{{ selectedLibrary?.entity_schema?.fields?.find(f => f.key === key)?.name || key }}</dt><dd>{{ typeof value === 'boolean' ? t(value ? 'managed.yes' : 'managed.no') : value }} {{ selectedLibrary?.entity_schema?.fields?.find(f => f.key === key)?.unit }}</dd></div></dl>
         <p v-if="selectedEntity.description" class="entity-intro">{{ selectedEntity.description }}</p>
         <dl class="entity-facts"><div><dt>{{ t('workbench.entities.aliasLabel') }}</dt><dd>{{ selectedEntity.aliases?.join(' · ') || t('workbench.entities.noAliases') }}</dd></div><div><dt>{{ t('entityPage.materials') }}</dt><dd class="mono">{{ entityEntries.length }}</dd></div><div><dt>{{ t('ikb18.relations') }}</dt><dd class="mono">{{ relationsLoading || relationError ? t('workbench.nameEmbeddings.unknown') : relationCount }}</dd></div></dl>
         <Tabs v-model="relationView" :items="detailTabs" :label="t('entityGraph.view')">
-          <template #graph><EntityGraph :entity="selectedEntity" :relation-type-options="graphRelationTypes" :active="relationView === 'graph'" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @relation-types-changed="loadCatalog" /></template>
-          <template #list><EntityRelations :entity-id="selectedEntity.id" :entity-name="selectedEntity.canonical_name" :groups="relations" :loading="relationsLoading" :error="relationError" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @retry="loadRelations()" @changed="loadRelations()" /></template>
+          <template #graph><EntityGraph :managed="managed" :entity="selectedEntity" :relation-type-options="graphRelationTypes" :active="relationView === 'graph'" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @relation-types-changed="loadCatalog" /></template>
+          <template #list><EntityRelations :entity-id="selectedEntity.id" :entity-name="selectedEntity.canonical_name" :groups="relations" :managed-library="managed ? selectedLibrary : undefined" :entity="selectedEntity" :loading="relationsLoading" :error="relationError" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @retry="loadRelations()" @changed="loadRelations()" /></template>
           <template #entries>
             <section class="entity-articles">
               <a :href="`/platform/entries?libraries=${encodeURIComponent(selectedEntity.library_id)}&entity_ids=${encodeURIComponent(selectedEntity.id)}`">{{ t('entryBatch.manageRelated') }}</a>
@@ -49,7 +55,7 @@
               </div>
             </section>
           </template>
-          <template #aliases><section class="entity-aliases"><h3>{{ t('workbench.entities.aliasLabel') }}</h3><ul v-if="selectedEntity.aliases?.length"><li v-for="alias in selectedEntity.aliases" :key="alias">{{ alias }}</li></ul><p v-else>{{ t('workbench.entities.noAliases') }}</p><p>{{ t('workbench.entities.mergeHint') }}</p><Button @click="openMerge">{{ t('workbench.entities.merge') }}</Button>
+          <template #aliases><section class="entity-aliases"><h3>{{ t('workbench.entities.aliasLabel') }}</h3><ul v-if="selectedEntity.aliases?.length"><li v-for="alias in selectedEntity.aliases" :key="alias">{{ alias }}</li></ul><p v-else>{{ t('workbench.entities.noAliases') }}</p><p>{{ t('workbench.entities.mergeHint') }}</p><Button v-if="!managed" @click="openMerge">{{ t('workbench.entities.merge') }}</Button>
             <details class="name-embedding-rebuild"><summary>{{ t('workbench.nameEmbeddings.title') }}</summary><p>{{ t('workbench.nameEmbeddings.pending', { count: nameEmbeddingStatus?.pending_count ?? t('workbench.nameEmbeddings.unknown') }, nameEmbeddingStatus?.pending_count ?? 0) }}</p><div class="entity-actions"><Button :loading="nameEmbeddingStatusLoading" @click="loadNameEmbeddingStatus">{{ t('workbench.refresh') }}</Button><Button :loading="nameEmbeddingRebuilding" :disabled="nameEmbeddingStatusLoading || !nameEmbeddingStatus?.pending_count || nameEmbeddingBusy" @click="rebuildNameEmbeddings">{{ t('workbench.nameEmbeddings.rebuild') }}</Button></div><p v-if="nameEmbeddingStatus?.latest_run" role="status">{{ t('workbench.nameEmbeddings.latest', { status: nameEmbeddingRunStatus, processed: nameEmbeddingStatus.latest_run.processed_count, total: nameEmbeddingStatus.latest_run.total_count }, nameEmbeddingStatus.latest_run.total_count) }}</p><p v-if="nameEmbeddingStatus?.latest_run?.error" class="run-error" role="alert">{{ nameEmbeddingStatus.latest_run.error }}</p><p v-if="nameEmbeddingError" class="run-error" role="alert">{{ nameEmbeddingError }}</p></details>
           </section></template>
         </Tabs>
@@ -72,6 +78,8 @@ import { listLibraries, type LibraryCatalogItem } from '@/api/library'
 import { listEntityRelations, type RelationGroup } from '@/api/relations'
 import { searchErrorCode } from '@/utils/search'
 import { ENTITY_TYPES, listEntityMergeSuggestions, getEntity, getEntityNameEmbeddingRebuildStatus, listEntities, mergeEntities, rebuildEntityNameEmbeddings, type Entity, type EntityEntry, type EntityNameEmbeddingRebuildStatus, type EntityType } from '@/api/entities'
+import ManagedEntityEditor from './ManagedEntityEditor.vue'
+import ManagedRelationEditor from './ManagedRelationEditor.vue'
 import EntityRelations from './EntityRelations.vue'
 import EntityGraph from './EntityGraph.vue'
 import type { SourceLocation } from '@/types/search'
@@ -88,6 +96,9 @@ const pageSize = 50
 const relationView = ref('graph'), overview = ref(false)
 const searchInput = ref<InstanceType<typeof Input>>()
 function clearSearch() { entityFilter.value = ''; searchInput.value?.focus() }
+const includeArchived = ref(false), kindFilter = ref('')
+const managed = computed(() => selectedLibrary.value?.entity_mode === 'managed')
+async function managedSaved(entity: Entity) { await loadEntities(); await selectInitialEntity(entity.id) }
 const entityFilter = ref(''), entityTypeFilter = ref<EntityType | ''>(''), entityComposing = ref(false)
 const entityTypeOptions = computed(() => ENTITY_TYPES.map(value => ({ value, label: entityTypeLabel(value) })))
 const entities = ref<Entity[]>([]), entitiesLoading = ref(false), hasMoreEntities = ref(false), loadError = ref('')
@@ -107,7 +118,7 @@ async function loadEntities(more = false) {
   const current = ++entityRequest
   if (!selectedLibraryId.value) { entities.value = []; hasMoreEntities.value = false; entitiesLoading.value = false; return }
   entitiesLoading.value = true; loadError.value = ''
-  try { const page = envelopeData(await listEntities({ library_id: selectedLibraryId.value, entity: entityFilter.value.trim(), entity_type: entityTypeFilter.value || undefined, limit: pageSize, offset: more ? entities.value.length : 0 })) || []; if (current === entityRequest) { entities.value = more ? [...entities.value, ...page] : page; hasMoreEntities.value = page.length === pageSize } }
+  try { const page = envelopeData(await listEntities({ library_id: selectedLibraryId.value, entity: entityFilter.value.trim(), entity_type: managed.value ? undefined : entityTypeFilter.value || undefined, include_archived: includeArchived.value || undefined, kind: managed.value ? kindFilter.value || undefined : undefined, limit: pageSize, offset: more ? entities.value.length : 0 })) || []; if (current === entityRequest) { entities.value = more ? [...entities.value, ...page] : page; hasMoreEntities.value = page.length === pageSize } }
   catch (cause) { if (current === entityRequest) loadError.value = errorMessage(cause) }
   finally { if (current === entityRequest) entitiesLoading.value = false }
 }
@@ -235,6 +246,8 @@ watch(() => props.libraryId, id => { if (id && id !== selectedLibraryId.value) l
 watch(selectedLibraryId, () => { mergeTargetRequest++; mergeVisible.value = false; mergeTargets.value = []; resetEntityList(); void loadPendingCount() }, { flush: 'sync' })
 watch(entityFilter, scheduleEntitySearch)
 watch(entityTypeFilter, resetEntityList)
+watch(includeArchived, resetEntityList)
+watch(kindFilter, resetEntityList)
 watch(() => props.initialEntityId, id => { if (id && id !== selectedEntity.value?.id) void selectInitialEntity(id) }, { immediate: true })
 onMounted(() => { void loadCatalog(); void refreshAll(); void loadPendingCount() })
 onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; nameEmbeddingRequest++; catalogRequest++; pendingRequest++; relationRequest++; clearNameEmbeddingPoll(); if (entitySearchTimer) clearTimeout(entitySearchTimer) })

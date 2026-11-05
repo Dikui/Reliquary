@@ -1,4 +1,4 @@
-import { get, post } from '@/utils/request'
+import { get, post, patch, put } from '@/utils/request'
 
 import { ENTITY_TYPES, type EntityType } from './entity-types'
 export { ENTITY_TYPES } from './entity-types'
@@ -6,6 +6,11 @@ export type { EntityType } from './entity-types'
 export interface EntityEnvelope<T> { success: boolean; data: T; error?: string }
 export interface EntityActionEnvelope { success: boolean; error?: string }
 export interface Entity {
+  kind?: string
+  code?: string
+  attributes?: Record<string, unknown>
+  revision?: number
+  archived_at?: string | null
   id: string
   space_id: number
   library_id: string
@@ -31,6 +36,8 @@ export interface EntityListParams {
   library_id: string
   entity?: string
   entity_type?: EntityType
+  kind?: string
+  include_archived?: boolean
   limit?: number
   offset?: number
 }
@@ -80,3 +87,11 @@ export interface EntityNameEmbeddingRebuildStatus { pending_count: number; lates
 const rebuildPath = `${base}/name-embeddings/rebuild`
 export const getEntityNameEmbeddingRebuildStatus = () => get<EntityEnvelope<EntityNameEmbeddingRebuildStatus>>(rebuildPath)
 export const rebuildEntityNameEmbeddings = () => post<EntityEnvelope<EntityNameEmbeddingRebuildStatus>>(rebuildPath, {})
+
+export interface ManagedEntityInput { name: string; kind: string; code: string; description: string; aliases: string[]; attributes: Record<string, unknown> }
+export const createManagedEntity = (library: string, data: ManagedEntityInput) => post<EntityEnvelope<Entity>>(`/api/v1/libraries/${encodeURIComponent(library)}/entities`, data)
+export const updateManagedEntity = (id: string, data: Partial<ManagedEntityInput> & { revision: number; archived?: boolean }) => patch<EntityEnvelope<Entity>>(`${base}/${encodeURIComponent(id)}`, data)
+export const entityHistory = (id: string, page: number) => get<EntityEnvelope<import('./operation-logs').OperationLogsData>>(`${base}/${encodeURIComponent(id)}/history?page=${page}&page_size=20`)
+export interface EntryEntityLink { entity: Entity; origin: string; excluded: boolean; evidence: import('@/types/search').SourceLocation[]; body_hash: string }
+export const listEntryEntityLinks = (id: string) => get<EntityEnvelope<EntryEntityLink[]>>(`/api/v1/entries/${encodeURIComponent(id)}/entity-links`)
+export const setEntryEntityLink = (id: string, entity: string, excluded: boolean) => put<EntityActionEnvelope>(`/api/v1/entries/${encodeURIComponent(id)}/entity-links/${encodeURIComponent(entity)}`, { excluded })

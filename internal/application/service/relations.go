@@ -135,10 +135,21 @@ func (s *EntityService) ListRelations(ctx context.Context, id, libraryID string)
 	})
 	return groups, err
 }
-func (s *EntityService) DeleteRelation(ctx context.Context, id string) error {
+func (s *EntityService) DeleteRelation(ctx context.Context, id string, versions ...int64) error {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return err
+	}
+	var managed bool
+	if err := s.db.WithContext(ctx).Table("relations r").Joins("JOIN libraries l ON l.id=r.library_id").Where("r.id=? AND r.space_id=?", id, spaceID).Select("l.entity_mode='managed'").Scan(&managed).Error; err != nil {
+		return err
+	}
+	if managed {
+		var version int64
+		if len(versions) > 0 {
+			version = versions[0]
+		}
+		return s.DeleteManagedRelation(ctx, id, version)
 	}
 	actor, ok := types.PrincipalFromContext(ctx)
 	if !ok {
@@ -173,6 +184,9 @@ func (s *EntityService) MergeRelationTypes(ctx context.Context, libraryID, from,
 			return werrors.NewNotFoundError("library not found")
 		} else if err != nil {
 			return err
+		}
+		if library.ManagesEntities() {
+			return werrors.NewBadRequestError("edit managed relationships individually; type merging is unavailable")
 		}
 		names := []string{from, to}
 		sort.Strings(names)

@@ -415,3 +415,26 @@ continue to display in the viewer’s timezone. `utils/dateTime.ts` owns this di
 ## Library prompt settings
 
 The library settings form owns six prompt overrides: understanding/classification, summary requirements, entities, relations, summary merge and historical topic classification. Each disclosure shows Shared default or Library override. Default text comes from the running backend and is read-only. Customize copies it into the draft; Restore default removes the draft override. Both require the existing Save action. Validation associates nonblank/length errors with the editor, opens the first invalid disclosure and focuses it. Failed saves retain the draft. Switching libraries and leaving follow the existing unsaved-change confirmation and stale-response protection. Swiss native textareas retain vertical resizing under DESIGN.md; shared buttons and feedback keep their existing owners. Both locales expose the same actions. Saved changes affect later processing, with no automatic historical reprocessing.
+
+## Managed entity libraries
+
+Source: `.scratch/managed-entity-library/spec.md` (approved shared API contract).
+Library settings retain the existing Swiss form and save/discard workflow. Entity
+source changes are validated by the server against all stored documents and
+entities. Schema keys are stable identifiers; blank allowed-kind lists mean all
+kinds. Field retirement uses Archive. Removing a row is offered for mistakes and
+unused definitions; server constraints protect definitions already in use.
+
+Only managed libraries show manual entity editing and document association
+controls. Editors retain draft values on server errors, including revision
+conflicts. Entity archive is reversible and retains document links. Relation
+editing sends the current version. Native select and date input popups remain
+owned by the operating system, consistent with the existing settings controls.
+Document links expose both included and excluded decisions. Exclusion persists
+through processing, and Restore link reverses it. History is paged in groups of
+20; related-entity pickers load 100 rows at a time with explicit Load more.
+
+Search optionally includes descendants and retains that choice in URL state.
+Parent context is displayed when supplied, while the click target remains the
+original matched location. Existing extracted libraries retain their merge and
+automatic-extraction workflows.

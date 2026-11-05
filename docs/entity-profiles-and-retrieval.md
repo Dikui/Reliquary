@@ -18,6 +18,27 @@ Reliquary 在个人空间的多个库中收集、存储、去重与检索文章�
 
 实体只允许在同库内合并；合并会把别名和文章关联转移到保留实体，重复关联会去重，并保存可查询的合并记录。相关文章的表头随合并更新，合并操作写入操作日志。删除文章会清理关联，实体档案继续保留。
 
+## 人工维护产品库
+
+新建普通库后，在库设置将实体模式改为“人工维护”，设置类别、属性与关系规则。只有完全空库可切换模式。实体页提供新建、编辑、归档、恢复与修改记录；资料详情提供人工关联与排除。
+
+此模式下自动处理只按名称、代码或别名唯一匹配已有实体。文档不会创建或更新产品、属性、别名和关系。未匹配项可以人工补关联。重新处理保留人工关联及排除，归档实体从默认目录与图谱隐藏，历史资料仍可读取。实体名称与非空代码在库内唯一。
+
+HTTP 接口位于 `/api/v1`，成功数据在 `data` 中。模式、类别和属性定义使用现有 `POST /libraries` 或 `PUT /libraries/:id`；关系类型定义使用后者。
+
+| 接口 | 请求或结果 |
+| --- | --- |
+| `POST /libraries/:id/entities` | `{name, kind, code, description, aliases:[], attributes:{}}`，返回实体 |
+| `PATCH /entities/:entity_id` | 必填当前 `revision`；其余字段可选，`attributes` 整体替换；`archived:true/false` 归档或恢复 |
+| `GET /entities?library_id=...` | 可增加 `kind`、`include_archived=true`，沿用 limit/offset |
+| `GET /entities/:entity_id/history` | `page`、`page_size`，返回操作日志分页，修改前后值在 `before`、`after` |
+| `GET /entries/:id/entity-links` | 包含人工排除项，返回 entity、origin、excluded、evidence、body_hash |
+| `PUT /entries/:id/entity-links/:entity_id` | `{excluded:false}` 补关联或恢复；`{excluded:true}` 排除 |
+
+库的 `entity_schema` 格式为 `{kinds:[{key,name,parent_kinds:[]}],fields:[{key,name,type,unit,options:[],kinds:[],archived:false}]}`。key 使用小写英文字母开头的字母、数字、下划线，最长 64 字符。字段 type 为 text、number、boolean、date（YYYY-MM-DD）或 select。fields 的 kinds 为空表示适用全部类别；parent_kinds 为空表示不允许父项。选项或字段定义变更不能使现有值失效。已有值的类型与单位不能直接变更。
+
+字段值不存在时从 attributes 中删除该键，不存 null。已归档字段保留历史值但不能修改。实体 revision 或关系 version 冲突返回 409，重新读取后再修改；不自动覆盖。关系维护见[关系接口](relations-api.md#人工维护库)。
+
 ## 名称向量
 
 空间共享的向量模型决定实体名称向量的模型与维度。实体页可触发名称向量重建并查看维护任务状态。没有可用嵌入模型时仍可按名称和别名匹配。

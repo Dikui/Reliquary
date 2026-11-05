@@ -14,6 +14,9 @@ export function librarySettingsPayload(draft: LibraryCatalogItem) {
     ...(draft.model_tiers ? { model_tiers: { ...draft.model_tiers } } : {}),
     ...(chunking ? { chunking_config: chunking } : {}),
     feed_enabled: draft.feed_enabled,
+    ...(draft.entity_mode ? { entity_mode: draft.entity_mode } : {}),
+    ...(draft.entity_schema ? { entity_schema: draft.entity_schema } : {}),
+    ...(draft.entity_mode === 'managed' ? { relation_types: draft.relation_types } : {}),
     content_types: draft.content_types.map((row, position) => ({ ...row, name: row.name.trim(), position })),
   }
 }

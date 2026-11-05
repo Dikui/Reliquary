@@ -25,6 +25,7 @@ func (s *libraryService) CreateLibrary(ctx context.Context, request types.Create
 		return nil, apperrors.NewBadRequestError("template must be standard")
 	}
 	library := &types.Library{ID: uuid.NewString(), SpaceID: types.MustSpaceIDFromContext(ctx), Name: request.Name, Description: request.Description, Template: request.Template, Directory: request.Directory, CreatedAt: time.Now(), UpdatedAt: time.Now(), ContentTypes: []types.LibraryContentType{}, RelationTypes: []types.LibraryRelationType{}}
+	library.EntityMode, library.EntitySchema = request.EntityMode, request.EntitySchema
 	if request.Color != nil {
 		if err := types.ValidateLibraryColor(*request.Color); err != nil {
 			return nil, apperrors.NewBadRequestError(err.Error())
@@ -72,6 +73,9 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 	}
 	var result *types.Library
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockEntitySpace(tx, types.MustSpaceIDFromContext(ctx)); err != nil {
+			return err
+		}
 		var locked types.Library
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", id, types.MustSpaceIDFromContext(ctx)).First(&locked).Error; err != nil {
 			return err
@@ -80,6 +84,13 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 		library, err := repo.GetLibraryByID(ctx, id)
 		if err != nil {
 			return err
+		}
+		previous := *library
+		if patch.EntityMode != nil {
+			library.EntityMode = *patch.EntityMode
+		}
+		if patch.EntitySchema != nil {
+			library.EntitySchema = *patch.EntitySchema
 		}
 		if patch.Name != nil {
 			library.Name = *patch.Name
@@ -132,6 +143,9 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 		if err := types.ValidateLibrary(library); err != nil {
 			return apperrors.NewBadRequestError(err.Error())
 		}
+		if err := validateManagedCatalogChange(tx, &previous, library); err != nil {
+			return err
+		}
 		library.UpdatedAt = time.Now()
 		if err := repo.UpdateLibrary(ctx, library); err != nil {
 			return libraryWriteError(err)
@@ -164,6 +178,14 @@ func (s *libraryService) DeleteLibrary(ctx context.Context, id string) error {
 		}
 		if count > 0 {
 			return apperrors.NewBadRequestError("library contains entries")
+		}
+		if library.ManagesEntities() {
+			if err := tx.Model(&types.Entity{}).Where("library_id=?", id).Count(&count).Error; err != nil {
+				return err
+			}
+			if count > 0 {
+				return apperrors.NewBadRequestError("library contains managed entities, including archived entities")
+			}
 		}
 		if err := graph.Lock(tx, spaceID); err != nil {
 			return err

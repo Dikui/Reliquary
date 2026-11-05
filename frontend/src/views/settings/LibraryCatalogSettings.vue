@@ -5,6 +5,7 @@ import { Button, Dialog, LibMark, Tag, confirm, toast } from '@/components/ui'
 import { CONTENT_TYPES, type ContentType } from '@/types/entryClassification'
 import { listLibraries, getCatalogLibrary, createCatalogLibrary, saveCatalogLibrary, deleteCatalogLibrary, type LibraryCatalogItem, type LibraryColor, type LibraryPromptID } from '@/api/library'
 import { validDirectory, validLibraryName, validTypes, librarySettingsPayload, moveType, catalogDescription, fillParentChunkDefaults, libraryNumberErrors, type LibraryNumberField } from '@/utils/libraryCatalogForm'
+import ManagedEntitySettings from './ManagedEntitySettings.vue'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
 import { copyModelTiers } from '@/utils/modelTiers'
 import type { ModelTier } from '@/types/modelTiers'
@@ -83,6 +84,7 @@ async function load(id?: string) {
     const response = await getCatalogLibrary(selected); if (!response.success) throw new Error(response.message)
     if (current !== sequence) return
     draft.value = { ...response.data, model_tiers: copyModelTiers({ ...response.data.model_tiers, generation: response.data.model_tiers?.generation || response.data.summary_model_id || '' }), description: catalogDescription(response.data, t('ikb18.systemMediaDescription')), chunking_config: response.data.chunking_config ? { ...response.data.chunking_config, strategy: response.data.chunking_config.strategy ?? '', token_limit: response.data.chunking_config.token_limit ?? 0, languages: response.data.chunking_config.languages ?? [] } : response.data.chunking_config, content_types: response.data.content_types || [], relation_types: response.data.relation_types || [] }
+    draft.value.entity_mode ||= 'extracted'
     draft.value.prompt_overrides = { ...draft.value.prompt_overrides }
     toggleParentChild()
     validationAttempted.value = false
@@ -174,6 +176,7 @@ onBeforeUnmount(() => { sequence++; window.removeEventListener('beforeunload', b
     <p v-else-if="!libraries.length" class="catalog-hint">{{ t('libraryNavigation.empty') }}</p>
     <form v-if="draft" ref="catalogForm" class="catalog-form" novalidate @submit.prevent="save">
       <fieldset :disabled="saving || loading">
+        <ManagedEntitySettings v-model="draft" />
         <section class="catalog-section">
           <header><h2>{{ t('libraryEditor.basic.title') }}</h2><p>{{ t('settingsPage.basicHint') }}</p></header>
           <div class="catalog-controls">

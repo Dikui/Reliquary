@@ -91,6 +91,16 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 			rule.Configuration = strings.TrimSpace(strings.ReplaceAll(" "+rule.Configuration+" ", " prompt_overrides ", " "))
 			copy["libraries"] = rule
 		}
+		if migration.Version < 37 {
+			for table, columns := range managedEntityDefaults {
+				rule := copy[table]
+				for column := range columns {
+					rule.Sidecar = strings.TrimSpace(strings.ReplaceAll(" "+rule.Sidecar+" ", " "+column+" ", " "))
+					rule.Configuration = strings.TrimSpace(strings.ReplaceAll(" "+rule.Configuration+" ", " "+column+" ", " "))
+				}
+				copy[table] = rule
+			}
+		}
 		result = copy
 	}()
 	if migration.Dirty {

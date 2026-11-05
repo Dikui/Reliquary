@@ -21,6 +21,14 @@ func (h *EntityHandler) SetNameEmbeddingRebuilder(r *service.EntityNameEmbedding
 }
 func entityListQuery(c *gin.Context) (types.EntityQuery, error) {
 	q := types.EntityQuery{LibraryID: c.Query("library_id"), Entity: c.Query("entity"), EntityType: c.Query("entity_type")}
+	q.Kind = c.Query("kind")
+	if raw, ok := c.GetQuery("include_archived"); ok {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			return q, werrors.NewBadRequestError("include_archived must be a boolean")
+		}
+		q.IncludeArchived = value
+	}
 	var err error
 	q.Limit, err = strconv.Atoi(c.DefaultQuery("limit", "50"))
 	if err != nil || q.Limit < 1 || q.Limit > 100 {
@@ -163,7 +171,12 @@ func (h *EntityHandler) Relations(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
 }
 func (h *EntityHandler) DeleteRelation(c *gin.Context) {
-	if err := h.service.DeleteRelation(c.Request.Context(), c.Param("relation_id")); err != nil {
+	version, err := strconv.ParseInt(c.DefaultQuery("version", "0"), 10, 64)
+	if err != nil {
+		c.Error(werrors.NewBadRequestError("invalid relationship version"))
+		return
+	}
+	if err := h.service.DeleteRelation(c.Request.Context(), c.Param("relation_id"), version); err != nil {
 		c.Error(err)
 		return
 	}

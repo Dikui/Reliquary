@@ -11,7 +11,7 @@ function loadAPI(requests: Request[]) {
   new Function('require', 'module', 'exports', code)((name: string) => {
     if (name === './entity-types') return scope
     assert.equal(name, '@/utils/request')
-    return Object.fromEntries(['get', 'post'].map(method => [method, (url: string, body?: unknown) => { requests.push({ method, url, ...(body === undefined ? {} : { body }) }); return Promise.resolve({ success: true, data: [] }) }]))
+    return Object.fromEntries(['get', 'post', 'patch', 'put'].map(method => [method, (url: string, body?: unknown) => { requests.push({ method, url, ...(body === undefined ? {} : { body }) }); return Promise.resolve({ success: true, data: [] }) }]))
   }, module, module.exports)
   return module.exports
 }
@@ -43,4 +43,14 @@ test('entity list requires the owning library', async () => {
   await api.listEntities({ library_id: 'library-a', limit: 20 })
   assert.equal(requests[0]?.url, '/api/v1/entities?library_id=library-a&limit=20')
   assert.equal('entityScopeParams' in scope, false)
+})
+
+test('managed entities keep revision and manual exclusion in their write requests', async () => {
+  const requests: Request[] = [], api = loadAPI(requests)
+  await api.updateManagedEntity('entity/a', { revision: 3, name: 'New name', attributes: { power: 12 } })
+  await api.setEntryEntityLink('entry/a', 'entity/a', true)
+  assert.deepEqual(requests, [
+    { method: 'patch', url: '/api/v1/entities/entity%2Fa', body: { revision: 3, name: 'New name', attributes: { power: 12 } } },
+    { method: 'put', url: '/api/v1/entries/entry%2Fa/entity-links/entity%2Fa', body: { excluded: true } },
+  ])
 })

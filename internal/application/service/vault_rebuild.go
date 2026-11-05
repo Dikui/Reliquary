@@ -219,6 +219,14 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 	}
 	setMessageFingerprint(entry, string(body))
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockEntitySpaceShared(tx, library.SpaceID); err != nil {
+			return err
+		}
+		var currentLibrary types.Library
+		if err := tx.Where("id=? AND space_id=?", library.ID, library.SpaceID).First(&currentLibrary).Error; err != nil {
+			return err
+		}
+		library = &currentLibrary
 		if err := tx.Create(entry).Error; err != nil {
 			return err
 		}
@@ -255,9 +263,18 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, library 
 		}
 		for _, link := range sortedUniqueNames(header.Entities) {
 			name := strings.TrimSpace(link[2 : len(link)-2])
-			entity, err := restoreVaultEntity(tx, library.SpaceID, name, now)
+			var entity *types.Entity
+			var err error
+			if library.ManagesEntities() {
+				entity, err = findManagedEntity(tx, library.SpaceID, library.ID, []string{normalizeEntityName(name)})
+			} else {
+				entity, err = restoreVaultEntity(tx, library.SpaceID, name, now)
+			}
 			if err != nil {
 				return err
+			}
+			if entity == nil {
+				continue
 			}
 			var existing int64
 			if err := tx.Model(&types.EntryEntity{}).Where("space_id=? AND entry_id=? AND entity_id=?", library.SpaceID, entry.ID, entity.ID).Count(&existing).Error; err != nil {

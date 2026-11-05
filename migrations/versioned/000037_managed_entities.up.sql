@@ -1,0 +1,15 @@
+ALTER TABLE libraries ADD COLUMN entity_mode text NOT NULL DEFAULT 'extracted' CHECK (entity_mode IN ('extracted','managed'));
+ALTER TABLE libraries ADD COLUMN entity_schema jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(entity_schema)='object');
+ALTER TABLE entities ADD COLUMN kind text NOT NULL DEFAULT '';
+ALTER TABLE entities ADD COLUMN code text NOT NULL DEFAULT '';
+ALTER TABLE entities ADD COLUMN attributes jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(attributes)='object');
+ALTER TABLE entities ADD COLUMN revision bigint NOT NULL DEFAULT 1 CHECK (revision >= 1);
+ALTER TABLE entities ADD COLUMN archived_at timestamptz;
+CREATE UNIQUE INDEX entities_library_code ON entities(space_id,library_id,code) WHERE code <> '' AND merged_into_id='';
+ALTER TABLE library_relation_types ADD COLUMN hierarchical boolean NOT NULL DEFAULT false;
+ALTER TABLE library_relation_types ADD COLUMN subject_kinds jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(subject_kinds)='array');
+ALTER TABLE library_relation_types ADD COLUMN object_kinds jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(object_kinds)='array');
+ALTER TABLE entry_entities ADD COLUMN origin text NOT NULL DEFAULT 'extracted' CHECK (origin IN ('extracted','manual'));
+ALTER TABLE entry_entities ADD COLUMN excluded boolean NOT NULL DEFAULT false;
+ALTER TABLE entry_entities ADD COLUMN evidence jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(evidence)='array');
+ALTER TABLE entry_entities ADD COLUMN body_hash text NOT NULL DEFAULT '';

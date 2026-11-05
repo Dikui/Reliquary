@@ -1,6 +1,7 @@
 import type { TranslationCall } from './translationCallAudit.ts'
 
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
+  { file: 'views/library/components/ManagedEntityEditor.vue', expressions: ['`operationLogs.types.${value}`'], reason: 'Operation names are guarded by the shared OPERATION_TYPES list.' },
   {
     "file": "views/settings/LibraryCatalogSettings.vue",
     "expressions": [

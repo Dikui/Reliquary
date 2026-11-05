@@ -7,6 +7,11 @@ import (
 
 // Entity is a canonical identity within a library.
 type Entity struct {
+	Kind                     string                  `json:"kind" gorm:"not null;default:''"`
+	Code                     string                  `json:"code" gorm:"not null;default:''"`
+	Attributes               map[string]any          `json:"attributes" gorm:"serializer:json;type:jsonb;not null;default:'{}'"`
+	Revision                 int64                   `json:"revision" gorm:"not null;default:1"`
+	ArchivedAt               *time.Time              `json:"archived_at,omitempty"`
 	LibraryID                string                  `json:"library_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_canonical"`
 	ID                       string                  `json:"id" gorm:"type:varchar(36);primaryKey"`
 	SpaceID                  uint64                  `json:"space_id" gorm:"not null;uniqueIndex:idx_entity_canonical"`
@@ -64,10 +69,14 @@ func (EntityMergeSuggestion) TableName() string {
 
 // EntryEntity associates an article with a canonical entity.
 type EntryEntity struct {
-	SpaceID   uint64    `json:"space_id" gorm:"not null;index"`
-	EntryID   string    `json:"entry_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_entity"`
-	EntityID  string    `json:"entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_entity;index"`
-	CreatedAt time.Time `json:"created_at"`
+	Origin    string           `json:"origin" gorm:"not null;default:extracted"`
+	Excluded  bool             `json:"excluded" gorm:"not null;default:false"`
+	Evidence  []SourceLocation `json:"evidence" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
+	BodyHash  string           `json:"body_hash" gorm:"not null;default:''"`
+	SpaceID   uint64           `json:"space_id" gorm:"not null;index"`
+	EntryID   string           `json:"entry_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_entity"`
+	EntityID  string           `json:"entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_entity;index"`
+	CreatedAt time.Time        `json:"created_at"`
 }
 
 func (EntryEntity) TableName() string { return "entry_entities" }
@@ -92,11 +101,13 @@ type EntityCandidate struct {
 }
 
 type EntityQuery struct {
-	LibraryID  string `json:"library_id"`
-	Entity     string `json:"entity,omitempty"`
-	EntityType string `json:"entity_type,omitempty"`
-	Limit      int    `json:"limit,omitempty"`
-	Offset     int    `json:"offset,omitempty"`
+	Kind            string `json:"kind,omitempty"`
+	IncludeArchived bool   `json:"include_archived,omitempty"`
+	LibraryID       string `json:"library_id"`
+	Entity          string `json:"entity,omitempty"`
+	EntityType      string `json:"entity_type,omitempty"`
+	Limit           int    `json:"limit,omitempty"`
+	Offset          int    `json:"offset,omitempty"`
 }
 
 type EntityLibraryGroup struct {

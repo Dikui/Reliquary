@@ -374,3 +374,34 @@ func TestLargeBacklogSyncAndRebuildAcknowledgement(t *testing.T) {
 	require.NoError(t, s.db.Table("graph_pending_sync").Where("completed_at IS NULL").Count(&pending).Error)
 	require.Zero(t, pending)
 }
+
+// Managed-library contract: the PostgreSQL projection includes manually
+// maintained edges without sources, but hides archived endpoints.
+func TestManagedSnapshotExcludesArchivedEndpoints(t *testing.T) {
+	db := pgtest.Open(t)
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Managed snapshot"}).Error)
+	require.NoError(t, db.Create(&types.Library{ID: "managed", SpaceID: 1, Name: "Managed", Directory: "managed", EntityMode: types.EntityModeManaged}).Error)
+	require.NoError(t, db.Create(&types.LibraryRelationType{LibraryID: "managed", Name: "belongs_to", Enabled: true}).Error)
+	require.NoError(t, db.Create(&[]types.Entity{
+		{ID: "child", SpaceID: 1, LibraryID: "managed", CanonicalName: "Child", NormalizedName: "child", EntityType: "product"},
+		{ID: "parent", SpaceID: 1, LibraryID: "managed", CanonicalName: "Parent", NormalizedName: "parent", EntityType: "product"},
+	}).Error)
+	require.NoError(t, db.Create(&types.Relation{ID: "managed-edge", SpaceID: 1, LibraryID: "managed", SubjectID: "child", ObjectID: "parent", RelationType: "belongs_to", Version: 1}).Error)
+	before, err := readPG(db, 0, "")
+	require.NoError(t, err)
+	require.Len(t, before.Nodes, 2)
+	require.Len(t, before.Edges, 1)
+	require.Zero(t, before.Edges[0].SourceCount)
+
+	require.NoError(t, db.Model(&types.Entity{}).Where("id=?", "child").Update("archived_at", time.Now()).Error)
+	archived, err := readPG(db, 0, "")
+	require.NoError(t, err)
+	require.Len(t, archived.Nodes, 1)
+	require.Equal(t, "parent", archived.Nodes[0].ID)
+	require.Empty(t, archived.Edges)
+
+	require.NoError(t, db.Model(&types.Entity{}).Where("id=?", "child").Update("archived_at", nil).Error)
+	restored, err := readPG(db, 0, "")
+	require.NoError(t, err)
+	require.Equal(t, before.Hash(), restored.Hash())
+}

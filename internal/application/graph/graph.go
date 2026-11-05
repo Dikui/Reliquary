@@ -57,7 +57,14 @@ func (c *changes) flush() error {
 		if old.Version == 0 {
 			version = 1
 		}
-		deleted := count == 0
+		deleted := errors.Is(err, gorm.ErrRecordNotFound)
+		if !deleted && count == 0 {
+			var library types.Library
+			if e := c.tx.Select("id,entity_mode").Where("id=?", row.LibraryID).First(&library).Error; e != nil {
+				return e
+			}
+			deleted = !library.ManagesEntities()
+		}
 		if deleted {
 			if e := c.tx.Where("id=?", id).Delete(&types.Relation{}).Error; e != nil {
 				return e
@@ -138,10 +145,10 @@ func canonicalEntity(tx *gorm.DB, spaceID uint64, libraryID, id string) (string,
 }
 func Enabled(tx *gorm.DB, entry *types.Entry) (bool, error) {
 	var library types.Library
-	if err := tx.Select("id,template").Where("id=? AND space_id=?", entry.LibraryID, entry.SpaceID).First(&library).Error; err != nil {
+	if err := tx.Select("id,template,entity_mode").Where("id=? AND space_id=?", entry.LibraryID, entry.SpaceID).First(&library).Error; err != nil {
 		return false, err
 	}
-	if !library.ExtractsEntities() {
+	if library.ManagesEntities() || !library.ExtractsEntities() {
 		return false, nil
 	}
 	if entry.Graph != nil {

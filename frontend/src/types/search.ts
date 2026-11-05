@@ -6,7 +6,7 @@ export const SEARCH_SOURCES = ['article', 'mine', 'report'] as const
 export type SearchSource = typeof SEARCH_SOURCES[number]
 export interface SearchEntity { id: string; library_id?: string; canonical_name: string; entity_type: EntityType; aliases?: string[] }
 export interface SourceLocation { heading_path: string[]; paragraph: number; start: number; end: number; body_hash: string; mapping: string }
-export interface SearchSnippet { chunk_type?: string; locations?: SourceLocation[]; chunk_id: string; content: string; chunk_index: number; score: number; match_type: string; image_path?: string }
+export interface SearchSnippet { context?: string; context_locations?: SourceLocation[]; chunk_type?: string; locations?: SourceLocation[]; chunk_id: string; content: string; chunk_index: number; score: number; match_type: string; image_path?: string }
 export interface SearchEntry {
   library_id?: string
   library_name?: string
@@ -35,6 +35,7 @@ export interface SearchEntry {
   acquisition?: Acquisition | ''
 }
 export interface SearchFilters {
+  include_descendants?: boolean
   content_types: string[]
   entity_ids: string[]
   topic_ids: string[]

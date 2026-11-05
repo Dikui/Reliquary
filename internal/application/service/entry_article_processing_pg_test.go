@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	"reliquary/internal/types"
 
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 type articleProcessingChat struct {
@@ -404,4 +406,55 @@ func TestArticleProcessingDefaultLimits(t *testing.T) {
 	require.Equal(t, 6000, chars)
 	require.Equal(t, 1000, completion)
 
+}
+
+// Managed libraries associate recognized products without extending the catalog
+// or allowing document processing to replace manually maintained relationships.
+func TestManagedArticleProcessingOnlyAssociatesExistingEntities(t *testing.T) {
+	h := newArticleProcessingHarness(t, false)
+	h.library.EntityMode = types.EntityModeManaged
+	require.NoError(t, h.db.Save(h.library).Error)
+	widget := types.Entity{ID: "managed-widget", SpaceID: h.library.SpaceID, LibraryID: h.library.ID, CanonicalName: "Widget", NormalizedName: "widget", EntityType: "product", Description: "Maintained description"}
+	parent := types.Entity{ID: "managed-parent", SpaceID: h.library.SpaceID, LibraryID: h.library.ID, CanonicalName: "Family", NormalizedName: "family", EntityType: "product"}
+	require.NoError(t, h.db.Create(&[]types.Entity{widget, parent}).Error)
+	require.NoError(t, h.db.Create(&types.LibraryRelationType{LibraryID: h.library.ID, Name: "belongs_to", Enabled: true}).Error)
+	relation := types.Relation{ID: "managed-relation", SpaceID: h.library.SpaceID, LibraryID: h.library.ID, SubjectID: widget.ID, ObjectID: parent.ID, RelationType: "belongs_to", Version: 1}
+	require.NoError(t, h.db.Create(&relation).Error)
+	var output map[string]any
+	require.NoError(t, json.Unmarshal([]byte(articleProcessingOutput(t, "event", []types.EntityCandidate{{Name: "Widget", EntityType: "product", Description: "Overwrite attempt"}, {Name: "Unknown", EntityType: "product"}}, []string{})), &output))
+	output["relations"] = []extractedRelation{{Subject: "Widget", Object: "Unknown", Type: "invented", EvidenceIDs: []int{1}}}
+	raw, err := json.Marshal(output)
+	require.NoError(t, err)
+	h.processor.output = string(raw)
+	entry := h.upload(t, "managed-products", "Widget and Unknown have new versions. Widget is still part of Family.")
+	require.Equal(t, types.ParseStatusCompleted, entry.ParseStatus, entry.ErrorMessage)
+	var links []types.EntryEntity
+	require.NoError(t, h.db.Where("entry_id=?", entry.ID).Find(&links).Error)
+	require.Len(t, links, 1)
+	require.Equal(t, widget.ID, links[0].EntityID)
+	require.NotEmpty(t, links[0].Evidence)
+	require.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte(entry.VaultBody))), links[0].BodyHash)
+	var saved types.Entity
+	require.NoError(t, h.db.First(&saved, "id=?", widget.ID).Error)
+	require.Equal(t, widget.Description, saved.Description)
+	var count int64
+	require.NoError(t, h.db.Model(&types.Entity{}).Count(&count).Error)
+	require.EqualValues(t, 2, count)
+	require.NoError(t, h.db.Model(&types.Relation{}).Count(&count).Error)
+	require.EqualValues(t, 1, count)
+	result, err := NewGraphSearchService(h.db, nil).Search(h.ctx, types.GraphSearchRequest{Libraries: []string{h.library.ID}, Mode: "all"})
+	require.NoError(t, err)
+	require.Len(t, result.Edges, 1, "source-free managed relationships remain visible")
+	require.NoError(t, h.service.cleanupLibraryRebuild(h.ctx, entry))
+	require.NoError(t, h.db.Model(&types.Relation{}).Count(&count).Error)
+	require.EqualValues(t, 1, count)
+	require.NoError(t, h.db.Transaction(func(tx *gorm.DB) error {
+		if err := graph.Lock(tx, h.library.SpaceID); err != nil {
+			return err
+		}
+		_, err := graph.DeleteRelationTx(tx, h.library.SpaceID, relation.ID, "test")
+		return err
+	}))
+	require.NoError(t, h.db.Model(&types.GraphPendingSync{}).Where("relation_id=? AND deleted=true", relation.ID).Count(&count).Error)
+	require.EqualValues(t, 2, count, "explicit deletion notifies both endpoints")
 }

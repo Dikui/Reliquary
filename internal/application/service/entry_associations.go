@@ -88,7 +88,7 @@ func (s *entryService) loadEntryAssociations(ctx context.Context, spaceID uint64
 	}
 	if err := s.db.WithContext(ctx).Table("entry_entities AS ke").
 		Select("ke.entry_id, e.*").Joins("JOIN entities AS e ON e.space_id=ke.space_id AND e.id=ke.entity_id").
-		Where("ke.space_id=? AND ke.entry_id IN ? AND e.merged_into_id=''", spaceID, ids).
+		Where("ke.space_id=? AND ke.entry_id IN ? AND e.merged_into_id='' AND ke.excluded=false", spaceID, ids).
 		Order("e.canonical_name,e.id").Find(&entityRows).Error; err != nil {
 		return err
 	}

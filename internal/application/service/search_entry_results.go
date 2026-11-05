@@ -214,7 +214,7 @@ func (s *searchService) entrySearchAssociations(ctx context.Context, spaceID uin
 	}
 	var rows []entityRow
 	err := s.db.WithContext(ctx).Table("entities e").
-		Joins("JOIN entry_entities ke ON ke.entity_id=e.id AND ke.space_id=e.space_id").
+		Joins("JOIN entry_entities ke ON ke.entity_id=e.id AND ke.space_id=e.space_id AND ke.excluded=false").
 		Where("e.space_id=? AND ke.entry_id IN ?", spaceID, ids).
 		Select("ke.entry_id,e.id,e.canonical_name,e.entity_type").
 		Order("e.canonical_name,e.id").Scan(&rows).Error
@@ -275,7 +275,7 @@ func (s *searchService) Options(ctx context.Context, libraries []string) (*types
 		return nil, fmt.Errorf("entry search requires PostgreSQL")
 	}
 	options := &types.EntrySearchOptions{ContentTypes: []string{}, Entities: []types.EntrySearchEntity{}, Topics: []types.EntrySearchTopic{}}
-	entitiesQuery := s.db.WithContext(ctx).Table("entities").Where("space_id=? AND merged_into_id=''", spaceID)
+	entitiesQuery := s.db.WithContext(ctx).Table("entities").Where("space_id=? AND merged_into_id='' AND archived_at IS NULL", spaceID)
 	contentTypesQuery := s.db.WithContext(ctx).Table("library_content_types ct").Joins("JOIN libraries l ON l.id=ct.library_id").Where("l.space_id=? AND l.deleted_at IS NULL AND ct.enabled=true", spaceID)
 	topicsQuery := s.db.WithContext(ctx).Table("topics").Where("space_id=?", spaceID)
 	if len(libraries) > 0 {

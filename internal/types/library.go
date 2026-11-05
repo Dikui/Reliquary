@@ -20,6 +20,8 @@ const (
 
 // Library represents a library entity
 type Library struct {
+	EntityMode         string                `json:"entity_mode" gorm:"not null;default:extracted"`
+	EntitySchema       EntitySchema          `json:"entity_schema" gorm:"serializer:json;type:jsonb;not null;default:'{}'"`
 	Color              int                   `json:"color" gorm:"not null;default:1"`
 	SystemRole         string                `json:"system_role"`
 	Template           string                `json:"template" gorm:"default:standard"`
@@ -171,6 +173,9 @@ func (c *ChunkingConfig) Scan(value interface{}) error {
 func (library *Library) EnsureDefaults() {
 	if library == nil {
 		return
+	}
+	if library.EntityMode == "" {
+		library.EntityMode = EntityModeExtracted
 	}
 	library.Type = LibraryTypeDocument
 	if library.PromptOverrides == nil {

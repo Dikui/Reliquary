@@ -13,6 +13,7 @@ export function buildSearchRequest(query: string, filters: SearchFilters): Searc
     ...(filters.published_from ? { published_from: filters.published_from } : {}),
     ...(filters.published_to ? { published_to: filters.published_to } : {}),
     ...(typeof filters.starred === 'boolean' ? { starred: filters.starred } : {}),
+    ...(filters.include_descendants ? { include_descendants: true } : {}),
     collapse_similar: filters.collapse_similar,
     limit: filters.limit,
   }
@@ -25,6 +26,7 @@ export function searchStateFromURL(query: Record<string, URLValue>): { query: st
   filters.content_types = list('content_types').filter(value => value.trim() && [...value].length <= 100)
   filters.entity_ids = list('entity_ids')
   filters.topic_ids = list('topic_ids')
+  if (first('include_descendants') === 'true') filters.include_descendants = true
   filters.published_from = first('published_from')
   filters.published_to = first('published_to')
   if (first('starred') === 'true' || first('starred') === 'false') filters.starred = first('starred') === 'true'

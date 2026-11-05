@@ -36,7 +36,7 @@ func (s *GraphSearchService) hydrate(ctx context.Context, space uint64, librarie
 		nodeIDs = append(nodeIDs, r.SubjectID, r.ObjectID)
 	}
 	var liveIDs []string
-	if err := s.db.WithContext(ctx).Model(&types.Entity{}).Where("space_id=? AND id IN ? AND coalesce(merged_into_id,'')=''", space, nodeIDs).Pluck("id", &liveIDs).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&types.Entity{}).Where("space_id=? AND id IN ? AND coalesce(merged_into_id,'')='' AND archived_at IS NULL", space, nodeIDs).Pluck("id", &liveIDs).Error; err != nil {
 		return nil, err
 	}
 	var sources []types.RelationSource
@@ -71,7 +71,7 @@ func (s *GraphSearchService) hydrate(ctx context.Context, space uint64, librarie
 	}
 	for _, e := range edges {
 		r, ok := rows[e.ID]
-		if !ok || r.LibraryID != e.LibraryID || r.SubjectID != e.SubjectID || r.ObjectID != e.ObjectID || r.RelationType != e.RelationType || !slices.Contains(liveIDs, r.SubjectID) || !slices.Contains(liveIDs, r.ObjectID) || len(sourceMap[e.ID]) == 0 {
+		if !ok || r.LibraryID != e.LibraryID || r.SubjectID != e.SubjectID || r.ObjectID != e.ObjectID || r.RelationType != e.RelationType || !slices.Contains(liveIDs, r.SubjectID) || !slices.Contains(liveIDs, r.ObjectID) || (len(sourceMap[e.ID]) == 0 && libMap[r.LibraryID].EntityMode != types.EntityModeManaged) {
 			continue
 		}
 		out = append(out, types.GraphSearchEdge{ID: r.ID, SubjectID: r.SubjectID, ObjectID: r.ObjectID, LibraryID: r.LibraryID, RelationType: r.RelationType, Version: r.Version, Sources: sourceMap[r.ID], SourceCount: len(sourceMap[r.ID])})

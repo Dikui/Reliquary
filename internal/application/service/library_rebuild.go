@@ -188,10 +188,13 @@ func (s *entryService) cleanupLibraryRebuild(ctx context.Context, entry *types.E
 				return err
 			}
 		}
-		for _, value := range []any{&types.Chunk{}, &types.EntryEntity{}, &types.EntryProcessingOutput{}} {
+		for _, value := range []any{&types.Chunk{}, &types.EntryProcessingOutput{}} {
 			if err := tx.Where("entry_id=? AND space_id=?", entry.ID, entry.SpaceID).Delete(value).Error; err != nil {
 				return err
 			}
+		}
+		if err := tx.Where("entry_id=? AND space_id=? AND origin<>?", entry.ID, entry.SpaceID, "manual").Delete(&types.EntryEntity{}).Error; err != nil {
+			return err
 		}
 		if err := tx.Where("entry_id=? AND space_id=? AND source=?", entry.ID, entry.SpaceID, types.TopicSourceModel).Delete(&types.EntryTopic{}).Error; err != nil {
 			return err

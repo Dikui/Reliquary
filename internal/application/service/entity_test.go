@@ -624,3 +624,65 @@ func TestEntityLibrariesKeepNamesAliasesRecallAndMergesIndependent(t *testing.T)
 	require.Len(t, detail.Entries, 1)
 	require.Equal(t, firstArticle.ID, detail.Entries[0].ID)
 }
+
+// Managed-library contract: automatic matching never owns the entity catalog,
+// and explicit document decisions survive both matching and rebuilding.
+func TestManagedEntityMatchingPreservesCatalogAndManualDecisions(t *testing.T) {
+	db, ctx, svc := entityFixture(t)
+	require.NoError(t, db.Model(&types.Library{}).Where("id=?", "entity-library").Update("entity_mode", types.EntityModeManaged).Error)
+	entry := entityArticle(t, db, "managed-article")
+	entry.VaultBody = "Widget and Unknown are mentioned."
+	require.NoError(t, db.Save(entry).Error)
+	widget := entityRecord("widget", "Widget", "product")
+	widget.Code, widget.Description = "W-1", "Maintained description"
+	manual := entityRecord("manual", "Manual", "product")
+	excluded := entityRecord("excluded", "Excluded", "product")
+	archived := entityRecord("archived", "Archived", "product")
+	now := time.Now()
+	archived.ArchivedAt = &now
+	ambiguous := entityRecord("ambiguous", "W-1", "product")
+	require.NoError(t, db.Create(&[]types.Entity{widget, manual, excluded, archived, ambiguous}).Error)
+	require.NoError(t, db.Create(&types.EntityAlias{ID: "widget-alias", SpaceID: 1, LibraryID: "entity-library", EntityType: "product", EntityID: widget.ID, Alias: "Gadget", NormalizedAlias: "gadget"}).Error)
+	require.NoError(t, db.Create(&[]types.EntryEntity{
+		{SpaceID: 1, EntryID: entry.ID, EntityID: manual.ID, Origin: "manual"},
+		{SpaceID: 1, EntryID: entry.ID, EntityID: excluded.ID, Origin: "manual", Excluded: true},
+	}).Error)
+	resolved, err := svc.ResolveEntities(ctx, entry.ID, []types.EntityCandidate{
+		{Name: "Gadget", EntityType: "product", Description: "Untrusted replacement"},
+		{Name: "Unknown", EntityType: "product"}, {Name: "Archived", EntityType: "product"},
+		{Name: "Excluded", EntityType: "product"}, {Name: "W-1", EntityType: "product"},
+	})
+	require.NoError(t, err)
+	require.Len(t, resolved, 1)
+	require.Equal(t, widget.ID, resolved[0].ID)
+	require.Equal(t, "Maintained description", resolved[0].Description)
+	var count int64
+	require.NoError(t, db.Model(&types.Entity{}).Count(&count).Error)
+	require.EqualValues(t, 5, count)
+	require.NoError(t, db.Model(&types.EntityAlias{}).Count(&count).Error)
+	require.EqualValues(t, 1, count)
+	require.NoError(t, db.Model(&types.EntityMergeSuggestion{}).Count(&count).Error)
+	require.Zero(t, count)
+	listed, err := svc.EntityDetail(ctx, excluded.ID)
+	require.NoError(t, err)
+	require.Empty(t, listed.Entries)
+	service := &entryService{db: db}
+	require.NoError(t, service.cleanupLibraryRebuild(ctx, entry))
+	var links []types.EntryEntity
+	require.NoError(t, db.Where("entry_id=?", entry.ID).Order("entity_id").Find(&links).Error)
+	require.Len(t, links, 2)
+	require.Equal(t, "manual", links[0].Origin)
+	require.Equal(t, "manual", links[1].Origin)
+	require.NoError(t, db.Model(&types.Entity{}).Count(&count).Error)
+	require.EqualValues(t, 5, count, "rebuilding must not prune the managed catalog")
+	var library types.Library
+	require.NoError(t, db.First(&library, "id=?", "entity-library").Error)
+	vault := &VaultDocumentService{db: db}
+	restored, err := vault.restoreVaultArticle(ctx, &library, "managed.md", VaultArticleHeader{ID: uuid.NewString(), Title: "Restored", CollectedAt: time.Now().Format(time.RFC3339), Entities: []string{"[[Gadget]]", "[[Unknown]]", "[[Archived]]", "[[W-1]]"}}, []byte("Gadget"))
+	require.NoError(t, err)
+	require.NoError(t, db.Where("entry_id=?", restored.ID).Find(&links).Error)
+	require.Len(t, links, 1)
+	require.Equal(t, widget.ID, links[0].EntityID)
+	require.NoError(t, db.Model(&types.Entity{}).Count(&count).Error)
+	require.EqualValues(t, 5, count, "restoring headers must not extend the managed catalog")
+}

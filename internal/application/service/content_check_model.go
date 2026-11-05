@@ -52,7 +52,7 @@ func (s *ContentCheckService) checkEntry(ctx context.Context, model chat.Chat, m
 		}
 		cache[entryID] = &e
 		var entities []types.Entity
-		if err := s.db.WithContext(ctx).Model(&types.Entity{}).Joins("JOIN entry_entities l ON l.entity_id=entities.id AND l.space_id=entities.space_id").Where("l.entry_id=? AND l.space_id=?", entryID, e.SpaceID).Find(&entities).Error; err != nil {
+		if err := s.db.WithContext(ctx).Model(&types.Entity{}).Joins("JOIN entry_entities l ON l.entity_id=entities.id AND l.space_id=entities.space_id").Where("l.entry_id=? AND l.space_id=? AND l.excluded=false", entryID, e.SpaceID).Find(&entities).Error; err != nil {
 			return nil, err
 		}
 		var relations []struct {
