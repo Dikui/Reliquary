@@ -19,8 +19,8 @@ func managedHistoryFixture(t *testing.T) (*gorm.DB, context.Context, *EntityServ
 	return db, ctx, svc
 }
 
-// Spec: managed catalog evolution. Effective dates order snapshots; revisions
-// break same-date ties and stale writes cannot append history.
+// Spec (medium): ADR 0022 / MEL-03. Effective dates order snapshots; backdated
+// edits propagate forward, revisions break same-date ties and stale writes cannot append history.
 func TestManagedEntityAttributeTimeline(t *testing.T) {
 	db, ctx, svc := managedHistoryFixture(t)
 	now := time.Now().UTC().Truncate(time.Second)
@@ -31,7 +31,7 @@ func TestManagedEntityAttributeTimeline(t *testing.T) {
 		at    time.Time
 		value int
 		want  int
-	}{{current, 2, 2}, {backdated, 3, 2}, {future, 4, 2}, {current, 5, 5}} {
+	}{{current, 2, 2}, {backdated, 3, 3}, {future, 4, 3}, {current, 5, 5}} {
 		attrs := map[string]any{"capacity": change.value}
 		entity, err = svc.UpdateManagedEntity(ctx, entity.ID, types.ManagedEntityPatch{Revision: entity.Revision, Attributes: &attrs, EffectiveAt: &change.at})
 		require.NoError(t, err)
@@ -120,8 +120,20 @@ func TestManagedEntityReorganizationPreservesProvenance(t *testing.T) {
 	require.Equal(t, "manual", link.Origin)
 	require.Equal(t, "original-body", link.BodyHash)
 	require.Len(t, link.Evidence, 1)
-	split, err := svc.SplitManagedEntity(ctx, target.ID, types.ManagedEntitySplitInput{Revision: target.Revision, NewEntity: types.ManagedEntityInput{Name: "Split product", Kind: "product", Attributes: map[string]any{"capacity": 3}}, EntryIDs: []string{entry.ID}, RelationIDs: []string{moved.ID}})
+	// MEL-03 (medium regression): backdating split attributes leaves the source timeline intact.
+	splitEffective := time.Now().Add(-35 * 24 * time.Hour)
+	split, err := svc.SplitManagedEntity(ctx, target.ID, types.ManagedEntitySplitInput{Revision: target.Revision, NewEntity: types.ManagedEntityInput{Name: "Split product", Kind: "product", Attributes: map[string]any{"capacity": 3}}, EntryIDs: []string{entry.ID}, RelationIDs: []string{moved.ID}, EffectiveAt: &splitEffective})
 	require.NoError(t, err)
+	splitAttributes, err := svc.EntityAttributes(ctx, split.ID, splitEffective)
+	require.NoError(t, err)
+	require.True(t, splitAttributes.Known)
+	require.EqualValues(t, 3, splitAttributes.Attributes["capacity"])
+	beforeSplit, err := svc.EntityAttributes(ctx, split.ID, splitEffective.Add(-time.Second))
+	require.NoError(t, err)
+	require.False(t, beforeSplit.Known)
+	futureTarget, err = svc.EntityAttributes(ctx, target.ID, future)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, futureTarget.Attributes["capacity"])
 	moved = types.Relation{}
 	require.NoError(t, db.Where("subject_id=? AND valid_to IS NULL", split.ID).First(&moved).Error)
 	require.Equal(t, split.ID, moved.SubjectID)
