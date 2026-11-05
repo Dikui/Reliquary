@@ -406,6 +406,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 	if err := s.repo.UpdateEntry(ctx, k); err != nil {
 		return err
 	}
+	localIDs := []string{}
 	if s.db != nil {
 		if !library.ExtractsEntities() && !library.ManagesEntities() {
 			result.Entities = []articleProcessingEntity{}
@@ -441,13 +442,8 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		if err := s.saveProcessingOutput(ctx, library, k, body, result, resolved); err != nil {
 			return err
 		}
-		ids := []string{}
 		for _, entity := range resolved {
-			ids = append(ids, entity.ID)
-		}
-		_, err := s.associateProductMentions(ctx, k, body, ids...)
-		if err != nil {
-			return err
+			localIDs = append(localIDs, entity.ID)
 		}
 		if err := NewTopicService(s.db).ReplaceEntryTopics(ctx, k.ID, result.Topics); err != nil {
 			return err
@@ -482,6 +478,17 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 			return err
 		}
 		if err := s.removeParsedBodyCopies(ctx, library, k, body, images); err != nil {
+			return err
+		}
+	}
+	if s.db != nil {
+		// Publication may rewrite image destinations. Match only after the body
+		// is saved, and keep the locked body check with link replacement.
+		matchedBody := body
+		if writeFiles {
+			matchedBody = k.VaultBody
+		}
+		if _, err := s.associateProductMentions(ctx, k, matchedBody, localIDs...); err != nil {
 			return err
 		}
 	}
