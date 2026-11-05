@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -86,10 +87,39 @@ func saveManagedAliases(tx *gorm.DB, entity *types.Entity, aliases []string) err
 		}
 		entity.Aliases = append(entity.Aliases, alias)
 	}
-	return nil
+	// Removed spellings lose their overrides; unrelated edits retain them.
+	seen[normalizeEntityName(entity.Code)] = true
+	settings := make(map[string]bool, len(entity.AutoMatch))
+	for name, enabled := range entity.AutoMatch {
+		key := normalizeEntityName(name)
+		if key == "" || len([]rune(name)) > 512 {
+			return apperrors.NewBadRequestError("automatic matching settings require valid names")
+		}
+		if previous, exists := settings[key]; exists && previous != enabled {
+			return apperrors.NewBadRequestError("conflicting automatic matching settings for the same name")
+		}
+		if seen[key] {
+			settings[key] = enabled
+		}
+	}
+	if len(entity.AutoMatch) > 102 {
+		return apperrors.NewBadRequestError("too many automatic matching settings")
+	}
+	entity.AutoMatch = settings
+	encoded, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+	return tx.Model(&types.Entity{}).Where("id=? AND space_id=?", entity.ID, entity.SpaceID).UpdateColumn("auto_match", types.JSON(encoded)).Error
 }
 
 func queueManagedEntity(tx *gorm.DB, entity *types.Entity) error {
+	// All catalog writers use this path. A persisted stamp also invalidates
+	// matcher caches in other processes, including rapid edits in one transaction.
+	if err := tx.Model(&types.Library{}).Where("id=? AND space_id=?", entity.LibraryID, entity.SpaceID).
+		UpdateColumn("updated_at", gorm.Expr("GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')")).Error; err != nil {
+		return err
+	}
 	if err := tx.Create(&types.GraphPendingSync{ID: uuid.NewString(), SpaceID: entity.SpaceID, EntityID: entity.ID, RelationVersion: entity.Revision, Deleted: entity.ArchivedAt != nil, CreatedAt: time.Now()}).Error; err != nil {
 		return err
 	}
@@ -117,7 +147,7 @@ func (s *EntityService) CreateManagedEntity(ctx context.Context, libraryID strin
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, apperrors.NewUnauthorizedError("entity editor required")
 	}
-	entity := types.Entity{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: libraryID, EntityType: "product", Kind: input.Kind, Code: input.Code, CanonicalName: input.Name, Description: input.Description, Attributes: input.Attributes, Revision: 1, EmbeddingNeedsRebuild: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	entity := types.Entity{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: libraryID, EntityType: "product", Kind: input.Kind, Code: input.Code, CanonicalName: input.Name, Description: input.Description, Attributes: input.Attributes, AutoMatch: input.AutoMatch, Revision: 1, EmbeddingNeedsRebuild: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
@@ -207,6 +237,9 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		}
 		if patch.Attributes != nil {
 			entity.Attributes = *patch.Attributes
+		}
+		if patch.AutoMatch != nil {
+			entity.AutoMatch = *patch.AutoMatch
 		}
 		if err := validateManagedEntity(library, &entity); err != nil {
 			return err

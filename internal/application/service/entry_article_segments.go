@@ -2,12 +2,8 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"reliquary/internal/config"
 	"reliquary/internal/infrastructure/docparser"
@@ -375,44 +371,4 @@ func (s *entryService) mergeSegmentSummaries(ctx context.Context, library *types
 	}
 	s.tracker().EndSpan(ctx, span, types.JSONMap{"model_calls": calls.Snapshot(), "segment_count": len(parts)})
 	return summary, nil
-}
-
-// Evidence coordinates describe the original Markdown, and are only saved if
-// that body is still current. Manual decisions and their evidence remain owned
-// by the explicit writer.
-func (s *entryService) saveManagedLinkEvidence(ctx context.Context, entry *types.Entry, body string, result *articleProcessingResult) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := lockEntitySpaceShared(tx, entry.SpaceID); err != nil {
-			return err
-		}
-		var current types.Entry
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", entry.ID, entry.SpaceID).First(&current).Error; err != nil {
-			return err
-		}
-		if current.VaultBody != body {
-			return errors.New("entry body changed during entity matching")
-		}
-		locations := map[string][]types.SourceLocation{}
-		for _, candidate := range result.Entities {
-			id := result.ResolvedEntities[entityNameKey(*candidate.Type, candidate.Name)]
-			if id != "" {
-				locations[id] = append(locations[id], candidate.Evidence...)
-			}
-		}
-		for id, evidence := range locations {
-			if evidence == nil {
-				evidence = []types.SourceLocation{}
-			}
-			encoded, err := json.Marshal(evidence)
-			if err != nil {
-				return err
-			}
-			if err := tx.Model(&types.EntryEntity{}).Where("space_id=? AND entry_id=? AND entity_id=? AND origin<>? AND excluded=false", entry.SpaceID, entry.ID, id, "manual").
-				Where("EXISTS (SELECT 1 FROM entities e WHERE e.id=entry_entities.entity_id AND e.archived_at IS NULL)").
-				Updates(map[string]any{"evidence": types.JSON(encoded), "body_hash": fmt.Sprintf("%x", sha256.Sum256([]byte(body)))}).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	})
 }

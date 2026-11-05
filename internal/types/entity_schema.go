@@ -234,25 +234,27 @@ func ValidateFieldAttributes(definitions []EntityFieldDefinition, attributes map
 }
 
 type ManagedEntityInput struct {
-	EffectiveAt *time.Time     `json:"effective_at,omitempty"`
-	Name        string         `json:"name"`
-	Kind        string         `json:"kind"`
-	Code        string         `json:"code"`
-	Description string         `json:"description"`
-	Aliases     []string       `json:"aliases"`
-	Attributes  map[string]any `json:"attributes"`
+	AutoMatch   map[string]bool `json:"auto_match"`
+	EffectiveAt *time.Time      `json:"effective_at,omitempty"`
+	Name        string          `json:"name"`
+	Kind        string          `json:"kind"`
+	Code        string          `json:"code"`
+	Description string          `json:"description"`
+	Aliases     []string        `json:"aliases"`
+	Attributes  map[string]any  `json:"attributes"`
 }
 
 type ManagedEntityPatch struct {
-	EffectiveAt *time.Time      `json:"effective_at,omitempty"`
-	Revision    int64           `json:"revision"`
-	Name        *string         `json:"name"`
-	Kind        *string         `json:"kind"`
-	Code        *string         `json:"code"`
-	Description *string         `json:"description"`
-	Aliases     *[]string       `json:"aliases"`
-	Attributes  *map[string]any `json:"attributes"`
-	Archived    *bool           `json:"archived"`
+	AutoMatch   *map[string]bool `json:"auto_match"`
+	EffectiveAt *time.Time       `json:"effective_at,omitempty"`
+	Revision    int64            `json:"revision"`
+	Name        *string          `json:"name"`
+	Kind        *string          `json:"kind"`
+	Code        *string          `json:"code"`
+	Description *string          `json:"description"`
+	Aliases     *[]string        `json:"aliases"`
+	Attributes  *map[string]any  `json:"attributes"`
+	Archived    *bool            `json:"archived"`
 }
 
 type ManagedRelationInput struct {

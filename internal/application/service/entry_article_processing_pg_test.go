@@ -414,9 +414,10 @@ func TestManagedArticleProcessingOnlyAssociatesExistingEntities(t *testing.T) {
 	h := newArticleProcessingHarness(t, false)
 	h.library.EntityMode = types.EntityModeManaged
 	require.NoError(t, h.db.Save(h.library).Error)
-	widget := types.Entity{ID: "managed-widget", SpaceID: h.library.SpaceID, LibraryID: h.library.ID, CanonicalName: "Widget", NormalizedName: "widget", EntityType: "product", Description: "Maintained description"}
+	widget := types.Entity{ID: "managed-widget", SpaceID: h.library.SpaceID, LibraryID: h.library.ID, CanonicalName: "Widget Pro", NormalizedName: "widget pro", EntityType: "product", Description: "Maintained description"}
 	parent := types.Entity{ID: "managed-parent", SpaceID: h.library.SpaceID, LibraryID: h.library.ID, CanonicalName: "Family", NormalizedName: "family", EntityType: "product"}
-	require.NoError(t, h.db.Create(&[]types.Entity{widget, parent}).Error)
+	short := types.Entity{ID: "managed-short", SpaceID: h.library.SpaceID, LibraryID: h.library.ID, CanonicalName: "Widget", NormalizedName: "widget", EntityType: "product"}
+	require.NoError(t, h.db.Create(&[]types.Entity{widget, parent, short}).Error)
 	require.NoError(t, h.db.Create(&types.LibraryRelationType{LibraryID: h.library.ID, Name: "belongs_to", Enabled: true}).Error)
 	relation := types.Relation{ID: "managed-relation", SpaceID: h.library.SpaceID, LibraryID: h.library.ID, SubjectID: widget.ID, ObjectID: parent.ID, RelationType: "belongs_to", Version: 1}
 	require.NoError(t, h.db.Create(&relation).Error)
@@ -426,7 +427,7 @@ func TestManagedArticleProcessingOnlyAssociatesExistingEntities(t *testing.T) {
 	raw, err := json.Marshal(output)
 	require.NoError(t, err)
 	h.processor.output = string(raw)
-	entry := h.upload(t, "managed-products", "Widget and Unknown have new versions. Widget is still part of Family.")
+	entry := h.upload(t, "managed-products", "Widget Pro and Unknown have new versions. Widget Pro is still part of Family.")
 	require.Equal(t, types.ParseStatusCompleted, entry.ParseStatus, entry.ErrorMessage)
 	var links []types.EntryEntity
 	require.NoError(t, h.db.Where("entry_id=?", entry.ID).Find(&links).Error)
@@ -441,7 +442,7 @@ func TestManagedArticleProcessingOnlyAssociatesExistingEntities(t *testing.T) {
 	require.Equal(t, widget.Description, saved.Description)
 	var count int64
 	require.NoError(t, h.db.Model(&types.Entity{}).Count(&count).Error)
-	require.EqualValues(t, 2, count)
+	require.EqualValues(t, 3, count)
 	require.NoError(t, h.db.Model(&types.Relation{}).Count(&count).Error)
 	require.EqualValues(t, 1, count)
 	result, err := NewGraphSearchService(h.db, nil).Search(h.ctx, types.GraphSearchRequest{Libraries: []string{h.library.ID}, Mode: "all"})

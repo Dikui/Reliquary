@@ -10,6 +10,7 @@ type Entity struct {
 	Kind                     string                  `json:"kind" gorm:"not null;default:''"`
 	Code                     string                  `json:"code" gorm:"not null;default:''"`
 	Attributes               map[string]any          `json:"attributes" gorm:"serializer:json;type:jsonb;not null;default:'{}'"`
+	AutoMatch                map[string]bool         `json:"auto_match" gorm:"serializer:json;type:jsonb;not null;default:'{}'"`
 	Revision                 int64                   `json:"revision" gorm:"not null;default:1"`
 	ArchivedAt               *time.Time              `json:"archived_at,omitempty"`
 	LibraryID                string                  `json:"library_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entity_canonical"`

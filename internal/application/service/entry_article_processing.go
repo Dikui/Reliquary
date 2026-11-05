@@ -425,7 +425,7 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		}
 		result.Entities = accepted
 		resolved := []types.Entity{}
-		if library.ExtractsEntities() || library.ManagesEntities() {
+		if library.ExtractsEntities() && !library.ManagesEntities() {
 			var err error
 			resolved, err = s.resolveProcessingEntities(ctx, k, candidates, result)
 			if err != nil {
@@ -433,10 +433,10 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 			}
 		}
 		if library.ManagesEntities() {
+			// Product associations are computed once from the saved body below.
+			result.Entities = []articleProcessingEntity{}
+			result.ResolvedEntities = nil
 			result.Relations = []extractedRelation{}
-			if err := s.saveManagedLinkEvidence(ctx, k, body, result); err != nil {
-				return err
-			}
 		}
 		if err := s.saveProcessingOutput(ctx, library, k, body, result, resolved); err != nil {
 			return err
@@ -445,16 +445,8 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 		for _, entity := range resolved {
 			ids = append(ids, entity.ID)
 		}
-		productIDs, err := s.associateProductMentions(ctx, k, body)
+		_, err := s.associateProductMentions(ctx, k, body, ids...)
 		if err != nil {
-			return err
-		}
-		ids = append(ids, productIDs...)
-		query := s.db.WithContext(ctx).Where("space_id=? AND entry_id=? AND origin<>?", k.SpaceID, k.ID, "manual")
-		if len(ids) > 0 {
-			query = query.Where("entity_id NOT IN ?", ids)
-		}
-		if err := query.Delete(&types.EntryEntity{}).Error; err != nil {
 			return err
 		}
 		if err := NewTopicService(s.db).ReplaceEntryTopics(ctx, k.ID, result.Topics); err != nil {

@@ -145,3 +145,98 @@ func TestManagedEntityReorganizationPreservesProvenance(t *testing.T) {
 	_, err = svc.MergeManagedEntities(ctx, peer.ID, types.ManagedEntityMergeInput{Revision: peer.Revision, SourceID: conflict.ID, SourceRevision: conflict.Revision, Attributes: map[string]any{}})
 	require.Error(t, err)
 }
+
+type mergeDropFixture struct {
+	db                                                                 *gorm.DB
+	ctx                                                                context.Context
+	svc                                                                *EntityService
+	target, source                                                     *types.Entity
+	sourceParent, targetParent, sourceDuplicate, targetDuplicate, keep *types.Relation
+}
+
+func newMergeDropFixture(t *testing.T) mergeDropFixture {
+	t.Helper()
+	db, ctx, svc := managedHistoryFixture(t)
+	create := func(name string) *types.Entity {
+		row, err := svc.CreateManagedEntity(ctx, "entity-library", types.ManagedEntityInput{Name: name, Kind: "product", Attributes: map[string]any{}})
+		require.NoError(t, err)
+		return row
+	}
+	target, source, parentA, parentB, peer, other := create("Target"), create("Source"), create("Parent A"), create("Parent B"), create("Peer"), create("Other")
+	require.NoError(t, db.Create(&[]types.LibraryRelationType{{LibraryID: "entity-library", Name: "belongs", Enabled: true, Hierarchical: true}, {LibraryID: "entity-library", Name: "related", Enabled: true}}).Error)
+	relate := func(from, to *types.Entity, kind string) *types.Relation {
+		row, err := svc.SaveManagedRelation(ctx, "entity-library", "", types.ManagedRelationInput{SubjectID: from.ID, ObjectID: to.ID, RelationType: kind})
+		require.NoError(t, err)
+		return row
+	}
+	return mergeDropFixture{db: db, ctx: ctx, svc: svc, target: target, source: source, sourceParent: relate(source, parentA, "belongs"), targetParent: relate(target, parentB, "belongs"), sourceDuplicate: relate(source, peer, "related"), targetDuplicate: relate(target, peer, "related"), keep: relate(source, other, "related")}
+}
+
+// Requirement 4: explicit source-edge drops resolve parent/duplicate conflicts
+// without discarding the target's relationships or unselected source edges.
+func TestManagedEntityMergeDropsChosenSourceRelations(t *testing.T) {
+	f := newMergeDropFixture(t)
+	var err error
+	f.source, err = f.svc.UpdateManagedEntity(f.ctx, f.source.ID, types.ManagedEntityPatch{Revision: f.source.Revision, AutoMatch: &map[string]bool{"Source": false}})
+	require.NoError(t, err)
+	f.target, err = f.svc.UpdateManagedEntity(f.ctx, f.target.ID, types.ManagedEntityPatch{Revision: f.target.Revision, AutoMatch: &map[string]bool{"Target": true}})
+	require.NoError(t, err)
+	input := types.ManagedEntityMergeInput{Revision: f.target.Revision, SourceID: f.source.ID, SourceRevision: f.source.Revision, Attributes: map[string]any{}}
+	_, err = f.svc.MergeManagedEntities(f.ctx, f.target.ID, input)
+	require.Error(t, err, "existing merge constraints still apply when no drops are supplied")
+	input.DropRelationIDs = []string{f.sourceParent.ID, f.sourceDuplicate.ID}
+	result, err := f.svc.MergeManagedEntities(f.ctx, f.target.ID, input)
+	require.NoError(t, err)
+	require.Equal(t, f.target.ID, result.ID)
+	require.Equal(t, map[string]bool{"source": false, "target": true}, result.AutoMatch)
+	var rows []types.Relation
+	require.NoError(t, f.db.Order("id").Find(&rows).Error)
+	require.Len(t, rows, 3)
+	for _, row := range rows {
+		require.NotEqual(t, f.source.ID, row.SubjectID)
+		require.NotEqual(t, f.source.ID, row.ObjectID)
+	}
+	var kept types.Relation
+	require.NoError(t, f.db.First(&kept, "id=?", f.keep.ID).Error)
+	require.Equal(t, f.target.ID, kept.SubjectID)
+	for _, dropped := range []*types.Relation{f.sourceParent, f.sourceDuplicate} {
+		var log types.OperationLog
+		require.NoError(t, f.db.First(&log, "object_id=? AND operation_type='delete_relation'", dropped.ID).Error)
+		var before types.Relation
+		require.NoError(t, json.Unmarshal(log.Before, &before))
+		require.Equal(t, dropped.ID, before.ID)
+		require.Equal(t, dropped.SubjectID, before.SubjectID)
+		require.Equal(t, dropped.ObjectID, before.ObjectID)
+		require.Equal(t, dropped.Version, before.Version)
+		require.Equal(t, dropped.Attributes, before.Attributes)
+		require.True(t, dropped.CreatedAt.Equal(before.CreatedAt))
+		var pending []types.GraphPendingSync
+		require.NoError(t, f.db.Where("relation_id=? AND deleted=true", dropped.ID).Find(&pending).Error)
+		require.Len(t, pending, 2)
+		require.ElementsMatch(t, []string{dropped.SubjectID, dropped.ObjectID}, []string{pending[0].EntityID, pending[1].EntityID})
+		require.Equal(t, dropped.Version+1, pending[0].RelationVersion)
+	}
+}
+
+// Requirement 4: invalid drop selections and later merge failures leave
+// relations, audit rows and graph pending records unchanged.
+func TestManagedEntityMergeDropRollback(t *testing.T) {
+	f := newMergeDropFixture(t)
+	input := types.ManagedEntityMergeInput{Revision: f.target.Revision, SourceID: f.source.ID, SourceRevision: f.source.Revision, Attributes: map[string]any{}}
+	for _, ids := range [][]string{{f.sourceParent.ID, "unknown-relation"}, {f.sourceParent.ID, f.targetParent.ID}, {f.sourceParent.ID, f.sourceParent.ID}, {f.sourceParent.ID}} {
+		input.DropRelationIDs = ids
+		_, err := f.svc.MergeManagedEntities(f.ctx, f.target.ID, input)
+		require.Error(t, err)
+		var count int64
+		require.NoError(t, f.db.Model(&types.Relation{}).Where("id=?", f.sourceParent.ID).Count(&count).Error)
+		require.EqualValues(t, 1, count)
+		require.NoError(t, f.db.Model(&types.OperationLog{}).Where("operation_type='delete_relation'").Count(&count).Error)
+		require.Zero(t, count)
+		require.NoError(t, f.db.Model(&types.GraphPendingSync{}).Where("deleted=true").Count(&count).Error)
+		require.Zero(t, count)
+		var source types.Entity
+		require.NoError(t, f.db.First(&source, "id=?", f.source.ID).Error)
+		require.Empty(t, source.MergedIntoID)
+		require.Equal(t, f.source.Revision, source.Revision)
+	}
+}

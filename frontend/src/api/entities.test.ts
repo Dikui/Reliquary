@@ -47,10 +47,10 @@ test('entity list requires the owning library', async () => {
 
 test('managed entities keep revision and manual exclusion in their write requests', async () => {
   const requests: Request[] = [], api = loadAPI(requests)
-  await api.updateManagedEntity('entity/a', { revision: 3, name: 'New name', attributes: { power: 12 } })
+  await api.updateManagedEntity('entity/a', { revision: 3, name: 'New name', attributes: { power: 12 }, auto_match: { 'ab': true, 'new name': false } })
   await api.setEntryEntityLink('entry/a', 'entity/a', true)
   assert.deepEqual(requests, [
-    { method: 'patch', url: '/api/v1/entities/entity%2Fa', body: { revision: 3, name: 'New name', attributes: { power: 12 } } },
+    { method: 'patch', url: '/api/v1/entities/entity%2Fa', body: { revision: 3, name: 'New name', attributes: { power: 12 }, auto_match: { 'ab': true, 'new name': false } } },
     { method: 'put', url: '/api/v1/entries/entry%2Fa/entity-links/entity%2Fa', body: { excluded: true } },
   ])
 })
@@ -67,4 +67,10 @@ test('effective attributes and split selections retain their typed payloads', as
     { method: 'post', url: '/api/v1/entities/product/split', body: { revision: 5, new_entity: { name: 'Variant', kind: 'model', code: 'V2', description: '', aliases: [], attributes }, entry_ids: ['document'], relation_ids: ['edge'], effective_at } },
     { method: 'put', url: '/api/v1/entries/document/entity-links/another-library-product', body: { excluded: false, relation_type: 'test_report' } },
   ])
+})
+
+test('managed merge sends explicitly discarded relation IDs', async () => {
+  const requests: Request[] = [], api = loadAPI(requests)
+  await api.mergeManagedEntity('target', { revision: 3, source_id: 'source', source_revision: 2, attributes: {}, drop_relation_ids: ['source-edge'] })
+  assert.deepEqual(requests, [{ method: 'post', url: '/api/v1/entities/target/merge', body: { revision: 3, source_id: 'source', source_revision: 2, attributes: {}, drop_relation_ids: ['source-edge'] } }])
 })

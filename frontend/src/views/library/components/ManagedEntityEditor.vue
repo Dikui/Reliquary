@@ -5,6 +5,8 @@ import { Button, Dialog, Input, Select, Textarea, confirm, toast } from '@/compo
 import { createManagedEntity, updateManagedEntity, entityHistory, type Entity, type ManagedEntityInput } from '@/api/entities'
 import type { LibraryCatalogItem } from '@/api/library'
 import { OPERATION_TYPES, type OperationLogsData } from '@/api/operation-logs'
+import { currentNameOverrides } from '@/utils/entityAutoMatch'
+import ManagedNameMatching from './ManagedNameMatching.vue'
 import ManagedAttributes from './ManagedAttributes.vue'
 import ManagedAttributeHistory from './ManagedAttributeHistory.vue'
 import { formatDateTime } from '@/utils/dateTime'
@@ -22,7 +24,7 @@ const fields = computed(() => (props.library.entity_schema?.fields || []).filter
 function begin() {
   const e = props.entity
   effectiveAt.value = ''
-  draft.value = { name: e?.canonical_name || '', kind: e?.kind || props.library.entity_schema?.kinds?.[0]?.key || '', code: e?.code || '', description: e?.description || '', aliases: [...(e?.aliases || [])], attributes: { ...e?.attributes } }
+  draft.value = { name: e?.canonical_name || '', kind: e?.kind || props.library.entity_schema?.kinds?.[0]?.key || '', code: e?.code || '', description: e?.description || '', aliases: [...(e?.aliases || [])], attributes: { ...e?.attributes }, auto_match: { ...e?.auto_match } }
   aliases.value = draft.value.aliases.join('\n'); baseline.value = JSON.stringify(draft.value) + aliases.value + effectiveAt.value; error.value = ''; attempted.value = false; open.value = true
 }
 const invalid = computed(() => !draft.value.name.trim() || !draft.value.kind)
@@ -33,7 +35,7 @@ async function save() {
   busy.value = true; error.value = ''
   try {
     const attributes = Object.fromEntries(Object.entries(draft.value.attributes).filter(([, value]) => value !== '' && value !== null && value !== undefined))
-    const data = { ...draft.value, ...(effectiveAt.value ? { effective_at: new Date(effectiveAt.value).toISOString() } : {}), attributes, aliases: aliases.value.split('\n').map(s => s.trim()).filter(Boolean) }
+    const data = { ...draft.value, auto_match: currentNameOverrides([draft.value.name, draft.value.code, ...aliases.value.split('\n')], draft.value.auto_match), ...(effectiveAt.value ? { effective_at: new Date(effectiveAt.value).toISOString() } : {}), attributes, aliases: aliases.value.split('\n').map(s => s.trim()).filter(Boolean) }
     const response = props.entity ? await updateManagedEntity(props.entity.id, { ...data, revision: props.entity.revision! }) : await createManagedEntity(props.library.id, data)
     if (!response.success) throw new Error(response.error || t('common.operationFailed'))
     emit('saved', response.data); open.value = false; toast.success(t('common.save'))
@@ -75,6 +77,7 @@ onBeforeUnmount(() => { request++ })
         <label>{{ t('managed.code') }}<Input v-model="draft.code" /></label>
         <label>{{ t('ikb18.description') }}<Textarea v-model="draft.description" :rows="4" /></label>
         <label>{{ t('managed.aliases') }}<Textarea v-model="aliases" :rows="3" /></label>
+        <ManagedNameMatching :model-value="draft.auto_match || {}" :name="draft.name" :code="draft.code" :aliases="aliases.split('\n')" @update:model-value="draft.auto_match = $event" />
         <label>{{ t('managed.effectiveAt') }}<input v-model="effectiveAt" type="datetime-local" class="rq-control"></label><p>{{ t('managed.effectiveHint') }}</p>
         <ManagedAttributes v-model="draft.attributes" :fields="fields" :library-id="library.id" :kind="draft.kind" />
         <p v-if="error" role="alert">{{ error }}</p>

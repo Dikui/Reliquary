@@ -88,6 +88,35 @@ func moveManagedRelations(tx *gorm.DB, library *types.Library, source, target st
 	return nil
 }
 
+// The caller holds the identity and graph locks; deletion shares the merge's
+// transaction so a later conflict also restores evidence and pending deltas.
+func dropManagedMergeRelations(ctx context.Context, tx *gorm.DB, library *types.Library, source string, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	var rows []types.Relation
+	if err := tx.Where("space_id=? AND library_id=? AND (subject_id=? OR object_id=?) AND id IN ?", library.SpaceID, library.ID, source, source, ids).Find(&rows).Error; err != nil {
+		return err
+	}
+	if len(rows) != len(ids) {
+		return apperrors.NewBadRequestError("drop_relation_ids must name distinct relationships of the source entity")
+	}
+	for _, row := range rows {
+		if err := tx.Delete(&row).Error; err != nil {
+			return err
+		}
+		before := row
+		row.Version++
+		if err := queueManagedRelation(tx, row, true); err != nil {
+			return err
+		}
+		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "delete_relation", row.ID, before, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func mergeManagedEntryLinks(tx *gorm.DB, spaceID uint64, source, target string) error {
 	var links []types.EntryEntity
 	if err := tx.Where("space_id=? AND entity_id=?", spaceID, source).Find(&links).Error; err != nil {
@@ -177,10 +206,21 @@ func (s *EntityService) MergeManagedEntities(ctx context.Context, id string, inp
 		if err := graph.Lock(tx, spaceID); err != nil {
 			return err
 		}
+		if err := dropManagedMergeRelations(ctx, tx, library, source.ID, input.DropRelationIDs); err != nil {
+			return err
+		}
 		if err := hydrateManagedEntityAttributes(ctx, tx, []*types.Entity{target, source}, time.Now()); err != nil {
 			return err
 		}
 		beforeTarget, beforeSource := *target, *source
+		matching := make(map[string]bool, len(source.AutoMatch)+len(target.AutoMatch))
+		for spelling, enabled := range source.AutoMatch {
+			matching[normalizeEntityName(spelling)] = enabled
+		}
+		for spelling, enabled := range target.AutoMatch {
+			matching[normalizeEntityName(spelling)] = enabled
+		}
+		target.AutoMatch = matching
 		target.Attributes = input.Attributes
 		if err := validateManagedEntity(library, target); err != nil {
 			return err
@@ -293,7 +333,7 @@ func (s *EntityService) SplitManagedEntity(ctx context.Context, id string, input
 		}
 		now := time.Now()
 		in := input.NewEntity
-		target = &types.Entity{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: library.ID, EntityType: "product", Kind: in.Kind, Code: in.Code, CanonicalName: in.Name, Description: in.Description, Attributes: in.Attributes, Revision: 1, EmbeddingNeedsRebuild: true, CreatedAt: now, UpdatedAt: now}
+		target = &types.Entity{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: library.ID, EntityType: "product", Kind: in.Kind, Code: in.Code, CanonicalName: in.Name, Description: in.Description, Attributes: in.Attributes, AutoMatch: in.AutoMatch, Revision: 1, EmbeddingNeedsRebuild: true, CreatedAt: now, UpdatedAt: now}
 		if err := validateManagedEntity(library, target); err != nil {
 			return err
 		}

@@ -1,5 +1,13 @@
 export default {
   managed: {
+    autoMatchTitle: "自动匹配使用的名称",
+    autoMatchHint: "每个开关独立控制一个名称、编码或别名的自动匹配。为避免误关联，纯中文一至两字、纯英文字母或数字一至两位的短名称默认关闭，可手动开启。",
+    autoMatchDefaultOn: "默认开启",
+    autoMatchDefaultOff: "默认关闭",
+    dropRelations: "舍弃来源实体的关系",
+    dropRelationsHint: "勾选的关系将在本次合并时删除；未勾选的关系将迁移到保留实体，仍有冲突时合并会被阻止。",
+    dropRelationsConfirm: "本次合并将删除已勾选的 {count} 条来源关系。",
+
     historyEntity: '历史所属实体', returnCurrent: '返回当前实体',
     targetLibrary: "目标产品库",
     autoProductLibraries: "自动匹配的产品库",

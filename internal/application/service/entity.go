@@ -15,6 +15,7 @@ import (
 
 // EntityService owns library-scoped canonical identities and article mentions.
 type EntityService struct {
+	productMatchers        productMatcherCache
 	files                  interfaces.FileService
 	db                     *gorm.DB
 	models                 interfaces.ModelService
@@ -296,9 +297,17 @@ func (s *EntityService) resolveManagedEntityCandidates(ctx context.Context, arti
 		if !library.ManagesEntities() {
 			return werrors.NewConflictError("library entity mode changed during processing")
 		}
+		matcher, err := s.productMatchers.load(tx, &library)
+		if err != nil {
+			return err
+		}
 		var current types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=? AND library_id=?", article.ID, article.SpaceID, article.LibraryID).First(&current).Error; err != nil {
 			return err
+		}
+		matched := map[string]bool{}
+		for _, mention := range matcher.matches(current.VaultBody) {
+			matched[mention.id] = true
 		}
 		seen := map[string]bool{}
 		for _, candidate := range input {
@@ -310,7 +319,7 @@ func (s *EntityService) resolveManagedEntityCandidates(ctx context.Context, arti
 			if err != nil {
 				return err
 			}
-			if entity == nil {
+			if entity == nil || !matched[entity.ID] {
 				continue
 			}
 			var link types.EntryEntity

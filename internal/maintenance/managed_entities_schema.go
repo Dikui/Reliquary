@@ -12,9 +12,14 @@ var managedEntityDefaults = map[string]map[string]any{
 	"library_relation_types": {"hierarchical": false, "subject_kinds": []any{}, "object_kinds": []any{}},
 }
 
+var entityAutoMatchDefaults = map[string]map[string]any{
+	"entities": {"auto_match": map[string]any{}},
+}
+
 func projectManagedEntitiesSnapshot(snapshot *Snapshot, targetVersion int64) {
 	projectEntityDefaultsSnapshot(snapshot, targetVersion, 37, managedEntityDefaults)
 	projectManagedEvolutionSnapshot(snapshot, targetVersion)
+	projectEntityDefaultsSnapshot(snapshot, targetVersion, 39, entityAutoMatchDefaults)
 }
 
 func projectEntityDefaultsSnapshot(snapshot *Snapshot, targetVersion, version int64, defaults map[string]map[string]any) {
@@ -32,7 +37,8 @@ func projectEntityDefaultsSnapshot(snapshot *Snapshot, targetVersion, version in
 
 func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 37, managedEntityDefaults)
-	return projectManagedEvolutionManifest(expected, actual)
+	expected, actual = projectManagedEvolutionManifest(expected, actual)
+	return projectEntityDefaultsManifest(expected, actual, 39, entityAutoMatchDefaults)
 }
 
 func projectEntityDefaultsManifest(expected, actual *Manifest, version int64, defaults map[string]map[string]any) (*Manifest, *Manifest) {

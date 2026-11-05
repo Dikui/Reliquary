@@ -751,3 +751,66 @@ func TestCrossLibraryProductLinksPreserveTypedDecisions(t *testing.T) {
 	require.True(t, links[0].Excluded)
 	require.Equal(t, "specification", links[0].RelationType)
 }
+
+// Regression: ADR 0022. One longest match per span, short-name opt-in, and
+// persisted catalog edits must be visible to both existing service caches.
+func TestProductMatchingUsesLongestNamesAndFreshSettings(t *testing.T) {
+	db, ctx, entities := managedHistoryFixture(t)
+	create := func(name string, aliases ...string) *types.Entity {
+		product, err := entities.CreateManagedEntity(ctx, "entity-library", types.ManagedEntityInput{Name: name, Kind: "product", Aliases: aliases})
+		require.NoError(t, err)
+		return product
+	}
+	short := create("Mate 60")
+	long := create("Mate 60 Pro")
+	xiaomi := create("小米")
+	code := create("Widget", "WX")
+	entry := entityArticle(t, db, "longest-product-document")
+	entry.VaultBody = "# 产品\n\nMate 60 Pro。小米粥。WX。XMate 60Y。"
+	require.NoError(t, db.Save(entry).Error)
+	service := &entryService{db: db}
+	ids, err := service.associateProductMentions(ctx, entry, entry.VaultBody)
+	require.NoError(t, err)
+	require.Equal(t, []string{long.ID}, ids)
+	var link types.EntryEntity
+	require.NoError(t, db.First(&link, "entry_id=? AND entity_id=?", entry.ID, long.ID).Error)
+	require.Len(t, link.Evidence, 1)
+	require.Equal(t, "Mate 60 Pro", string([]rune(entry.VaultBody)[link.Evidence[0].Start:link.Evidence[0].End]))
+	candidates := []types.EntityCandidate{{Name: short.CanonicalName, EntityType: "product"}, {Name: long.CanonicalName, EntityType: "product"}, {Name: xiaomi.CanonicalName, EntityType: "product"}, {Name: "WX", EntityType: "product"}}
+	resolved, err := entities.ResolveEntities(ctx, entry.ID, candidates)
+	require.NoError(t, err)
+	require.Len(t, resolved, 1)
+	require.Equal(t, long.ID, resolved[0].ID)
+
+	settings := map[string]bool{"小米": true}
+	xiaomi, err = entities.UpdateManagedEntity(ctx, xiaomi.ID, types.ManagedEntityPatch{Revision: xiaomi.Revision, AutoMatch: &settings})
+	require.NoError(t, err)
+	settings = map[string]bool{"wx": true}
+	code, err = entities.UpdateManagedEntity(ctx, code.ID, types.ManagedEntityPatch{Revision: code.Revision, AutoMatch: &settings})
+	require.NoError(t, err)
+	ids, err = service.associateProductMentions(ctx, entry, entry.VaultBody)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{long.ID, xiaomi.ID, code.ID}, ids)
+	resolved, err = entities.ResolveEntities(ctx, entry.ID, candidates)
+	require.NoError(t, err)
+	require.Len(t, resolved, 3)
+
+	// Unrelated edits retain choices; disabling a longer name blocks its shorter prefix.
+	description := "Updated description"
+	code, err = entities.UpdateManagedEntity(ctx, code.ID, types.ManagedEntityPatch{Revision: code.Revision, Description: &description})
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"wx": true}, code.AutoMatch)
+	settings = map[string]bool{"mate 60 pro": false}
+	_, err = entities.UpdateManagedEntity(ctx, long.ID, types.ManagedEntityPatch{Revision: long.Revision, AutoMatch: &settings})
+	require.NoError(t, err)
+	archived := true
+	_, err = entities.UpdateManagedEntity(ctx, xiaomi.ID, types.ManagedEntityPatch{Revision: xiaomi.Revision, Archived: &archived})
+	require.NoError(t, err)
+	ids, err = service.associateProductMentions(ctx, entry, entry.VaultBody)
+	require.NoError(t, err)
+	require.Equal(t, []string{code.ID}, ids)
+	var links []types.EntryEntity
+	require.NoError(t, db.Where("entry_id=?", entry.ID).Find(&links).Error)
+	require.Len(t, links, 1, "stale automatic associations are removed in the matching transaction")
+	require.Equal(t, code.ID, links[0].EntityID)
+}

@@ -1,5 +1,13 @@
 export default {
   managed: {
+    autoMatchTitle: "Names used for automatic matching",
+    autoMatchHint: "Each switch controls matching by this name, code or alias. Short names (one or two Han characters, or one or two ASCII letters or digits) are off by default to avoid unrelated matches. You can enable them explicitly.",
+    autoMatchDefaultOn: "On by default",
+    autoMatchDefaultOff: "Off by default",
+    dropRelations: "Source relations to discard",
+    dropRelationsHint: "Selected relations will be deleted during this merge. Unselected relations will move to the retained entity; conflicts still block the merge.",
+    dropRelationsConfirm: "This merge will delete {count} selected source relations.",
+
     historyEntity: 'History for entity', returnCurrent: 'Return to current entity',
     targetLibrary: "Target product library",
     autoProductLibraries: "Product libraries for automatic matching",

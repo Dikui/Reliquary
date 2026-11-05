@@ -35,6 +35,7 @@ var (
 // entryService implements the entry service interface
 // service 实现知识服务接口
 type entryService struct {
+	productMatchers productMatcherCache
 	diagnostics     *diagnostics.Service
 	db              *gorm.DB
 	config          *config.Config

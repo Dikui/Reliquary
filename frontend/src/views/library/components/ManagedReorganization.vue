@@ -5,12 +5,15 @@ import { Button, Dialog, Combobox, Input, Select, Textarea, confirm, toast } fro
 import { getEntity, listEntities, mergeManagedEntity, splitManagedEntity, type Entity, type EntityEntry, type ManagedEntityInput } from '@/api/entities'
 import { listEntityRelations, type EntityRelation } from '@/api/relations'
 import type { LibraryCatalogItem } from '@/api/library'
+import { currentNameOverrides } from '@/utils/entityAutoMatch'
+import ManagedNameMatching from './ManagedNameMatching.vue'
 import ManagedAttributes from './ManagedAttributes.vue'
 const props = defineProps<{ entity: Entity; library: LibraryCatalogItem }>()
 const emit = defineEmits<{ saved: [entity: Entity] }>()
 const { t } = useI18n()
 const open = ref(false), mode = ref<'merge' | 'split'>('merge'), loading = ref(false), busy = ref(false), error = ref(''), more = ref(false)
 const candidates = ref<Entity[]>([]), sourceId = ref(''), source = ref<Entity>(), entries = ref<EntityEntry[]>([]), relations = ref<EntityRelation[]>([]), entryIds = ref<string[]>([]), relationIds = ref<string[]>([]), effectiveAt = ref('')
+const dropRelationIds = ref<string[]>([]), sourceRelations = ref<EntityRelation[]>([])
 const draft = ref<ManagedEntityInput>({ name: '', kind: '', code: '', description: '', aliases: [], attributes: {} }), aliases = ref('')
 const options = computed(() => candidates.value.filter(e => e.id !== props.entity.id).map(e => ({ value: e.id, label: `${e.canonical_name} · ${e.code || e.id}` })))
 const fields = computed(() => (props.library.entity_schema?.fields || []).filter(f => !f.archived && (!f.kinds?.length || f.kinds.includes(mode.value === 'merge' ? props.entity.kind || '' : draft.value.kind))))
@@ -22,7 +25,7 @@ async function loadCandidates(append = false) {
   finally { if (current === request) loading.value = false }
 }
 async function begin(value: 'merge' | 'split') {
-  mode.value = value; open.value = true; error.value = ''; sourceId.value = ''; source.value = undefined; entryIds.value = []; relationIds.value = []; effectiveAt.value = ''; aliases.value = ''
+  mode.value = value; open.value = true; error.value = ''; sourceId.value = ''; source.value = undefined; dropRelationIds.value = []; sourceRelations.value = []; entryIds.value = []; relationIds.value = []; effectiveAt.value = ''; aliases.value = ''
   draft.value = { name: '', code: '', kind: props.entity.kind || '', description: '', aliases: [], attributes: { ...props.entity.attributes } }
   if (value === 'merge') { await loadCandidates(); return }
   const current = ++request; loading.value = true
@@ -31,10 +34,10 @@ async function begin(value: 'merge' | 'split') {
   finally { if (current === request) loading.value = false }
 }
 watch(sourceId, async id => {
-  const current = ++sourceRequest; source.value = undefined
-  if (!id) return
+  const current = ++sourceRequest; source.value = undefined; sourceRelations.value = []; dropRelationIds.value = []; error.value = ''
+  if (!id) { loading.value = false; return }
   loading.value = true
-  try { const result = await getEntity(id); if (!result.success) throw new Error(result.error); if (current === sourceRequest) { source.value = result.data.entity; draft.value.attributes = { ...result.data.entity.attributes, ...props.entity.attributes } } }
+  try { const [result, edges] = await Promise.all([getEntity(id), listEntityRelations(id)]); if (!result.success || !edges.success) throw new Error(result.error || edges.message || t('common.operationFailed')); if (current === sourceRequest) { source.value = result.data.entity; sourceRelations.value = edges.data.flatMap(group => group.relations); draft.value.attributes = { ...result.data.entity.attributes, ...props.entity.attributes } } }
   catch (cause: any) { if (current === sourceRequest) error.value = cause.message || t('common.operationFailed') }
   finally { if (current === sourceRequest) loading.value = false }
 })
@@ -45,8 +48,8 @@ async function apply() {
     const effective_at = effectiveAt.value ? new Date(effectiveAt.value).toISOString() : undefined
     const attributes = Object.fromEntries(Object.entries(draft.value.attributes).filter(([, v]) => v !== '' && v != null))
     const result = mode.value === 'merge'
-      ? await mergeManagedEntity(props.entity.id, { revision: props.entity.revision!, source_id: source.value!.id, source_revision: source.value!.revision!, attributes, effective_at })
-      : await splitManagedEntity(props.entity.id, { revision: props.entity.revision!, new_entity: { ...draft.value, attributes, aliases: aliases.value.split('\n').map(s => s.trim()).filter(Boolean) }, entry_ids: entryIds.value, relation_ids: relationIds.value, effective_at })
+      ? await mergeManagedEntity(props.entity.id, { revision: props.entity.revision!, source_id: source.value!.id, source_revision: source.value!.revision!, drop_relation_ids: dropRelationIds.value, attributes, effective_at })
+      : await splitManagedEntity(props.entity.id, { revision: props.entity.revision!, new_entity: { ...draft.value, auto_match: currentNameOverrides([draft.value.name, draft.value.code, ...aliases.value.split('\n')], draft.value.auto_match), attributes, aliases: aliases.value.split('\n').map(s => s.trim()).filter(Boolean) }, entry_ids: entryIds.value, relation_ids: relationIds.value, effective_at })
     if (!result.success) throw new Error(result.error || t('common.operationFailed'))
     open.value = false; emit('saved', result.data); toast.success(t('common.save'))
   } catch (cause: any) { error.value = cause.message || t('common.operationFailed'); throw cause }
@@ -55,7 +58,7 @@ async function apply() {
 function submit() {
   if (loading.value || busy.value) return
   if (mode.value === 'merge' ? !source.value : !draft.value.name.trim() || !draft.value.kind) { error.value = t('managed.required'); return }
-  confirm({ header: t(mode.value === 'merge' ? 'managed.merge' : 'managed.split'), body: t('managed.reorganizeConfirm', { name: props.entity.canonical_name }), onConfirm: apply })
+  confirm({ header: t(mode.value === 'merge' ? 'managed.merge' : 'managed.split'), body: t('managed.reorganizeConfirm', { name: props.entity.canonical_name }) + (mode.value === 'merge' && dropRelationIds.value.length ? '\n' + t('managed.dropRelationsConfirm', { count: dropRelationIds.value.length }) : ''), onConfirm: apply })
 }
 onBeforeUnmount(() => { request++; sourceRequest++ })
 </script>
@@ -64,8 +67,9 @@ onBeforeUnmount(() => { request++; sourceRequest++ })
   <Dialog v-model="open" :title="t(mode === 'merge' ? 'managed.merge' : 'managed.split')" :closable="!busy" :close-on-overlay-click="false" :close-on-esc-keydown="false">
     <form novalidate class="reorganization-form" @submit.prevent="submit"><fieldset :disabled="busy">
       <p>{{ t('managed.reorganizeHint') }}</p>
-      <template v-if="mode === 'merge'"><p>{{ t('managed.mergeTarget') }}: {{ entity.canonical_name }}</p><label>{{ t('managed.mergeSource') }}<Combobox v-model="sourceId" :options="options" :disabled="loading" /></label><Button v-if="more" :loading="loading" @click="loadCandidates(true)">{{ t('workbench.loadMore') }}</Button></template>
+      <template v-if="mode === 'merge'"><p>{{ t('managed.mergeTarget') }}: {{ entity.canonical_name }}</p><label>{{ t('managed.mergeSource') }}<Combobox v-model="sourceId" :options="options" :disabled="loading" /></label><Button v-if="more" :loading="loading" @click="loadCandidates(true)">{{ t('workbench.loadMore') }}</Button><template v-if="source"><h3>{{ t('managed.dropRelations') }}</h3><p>{{ t('managed.dropRelationsHint') }}</p><p v-if="!sourceRelations.length">{{ t('ikb18.noRelations') }}</p><label v-for="relation in sourceRelations" :key="relation.id" class="choice"><input v-model="dropRelationIds" type="checkbox" :value="relation.id">{{ relation.direction === 'outgoing' ? '→' : '←' }} {{ relation.relation_type }} · {{ relation.peer.canonical_name }}</label></template></template>
       <template v-else><label>{{ t('ikb18.name') }}<Input v-model="draft.name" /></label><label>{{ t('managed.kind') }}<Select v-model="draft.kind"><option v-for="kind in library.entity_schema?.kinds" :key="kind.key" :value="kind.key">{{ kind.name }}</option></Select></label><label>{{ t('managed.code') }}<Input v-model="draft.code" /></label><label>{{ t('ikb18.description') }}<Textarea v-model="draft.description" :rows="3" /></label><label>{{ t('managed.aliases') }}<Textarea v-model="aliases" :rows="3" /></label>
+        <ManagedNameMatching :model-value="draft.auto_match || {}" :name="draft.name" :code="draft.code" :aliases="aliases.split('\n')" @update:model-value="draft.auto_match = $event" />
         <h3>{{ t('managed.moveDocuments') }}</h3><p v-if="!entries.length">{{ t('workbench.entities.noArticles') }}</p><label v-for="entry in entries" :key="entry.id" class="choice"><input v-model="entryIds" type="checkbox" :value="entry.id">{{ entry.title || entry.file_name || entry.id }}</label>
         <h3>{{ t('managed.moveRelations') }}</h3><p v-if="!relations.length">{{ t('ikb18.noRelations') }}</p><label v-for="relation in relations" :key="relation.id" class="choice"><input v-model="relationIds" type="checkbox" :value="relation.id">{{ relation.direction === 'outgoing' ? '→' : '←' }} {{ relation.relation_type }} · {{ relation.peer.canonical_name }}</label>
       </template>

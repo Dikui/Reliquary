@@ -17,7 +17,7 @@ func TestIKB07RegistryLibraryConfigurationRoundTrip(t *testing.T) {
 	require.NoError(t, db.Exec(`INSERT INTO library_relation_types(library_id,name,position,enabled) SELECT id,'引用',17,true FROM libraries WHERE id='library' ON CONFLICT DO NOTHING`).Error)
 	// Product master data and manual exclusions are authoritative export data.
 	require.NoError(t, db.Exec(`UPDATE libraries SET entity_mode='managed', entity_schema='{"kinds":[{"key":"model","name":"Model"}],"fields":[]}' WHERE id='library';
-	 UPDATE entities SET kind='model',code='MODEL-1',attributes='{"status":"available"}',revision=4,archived_at=now() WHERE id='entity-a';
+	 UPDATE entities SET kind='model',code='MODEL-1',auto_match='{"name":false,"code":true}',attributes='{"status":"available"}',revision=4,archived_at=now() WHERE id='entity-a';
 	 UPDATE entry_entities SET origin='manual',relation_type='test_report',excluded=true,evidence='[{"paragraph":1}]',body_hash='old-body' WHERE entity_id='entity-a';
 	 UPDATE library_relation_types SET hierarchical=true,subject_kinds='["model"]',object_kinds='["model"]',fields='[{"key":"quantity","name":"Quantity","type":"number"}]' WHERE library_id='library' AND name='引用'`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO entity_attribute_versions(id,space_id,entity_id,revision,effective_at,recorded_at,attributes) VALUES('version-fixture',1,'entity-a',4,now(),now(),'{"status":"available"}');
@@ -38,6 +38,9 @@ func TestIKB07RegistryLibraryConfigurationRoundTrip(t *testing.T) {
 	_, err = Import(ctx, fresh, root, "", nil)
 	require.NoError(t, err)
 	require.NoError(t, VerifyImportedReplica(ctx, fresh, root))
+	var autoMatch string
+	require.NoError(t, fresh.Raw("SELECT auto_match::text FROM entities WHERE id='entity-a'").Scan(&autoMatch).Error)
+	require.JSONEq(t, `{"name":false,"code":true}`, autoMatch)
 	current, err := Capture(ctx, fresh)
 	require.NoError(t, err)
 	require.NoError(t, WriteSnapshot(root, "", current))
