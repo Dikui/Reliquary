@@ -267,3 +267,14 @@ the existing Swiss controls, spacing and tokens. They introduce no new visual
 system. Entity and relation forms use shared Dialog, native select/date controls,
 and the shared feedback service. Wide schema rows wrap on narrow screens;
 entity details retain the existing workbench scroll ownership.
+
+### Editable product shelf
+
+Managed product libraries can add the four-level shelf schema in their settings draft.
+The shelf uses the existing Swiss tokens, Cytoscape canvas, shared editor dialogs and
+four detail tabs: parameters, sale status, certifications and documents. Selecting a
+node updates the detail rail while keeping graph pan and zoom. Below 1100px the rail
+follows the graph. A semantic four-column button list provides keyboard access to the
+same nodes. Candidate parents have dashed edges; missing parents remain navigation
+groups rather than saved entities. Long entity and relation forms keep Save in the
+shared dialog footer. These views contain no bundled business data.

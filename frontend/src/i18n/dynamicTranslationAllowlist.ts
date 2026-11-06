@@ -1,6 +1,8 @@
 import type { TranslationCall } from './translationCallAudit.ts'
 
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
+  { file: 'utils/productShelf.ts', expressions: ['`productShelf.kinds.${key}`', '`productShelf.fields.${key}`'], reason: 'Shelf kinds and field names use the fixed product shelf schema.' },
+  { file: 'views/library/components/ProductShelf.vue', expressions: ['`productShelf.${value}`', "shelfRelationLabel(record.relation.relation_type) || 'productShelf.associated'"], reason: 'Shelf tabs and known relation labels are restricted to the product shelf vocabulary.' },
   { file: 'views/settings/ManagedFieldSchema.vue', expressions: ['`managed.types.${type}`'], reason: 'Schema field types come from the fixed supported type list.' },
   { file: 'views/library/components/ManagedEntityEditor.vue', expressions: ['`operationLogs.types.${value}`'], reason: 'Operation names are guarded by the shared OPERATION_TYPES list.' },
   {

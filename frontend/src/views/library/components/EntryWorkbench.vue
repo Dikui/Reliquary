@@ -1,5 +1,10 @@
 <template>
-  <section class="entry-workbench" :class="{ 'is-empty': !entities.length && !entitiesLoading && !selectedEntity && !entityDetailLoading && !initialEntityId }">
+  <section v-if="managed && shelfView && selectedLibrary" class="shelf-workbench">
+    <div class="shelf-library-bar"><Select :model-value="selectedLibraryId" :aria-label="t('entityPage.library')" @update:model-value="changeLibrary"><option v-for="library in libraries" :key="library.id" :value="library.id">{{ library.display_name || library.name }}</option></Select><Button @click="shelfView = false">{{ t('workbench.entities.title') }}</Button></div>
+    <ProductShelf v-if="shelfConfigured" :key="selectedLibrary.id" :library="selectedLibrary" :initial-entity-id="initialEntityId" @select-entity="(id, library) => emit('select-entity', id, library)" @open-source="id => emit('open-source', id)" />
+    <EmptyState v-else :title="t('productShelf.setupTitle')" :description="t('productShelf.setupHint')"><a href="/platform/settings?section=library">{{ t('productShelf.openSettings') }}</a></EmptyState>
+  </section>
+  <section v-else class="entry-workbench" :class="{ 'is-empty': !entities.length && !entitiesLoading && !selectedEntity && !entityDetailLoading && !initialEntityId }">
     <aside class="entity-list" :aria-label="t('workbench.entities.title')">
       <div class="entity-list-head">
         <h1>{{ t('workbench.entities.title') }}</h1>
@@ -10,6 +15,7 @@
         </div>
         <div class="entity-search"><Input ref="searchInput" v-model="entityFilter" type="search" :disabled="merging" :placeholder="t('workbench.entities.filter')" :aria-label="t('workbench.entities.filter')" @compositionstart="entityComposing = true" @compositionend="endEntityComposition" @keydown.enter="onEntityEnter(undefined, { e: $event })" /><Button v-if="entityFilter" variant="ghost" :aria-label="t('common.clear')" @click="clearSearch">×</Button></div>
       </div>
+      <Button v-if="managed" @click="shelfView = true">{{ t('productShelf.title') }}</Button>
       <ManagedEntityEditor v-if="managed && selectedLibrary" :library="selectedLibrary" @saved="managedSaved" />
       <label v-if="managed"><input v-model="includeArchived" type="checkbox">{{ t('managed.includeArchived') }}</label>
       <a v-if="!managed" class="merge-link" :href="pendingHref">{{ t('mergeSuggestions.title') }}<span v-if="pendingCount !== null" class="mono">{{ pendingCount }}</span></a>
@@ -86,6 +92,8 @@ import ManagedEntityEditor from './ManagedEntityEditor.vue'
 import ManagedRelationEditor from './ManagedRelationEditor.vue'
 import EntityRelations from './EntityRelations.vue'
 import EntityGraph from './EntityGraph.vue'
+import ProductShelf from './ProductShelf.vue'
+import { isProductShelf, shelfLevel } from '@/utils/productShelf'
 import type { SourceLocation } from '@/types/search'
 import FollowToggle from '@/components/FollowToggle.vue'
 import { useFollowStore } from '@/stores/follows'
@@ -188,7 +196,7 @@ async function selectInitialEntity(id: string, preview?: Entity) {
     const result = envelopeData(await getEntity(id))
     if (current !== detailRequest) return
     if (selectedLibraryId.value !== result.entity.library_id) libraryScope.value = [result.entity.library_id]
-    selectedEntity.value = result.entity; entityEntries.value = result.entries || []
+    selectedEntity.value = result.entity; if (shelfLevel(result.entity.kind || '') === null) shelfView.value = false; entityEntries.value = result.entries || []
     entityDetailLoading.value = false
     void loadRelations(result.entity.id)
     emit('select-entity', result.entity.id, result.entity.library_id)
@@ -200,6 +208,9 @@ async function selectInitialEntity(id: string, preview?: Entity) {
 }
 const libraries = ref<LibraryCatalogItem[]>([]), catalogLoading = ref(false), catalogError = ref('')
 const selectedLibrary = computed(() => libraries.value.find(item => item.id === selectedLibraryId.value))
+const shelfView = ref(false)
+const shelfConfigured = computed(() => isProductShelf(selectedLibrary.value?.entity_schema))
+watch([selectedLibraryId, shelfConfigured], () => { shelfView.value = managed.value && shelfConfigured.value && !(props.initialEntityId === selectedEntity.value?.id && shelfLevel(selectedEntity.value?.kind || '') === null) }, { immediate: true })
 const graphRelationTypes = computed(() => (selectedLibrary.value?.relation_types || []).filter(type => type.enabled).map(type => type.name))
 const relationAsOf = ref('')
 function queryRelationTime(value: string) { relationAsOf.value = value; void loadRelations() }
@@ -261,6 +272,9 @@ onMounted(() => { void loadCatalog(); void refreshAll(); void loadPendingCount()
 onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; nameEmbeddingRequest++; catalogRequest++; pendingRequest++; relationRequest++; clearNameEmbeddingPoll(); if (entitySearchTimer) clearTimeout(entitySearchTimer) })
 </script>
 <style scoped>
+.shelf-workbench { padding: var(--space-4); min-width: 0; overflow: auto; }
+.shelf-library-bar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.shelf-library-bar :deep(select) { max-width: 320px; }
 .entry-workbench { display: grid; grid-template-columns: 304px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100%; font-family: var(--font); color: var(--text); background: var(--bg); font-size: var(--type-body-size); }
 .entry-workbench.is-empty { grid-template-columns: minmax(0, 1fr); }
 .entry-workbench.is-empty .entity-list { border-right: 0; }

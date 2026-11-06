@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button, Dialog, Combobox, Select, toast } from '@/components/ui'
 import { listEntities, type Entity } from '@/api/entities'
@@ -10,6 +10,7 @@ import { localDateTimeISO } from '@/utils/dateTime'
 const props = defineProps<{ library: LibraryCatalogItem; entity: Entity; relation?: EntityRelation }>()
 const emit = defineEmits<{ saved: [] }>()
 const { t } = useI18n()
+const formId = useId()
 const open = ref(false), busy = ref(false), loading = ref(false), error = ref(''), peers = ref<Entity[]>([]), more = ref(false)
 const attributes = ref<Record<string, unknown>>({})
 const effectiveAt = ref('')
@@ -50,7 +51,7 @@ onBeforeUnmount(() => { request++ })
 <template>
   <Button @click="begin">{{ t(relation ? 'managed.editRelation' : 'managed.addRelation') }}</Button>
   <Dialog v-model="open" :title="t(relation ? 'managed.editRelation' : 'managed.addRelation')" :closable="!busy" :close-on-esc-keydown="false" :close-on-overlay-click="false">
-    <form class="relation-form" novalidate @submit.prevent="save"><fieldset :disabled="busy">
+    <form :id="formId" class="relation-form" novalidate @submit.prevent="save"><fieldset :disabled="busy">
       <p>{{ entity.canonical_name }}</p><label>{{ t('managed.direction') }}<Select :model-value="outgoing ? 'outgoing' : 'incoming'" @update:model-value="outgoing = $event === 'outgoing'"><option value="outgoing">{{ t('managed.outgoing') }}</option><option value="incoming">{{ t('managed.incoming') }}</option></Select></label>
       <label>{{ t('ikb18.relations') }}<Select v-model="type"><option v-for="r in library.relation_types.filter(r => r.enabled)" :key="r.name" :value="r.name">{{ r.name }}</option></Select></label>
       <label>{{ t('managed.peer') }}<Combobox :key="library.id" v-model="peer" :options="options" :aria-busy="loading" remote @search="search" /></label>
@@ -59,8 +60,9 @@ onBeforeUnmount(() => { request++ })
       <ManagedAttributes v-model="attributes" :fields="fields" :library-id="library.id" />
       <p v-if="loading" role="status">{{ t('common.loading') }}</p><Button v-if="more" :loading="loading" @click="load(true)">{{ t('workbench.loadMore') }}</Button>
       <p v-if="error" role="alert">{{ error }} <Button @click="load()">{{ t('common.retry') }}</Button></p>
-      <Button type="submit" variant="primary" :loading="busy" :disabled="!peer || !type">{{ t('common.save') }}</Button>
+
     </fieldset></form>
+    <template #footer><Button type="submit" :form="formId" variant="primary" :loading="busy" :disabled="!peer || !type">{{ t('common.save') }}</Button></template>
   </Dialog>
 </template>
 <style scoped>.relation-form fieldset { display: grid; gap: var(--space-3); border: 0; padding: 0; } label { display: grid; gap: var(--space-1); } [role='alert'] { color: var(--danger); }</style>

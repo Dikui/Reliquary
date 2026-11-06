@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui'
 import { listLibraries, getEntityConversion, type LibraryCatalogItem } from '@/api/library'
+import { addProductShelfSchema } from '@/utils/productShelf'
 import ManagedFieldSchema from './ManagedFieldSchema.vue'
 const library = defineModel<LibraryCatalogItem>({ required: true })
 const { t } = useI18n()
@@ -13,10 +14,12 @@ const schema = computed(() => {
   return value
 })
 const needsConversion = ref(false)
+const shelfError = ref(''), shelfAdded = ref(false)
 const libraries = ref<LibraryCatalogItem[]>([]), conversion = ref<Record<string, number>>({}), conversionError = ref('')
 let sequence = 0
 watch(() => library.value.id, async () => {
   const current = ++sequence
+  shelfError.value = ''; shelfAdded.value = false
   conversion.value = {}; conversionError.value = ''; needsConversion.value = library.value.entity_mode !== 'managed'
   try {
     const [catalog, counts] = await Promise.all([listLibraries(), getEntityConversion(library.value.id)])
@@ -28,6 +31,13 @@ watch(() => library.value.id, async () => {
 }, { immediate: true })
 onBeforeUnmount(() => { sequence++ })
 function values(event: Event) { return (event.target as HTMLInputElement).value.split(',').map(s => s.trim()).filter(Boolean) }
+function addShelf() {
+  shelfError.value = ''; shelfAdded.value = false
+  try {
+    Object.assign(library.value, addProductShelfSchema(library.value, t))
+    shelfAdded.value = true
+  } catch (cause) { shelfError.value = cause instanceof Error ? cause.message : t('common.operationFailed') }
+}
 </script>
 <template>
   <section class="managed-settings">
@@ -40,6 +50,10 @@ function values(event: Event) { return (event.target as HTMLInputElement).value.
     <p v-if="!libraries.length">{{ t('managed.noOtherProductLibraries') }}</p>
     <label v-for="target in libraries" :key="target.id"><input type="checkbox" :checked="library.product_library_ids?.includes(target.id)" @change="library.product_library_ids = ($event.target as HTMLInputElement).checked ? [...(library.product_library_ids || []), target.id] : (library.product_library_ids || []).filter(id => id !== target.id)">{{ target.name }}</label>
     <template v-if="library.entity_mode === 'managed'">
+      <Button @click="addShelf">{{ t('productShelf.addConfig') }}</Button>
+      <p>{{ t('productShelf.configHint') }}</p>
+      <p v-if="shelfError" role="alert">{{ shelfError }}</p>
+      <p v-else-if="shelfAdded" role="status">{{ t('productShelf.configAdded') }}</p>
       <h3 v-if="needsConversion">{{ t('managed.conversionMapping') }}</h3><label v-for="(count, type) in needsConversion ? conversion : {}" :key="type">{{ type }} ({{ count }})<select :value="library.entity_kind_mapping?.[type] || ''" @change="library.entity_kind_mapping = { ...library.entity_kind_mapping, [type]: ($event.target as HTMLSelectElement).value }"><option value="">{{ t('managed.chooseKind') }}</option><option v-for="kind in schema.kinds" :key="kind.key" :value="kind.key">{{ kind.name || kind.key }}</option></select></label>
       <label>{{ t('managed.documentRelationTypes') }}<input :value="(library.document_relation_types || ['references', 'specification', 'test_report', 'comparison']).join(', ')" @input="library.document_relation_types = values($event)"></label>
       <h3>{{ t('managed.kinds') }}</h3><p>{{ t('managed.keysHint') }}</p>

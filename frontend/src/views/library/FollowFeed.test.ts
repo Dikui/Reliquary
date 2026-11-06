@@ -135,7 +135,7 @@ function environment(locale: keyof typeof messages, initialTargets: any[] = []) 
   modules['./components/AddFollowDialog.vue'] = moduleOf(loadComponent(new URL('./components/AddFollowDialog.vue', import.meta.url), modules))
   modules['./components/FollowFeedItem.vue'] = moduleOf(loadComponent(new URL('./components/FollowFeedItem.vue', import.meta.url), modules))
   modules['@/components/LibraryScopeSelect.vue'] = moduleOf(loadComponent(new URL('../../components/LibraryScopeSelect.vue', import.meta.url), modules))
-  modules['./EntityRelations.vue'] = modules['./EntityGraph.vue'] = modules['./BodyReference.vue'] = empty
+  modules['./EntityRelations.vue'] = modules['./ManagedAttributes.vue'] = modules['./ManagedEntityEditor.vue'] = modules['./ManagedRelationEditor.vue'] = modules['./ManagedReorganization.vue'] = modules['./ProductShelf.vue'] = modules['./EntityGraph.vue'] = modules['./BodyReference.vue'] = empty
   modules['@/utils/entrySourceLabels'] = entrySourceLabels
   modules['@/utils/markdownPlainText'] = markdownPlainText
   const toggle = loadComponent(new URL('../../components/FollowToggle.vue', import.meta.url), modules)

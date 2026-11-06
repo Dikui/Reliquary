@@ -1,3 +1,4 @@
+import { isProductShelf, shelfLevel } from '../../../utils/productShelf'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -42,11 +43,11 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
       props: ['modelValue', 'title', 'label', 'description', 'disabled', 'items'],
       setup: (props, { attrs, slots }) => () => name === 'Dialog' && !props.modelValue ? null : name === 'Tabs' ? h('div', [h('nav', props.items.map((item: any) => h('button', item.label))), slots[String(props.modelValue)]?.()]) : h(name === 'Button' ? 'button' : 'div', { ...attrs, role: name === 'ErrorState' ? 'alert' : undefined }, [props.title, props.description, props.label, slots.default?.(), slots.footer?.()])
     })])),
-    '@/api/entities': api, '@/components/LibraryScopeSelect.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+    '@/utils/productShelf': { isProductShelf, shelfLevel }, '@/api/entities': api, '@/components/LibraryScopeSelect.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
     '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
     '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
     './MergeSuggestions.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('div', { class: 'merge-suggestions-test' }, i18n.global.t('mergeSuggestions.title')) }) } }
-  function evaluate(code: string) { const module = { exports: {} as any }; const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText; new Function('require', 'module', 'exports', output)((name: string) => (['./EntityRelations.vue', './EntityGraph.vue', './ManagedEntityEditor.vue', './ManagedRelationEditor.vue', './ManagedAttributes.vue', './ManagedReorganization.vue'].includes(name) ? { __esModule: true, default: defineComponent({ setup: () => () => h('div', { 'data-relation-view': name }) }) } : modules[name]) ?? require(name), module, module.exports); return module.exports }
+  function evaluate(code: string) { const module = { exports: {} as any }; const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText; new Function('require', 'module', 'exports', output)((name: string) => (['./ProductShelf.vue', './EntityRelations.vue', './EntityGraph.vue', './ManagedEntityEditor.vue', './ManagedRelationEditor.vue', './ManagedAttributes.vue', './ManagedReorganization.vue'].includes(name) ? { __esModule: true, default: defineComponent({ setup: () => () => h('div', { 'data-relation-view': name }) }) } : modules[name]) ?? require(name), module, module.exports); return module.exports }
   const component = evaluate(script.content).default; component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup; let state: any
   component.setup = (props: object, context: object) => { state = setup(props, context); onServerPrefetch(async () => { try { await state.refreshAll(); await options.scenario?.(state, () => cleanups.forEach(callback => callback())); await nextTick() } finally { state.clearNameEmbeddingPoll(); if (state.entitySearchTimer) clearTimeout(state.entitySearchTimer) } }); return state }
@@ -159,4 +160,11 @@ test('graph filter options come from enabled relation types in the selected libr
     { name: '发布', enabled: true }, { name: '隐藏', enabled: false }, { name: '研发', enabled: true },
   ] }], scenario: state => state.loadCatalog() })
   assert.deepEqual(state.graphRelationTypes.value, ['发布', '研发'])
+})
+
+// Side-record links must retain their own profile instead of selecting the first shelf product line.
+test('a credential deep link keeps the entity profile in a configured product library', async () => {
+  const { state } = await renderWorkbench({ initialEntityId: 'certificate', libraries: [{ id: 'library-a', name: 'Products', entity_mode: 'managed', entity_schema: { kinds: ['product_line', 'platform', 'product', 'model'].map(key => ({ key, name: key, parent_kinds: [] })), fields: [] } }], api: { getEntity: () => envelope({ entity: { ...entity, id: 'certificate', kind: 'credential' }, entries: [] }) }, scenario: async state => { await state.loadCatalog(); await state.selectInitialEntity('certificate') } })
+  assert.equal(state.selectedEntity.value.id, 'certificate')
+  assert.equal(state.shelfView.value, false)
 })

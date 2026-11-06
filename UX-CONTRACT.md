@@ -455,3 +455,23 @@ Search optionally includes descendants and retains that choice in URL state.
 Parent context is displayed when supplied, while the click target remains the
 original matched location. Existing extracted libraries retain their merge and
 automatic-extraction workflows.
+
+### Editable four-level product shelf
+
+A managed library with product_line, platform, product and model kinds opens the shelf
+from the entity workbench. Library settings can add the compatible shelf definitions
+to the draft; the existing settings Save persists them. Conflicting definitions leave
+the whole draft unchanged. No product records are created by this configuration step.
+
+The shelf reads current entities and relationships using existing APIs. Node selection
+preserves the canvas viewport; the four detail tabs show parameters, sale status,
+certifications and documents. Configuration facts remain separate from model facts.
+Ancestor evidence is labelled as a scope candidate. Candidate parents use a separate
+non-hierarchical relationship and do not become formal parents by display selection.
+
+Creating a child preselects its kind and then links it to the selected parent. If the
+link fails after creation, the created identity remains visible in the retry notice;
+Retry only writes the relationship. Existing editors own revisions, validation and
+relationship history. Documents include linked Entry records as well as credential
+URL and attachment fields. Spreadsheet imports and automatic certification verdicts
+are outside this workflow.
