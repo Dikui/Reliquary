@@ -61,7 +61,7 @@ func (s *ContentCheckService) checkEntry(ctx context.Context, model chat.Chat, m
 			Object   string
 			Evidence string
 		}
-		if err := s.db.WithContext(ctx).Raw(`SELECT a.canonical_name AS subject,r.relation_type AS type,b.canonical_name AS object,rs.evidence::text AS evidence FROM relation_sources rs JOIN relations r ON r.id=rs.relation_id JOIN entities a ON a.id=r.subject_id JOIN entities b ON b.id=r.object_id WHERE rs.entry_id=? AND r.space_id=?`, entryID, e.SpaceID).Scan(&relations).Error; err != nil {
+		if err := s.db.WithContext(ctx).Raw(`SELECT a.canonical_name AS subject,r.relation_type AS type,b.canonical_name AS object,rs.evidence::text AS evidence FROM relation_sources rs JOIN relations r ON r.id=rs.relation_id JOIN entities a ON a.id=r.subject_id JOIN entities b ON b.id=r.object_id WHERE rs.entry_id=? AND r.space_id=? AND r.valid_to IS NULL`, entryID, e.SpaceID).Scan(&relations).Error; err != nil {
 			return nil, err
 		}
 		var definitions []types.LibraryContentType
