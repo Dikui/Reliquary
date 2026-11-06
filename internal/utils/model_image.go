@@ -23,6 +23,7 @@ const (
 	MaxImagePixels       = 200_000_000
 	maxModelImagePixels  = 8_000_000
 	maxModelImageSide    = 4096
+	minModelImageSide    = 32
 	maxModelImageBytes   = 8 << 20
 	maxImageDecodeMemory = 1536 << 20
 )
@@ -143,7 +144,7 @@ func PrepareModelImage(ctx context.Context, reader io.Reader) (*ModelImage, erro
 	result := &ModelImage{SourceHash: fmt.Sprintf("%x", sha256.Sum256(data))}
 	scale := math.Min(1, math.Min(float64(maxModelImageSide)/float64(max(config.Width, config.Height)),
 		math.Sqrt(float64(maxModelImagePixels)/(float64(config.Width)*float64(config.Height)))))
-	if scale == 1 && len(data) <= maxModelImageBytes && (format == "jpeg" || format == "png" || format == "webp") {
+	if scale == 1 && min(config.Width, config.Height) >= minModelImageSide && len(data) <= maxModelImageBytes && (format == "jpeg" || format == "png" || format == "webp") {
 		result.Data = data
 		return result, nil
 	}
@@ -151,6 +152,7 @@ func PrepareModelImage(ctx context.Context, reader io.Reader) (*ModelImage, erro
 	output := image.NewRGBA(image.Rect(0, 0, width, height))
 	// ApproxBiLinear avoids the source-height-sized intermediate buffer of kernels.
 	draw.ApproxBiLinear.Scale(output, output.Bounds(), source, source.Bounds(), draw.Src, nil)
+	output = padModelImage(output)
 	var encoded bytes.Buffer
 	if err := png.Encode(&encoded, output); err != nil {
 		return nil, err
@@ -175,10 +177,24 @@ func PrepareModelImage(ctx context.Context, reader io.Reader) (*ModelImage, erro
 			result.Data = bytes.Clone(encoded.Bytes())
 			return result, nil
 		}
-		width, height = max(1, width*3/4), max(1, height*3/4)
+		width, height = max(1, flattened.Bounds().Dx()*3/4), max(1, flattened.Bounds().Dy()*3/4)
 		smaller := image.NewRGBA(image.Rect(0, 0, width, height))
 		draw.ApproxBiLinear.Scale(smaller, smaller.Bounds(), flattened, flattened.Bounds(), draw.Src, nil)
-		flattened = smaller
+		flattened = padModelImage(smaller)
 	}
 	return nil, &ImageInputError{Reason: "图片压缩后仍超过 8 MiB，请缩小图片后重新提交"}
+}
+
+func padModelImage(source *image.RGBA) *image.RGBA {
+	bounds := source.Bounds()
+	if min(bounds.Dx(), bounds.Dy()) >= minModelImageSide {
+		return source
+	}
+	// With the 4096px maximum, a 32px minimum also bounds the aspect ratio to 128:1.
+	width, height := max(minModelImageSide, bounds.Dx()), max(minModelImageSide, bounds.Dy())
+	padded := image.NewRGBA(image.Rect(0, 0, width, height))
+	draw.Draw(padded, padded.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	offset := image.Pt((width-bounds.Dx())/2, (height-bounds.Dy())/2)
+	draw.Draw(padded, image.Rectangle{Min: offset, Max: offset.Add(bounds.Size())}, source, bounds.Min, draw.Src)
+	return padded
 }

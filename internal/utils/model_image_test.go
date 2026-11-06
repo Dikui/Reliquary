@@ -8,11 +8,50 @@ import (
 	"fmt"
 	"hash/crc32"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/jpeg"
 	"image/png"
 	"strings"
 	"testing"
 )
+
+// Regression: a 1456×5 image was repeatedly rejected by the vision embedder.
+func TestPrepareModelImagePadsThinCopyAndKeepsOriginal(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 1456, 5))
+	ink := color.RGBA{R: 128, A: 255}
+	draw.Draw(source, source.Bounds(), image.NewUniform(ink), image.Point{}, draw.Src)
+	var original bytes.Buffer
+	if err := png.Encode(&original, source); err != nil {
+		t.Fatal(err)
+	}
+	before := append([]byte(nil), original.Bytes()...)
+	prepared, err := PrepareModelImage(context.Background(), bytes.NewReader(original.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, _, err := image.Decode(bytes.NewReader(prepared.Data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Bounds().Dx() != 1456 || output.Bounds().Dy() != 32 {
+		t.Fatalf("expected padded 1456×32 copy, got %v", output.Bounds())
+	}
+	for y := 0; y < 32; y++ {
+		want := color.RGBA{R: 255, G: 255, B: 255, A: 255}
+		if y >= 13 && y < 18 {
+			want = ink
+		}
+		for x := 0; x < 1456; x++ {
+			if got := color.RGBAModel.Convert(output.At(x, y)); got != want {
+				t.Fatalf("pixel (%d,%d): got %v, want %v", x, y, got, want)
+			}
+		}
+	}
+	if !bytes.Equal(before, original.Bytes()) || prepared.SourceHash != fmt.Sprintf("%x", sha256.Sum256(before)) {
+		t.Fatal("padding must preserve the original bytes and hash")
+	}
+}
 
 func TestPrepareModelImageShrinksCopyAndKeepsOriginalHash(t *testing.T) {
 	var original bytes.Buffer

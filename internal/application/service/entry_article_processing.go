@@ -340,9 +340,11 @@ func (s *entryService) processArticleBody(ctx context.Context, library *types.Li
 	// Publish the body index before calling any enrichment model.
 	if k.ParseStatus != types.ParseStatusCompleted {
 		chunks, options := splitArticleBody(body, eff.ChunkingConfig)
-		s.processChunks(ctx, library, k, chunks, options)
-		if k.ParseStatus != types.ParseStatusCompleted {
-			return errors.New(k.ErrorMessage)
+		if err := s.processChunks(ctx, library, k, chunks, options); err != nil {
+			return err
+		}
+		if aborted, _ := s.isEntryAborted(ctx, k.SpaceID, k.ID); aborted {
+			return nil
 		}
 	}
 	k.SummaryStatus = types.SummaryStatusProcessing
@@ -456,9 +458,11 @@ func (s *entryService) persistArticleProcessingResult(ctx context.Context, libra
 	}
 	if k.ParseStatus != types.ParseStatusCompleted {
 		chunks, options := splitArticleBody(body, eff.ChunkingConfig)
-		s.processChunks(ctx, library, k, chunks, options)
-		if k.ParseStatus == types.ParseStatusFailed {
-			return errors.New(k.ErrorMessage)
+		if err := s.processChunks(ctx, library, k, chunks, options); err != nil {
+			return err
+		}
+		if aborted, _ := s.isEntryAborted(ctx, k.SpaceID, k.ID); aborted {
+			return nil
 		}
 	}
 	if err := indexArticleEmbedding(ctx, s.db, s.modelService, library, k); err != nil {

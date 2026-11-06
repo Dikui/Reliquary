@@ -151,6 +151,23 @@ func TestArticleImagesEmbedAfterFullProcessingAndKeepModelIdentity(t *testing.T)
 	require.EqualValues(t, 3, count, "failed replacement keeps the prior image vector")
 }
 
+// Regression: a permanent fusion error must retain its type through chunk processing.
+func TestManualProcessingSkipsRetryForPermanentFusionError(t *testing.T) {
+	h, _, e := newArticleImageHarness(t, true)
+	e.fusion = true
+	article := h.upload(t, "Fusion image", "Original illustration records source details.\n\n![chart]("+articleImageDataURI(t, 17)+")")
+	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
+	require.NoError(t, h.db.Model(article).Update("parse_status", types.ParseStatusPending).Error)
+	e.err = &utils.ImageInputError{Reason: "fixture image cannot be encoded"}
+	payload, err := json.Marshal(types.ManualProcessPayload{SpaceID: article.SpaceID, LibraryID: article.LibraryID, EntryID: article.ID, Content: article.VaultBody})
+	require.NoError(t, err)
+	err = h.service.ProcessManualUpdate(h.ctx, taskqueue.NewTask(types.TypeManualProcess, payload))
+	var imageErr *utils.ImageInputError
+	require.ErrorAs(t, err, &imageErr)
+	require.ErrorIs(t, err, taskqueue.SkipRetry)
+	require.Equal(t, types.ParseStatusFailed, h.article(t, article.ID).ParseStatus)
+}
+
 func TestArticleImagePreparationRejectsChangedAttachmentBeforeWrite(t *testing.T) {
 	h, vault, _ := newArticleImageHarness(t, true)
 	article := h.upload(t, "Fresh image", "Original illustration records verifiable source details.\n\n![chart]("+articleImageDataURI(t, 17)+")")

@@ -90,7 +90,7 @@ func buildParentChildConfigs(cc types.ChunkingConfig, base chunker.SplitterConfi
 func (s *entryService) processChunks(ctx context.Context,
 	library *types.Library, entry *types.Entry, chunks []types.ParsedChunk,
 	opts ...ProcessChunksOptions,
-) {
+) error {
 	ctx = types.WithModelCallEntry(ctx, entry.ID)
 	ctx, _ = types.WithModelCallCollector(ctx)
 	ctx = types.WithLLMCallMetadata(ctx, "document_embedding", "")
@@ -122,7 +122,7 @@ func (s *entryService) processChunks(ctx context.Context,
 	// up yet so the branch is purely "stop early".
 	if aborted, status := s.isEntryAborted(ctx, entry.SpaceID, entry.ID); aborted {
 		logger.Infof(ctx, "Entry aborted (%s), skipping chunk processing: %s", status, entry.ID)
-		return
+		return nil
 	}
 
 	// Get embedding model for vectorization — only needed when vector/keyword indexing is enabled
@@ -330,7 +330,7 @@ func (s *entryService) processChunks(ctx context.Context,
 	// Nothing has been persisted yet, so both branches just bail.
 	if aborted, status := s.isEntryAborted(ctx, entry.SpaceID, entry.ID); aborted {
 		logger.Infof(ctx, "Entry aborted (%s), skipping chunk write: %s", status, entry.ID)
-		return
+		return nil
 	}
 
 	// Save chunks to database — ALWAYS, regardless of indexing strategy.
@@ -353,7 +353,7 @@ func (s *entryService) processChunks(ctx context.Context,
 		s.repo.UpdateEntry(ctx, entry)
 		s.failStage(ctx, entry.ID, types.StageChunking,
 			werrors.ErrCodeChunkingFailed, "create chunks failed", err)
-		return
+		return err
 	}
 	totalChunkChars := 0
 	for _, c := range insertChunks {
@@ -422,7 +422,7 @@ func (s *entryService) processChunks(ctx context.Context,
 					logger.Warnf(ctx, "Failed to cleanup chunks after deletion detected: %v", err)
 				}
 			}
-			return
+			return nil
 		}
 
 		err = prepareErr
@@ -450,7 +450,7 @@ func (s *entryService) processChunks(ctx context.Context,
 					logger.Warnf(ctx, "Failed to cleanup index after deletion detected: %v", err)
 				}
 			}
-			return
+			return nil
 		}
 	} else {
 		logger.Infof(ctx, "Vector/keyword indexing disabled for Library %s, skipping BatchIndex", library.ID)
@@ -462,13 +462,13 @@ func (s *entryService) processChunks(ctx context.Context,
 			entry.ParseStatus = types.ParseStatusFailed
 			entry.ErrorMessage = err.Error()
 			_ = s.repo.UpdateEntry(ctx, entry)
-			return
+			return err
 		}
 	}
 
 	now := time.Now()
 	finalizeIndexedEntryState(entry, totalStorageSize, now)
-	if err := s.repo.UpdateEntry(ctx, entry); err != nil {
+	if err = s.repo.UpdateEntry(ctx, entry); err != nil {
 		entry.ParseStatus = types.ParseStatusFailed
 		entry.ErrorMessage = err.Error()
 	}
@@ -479,6 +479,7 @@ func (s *entryService) processChunks(ctx context.Context,
 		logger.GetLogger(ctx).WithField("error", err).Errorf("processChunks update space storage used failed")
 	}
 	logger.GetLogger(ctx).Infof("processChunks successfully")
+	return err
 }
 
 func (s *entryService) ReparseEntry(ctx context.Context, entryID string, overrides *types.EntryProcessOverrides) (entry *types.Entry, err error) {
