@@ -49,6 +49,10 @@ export default {
     moveDocuments: "Documents to move",
     moveRelations: "Relations to move",
     resultAttributes: "Resulting attributes",
+    mergeArchivedAttributes: "Target archived attributes retained",
+    mergeArchivedAttributesHint: "These target values are kept unchanged and cannot be edited here.",
+    mergeExcludedAttributes: "Source attributes excluded from the result",
+    mergeExcludedAttributesHint: "These source fields do not apply to the target category or are archived or undefined. Their values will not be copied to the target. The source attribute history is preserved.",
 
     yes: 'Yes', no: 'No',
     parentContext: 'Parent context',

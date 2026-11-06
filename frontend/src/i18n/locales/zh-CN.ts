@@ -49,6 +49,10 @@ export default {
     moveDocuments: "要迁移的文档",
     moveRelations: "要迁移的关系",
     resultAttributes: "结果属性",
+    mergeArchivedAttributes: "保留目标已有的归档属性",
+    mergeArchivedAttributesHint: "这些目标属性值将原样保留，不能在此修改。",
+    mergeExcludedAttributes: "不带入结果的来源属性",
+    mergeExcludedAttributesHint: "以下来源字段不适用于目标类别，或已归档、未定义，其值不会带入目标。来源的属性历史仍将保留。",
 
     yes: '是', no: '否',
     parentContext: '上下文',
