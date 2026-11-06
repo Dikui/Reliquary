@@ -25,6 +25,8 @@ export default {
     historyEntity: '历史所属实体', returnCurrent: '返回当前实体',
     targetLibrary: "目标产品库",
     autoProductLibraries: "自动匹配的产品库",
+    ownProductsAlwaysMatch: "本库产品始终参与自动匹配。",
+    noOtherProductLibraries: "暂无其他可选产品库。创建人工维护库后，可在此添加匹配目标。",
     documentRelationTypes: "文档关系类型（逗号分隔）",
     documentRelationType: "文档关系类型",
     conversionHint: "可通过类别映射转换已有实体，保留文档和关系。",

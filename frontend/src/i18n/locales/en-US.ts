@@ -25,6 +25,8 @@ export default {
     historyEntity: 'History for entity', returnCurrent: 'Return to current entity',
     targetLibrary: "Target product library",
     autoProductLibraries: "Product libraries for automatic matching",
+    ownProductsAlwaysMatch: "Products in this library always participate in automatic matching.",
+    noOtherProductLibraries: "No other product libraries are available. Create a managed library to add matching targets.",
     documentRelationTypes: "Document relation types (comma-separated)",
     documentRelationType: "Document relation type",
     conversionHint: "Existing entities can switch to managed mode with a kind mapping. Documents and relations are retained.",
