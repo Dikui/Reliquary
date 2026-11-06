@@ -98,12 +98,14 @@ func (c *changes) removeEntries(ids []string) error {
 		return nil
 	}
 	var rows []types.Relation
-	if err := c.tx.Model(&types.Relation{}).Joins("JOIN relation_sources s ON s.relation_id=relations.id").Where("s.entry_id IN ?", ids).Select("relations.*").Distinct().Find(&rows).Error; err != nil {
+	if err := c.tx.Model(&types.Relation{}).Joins("JOIN relation_sources s ON s.relation_id=relations.id").Where("s.entry_id IN ? AND relations.valid_to IS NULL", ids).Select("relations.*").Distinct().Find(&rows).Error; err != nil {
 		return err
 	}
 	for _, r := range rows {
 		c.touch(r)
 	}
+	// Remove the document's sources from history too, without publishing a new
+	// version of ended relationships to the current graph.
 	return c.tx.Where("entry_id IN ?", ids).Delete(&types.RelationSource{}).Error
 }
 
@@ -473,9 +475,9 @@ func rewriteSuppressions(tx *gorm.DB, spaceID uint64, libraryID, fromType, toTyp
 	}
 	return nil
 }
-func (c *changes) enforceSuppressions(spaceID uint64) error {
+func (c *changes) enforceSuppressions(spaceID uint64, libraryID string) error {
 	var rows []types.Relation
-	if err := c.tx.Model(&types.Relation{}).Joins("JOIN relation_suppressions s ON s.library_id=relations.library_id AND s.subject_id=relations.subject_id AND s.relation_type=relations.relation_type AND s.object_id=relations.object_id").Where("relations.space_id=?", spaceID).Select("relations.*").Find(&rows).Error; err != nil {
+	if err := c.tx.Model(&types.Relation{}).Joins("JOIN relation_suppressions s ON s.library_id=relations.library_id AND s.subject_id=relations.subject_id AND s.relation_type=relations.relation_type AND s.object_id=relations.object_id").Where("relations.space_id=? AND relations.library_id=? AND relations.valid_to IS NULL", spaceID, libraryID).Select("relations.*").Find(&rows).Error; err != nil {
 		return err
 	}
 	for _, row := range rows {
@@ -524,7 +526,7 @@ func MergeEntityTx(tx *gorm.DB, spaceID uint64, from, to string) error {
 			return err
 		}
 	}
-	if err := c.enforceSuppressions(spaceID); err != nil {
+	if err := c.enforceSuppressions(spaceID, identities[0].LibraryID); err != nil {
 		return err
 	}
 	return c.flush()
@@ -555,7 +557,7 @@ func MergeTypeTx(tx *gorm.DB, spaceID uint64, libraryID, from, to string) error 
 	if err := tx.Model(&types.LibraryRelationType{}).Where("library_id=? AND name=?", libraryID, from).Update("enabled", false).Error; err != nil {
 		return err
 	}
-	if err := c.enforceSuppressions(spaceID); err != nil {
+	if err := c.enforceSuppressions(spaceID, libraryID); err != nil {
 		return err
 	}
 	return c.flush()
