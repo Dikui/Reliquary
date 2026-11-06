@@ -35,10 +35,10 @@ function values(event: Event) { return (event.target as HTMLInputElement).value.
     <label>{{ t('managed.mode') }}<select v-model="library.entity_mode"><option value="extracted">{{ t('managed.extracted') }}</option><option value="managed">{{ t('managed.managed') }}</option></select></label>
     <p>{{ t('managed.conversionHint') }}</p>
     <p v-if="conversionError" role="alert">{{ conversionError }}</p>
-    <template v-if="library.entity_mode === 'extracted'">
-      <h3>{{ t('managed.autoProductLibraries') }}</h3>
-      <label v-for="target in libraries" :key="target.id"><input type="checkbox" :checked="library.product_library_ids?.includes(target.id)" @change="library.product_library_ids = ($event.target as HTMLInputElement).checked ? [...(library.product_library_ids || []), target.id] : (library.product_library_ids || []).filter(id => id !== target.id)">{{ target.name }}</label>
-    </template>
+    <h3>{{ t('managed.autoProductLibraries') }}</h3>
+    <p v-if="library.entity_mode === 'managed'">{{ t('managed.ownProductsAlwaysMatch') }}</p>
+    <p v-if="!libraries.length">{{ t('managed.noOtherProductLibraries') }}</p>
+    <label v-for="target in libraries" :key="target.id"><input type="checkbox" :checked="library.product_library_ids?.includes(target.id)" @change="library.product_library_ids = ($event.target as HTMLInputElement).checked ? [...(library.product_library_ids || []), target.id] : (library.product_library_ids || []).filter(id => id !== target.id)">{{ target.name }}</label>
     <template v-if="library.entity_mode === 'managed'">
       <h3 v-if="needsConversion">{{ t('managed.conversionMapping') }}</h3><label v-for="(count, type) in needsConversion ? conversion : {}" :key="type">{{ type }} ({{ count }})<select :value="library.entity_kind_mapping?.[type] || ''" @change="library.entity_kind_mapping = { ...library.entity_kind_mapping, [type]: ($event.target as HTMLSelectElement).value }"><option value="">{{ t('managed.chooseKind') }}</option><option v-for="kind in schema.kinds" :key="kind.key" :value="kind.key">{{ kind.name || kind.key }}</option></select></label>
       <label>{{ t('managed.documentRelationTypes') }}<input :value="(library.document_relation_types || ['references', 'specification', 'test_report', 'comparison']).join(', ')" @input="library.document_relation_types = values($event)"></label>
