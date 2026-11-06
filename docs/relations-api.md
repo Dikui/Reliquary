@@ -23,7 +23,7 @@
 
 修改内容类型使用 `PUT /api/v1/entries/:id/content-type`，请求 `{"content_type":"所属库启用类型"}`。按资料 graph 覆盖和类型默认值决定补抽或撤除关系。实体合并使用 `POST /api/v1/entities/merge`，请求 `{"keep_entity_id":"保留ID","merge_entity_id":"被合并ID"}`。删除资料使用 `DELETE /api/v1/entries/:id`，同时撤除该资料的关系来源，最后一个来源删除后关系也删除。显式更新正文和图片后重新处理会替换该资料的证据，不累加重复来源。
 
-这些动作与 PG 正本及待同步通知在同一事务提交。Neo4j 异步读取 PG 当前状态；查询返回的 `pending_sync` 可提示副本落后。人工删除留下库内抑制，重新处理不能复活该三元组。同库同来源覆盖保留原资料 ID，同步撤除旧派生数据并在后台重建图谱；不保留旧正文版本。维护核对见 [个人使用指南](personal-use.md#neo4j-图谱查询副本)。
+这些动作与 PG 正本及待同步通知在同一事务提交。Neo4j 异步读取 PG 当前状态；查询返回的 `pending_sync` 可提示副本落后。人工删除留下库内抑制，重新处理不能复活该三元组；合并后的抑制清理只作用于本库的当前关系。撤除文献来源会清理历史来源行，但不改写已结束关系，也不重新发布它们；内容检查只读取未结束的关系。同库同来源覆盖保留原资料 ID，同步撤除旧派生数据并在后台重建图谱；不保留旧正文版本。维护核对见 [个人使用指南](personal-use.md#neo4j-图谱查询副本)。
 
 ## 产品属性、文献关联与结构调整
 
@@ -33,8 +33,8 @@
 - `GET /entities/:entity_id/attribute-history?page=1&page_size=20`：分页返回全部生效快照，包括未来快照。`GET /entities/:entity_id/history` 仍返回操作日志。
 - `POST /libraries/:id/entity-attachments`：multipart 的 `file` 字段上传附件，最多 32 MiB。返回附件 ID、名称、类型和大小。`GET /entity-attachments/:attachment_id` 读取元数据；追加 `/download` 下载。属性中的附件值为该 ID，必须与实体或关系在同一库。`DELETE /entity-attachments/:attachment_id` 仅删除无当前或历史引用的附件。
 - `GET /entries/:id/entity-links`：仅查看文献与人工维护库产品的关联。`PUT /entries/:id/entity-links/:entity_id` 接受 `excluded` 与可选 `relation_type`。文献可属于其他库，产品必须在同一空间的人工维护库。省略类型保留旧值，新关联默认为 references。
-- 文献库的 `product_library_ids` 配置自动匹配范围；产品库的 `document_relation_types` 配置关联类型，必须保留 references。自动匹配不推断规格书、测试报告等语义类型。
-- `POST /entities/:entity_id/merge`：目标 ID 在路径中，请求 `{revision,source_id,source_revision,attributes,effective_at?,drop_relation_ids?,document_relation_preference?}`。必须显式给出合并后的完整属性。关联类型冲突可用 document_relation_preference 指定 source 或 target；相反的排除决定仍拒绝。
+- 文献库的 `product_library_ids` 配置自动匹配范围；产品库的 `document_relation_types` 配置关联类型，必须保留 references。自动匹配不推断规格书、测试报告等语义类型。两种实体模式都可以配置 `product_library_ids`；人工维护库自身的产品始终参与匹配。
+- `POST /entities/:entity_id/merge`：目标 ID 在路径中，请求 `{revision,source_id,source_revision,attributes,effective_at?,drop_relation_ids?,document_relation_preference?}`。必须显式给出合并后的完整属性：只能包含目标类别适用的字段，并原样保留目标已归档字段的值。关联类型冲突可用 document_relation_preference 指定 source 或 target；相反的排除决定仍拒绝。
 - `POST /entities/:entity_id/split`：请求 `{revision,new_entity,entry_ids,relation_ids,copy_relation_ids?,effective_at?}`，其中 new_entity 使用创建实体结构。原实体保留，指定的文献和 relation_ids 移动到新实体，copy_relation_ids 复制给新实体；同一关系不能同时迁移和复制。
 - `DELETE /entities/:entity_id`：请求 `{revision}`，仅没有未排除文献关联、关系（含历史）或其他受保护引用的产品可删除；只剩排除记录时可以删除，排除记录随产品一并清理并写入操作日志。
 - `GET /entities/:entity_id/reorganizations`：查看合并、拆分的来源与目标。结构变化立即生效；仅结果属性支持过去或当前生效时间。原实体的时间线及未来快照不迁移。

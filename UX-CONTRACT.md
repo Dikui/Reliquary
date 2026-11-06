@@ -445,6 +445,12 @@ confirmation and is restricted by the server to unreferenced products.
 Library settings send entity mode, entity schema and relation types only when
 they changed since load, so ordinary edits do not request the exclusive space lock.
 
+Merge drafts keep only fields that apply to the target kind, show preserved archived
+target values read-only, and list source values that will not carry over before
+confirmation; choosing another source recalculates them. Both entity modes can select
+other product libraries for automatic matching; a managed library always matches its
+own products.
+
 Search optionally includes descendants and retains that choice in URL state.
 Parent context is displayed when supplied, while the click target remains the
 original matched location. Existing extracted libraries retain their merge and
