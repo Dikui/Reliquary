@@ -310,3 +310,28 @@ func TestShelfModelCompositionEditsPreserveConditionalFacts(t *testing.T) {
 	require.Equal(t, "GA", detail.Shelf.SaleStatuses[0].Status)
 	require.Len(t, detail.Shelf.Composition[0].Parts, 2)
 }
+
+// Medium regression, task 04: a scheduled component status proposal must show
+// its future value and warn dependents while current status remains unchanged.
+func TestShelfModelScheduledStatusReturnsFutureDiff(t *testing.T) {
+	f, library, draft := shelfModelSetup(t)
+	id := shelfNode(draft, "single")
+	future := time.Date(2090, 1, 1, 0, 0, 0, 0, time.UTC)
+	status := types.ShelfOperation{ID: "scheduled", Type: "set_sale_statuses", EntityID: id, Revision: 1, EffectiveAt: &future, SaleStatuses: &[]types.ShelfSaleStatus{{Region: "region_a", Status: "EOM"}}}
+	var saved types.ShelfChangeset
+	path := "/libraries/" + library.ID + "/shelf/changesets"
+	f.request(http.MethodPost, path, types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Operations: []types.ShelfOperation{status}}, http.StatusCreated, &saved)
+	var proposed types.Entity
+	require.NoError(t, json.Unmarshal(saved.Items[0].After, &proposed))
+	var statuses []types.ShelfSaleStatus
+	require.NoError(t, types.DecodeShelfValue(proposed.Attributes["sale_statuses"], &statuses))
+	require.Len(t, statuses, 1)
+	require.Equal(t, "EOM", statuses[0].Status)
+	require.Len(t, saved.Items[0].Warnings, 1)
+	f.request(http.MethodPost, path+"/"+saved.ID+"/confirm", types.ShelfChangesetReview{Revision: saved.Revision, Decisions: []types.ShelfDecision{{ItemID: "scheduled", Action: "apply"}}}, http.StatusOK, nil)
+	var detail types.EntityDetail
+	f.request(http.MethodGet, "/entities/"+id, nil, http.StatusOK, &detail)
+	require.Empty(t, detail.Shelf.SaleStatuses)
+	f.request(http.MethodGet, "/entities/"+id+"?as_of=2090-01-02T00:00:00Z", nil, http.StatusOK, &detail)
+	require.Equal(t, "EOM", detail.Shelf.SaleStatuses[0].Status)
+}

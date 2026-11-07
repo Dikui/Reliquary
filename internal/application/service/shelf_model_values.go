@@ -132,7 +132,17 @@ func (s *EntityService) setShelfModelValues(ctx context.Context, draft *types.Sh
 			}
 		}
 	}
-	return s.UpdateManagedEntity(ctx, entity.ID, types.ManagedEntityPatch{Revision: op.Revision, Attributes: &attrs, EffectiveAt: at})
+	result, err := s.UpdateManagedEntity(ctx, entity.ID, types.ManagedEntityPatch{Revision: op.Revision, Attributes: &attrs, EffectiveAt: at})
+	if err != nil {
+		return nil, err
+	}
+	// The proposal describes the requested business time, including scheduled facts.
+	if at != nil {
+		if err := hydrateManagedEntityAttributes(ctx, s.db, []*types.Entity{result}, *at); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
 }
 
 func (s *EntityService) shelfStatusWarnings(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem) ([]types.ShelfWarning, error) {
