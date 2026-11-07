@@ -1848,6 +1848,8 @@ export default {
     candidateB: '候选 B',
     description: '简介',
     mergeInto: '合并到 {name}',
+    keepEntity: '保留实体',
+    keepCandidate: '保留 {candidate}：{name}',
     notFound: '此事项或关联内容已不存在，请刷新列表。',
     changed: '此事项的状态已改变或不满足操作条件，请刷新后核对。',
     saveFailed: '处理结果未保存，请重试。',

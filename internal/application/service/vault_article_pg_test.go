@@ -236,11 +236,11 @@ func TestVaultAcceptedEntityMergeSuggestionRefreshesHeader(t *testing.T) {
 	keep := entityRecord(uuid.NewString(), "规范实体", "company")
 	keep.LibraryID = h.library.ID
 	require.NoError(t, h.db.Create(&keep).Error)
-	suggestion := &types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: h.library.SpaceID, NewEntityID: old.ID, CandidateEntityID: keep.ID, EntryID: k.ID, Reason: "同一主体", Status: "pending", CreatedAt: time.Now()}
+	suggestion := &types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: h.library.SpaceID, NewEntityID: keep.ID, CandidateEntityID: old.ID, EntryID: k.ID, Reason: "同一主体", Status: "pending", CreatedAt: time.Now()}
 	require.NoError(t, h.db.Create(suggestion).Error)
 	entities := NewEntityService(h.db, h.service.modelService)
 	entities.SetHeaderRefresher(v)
-	_, err := entities.DecideMergeSuggestion(h.ctx, suggestion.ID, true)
+	_, err := entities.DecideMergeSuggestion(h.ctx, suggestion.ID, true, keep.ID)
 	require.NoError(t, err)
 	require.NoError(t, v.RefreshHeader(h.ctx, k.ID))
 	require.Eventually(t, func() bool {

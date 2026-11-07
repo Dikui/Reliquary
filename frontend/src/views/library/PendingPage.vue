@@ -96,8 +96,8 @@ async function loadCatalog() {
 }
 async function refresh() { if (!busy.value) await Promise.all([loadMerges(), loadReviews(), counts.refresh()]) }
 function changePage(page: number) { reviewPage.value = page; void loadReviews() }
-async function mergeChanged(id: string, status: 'accepted' | 'rejected') {
-  merges.value = merges.value.map(item => item.id === id ? { ...item, status } : item)
+async function mergeChanged(id: string, status: 'accepted' | 'rejected', keepEntityId?: string) {
+  merges.value = merges.value.map(item => item.id === id ? { ...item, status, keep_entity_id: keepEntityId } : item)
   await counts.refresh()
 }
 async function reviewChanged() { await Promise.all([loadReviews(), counts.refresh()]) }

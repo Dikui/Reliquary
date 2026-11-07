@@ -22,7 +22,7 @@ test('entity resources and mutations use the dedicated entity routes', async () 
   await api.mergeEntities({ keep_entity_id: 'kept', merge_entity_id: 'merged' })
   await api.listEntityMergeRecords('entity/a')
   await api.listEntityMergeSuggestions({ library_id: 'library-a', status: 'pending', limit: 20 })
-  await api.acceptEntityMergeSuggestion('suggestion/a')
+  await api.acceptEntityMergeSuggestion('suggestion/a', 'entity/a')
   await api.rejectEntityMergeSuggestion('suggestion/b')
   await api.getEntityNameEmbeddingRebuildStatus()
   await api.rebuildEntityNameEmbeddings()
@@ -32,7 +32,7 @@ test('entity resources and mutations use the dedicated entity routes', async () 
     { method: 'post', url: '/api/v1/entities/merge', body: { keep_entity_id: 'kept', merge_entity_id: 'merged' } },
     { method: 'get', url: '/api/v1/entities/entity%2Fa/merge-records' },
     { method: 'get', url: '/api/v1/entities/merge-suggestions?library_id=library-a&status=pending&limit=20' },
-    { method: 'post', url: '/api/v1/entities/merge-suggestions/suggestion%2Fa/accept', body: {} },
+    { method: 'post', url: '/api/v1/entities/merge-suggestions/suggestion%2Fa/accept', body: { keep_entity_id: 'entity/a' } },
     { method: 'post', url: '/api/v1/entities/merge-suggestions/suggestion%2Fb/reject', body: {} },
     { method: 'get', url: '/api/v1/entities/name-embeddings/rebuild' },
     { method: 'post', url: '/api/v1/entities/name-embeddings/rebuild', body: {} },

@@ -131,7 +131,16 @@ func (h *EntityHandler) MergeSuggestions(c *gin.Context) {
 func (h *EntityHandler) AcceptMergeSuggestion(c *gin.Context) { h.decideMergeSuggestion(c, true) }
 func (h *EntityHandler) RejectMergeSuggestion(c *gin.Context) { h.decideMergeSuggestion(c, false) }
 func (h *EntityHandler) decideMergeSuggestion(c *gin.Context, accept bool) {
-	item, err := h.service.DecideMergeSuggestion(c.Request.Context(), c.Param("suggestion_id"), accept)
+	var input struct {
+		KeepEntityID string `json:"keep_entity_id"`
+	}
+	if accept && c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.Error(werrors.NewBadRequestError("invalid retained entity"))
+			return
+		}
+	}
+	item, err := h.service.DecideMergeSuggestion(c.Request.Context(), c.Param("suggestion_id"), accept, input.KeepEntityID)
 	if err != nil {
 		c.Error(err)
 		return

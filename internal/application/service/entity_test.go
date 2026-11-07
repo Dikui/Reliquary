@@ -246,7 +246,7 @@ func TestEntityResolutionUncertainIdentityCreatesDecidableSuggestions(t *testing
 	require.Equal(t, article.ID, suggestions[0].EntryID)
 	require.Equal(t, "Acme Systems Ltd", suggestions[0].NewEntityName)
 	require.Equal(t, "Acme Systems", suggestions[0].CandidateEntityName)
-	accepted, err := svc.DecideMergeSuggestion(ctx, suggestions[0].ID, true)
+	accepted, err := svc.DecideMergeSuggestion(ctx, suggestions[0].ID, true, "")
 	require.NoError(t, err)
 	require.Equal(t, "accepted", accepted.Status)
 	require.Equal(t, "acme", readNameEntity(t, db, entities[0].ID).MergedIntoID)
@@ -254,11 +254,11 @@ func TestEntityResolutionUncertainIdentityCreatesDecidableSuggestions(t *testing
 	require.NoError(t, db.Create(&other).Error)
 	rejected := types.EntityMergeSuggestion{ID: uuid.NewString(), SpaceID: 1, NewEntityID: other.ID, CandidateEntityID: "acme", EntryID: article.ID, Reason: "Unclear", Status: "pending", CreatedAt: time.Now()}
 	require.NoError(t, db.Create(&rejected).Error)
-	decided, err := svc.DecideMergeSuggestion(ctx, rejected.ID, false)
+	decided, err := svc.DecideMergeSuggestion(ctx, rejected.ID, false, "")
 	require.NoError(t, err)
 	require.Equal(t, "rejected", decided.Status)
 	require.Empty(t, readNameEntity(t, db, other.ID).MergedIntoID)
-	_, err = svc.DecideMergeSuggestion(ctx, rejected.ID, true)
+	_, err = svc.DecideMergeSuggestion(ctx, rejected.ID, true, "")
 	require.Error(t, err)
 }
 

@@ -40,7 +40,12 @@ func (s *EntityService) ListMergeSuggestions(ctx context.Context, q types.Entity
 	}
 	items := []types.EntityMergeSuggestion{}
 	query := s.db.WithContext(ctx).Model(&types.EntityMergeSuggestion{}).
-		Select("entity_merge_suggestions.*, fresh.canonical_name AS new_entity_name, candidate.canonical_name AS candidate_entity_name").
+		Select(`entity_merge_suggestions.*, fresh.canonical_name AS new_entity_name, candidate.canonical_name AS candidate_entity_name,
+            (SELECT record.keep_entity_id FROM entity_merge_records record
+             WHERE record.space_id=entity_merge_suggestions.space_id
+               AND ((record.keep_entity_id=fresh.id AND record.merge_entity_id=candidate.id)
+                 OR (record.keep_entity_id=candidate.id AND record.merge_entity_id=fresh.id))
+             ORDER BY record.created_at DESC LIMIT 1) AS keep_entity_id`).
 		Joins("JOIN entities fresh ON fresh.space_id=entity_merge_suggestions.space_id AND fresh.id=entity_merge_suggestions.new_entity_id").
 		Joins("JOIN entities candidate ON candidate.space_id=entity_merge_suggestions.space_id AND candidate.id=entity_merge_suggestions.candidate_entity_id").
 		Where("entity_merge_suggestions.space_id=?", spaceID)
@@ -59,7 +64,7 @@ func (s *EntityService) ListMergeSuggestions(ctx context.Context, q types.Entity
 	return items, err
 }
 
-func (s *EntityService) DecideMergeSuggestion(ctx context.Context, suggestionID string, accept bool) (*types.EntityMergeSuggestion, error) {
+func (s *EntityService) DecideMergeSuggestion(ctx context.Context, suggestionID string, accept bool, keepEntityID string) (*types.EntityMergeSuggestion, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -79,10 +84,30 @@ func (s *EntityService) DecideMergeSuggestion(ctx context.Context, suggestionID 
 		}
 
 		target := "rejected"
+		mergeEntityID := item.NewEntityID
 		if accept {
 			target = "accepted"
+			if keepEntityID == "" {
+				keepEntityID = item.CandidateEntityID
+			}
+			if keepEntityID != item.NewEntityID && keepEntityID != item.CandidateEntityID {
+				return werrors.NewBadRequestError("retained entity must be one of the suggestion candidates")
+			}
+			if keepEntityID == item.NewEntityID {
+				mergeEntityID = item.CandidateEntityID
+			}
+			item.KeepEntityID = keepEntityID
 		}
 		if item.Status == target {
+			if accept {
+				var count int64
+				if err := tx.Model(&types.EntityMergeRecord{}).Where("space_id=? AND keep_entity_id=? AND merge_entity_id=?", spaceID, keepEntityID, mergeEntityID).Count(&count).Error; err != nil {
+					return err
+				}
+				if count == 0 {
+					return werrors.NewBadRequestError("merge suggestion was accepted with a different retained entity")
+				}
+			}
 			return nil
 		}
 		if item.Status != "pending" {
@@ -91,7 +116,7 @@ func (s *EntityService) DecideMergeSuggestion(ctx context.Context, suggestionID 
 		if accept {
 			nested := *s
 			nested.db = tx
-			if err := nested.MergeEntities(ctx, item.CandidateEntityID, item.NewEntityID); err != nil {
+			if err := nested.MergeEntities(ctx, keepEntityID, mergeEntityID); err != nil {
 				return err
 			}
 		}
@@ -101,7 +126,7 @@ func (s *EntityService) DecideMergeSuggestion(ctx context.Context, suggestionID 
 		return tx.Model(&item).Updates(map[string]any{"status": target, "decided_at": now}).Error
 	})
 	if err == nil && accept {
-		err = s.refreshArticleHeadersForEntity(ctx, spaceID, item.CandidateEntityID)
+		err = s.refreshArticleHeadersForEntity(ctx, spaceID, keepEntityID)
 	}
 	return &item, err
 }

@@ -59,6 +59,7 @@ export interface EntityMergeSuggestion {
   candidate_entity_id: string
   new_entity_name?: string
   candidate_entity_name?: string
+  keep_entity_id?: string
   reason: string
   entry_id?: string
   status: 'pending' | 'accepted' | 'rejected'
@@ -66,7 +67,7 @@ export interface EntityMergeSuggestion {
   decided_at?: string
 }
 export const listEntityMergeSuggestions = (params: EntityListParams & { status?: string }) => get<EntityEnvelope<EntityMergeSuggestion[]>>(`${base}/merge-suggestions${queryString(params)}`)
-export const acceptEntityMergeSuggestion = (id: string) => post<EntityActionEnvelope>(`${base}/merge-suggestions/${encodeURIComponent(id)}/accept`, {})
+export const acceptEntityMergeSuggestion = (id: string, keepEntityId: string) => post<EntityActionEnvelope>(`${base}/merge-suggestions/${encodeURIComponent(id)}/accept`, { keep_entity_id: keepEntityId })
 export const rejectEntityMergeSuggestion = (id: string) => post<EntityActionEnvelope>(`${base}/merge-suggestions/${encodeURIComponent(id)}/reject`, {})
 export interface EntityNameEmbeddingRebuildRun {
   id: string

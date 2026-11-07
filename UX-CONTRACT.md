@@ -40,7 +40,7 @@ Reliquary serves a single user collecting source material and maintaining entity
 | View entity | Clear the previous article list and show loading | Show type, aliases and articles mentioning the entity in the single library | Keep selection, show inline error and allow refresh |
 | Filter entity list | Debounce search and invalidate older requests | Show the filtered list with explicit load more | Show inline error and allow refresh |
 | Merge entity | App-owned dialog names the retained entity and space-wide consequences; disable duplicate requests | Refresh the entity list and announce success | Keep selected target and show inline error |
-| Accept merge suggestion | Shared confirmation names both entities and space-wide consequences | Refresh the list, retain filter and announce success | Keep list and show inline error |
+| Accept merge suggestion | Choose to retain A or B (default B); the action and shared confirmation name the selected target and space-wide consequences | Retain filter, show actual merge direction in history and announce success; next suggestion defaults to B | Keep the target selection and show inline error |
 | Reject merge suggestion | Disable duplicate requests | Keep entities separate and refresh suggestions | Keep list and show inline error |
 | Rebuild entity name embeddings | Disable duplicate starts; poll active runs every five seconds | Show status and processed/total counts | Preserve failure reason and retry controls |
 

@@ -115,3 +115,61 @@ FOR EACH ROW EXECUTE FUNCTION reject_merge_log();`).Error)
 		})
 	}
 }
+
+// Spec (medium): choosing A retains A; invalid targets cannot alter the pair.
+func TestEntityMergeSuggestionRetainsSelectedCandidate(t *testing.T) {
+	db := entityFixtureDB(t)
+	require.NoError(t, db.Create(&types.Space{ID: 1, Name: "Merge choice"}).Error)
+	library := types.Library{ID: "library", SpaceID: 1, Name: "Library", Directory: "library"}
+	library.EnsureDefaults()
+	require.NoError(t, db.Create(&library).Error)
+	for _, id := range []string{"a", "b", "third"} {
+		require.NoError(t, db.Create(&types.Entity{ID: id, SpaceID: 1, LibraryID: library.ID, CanonicalName: id, NormalizedName: id, EntityType: "product"}).Error)
+	}
+	entry := types.Entry{ID: "entry", SpaceID: 1, LibraryID: library.ID, Title: "Source", Type: types.EntryTypeManual, ParseStatus: types.ParseStatusCompleted}
+	require.NoError(t, db.Create(&entry).Error)
+	require.NoError(t, db.Create(&types.EntryEntity{SpaceID: 1, EntryID: entry.ID, EntityID: "b"}).Error)
+	suggestion := types.EntityMergeSuggestion{ID: "choice", SpaceID: 1, EntryID: entry.ID, NewEntityID: "a", CandidateEntityID: "b", Status: "pending"}
+	require.NoError(t, db.Create(&suggestion).Error)
+	engine := gin.New()
+	engine.Use(middleware.ErrorHandler(), entityIdentityMiddleware())
+	RegisterEntityRoutes(engine.Group("/api/v1"), handler.NewEntityHandler(service.NewEntityService(db, nil)))
+	const endpoint = "/api/v1/entities/merge-suggestions/choice/accept"
+	response := entityRequest(t, engine, http.MethodPost, endpoint, `{"keep_entity_id":"third"}`, 1, entityOwnerID)
+	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+	require.NoError(t, db.First(&suggestion, "id=?", suggestion.ID).Error)
+	require.Equal(t, "pending", suggestion.Status)
+	var count int64
+	require.NoError(t, db.Model(&types.EntityMergeRecord{}).Count(&count).Error)
+	require.Zero(t, count)
+
+	for range 2 {
+		response = entityRequest(t, engine, http.MethodPost, endpoint, `{"keep_entity_id":"a"}`, 1, entityOwnerID)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var decision struct{ Data types.EntityMergeSuggestion }
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &decision))
+		require.Equal(t, "a", decision.Data.KeepEntityID)
+	}
+	response = entityRequest(t, engine, http.MethodPost, endpoint, `{"keep_entity_id":"b"}`, 1, entityOwnerID)
+	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+	var merged types.Entity
+	require.NoError(t, db.First(&merged, "id=?", "b").Error)
+	require.Equal(t, "a", merged.MergedIntoID)
+	var links []types.EntryEntity
+	require.NoError(t, db.Where("entry_id=?", entry.ID).Find(&links).Error)
+	require.Len(t, links, 1)
+	require.Equal(t, "a", links[0].EntityID)
+	var records []types.EntityMergeRecord
+	require.NoError(t, db.Find(&records).Error)
+	require.Len(t, records, 1)
+	require.Equal(t, "a", records[0].KeepEntityID)
+	require.Equal(t, "b", records[0].MergeEntityID)
+	response = entityRequest(t, engine, http.MethodGet, "/api/v1/entities/merge-suggestions?library_id=library&status=accepted", "", 1, entityOwnerID)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var history struct{ Data []types.EntityMergeSuggestion }
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &history))
+	require.Len(t, history.Data, 1)
+	require.Equal(t, "a", history.Data[0].KeepEntityID)
+	require.Equal(t, "a", history.Data[0].NewEntityID)
+	require.Equal(t, "b", history.Data[0].CandidateEntityID)
+}

@@ -62,6 +62,7 @@ type EntityMergeSuggestion struct {
 	DecidedAt           *time.Time `json:"decided_at,omitempty"`
 	NewEntityName       string     `json:"new_entity_name" gorm:"column:new_entity_name;->;-:migration"`
 	CandidateEntityName string     `json:"candidate_entity_name" gorm:"column:candidate_entity_name;->;-:migration"`
+	KeepEntityID        string     `json:"keep_entity_id,omitempty" gorm:"column:keep_entity_id;->;-:migration"`
 }
 
 func (EntityMergeSuggestion) TableName() string {

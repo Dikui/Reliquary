@@ -28,7 +28,7 @@ function mount(t: TestContext, options: { merges?: any[]; reviews?: any[]; query
     ENTITY_TYPES,
     listEntityMergeSuggestions: async (query: any) => { calls.scopes.push(query); return { success: true, data: query.library_id === 'a' ? data.merges : [] } },
     getEntity: async (id: string) => ({ success: true, data: { entity: { id, canonical_name: id.startsWith('fresh') ? `Fresh ${id.slice(6)}` : `Existing ${id.slice(9)}`, entity_type: 'company', aliases: ['Alias'], description: 'Actual description', library_id: 'a' }, entries: [{ id: 'source-full-identifier', title: 'Source evidence' }] } }),
-    acceptEntityMergeSuggestion: async (id: string) => { calls.decisions.push(['accept', id]); data.merges.find(item => item.id === id)!.status = 'accepted'; return { success: true } },
+    acceptEntityMergeSuggestion: async (id: string, keepEntityId: string) => { calls.decisions.push(['accept', id, keepEntityId]); data.merges.find(item => item.id === id)!.status = 'accepted'; return { success: true } },
     rejectEntityMergeSuggestion: async (id: string) => { calls.decisions.push(['reject', id]); data.merges.find(item => item.id === id)!.status = 'rejected'; return { success: true } },
     ...options.api,
   }
@@ -83,15 +83,42 @@ test('merge decisions retain the target identity, confirm acceptance and advance
   assert.equal(useFeedback().confirmations.length, 1)
   assert.equal(descendants(root).find(node => node.tag === 'select' && node.props['aria-label'] === zh.mergeSuggestions.statusFilter)?.props.disabled, true)
   await useFeedback().confirmations[0]!.accept(); await settle()
-  assert.deepEqual(calls.decisions, [['accept', 'one']])
+  assert.deepEqual(calls.decisions, [['accept', 'one', 'existing-one']])
   assert.ok(visibleText(root).includes('Fresh two'))
   await click(find(root, 'button', '保持独立'))
-  assert.deepEqual(calls.decisions, [['accept', 'one'], ['reject', 'two']])
+  assert.deepEqual(calls.decisions, [['accept', 'one', 'existing-one'], ['reject', 'two']])
   assert.ok(visibleText(root).includes(zh.mergeSuggestions.empty.pending))
   const status = descendants(root).find(node => node.tag === 'select' && node.props['aria-label'] === zh.mergeSuggestions.statusFilter)!
   status.props.onChange({ target: { value: 'accepted' } }); await settle()
   assert.ok(visibleText(root).includes('Fresh one'))
   assert.equal(calls.counts, 2)
+})
+
+// Spec (small): choosing the retained candidate changes the entire merge flow.
+test('retaining A updates the action, confirmation and accepted history', async t => {
+  const { root, calls } = mount(t, { reviews: [] })
+  await settle()
+  const target = () => descendants(root).find(node => node.tag === 'select' && node.props['aria-label'] === zh.pendingPage.keepEntity)!
+  assert.equal(target().props.value, 'b')
+  target().props.onChange({ target: { value: 'a' } }); await settle()
+  await click(find(root, 'button', '合并到 Fresh one'))
+  const confirmation = useFeedback().confirmations[0]!
+  assert.equal(confirmation.options.body, '将“Existing one”合并到“Fresh one”？本空间的别名和资料关联将转移到保留实体。')
+  assert.equal(confirmation.options.confirmBtn, '合并到 Fresh one')
+  assert.equal(target().props.disabled, true)
+  confirmation.cancel(); await settle()
+  assert.equal(target().props.value, 'a')
+  assert.equal(calls.decisions.length, 0)
+  await click(find(root, 'button', '合并到 Fresh one'))
+  await useFeedback().confirmations[0]!.accept(); await settle()
+  assert.deepEqual(calls.decisions, [['accept', 'one', 'fresh-one']])
+  assert.equal(target().props.value, 'b', 'the next suggestion defaults to retaining B')
+  assert.ok(find(root, 'button', '合并到 Existing two'))
+  const status = descendants(root).find(node => node.tag === 'select' && node.props['aria-label'] === zh.mergeSuggestions.statusFilter)!
+  status.props.onChange({ target: { value: 'accepted' } }); await settle()
+  const cards = descendants(root).filter(node => node.tag === 'article')
+  assert.doesNotMatch(visibleText(cards[0]!), /已合并入/)
+  assert.match(visibleText(cards[1]!), /已合并入 Fresh one/)
 })
 
 test('historical rejection requires confirmation, preserves failed decisions for retry and refreshes counts', async t => {

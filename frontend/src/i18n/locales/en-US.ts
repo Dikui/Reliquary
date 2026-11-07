@@ -1177,6 +1177,8 @@ export default {
     candidateB: 'Candidate B',
     description: 'Description',
     mergeInto: 'Merge into {name}',
+    keepEntity: 'Retain entity',
+    keepCandidate: 'Keep {candidate}: {name}',
     notFound: 'This item or its related content no longer exists. Refresh the list.',
     changed: 'This item has changed or no longer meets the action requirements. Refresh and review it.',
     saveFailed: 'The decision was not saved. Try again.',
