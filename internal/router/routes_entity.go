@@ -38,6 +38,8 @@ func RegisterEntityRoutes(r *gin.RouterGroup, h *handler.EntityHandler) {
 	group.GET("/:entity_id", h.EntityDetail)
 	group.PATCH("/:entity_id", h.UpdateManagedEntity)
 	group.DELETE("/:entity_id", h.DeleteManagedEntity)
+	group.GET("/:entity_id/document-versions", h.ShelfDocumentVersions)
+	group.GET("/:entity_id/document-versions/:version_id/download", h.DownloadShelfDocumentVersion)
 	group.GET("/:entity_id/history", h.ManagedEntityHistory)
 	group.GET("/:entity_id/attributes", h.EntityAttributes)
 	group.GET("/:entity_id/attribute-history", h.EntityAttributeHistory)

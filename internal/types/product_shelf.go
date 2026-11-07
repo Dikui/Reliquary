@@ -14,10 +14,11 @@ type ShelfOption struct {
 }
 
 type ShelfConfig struct {
-	Standards   []ShelfStandard `json:"standards,omitempty"`
-	ModuleTypes []ShelfOption   `json:"module_types,omitempty"`
-	Regions     []ShelfOption   `json:"regions,omitempty"`
-	Stages      []ShelfOption   `json:"stages,omitempty"`
+	MaxFileBytes int64           `json:"max_file_bytes,omitempty"`
+	Standards    []ShelfStandard `json:"standards,omitempty"`
+	ModuleTypes  []ShelfOption   `json:"module_types,omitempty"`
+	Regions      []ShelfOption   `json:"regions,omitempty"`
+	Stages       []ShelfOption   `json:"stages,omitempty"`
 }
 
 func ProductShelfSchema() EntitySchema {
@@ -51,7 +52,21 @@ func ProductShelfRelations() []LibraryRelationType {
 	return rules
 }
 
+func (c ShelfConfig) FileSizeLimit() int64 {
+	if c.MaxFileBytes == 0 {
+		return 32 << 20
+	}
+	return c.MaxFileBytes
+}
+
 func ValidateProductShelf(l *Library) error {
+	if l.ShelfConfig.MaxFileBytes < 0 || l.ShelfConfig.MaxFileBytes > int64(^uint64(0)>>1)-(1<<20)-1 {
+		return fmt.Errorf("invalid shelf file size limit")
+	}
+	if !l.ShelfEnabled && l.ShelfConfig.MaxFileBytes != 0 {
+		return fmt.Errorf("shelf file size limit requires an enabled shelf")
+	}
+
 	if !l.ShelfEnabled {
 		if len(l.ShelfConfig.ModuleTypes)+len(l.ShelfConfig.Regions)+len(l.ShelfConfig.Stages)+len(l.ShelfConfig.Standards) != 0 {
 			return fmt.Errorf("shelf configuration requires an enabled shelf")

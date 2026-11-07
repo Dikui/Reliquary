@@ -6,24 +6,32 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"reliquary/internal/application/service"
 	apperrors "reliquary/internal/errors"
 )
 
 func (h *EntityHandler) UploadEntityAttachment(c *gin.Context) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, service.MaxEntityAttachmentBytes+(1<<20))
-	if err := c.Request.ParseMultipartForm(1 << 20); err != nil {
-		c.Error(apperrors.NewBadRequestError("invalid attachment upload (maximum 32 MiB)"))
+	limit, err := h.service.EntityAttachmentLimit(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		c.Error(err)
 		return
 	}
-	defer c.Request.MultipartForm.RemoveAll()
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit+(1<<20))
+	defer func() {
+		if c.Request.MultipartForm != nil {
+			_ = c.Request.MultipartForm.RemoveAll()
+		}
+	}()
+	if err := c.Request.ParseMultipartForm(1 << 20); err != nil {
+		c.Error(apperrors.NewBadRequestError("invalid attachment upload or configured size limit exceeded"))
+		return
+	}
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		c.Error(apperrors.NewBadRequestError("file is required"))
 		return
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, service.MaxEntityAttachmentBytes+1))
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
 	if err != nil {
 		c.Error(err)
 		return
