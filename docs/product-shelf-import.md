@@ -1,10 +1,10 @@
-# 产品地图导入
+# 货架表格导入
 
 导入只创建待确认变更集。确认、修订检查、逐项修正、暂缓和单事务写入沿用[货架变更集](product-shelf-changesets.md)。上传的工作簿不成为资料文件，也不保留客户原件。
 
 ## 导入方案
 
-`GET /libraries/:id/shelf/import-plans` 返回当前库的方案，按 `key` 排序。每个文件种类用一个稳定的方案键。当前支持 `file_kind=product_map`。
+`GET /libraries/:id/shelf/import-plans` 返回当前库的方案，按 `key` 排序。每个文件种类用一个稳定的方案键。支持 `product_map`、`certification_progress`、`certification_report`、`overseas_sales` 和 `atq`。DC 与 AC 证书汇总都使用 `certification_report`，各工作表分别配置。
 
 方案也通过变更集保存，没有直接修改货架的旁路：
 
@@ -71,8 +71,40 @@
 
 来源包含 `import_batch_id`、`import_plan_key`、`plan_revision`、`file_name`、`file_sha256`、`file_date`；每项的 `import_location` 保存工作表和单元格，确认日志也带相同位置。方案、批次、决定和来源随维护副本导出恢复。迁移 49 新增方案表，存在方案或导入批次时拒绝开发降级。
 
+## 认证进度与证书报告
+
+认证工作表指定 `owner_kind`（`model`、`part`、`product` 或 `platform`），用 `owner` 列按名称、代码、明确别名或 ID 确定所属节点。可选 `product_line_id` 限定所属范围，按文件日期检查层级；无法证明属于指定产品线时转人工。共同必填列为 `owner`、`standard`、`certification_object` 和 `region`。地区单元格允许明确为空，仍参与识别。标准只按本库已配置的键、规范名或别名解析，不从名称猜年份。
+
+其他列可映射 `name`、`year`、`cell_part`、`agency`、`progress`、`start_date`、`obtained_date`、`issued_date`、`validity`、`number` 和 `cloud_url`。名称与文字原样保存。已有认证只更新映射列，未映射字段和适用条件保留。识别键仍为所属节点、标准、认证对象、电芯部件和地区；零条匹配产生人工处理冲突，须明确改为 `create_certification` 并填写原始名称；多条匹配须提交含完整记录及目标修订号的修正操作，避免遗漏候选中的其他字段。同键重复行须逐项处理，不自动合并。`model_separators` 也用于拆分型号类别的所属节点列，不修剪拆分后的名字。
+
+证书汇总工作表另需填写 `progress`，明确本表表示已完成认证的原文。若同时映射进度列，其值须与该配置一致。汇总可增加 `pack_model`、`cluster_model`、`container_model` 和 `model` 列。电芯部件不存在时提议新增，存在时提议更新属性，均须有已配置的工作表 `module_type`。Pack、簇和集装箱型号只成为部件属性。`model` 对应明确的型号或 AC 表项目名称，用于提议组成；所属节点本身是型号时可省略这一列。多个型号合用同一部件时复用该部件，不生成副本。已有不同模块或重复行中不同的部件属性交给提交方处理。
+
+认证日期接受 `YYYY-MM-DD`、`YYYY/M/D`、`YYYY.M.D`、`YYYY年M月D日`。Excel 内置日期格式 14 至 17、22 的整数日期序号按工作簿 1900 或 1904 日期系统转换。虚构的 1900 年闰日、分数日期、异常日期及无法判断的自定义显示格式成为 `unparseable`，保留原单元格，不补日期。有效期保留原写法。新批次的 `import_location.values` 保存映射单元格原文，公式另存 `.formula`。
+
+## 海外清单交叉核对
+
+海外工作表使用 `overseas_sales` 和明确的 `owner_kind`。`owner` 必填，至少提供一类状态或认证核对列。`sale_status` 列的 `key` 为区域配置键，沿用 `status_values` 解释原文。核对覆盖文件日期的货架记录；多种选配状态不能当成一条统一状态。
+
+认证的 √/× 矩阵用 `field=certification`，`key` 指定规范标准键。工作表的 `check_values` 明确符号含义，例如 `{"√":true,"×":false}`；工作表 `progress` 明确表示完成认证的原文。核对复用节点读取中的部件、上层和适用条件语义；只覆盖部分选配时保留提示。未知符号或身份不明确仍须由提交方修正。
+
+也可映射 `standard` 列，配合 `certification_object`、`cell_part` 和 `region` 限定直接所属认证，再核对 `progress`、`agency`、`validity`、`number`、`cloud_url`。认证零条或多条都只报告双方证据。核对结果保存为 `import_notice` 操作，差异类型为 `cross_table_contradiction`，详情含货架值与表格值。确认提示不会创建或修改实体、属性、关系或认证，数据一致的行也保留无冲突的核对项。
+
+## ATQ 资料要求
+
+ATQ 工作表用 `atq`，明确指定一个 `product_line_id` 或 `module_type`，绑定到产品线或配置模块。名称列可以是 `name`、`name_zh` 或 `name_en`；按这个顺序选第一个已映射的列作为实体名称，所选单元格空白时不改用另一列。`name_zh` 与 `name_en` 同时作为中英文元数据保留。名称按已有明确别名匹配，不做相似合并。
+
+`due_stages` 必填，映射原表“研发最迟提供时间”。原表阶段列另映射 `stage_label`，只展示。单个配置阶段名或键表示终稿应交阶段；两项可以写为 `初稿：阶段名；终稿：阶段名` 或 `阶段名（初稿）；阶段名（终稿）`，也支持半角标点和换行。阶段名来自本库配置。无法确定的自由文字须人工确认；可在方案的 `deadlines` 中按完整原文指定 `draft_stage` 与 `final_stage`，例如：
+
+```json
+{"deadlines":{"提交方确认的原文":{"draft_stage":"configured_draft","final_stage":"configured_final"}}}
+```
+
+原始期限另存 `requirement.due_text`。不根据 `stage_label` 补到期阶段，不根据上传时间生成清单版本。其他列为 `file_category`、`owner`、`priority`、`source_list`、`source_version`；`market` 列的 `key` 为区域键，值接受 `required/optional/not_needed` 或 `必需/可选/不需要`，其他写法须修正。未映射元数据保留，映射的空值明确清空。
+
+新版新增要求进入新增提议，旧要求更新保留身份。以前确认过的活动要求若在新版消失，生成 `missing_entity`，明确选择 `retire` 后归档；不会自动归档或删除文件，所有型号沿用当前活动清单。被忽略、缺失或无法识别名称的工作表不据此推断消失。放弃异常行、稍后确认暂缓部分或保留旧项，不会使先前活动要求失去后续版本的消失追踪。
+
 ## 文件边界
 
 单文件及 ZIP 解压后的总量最多 32 MiB；最多 2,000 个 ZIP 项，每张表最多 10,000 行、100,000 单元格和 10,000 个合并范围。批次沿用 500 操作上限，超过时拒绝并要求拆分工作簿。原件只暂存于请求解析阶段，结束后清理。
 
-只读取数据型 `.xlsx`，不执行公式或访问外部引用。自定义数字显示格式、条件格式等不能确定含义的内容须先提供明确值；不通过推测补全型号或自由文本参数。测试在代码中构造脱敏片段，客户原件不进入仓库。
+只读取数据型 `.xlsx`，不执行公式或访问外部引用。除上述内置日期外，自定义数字显示格式、条件格式等不能确定含义的内容须先提供明确值；不通过推测补全型号或自由文本参数。测试在代码中构造脱敏片段，客户原件不进入仓库。

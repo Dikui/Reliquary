@@ -32,20 +32,31 @@ func (s *EntityService) shelfImportPlan(ctx context.Context, libraryID, key stri
 }
 
 func (s *EntityService) writeShelfImportPlan(ctx context.Context, draft *types.ShelfChangeset, input types.ShelfImportPlanInput) (*types.ShelfImportPlan, error) {
-	if !shelfImportKey.MatchString(input.Key) || strings.TrimSpace(input.Name) == "" || len(input.Name) > 200 || input.FileKind != "product_map" || len(input.Sheets) == 0 || len(input.Sheets) > 100 {
-		return nil, apperrors.NewBadRequestError("import plan requires key, name, product_map file_kind and worksheets")
+	if !shelfImportKey.MatchString(input.Key) || strings.TrimSpace(input.Name) == "" || len(input.Name) > 200 || !slices.Contains([]string{"product_map", "certification_progress", "certification_report", "overseas_sales", "atq"}, input.FileKind) || len(input.Sheets) == 0 || len(input.Sheets) > 100 {
+		return nil, apperrors.NewBadRequestError("import plan requires key, name, a supported file_kind and worksheets")
 	}
 	library, err := s.shelfLibrary(ctx, s.db, draft.LibraryID)
 	if err != nil {
 		return nil, err
 	}
 	worksheets := map[string]bool{}
+	for raw, deadline := range input.Deadlines {
+		if input.FileKind != "atq" || strings.TrimSpace(raw) == "" || !shelfOptionExists(library.ShelfConfig.Stages, deadline.FinalStage) || deadline.DraftStage != "" && !shelfOptionExists(library.ShelfConfig.Stages, deadline.DraftStage) {
+			return nil, apperrors.NewBadRequestError("deadline mappings require ATQ source text and configured stage keys")
+		}
+	}
 	for _, sheet := range input.Sheets {
 		if sheet.Worksheet == "" || worksheets[sheet.Worksheet] || sheet.HeaderRows < 0 || sheet.HeaderRows > 100 {
 			return nil, apperrors.NewBadRequestError("invalid worksheet or header_rows")
 		}
 		worksheets[sheet.Worksheet] = true
 		if sheet.Ignore {
+			continue
+		}
+		if input.FileKind != "product_map" {
+			if err := s.validateRecordImportSheet(ctx, library, input.FileKind, sheet); err != nil {
+				return nil, err
+			}
 			continue
 		}
 		line, err := s.shelfEntity(ctx, library.ID, sheet.ProductLineID)

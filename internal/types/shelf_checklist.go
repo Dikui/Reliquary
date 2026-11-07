@@ -13,6 +13,7 @@ type ShelfRequirement struct {
 	NameEN        string            `json:"name_en,omitempty"`
 	FileCategory  string            `json:"file_category,omitempty"`
 	StageLabel    string            `json:"stage_label,omitempty"`
+	DueText       string            `json:"due_text,omitempty"`
 	DraftDueStage string            `json:"draft_due_stage,omitempty"`
 	FinalDueStage string            `json:"final_due_stage"`
 	Markets       map[string]string `json:"markets,omitempty"`
@@ -30,7 +31,7 @@ func ValidateShelfRequirement(value any) error {
 	if strings.TrimSpace(r.FinalDueStage) == "" {
 		return fmt.Errorf("final due stage is required")
 	}
-	for _, v := range []string{r.NameZH, r.NameEN, r.FileCategory, r.StageLabel, r.Owner, r.Priority, r.SourceList, r.SourceVersion} {
+	for _, v := range []string{r.NameZH, r.NameEN, r.FileCategory, r.StageLabel, r.DueText, r.Owner, r.Priority, r.SourceList, r.SourceVersion} {
 		if len([]rune(v)) > 20000 {
 			return fmt.Errorf("document requirement text is too long")
 		}

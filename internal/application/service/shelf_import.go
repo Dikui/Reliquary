@@ -76,11 +76,20 @@ func (s *EntityService) ImportShelfWorkbook(ctx context.Context, libraryID, plan
 		if err != nil {
 			return err
 		}
-		if err := builder.parse(workbook); err != nil {
+		if plan.FileKind == "product_map" {
+			if err := builder.parse(workbook); err != nil {
+				return err
+			}
+			if err := builder.disappeared(source.ImportBatchID); err != nil {
+				return err
+			}
+		} else if err := builder.parseRecords(workbook); err != nil {
 			return err
 		}
-		if err := builder.disappeared(source.ImportBatchID); err != nil {
-			return err
+		if plan.FileKind == "atq" {
+			if err := builder.disappeared(source.ImportBatchID); err != nil {
+				return err
+			}
 		}
 		if len(builder.ops) == 0 {
 			return apperrors.NewBadRequestError("workbook has no importable rows or conflicts")
@@ -126,9 +135,7 @@ func (s *EntityService) newImportMapBuilder(ctx context.Context, library *types.
 	}
 	models := []*types.Entity{}
 	for i := range b.entities {
-		if b.entities[i].Kind == "model" {
-			models = append(models, &b.entities[i])
-		}
+		models = append(models, &b.entities[i])
 	}
 	if err := hydrateManagedEntityAttributes(ctx, s.db, models, at); err != nil {
 		return nil, err
@@ -436,6 +443,9 @@ func importParameter(field types.EntityFieldDefinition, raw string) (any, error)
 }
 
 func (b *importMapBuilder) disappeared(batchID string) error {
+	if b.plan.FileKind == "atq" {
+		return b.disappearedRequirements()
+	}
 	// Compare the newest file's complete batch, including deferred pieces. A
 	// later confirmation of an older piece does not make that an updated file.
 	var previous struct{ BatchID string }

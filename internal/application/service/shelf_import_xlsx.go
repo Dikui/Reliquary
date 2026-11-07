@@ -39,6 +39,8 @@ type importCell struct {
 	Formula         *string        `xml:"f"`
 	Fill            string
 	FormattedNumber bool
+	DateSerial      bool
+	Date1904        bool
 }
 type importWorksheet struct {
 	Cells                 map[string]importCell
@@ -114,6 +116,9 @@ func readImportWorkbook(data []byte) (*importWorkbookData, error) {
 		return xml.NewDecoder(io.LimitReader(r, shelfImportMaxBytes+1)).Decode(target)
 	}
 	var workbook struct {
+		Properties struct {
+			Date1904 bool `xml:"date1904,attr"`
+		} `xml:"workbookPr"`
 		Sheets []struct {
 			Name string `xml:"name,attr"`
 			ID   string `xml:"id,attr"`
@@ -259,6 +264,9 @@ func readImportWorkbook(data []byte) (*importWorkbookData, error) {
 				if style < len(colors) {
 					cell.Fill = colors[style]
 					cell.FormattedNumber = styles.Formats[style].NumberFormat != 0 && (cell.Type == "" || cell.Type == "n") && cell.Value != ""
+					format := styles.Formats[style].NumberFormat
+					cell.DateSerial = cell.FormattedNumber && (format >= 14 && format <= 17 || format == 22)
+					cell.Date1904 = workbook.Properties.Date1904
 				}
 				switch cell.Type {
 				case "inlineStr":

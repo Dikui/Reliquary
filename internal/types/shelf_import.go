@@ -24,11 +24,17 @@ type ShelfImportPlanInput struct {
 }
 
 type ShelfImportDefinition struct {
-	Sheets          []ShelfImportSheet           `json:"sheets"`
-	ModelSeparators []string                     `json:"model_separators,omitempty"`
-	MissingValues   []string                     `json:"missing_values,omitempty"`
-	StatusValues    map[string]ShelfImportStatus `json:"status_values,omitempty"`
-	FillMeanings    map[string]string            `json:"fill_meanings,omitempty"`
+	Sheets          []ShelfImportSheet             `json:"sheets"`
+	ModelSeparators []string                       `json:"model_separators,omitempty"`
+	MissingValues   []string                       `json:"missing_values,omitempty"`
+	StatusValues    map[string]ShelfImportStatus   `json:"status_values,omitempty"`
+	FillMeanings    map[string]string              `json:"fill_meanings,omitempty"`
+	Deadlines       map[string]ShelfImportDeadline `json:"deadlines,omitempty"`
+}
+
+type ShelfImportDeadline struct {
+	DraftStage string `json:"draft_stage,omitempty"`
+	FinalStage string `json:"final_stage"`
 }
 
 type ShelfImportSheet struct {
@@ -37,6 +43,10 @@ type ShelfImportSheet struct {
 	ProductLineID string              `json:"product_line_id,omitempty"`
 	HeaderRows    int                 `json:"header_rows"`
 	Columns       []ShelfImportColumn `json:"columns,omitempty"`
+	OwnerKind     string              `json:"owner_kind,omitempty"`
+	ModuleType    string              `json:"module_type,omitempty"`
+	Progress      string              `json:"progress,omitempty"`
+	CheckValues   map[string]bool     `json:"check_values,omitempty"`
 }
 
 type ShelfImportColumn struct {
@@ -51,6 +61,7 @@ type ShelfImportStatus struct {
 }
 
 type ShelfImportLocation struct {
-	Worksheet string   `json:"worksheet"`
-	Cells     []string `json:"cells"`
+	Worksheet string            `json:"worksheet"`
+	Cells     []string          `json:"cells"`
+	Values    map[string]string `json:"values,omitempty"`
 }

@@ -58,6 +58,8 @@ func shelfOperationValid(op types.ShelfOperation) error {
 	}
 	valid := false
 	switch op.Type {
+	case "import_notice":
+		valid = op.Entity == nil && op.Patch == nil && op.Relation == nil && op.EntityID == ""
 	case "save_import_plan":
 		valid = op.ImportPlan != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
 	case "reparse_document":
@@ -111,6 +113,9 @@ func shelfOperationValid(op types.ShelfOperation) error {
 		return apperrors.NewBadRequestError("unknown operation type or incompatible operation payload")
 	}
 	for _, issue := range op.Issues {
+		if op.Type == "import_notice" && issue.Type != "cross_table_contradiction" {
+			return apperrors.NewBadRequestError("import notices only accept cross table contradictions")
+		}
 		if !slices.Contains([]string{"unparseable", "uncertain", "required_missing", "cross_table_contradiction"}, issue.Type) {
 			return apperrors.NewBadRequestError("unsupported submitter issue type")
 		}
@@ -318,6 +323,9 @@ func (s *EntityService) previewShelf(ctx context.Context, tx *gorm.DB, draft *ty
 		item.Before = types.JSON("null")
 		item.After = types.JSON("null")
 		item.Conflicts = append([]types.ShelfConflict{}, item.Operation.Issues...)
+		if item.Operation.Type == "import_notice" {
+			continue
+		}
 		if item.Operation.Type == "missing_entity" {
 			item.Conflicts = append(item.Conflicts, types.ShelfConflict{Type: "disappeared", Message: "choose retire or keep; missing rows are never deleted"})
 		}
@@ -470,6 +478,9 @@ func (s *EntityService) confirmShelf(ctx context.Context, tx *gorm.DB, draft *ty
 			continue
 		}
 		for _, conflict := range item.Conflicts {
+			if item.Operation.Type == "import_notice" && conflict.Type == "cross_table_contradiction" {
+				continue
+			}
 			if conflict.Type == "new" || conflict.Type == "modified" || (conflict.Type == "disappeared" && item.Decision.Action == "retire") {
 				continue
 			}
@@ -668,6 +679,9 @@ func shelfResolvedConditions(draft *types.ShelfChangeset, raw []types.ShelfCondi
 
 func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem) (any, error) {
 	op := shelfResolvedOperation(draft, item.Operation)
+	if op.Type == "import_notice" {
+		return op.Issues, nil
+	}
 	if op.ImportLocation != nil && draft.Source.Type == "import" {
 		source := draft.Source
 		source.Worksheet = op.ImportLocation.Worksheet
