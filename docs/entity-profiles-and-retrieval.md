@@ -22,7 +22,7 @@ Reliquary 在个人空间的多个库中收集、存储、去重与检索文章�
 
 新建普通库后，在库设置将实体模式改为“人工维护”，设置类别、属性与关系规则。已有文献的库可以在显式映射已有实体类别、解决名称冲突后转换。实体页提供新建、编辑、归档、恢复与修改记录；资料详情提供人工关联与排除。
 
-此模式下自动处理只按名称、代码或别名唯一匹配已有实体。文档不会创建或更新产品、属性、别名和关系。未匹配项可以人工补关联。重新处理保留人工关联及排除，归档实体从默认目录与图谱隐藏，历史资料仍可读取。活动实体名称在库内跨原类型唯一，归档后名称可复用；非空代码不区分大小写，归档仍保留代码唯一性。没有未排除文献关联、关系或其他受保护引用的产品可以删除；只剩排除记录的产品也可删除，排除记录一并清理。关系对端、合并来源、产品引用与文献关联的选择器均按名称在服务端搜索。
+此模式下自动处理只按名称、代码或别名唯一匹配已有实体。文档不会创建或更新产品、属性、别名和关系。未匹配项可以人工补关联。重新处理保留人工关联及排除，归档实体从默认目录与图谱隐藏，历史资料仍可读取。活动名称、别名和代码在每个类别内共用唯一名称空间，不受原存储类型影响。跨类别同名须确认具体实体后保存，确认结果持久化；列表和详情包含 `kind` 与 `kind_label`。名称原样保存，比较沿用名称规范化规则。归档后名称和别名可复用；非空代码不区分大小写，归档仍保留类别内的代码占用。没有未排除文献关联、关系或其他受保护引用的产品可以删除；只剩排除记录的产品也可删除，排除记录一并清理。关系对端、合并来源、产品引用与文献关联的选择器均按名称在服务端搜索。
 
 HTTP 接口位于 `/api/v1`，成功数据在 `data` 中。模式、类别和属性定义使用现有 `POST /libraries` 或 `PUT /libraries/:id`；关系类型定义使用后者。
 
@@ -34,6 +34,20 @@ HTTP 接口位于 `/api/v1`，成功数据在 `data` 中。模式、类别和属
 | `GET /entities/:entity_id/history` | `page`、`page_size`，返回操作日志分页，修改前后值在 `before`、`after` |
 | `GET /entries/:id/entity-links` | 包含人工排除项，返回 entity、origin、excluded、evidence、body_hash |
 | `PUT /entries/:id/entity-links/:entity_id` | `{excluded:false}` 补关联或恢复；`{excluded:true}` 排除 |
+
+同类别的名称、别名或代码冲突返回 409，不能用确认跳过。跨类别同名也返回 409，`error.details.type` 为 `cross_kind_name_confirmation_required`；`conflicts` 逐项给出提交的写法与类别，以及另一实体的 `other_entity_id`、`other_name`、`other_kind` 和 `other_kind_label`。确认具体对象后，在原请求增加：
+
+```json
+{
+  "name_confirmations": [
+    {"name": "Shared Product", "other_entity_id": "existing-entity-id", "other_kind": "platform"}
+  ]
+}
+```
+
+创建、修改、恢复与合并均支持此字段；拆分放在 `new_entity` 中。同一对实体、类别与规范化写法已经确认时，不必再次提交确认。新对象或类别变化产生的新冲突仍须确认。确认与本次写入处于同一事务，写入失败不保留确认。确认记录随文件库显式导出和恢复保存。
+
+已有库转换也使用此校验，类别取自 `entity_kind_mapping`。转换请求的每条 `name_confirmations` 还须提供已有的 `entity_id`，指定被确认的一端；另一端仍由 `other_entity_id` 与 `other_kind` 指定。转换冲突中的 `entity_id` 可用于构造该确认。
 
 库的 `entity_schema` 格式为 `{kinds:[{key,name,parent_kinds:[]}],fields:[{key,name,type,unit,options:[],kinds:[],archived:false}]}`。key 使用小写英文字母开头的字母、数字、下划线，最长 64 字符。字段 type 为 text、number、boolean、date（YYYY-MM-DD）或 select。fields 的 kinds 为空表示适用全部类别；parent_kinds 为空表示不允许父项。选项或字段定义变更不能使现有值失效。已有值的类型与单位不能直接变更。
 

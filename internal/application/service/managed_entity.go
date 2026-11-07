@@ -41,10 +41,8 @@ func managedWriteError(err error) error {
 }
 
 func validateManagedEntity(library *types.Library, entity *types.Entity) error {
-	entity.CanonicalName = strings.TrimSpace(entity.CanonicalName)
-	entity.Code = strings.TrimSpace(entity.Code)
 	entity.Description = strings.TrimSpace(entity.Description)
-	if entity.CanonicalName == "" || len([]rune(entity.CanonicalName)) > 512 || len([]rune(entity.Code)) > 128 || len([]rune(entity.Description)) > 20000 {
+	if strings.TrimSpace(entity.CanonicalName) == "" || (entity.Code != "" && strings.TrimSpace(entity.Code) == "") || len([]rune(entity.CanonicalName)) > 512 || len([]rune(entity.Code)) > 128 || len([]rune(entity.Description)) > 20000 {
 		return apperrors.NewBadRequestError("name is required; name, code or description is too long")
 	}
 	entity.NormalizedName = normalizeEntityName(entity.CanonicalName)
@@ -54,10 +52,11 @@ func validateManagedEntity(library *types.Library, entity *types.Entity) error {
 	if err := library.EntitySchema.ValidateAttributes(entity.Kind, entity.Attributes); err != nil {
 		return apperrors.NewBadRequestError(err.Error())
 	}
+	entity.KindLabel = managedKindLabel(library, entity.Kind)
 	return nil
 }
 
-func saveManagedAliases(tx *gorm.DB, entity *types.Entity, aliases []string) error {
+func saveManagedAliases(tx *gorm.DB, library *types.Library, entity *types.Entity, aliases []string, confirmations []types.ManagedNameConfirmation) error {
 	if len(aliases) > 100 {
 		return apperrors.NewBadRequestError("at most 100 aliases are allowed")
 	}
@@ -67,8 +66,7 @@ func saveManagedAliases(tx *gorm.DB, entity *types.Entity, aliases []string) err
 	entity.Aliases = []string{}
 	seen := map[string]bool{}
 	for _, alias := range append(aliases, entity.CanonicalName) {
-		alias = strings.TrimSpace(alias)
-		if alias == "" || len([]rune(alias)) > 512 {
+		if strings.TrimSpace(alias) == "" || len([]rune(alias)) > 512 {
 			return apperrors.NewBadRequestError("aliases must contain 1-512 characters")
 		}
 		key := normalizeEntityName(alias)
@@ -76,17 +74,14 @@ func saveManagedAliases(tx *gorm.DB, entity *types.Entity, aliases []string) err
 			continue
 		}
 		seen[key] = true
-		var count int64
-		if err := tx.Model(&types.Entity{}).Where("space_id=? AND library_id=? AND normalized_name=? AND id<>? AND merged_into_id='' AND archived_at IS NULL", entity.SpaceID, entity.LibraryID, key, entity.ID).Count(&count).Error; err != nil {
-			return err
-		}
-		if count > 0 && entity.ArchivedAt == nil {
-			return apperrors.NewConflictError("alias conflicts with another entity name")
-		}
-		if err := saveEntityAlias(tx, *entity, alias, "manual"); err != nil {
+		row := types.EntityAlias{ID: uuid.NewString(), SpaceID: entity.SpaceID, LibraryID: entity.LibraryID, EntityType: entity.EntityType, EntityID: entity.ID, Alias: alias, NormalizedAlias: key, ResolutionMethod: "manual", CreatedAt: time.Now()}
+		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
 		entity.Aliases = append(entity.Aliases, alias)
+	}
+	if err := validateManagedNames(tx, library, entity, entity.Aliases, confirmations); err != nil {
+		return err
 	}
 	// Removed spellings lose their overrides; unrelated edits retain them.
 	seen[normalizeEntityName(entity.Code)] = true
@@ -175,7 +170,7 @@ func (s *EntityService) CreateManagedEntity(ctx context.Context, libraryID strin
 		if err := saveManagedAttributeVersion(ctx, tx, &entity, input.EffectiveAt); err != nil {
 			return err
 		}
-		if err := saveManagedAliases(tx, &entity, input.Aliases); err != nil {
+		if err := saveManagedAliases(tx, library, &entity, input.Aliases, input.NameConfirmations); err != nil {
 			return err
 		}
 		if err := queueManagedEntity(tx, &entity); err != nil {
@@ -318,7 +313,7 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		if entity.CanonicalName != before.CanonicalName {
 			aliases = append(append([]string{}, aliases...), before.CanonicalName)
 		}
-		if err := saveManagedAliases(tx, &entity, aliases); err != nil {
+		if err := saveManagedAliases(tx, library, &entity, aliases, patch.NameConfirmations); err != nil {
 			return err
 		}
 		var relations []types.Relation

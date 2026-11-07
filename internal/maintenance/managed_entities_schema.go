@@ -25,6 +25,11 @@ func projectManagedEntitiesSnapshot(snapshot *Snapshot, targetVersion int64) {
 	projectManagedEvolutionSnapshot(snapshot, targetVersion)
 	projectEntityDefaultsSnapshot(snapshot, targetVersion, 39, entityAutoMatchDefaults)
 	projectEntityDefaultsSnapshot(snapshot, targetVersion, 40, relationValidityDefaults)
+	if snapshot.schemaVersion < 41 && targetVersion >= 41 {
+		if _, exists := snapshot.Tables["entity_name_confirmations"]; !exists {
+			snapshot.Tables["entity_name_confirmations"] = []map[string]any{}
+		}
+	}
 }
 
 func projectEntityDefaultsSnapshot(snapshot *Snapshot, targetVersion, version int64, defaults map[string]map[string]any) {
@@ -47,7 +52,42 @@ func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Man
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 37, managedEntityDefaults)
 	expected, actual = projectManagedEvolutionManifest(expected, actual)
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 39, entityAutoMatchDefaults)
-	return projectEntityDefaultsManifest(expected, actual, 40, relationValidityDefaults)
+	expected, actual = projectEntityDefaultsManifest(expected, actual, 40, relationValidityDefaults)
+	return projectManagedNamesManifest(expected, actual)
+}
+
+// Only an empty confirmation table is implied by upgrading an older replica.
+// Saved decisions remain authoritative and must still compare exactly.
+func projectManagedNamesManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	if expected.SchemaVersion >= 41 || actual.SchemaVersion < 41 {
+		return expected, actual
+	}
+	const table = "entity_name_confirmations"
+	if _, exists := expected.Tables[table]; exists {
+		return expected, actual
+	}
+	left := *expected
+	left.Tables = make(map[string]TableManifest, len(expected.Tables)+1)
+	for name, item := range expected.Tables {
+		left.Tables[name] = item
+	}
+	left.Files = make(map[string][]File, len(expected.Files))
+	for group, files := range expected.Files {
+		left.Files[group] = append([]File{}, files...)
+	}
+	registration := PersistentTables[table]
+	columns := []string{}
+	for column := range registration.Columns.Columns() {
+		columns = append(columns, column)
+	}
+	sort.Strings(columns)
+	left.Tables[table] = TableManifest{Columns: columns, Data: []map[string]any{}, SHA256: sum([]byte("[]"))}
+	for _, file := range actual.Files["vault"] {
+		if file.Path == ".reliquary/"+registration.File {
+			left.Files["vault"] = append(left.Files["vault"], File{Path: file.Path, SHA256: sum([]byte("[]\n")), Size: 3})
+		}
+	}
+	return &left, actual
 }
 
 func projectEntityDefaultsManifest(expected, actual *Manifest, version int64, defaults map[string]map[string]any) (*Manifest, *Manifest) {

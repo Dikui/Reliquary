@@ -164,7 +164,7 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 			}
 		}
 		if !previous.ManagesEntities() && library.ManagesEntities() {
-			if err := convertLibraryEntities(ctx, tx, library, patch.EntityKindMapping); err != nil {
+			if err := convertLibraryEntities(ctx, tx, library, patch.EntityKindMapping, patch.NameConfirmations); err != nil {
 				return err
 			}
 		}

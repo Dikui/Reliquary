@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,32 +50,17 @@ func (s *EntityService) EntityConversionPreview(ctx context.Context, id string) 
 
 // Conversion changes the authority of existing identities, never their IDs or
 // document ownership. A caller must explicitly map every existing entity type.
-func convertLibraryEntities(ctx context.Context, tx *gorm.DB, library *types.Library, mapping map[string]string) error {
+func convertLibraryEntities(ctx context.Context, tx *gorm.DB, library *types.Library, mapping map[string]string, confirmations []types.ManagedConversionNameConfirmation) error {
 	var entities []types.Entity
 	if err := tx.Where("library_id=? AND space_id=?", library.ID, library.SpaceID).Find(&entities).Error; err != nil {
 		return err
-	}
-	names := map[string][]string{}
-	for _, entity := range entities {
-		if entity.ArchivedAt == nil && entity.MergedIntoID == "" {
-			names[entity.NormalizedName] = append(names[entity.NormalizedName], fmt.Sprintf("%s (%s, %s)", entity.CanonicalName, entity.EntityType, entity.ID))
-		}
-	}
-	var conflicts []string
-	for _, items := range names {
-		if len(items) > 1 {
-			conflicts = append(conflicts, strings.Join(items, ", "))
-		}
-	}
-	if len(conflicts) > 0 {
-		slices.Sort(conflicts)
-		return apperrors.NewConflictError("resolve duplicate names before conversion: " + strings.Join(conflicts, "; "))
 	}
 	if err := graph.Lock(tx, library.SpaceID); err != nil {
 		return err
 	}
 	now := time.Now()
-	for _, entity := range entities {
+	for i := range entities {
+		entity := &entities[i]
 		kind, ok := mapping[entity.EntityType]
 		if !ok {
 			return apperrors.NewBadRequestError("choose an entity kind for existing type " + entity.EntityType)
@@ -88,7 +71,7 @@ func convertLibraryEntities(ctx context.Context, tx *gorm.DB, library *types.Lib
 		entity.Kind = kind
 		entity.Revision++
 		entity.UpdatedAt = now
-		if err := tx.Save(&entity).Error; err != nil {
+		if err := tx.Save(entity).Error; err != nil {
 			return err
 		}
 		version := types.EntityAttributeVersion{ID: uuid.NewString(), SpaceID: library.SpaceID, EntityID: entity.ID, Revision: entity.Revision, EffectiveAt: now, RecordedAt: now, Attributes: entity.Attributes}
@@ -98,7 +81,40 @@ func convertLibraryEntities(ctx context.Context, tx *gorm.DB, library *types.Lib
 		if err := tx.Model(&types.EntryEntity{}).Where("space_id=? AND entity_id=?", library.SpaceID, entity.ID).Update("origin", "manual").Error; err != nil {
 			return err
 		}
-		if err := queueManagedEntity(tx, &entity); err != nil {
+		if err := queueManagedEntity(tx, entity); err != nil {
+			return err
+		}
+	}
+	byID := map[string]*types.Entity{}
+	for i := range entities {
+		byID[entities[i].ID] = &entities[i]
+	}
+	confirmed := map[string][]types.ManagedNameConfirmation{}
+	for _, confirmation := range confirmations {
+		entity, other := byID[confirmation.EntityID], byID[confirmation.OtherEntityID]
+		if entity == nil || other == nil || other.Kind != confirmation.OtherKind {
+			continue
+		}
+		confirmed[entity.ID] = append(confirmed[entity.ID], confirmation.ManagedNameConfirmation)
+		confirmed[other.ID] = append(confirmed[other.ID], types.ManagedNameConfirmation{Name: confirmation.Name, OtherEntityID: entity.ID, OtherKind: entity.Kind})
+	}
+	for i := range entities {
+		entity := &entities[i]
+		if entity.MergedIntoID != "" {
+			continue
+		}
+		var aliases []string
+		if err := tx.Model(&types.EntityAlias{}).Where("entity_id=? AND space_id=?", entity.ID, entity.SpaceID).Pluck("alias", &aliases).Error; err != nil {
+			return err
+		}
+		if err := validateManagedNames(tx, library, entity, aliases, confirmed[entity.ID]); err != nil {
+			if appErr, ok := apperrors.IsAppError(err); ok {
+				if details, ok := appErr.Details.(*types.ManagedNameConflictDetails); ok {
+					for i := range details.Conflicts {
+						details.Conflicts[i].EntityID = entity.ID
+					}
+				}
+			}
 			return err
 		}
 	}

@@ -227,27 +227,29 @@ func ValidateFieldAttributes(definitions []EntityFieldDefinition, attributes map
 }
 
 type ManagedEntityInput struct {
-	AutoMatch   map[string]bool `json:"auto_match"`
-	EffectiveAt *time.Time      `json:"effective_at,omitempty"`
-	Name        string          `json:"name"`
-	Kind        string          `json:"kind"`
-	Code        string          `json:"code"`
-	Description string          `json:"description"`
-	Aliases     []string        `json:"aliases"`
-	Attributes  map[string]any  `json:"attributes"`
+	NameConfirmations []ManagedNameConfirmation `json:"name_confirmations,omitempty"`
+	AutoMatch         map[string]bool           `json:"auto_match"`
+	EffectiveAt       *time.Time                `json:"effective_at,omitempty"`
+	Name              string                    `json:"name"`
+	Kind              string                    `json:"kind"`
+	Code              string                    `json:"code"`
+	Description       string                    `json:"description"`
+	Aliases           []string                  `json:"aliases"`
+	Attributes        map[string]any            `json:"attributes"`
 }
 
 type ManagedEntityPatch struct {
-	AutoMatch   *map[string]bool `json:"auto_match"`
-	EffectiveAt *time.Time       `json:"effective_at,omitempty"`
-	Revision    int64            `json:"revision"`
-	Name        *string          `json:"name"`
-	Kind        *string          `json:"kind"`
-	Code        *string          `json:"code"`
-	Description *string          `json:"description"`
-	Aliases     *[]string        `json:"aliases"`
-	Attributes  *map[string]any  `json:"attributes"`
-	Archived    *bool            `json:"archived"`
+	NameConfirmations []ManagedNameConfirmation `json:"name_confirmations,omitempty"`
+	AutoMatch         *map[string]bool          `json:"auto_match"`
+	EffectiveAt       *time.Time                `json:"effective_at,omitempty"`
+	Revision          int64                     `json:"revision"`
+	Name              *string                   `json:"name"`
+	Kind              *string                   `json:"kind"`
+	Code              *string                   `json:"code"`
+	Description       *string                   `json:"description"`
+	Aliases           *[]string                 `json:"aliases"`
+	Attributes        *map[string]any           `json:"attributes"`
+	Archived          *bool                     `json:"archived"`
 }
 
 type ManagedRelationInput struct {

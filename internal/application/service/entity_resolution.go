@@ -458,7 +458,7 @@ func persistEntities(tx *gorm.DB, entities []types.Entity) (map[string]string, e
 					entity.EmbeddingNeedsRebuild = true
 				}
 			}
-			created := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "entity_type"}, {Name: "normalized_name"}}, TargetWhere: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "archived_at IS NULL AND merged_into_id=''"}}}, DoNothing: true}).Create(&entity)
+			created := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "space_id"}, {Name: "library_id"}, {Name: "entity_type"}, {Name: "normalized_name"}}, TargetWhere: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "archived_at IS NULL AND merged_into_id='' AND managed_kind IS NULL"}}}, DoNothing: true}).Create(&entity)
 			if created.Error != nil {
 				return nil, created.Error
 			}

@@ -185,7 +185,8 @@ func (s *EntityService) loadAliases(ctx context.Context, spaceID uint64, entitie
 		entities[i].Aliases = []string{}
 		for _, alias := range aliases {
 			if alias.EntityID == entities[i].ID {
-				entities[i].Aliases = appendUniqueEntityString(entities[i].Aliases, alias.Alias)
+				// The owner index already deduplicates spellings; return the stored name.
+				entities[i].Aliases = append(entities[i].Aliases, alias.Alias)
 			}
 		}
 	}
@@ -225,6 +226,9 @@ func (s *EntityService) ListEntities(ctx context.Context, q types.EntityQuery) (
 	if err := hydrateManagedEntityAttributes(ctx, s.db, pointers, time.Now()); err != nil {
 		return nil, err
 	}
+	if err := hydrateManagedKindLabels(ctx, s.db, pointers); err != nil {
+		return nil, err
+	}
 	return entities, nil
 }
 func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.EntityDetail, error) {
@@ -246,6 +250,9 @@ func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.Ent
 		return nil, err
 	}
 	if err := hydrateManagedEntityAttributes(ctx, s.db, []*types.Entity{&entities[0]}, time.Now()); err != nil {
+		return nil, err
+	}
+	if err := hydrateManagedKindLabels(ctx, s.db, []*types.Entity{&entities[0]}); err != nil {
 		return nil, err
 	}
 	result := &types.EntityDetail{Entity: entities[0], Entries: []types.Entry{}, LibraryGroups: []types.EntityLibraryGroup{}}

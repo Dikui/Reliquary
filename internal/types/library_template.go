@@ -79,25 +79,26 @@ func (r LibraryRelationType) MarshalJSON() ([]byte, error) {
 // LibraryPatch intentionally includes immutable fields so attempts to write
 // them are rejected instead of silently ignored by JSON decoding.
 type LibraryPatch struct {
-	ProductLibraryIDs     *[]string              `json:"product_library_ids"`
-	DocumentRelationTypes *[]string              `json:"document_relation_types"`
-	EntityKindMapping     map[string]string      `json:"entity_kind_mapping"`
-	EntityMode            *string                `json:"entity_mode"`
-	EntitySchema          *EntitySchema          `json:"entity_schema"`
-	PromptOverrides       *map[string]string     `json:"prompt_overrides"`
-	Color                 *int                   `json:"color"`
-	Name                  *string                `json:"name"`
-	Description           *string                `json:"description"`
-	ReviewCriteria        *string                `json:"review_criteria"`
-	ModelTiers            *ModelTierConfig       `json:"model_tiers"`
-	ChunkingConfig        *ChunkingConfig        `json:"chunking_config"`
-	SourceEvidenceRule    *string                `json:"source_evidence_rule"`
-	FeedEnabled           *bool                  `json:"feed_enabled"`
-	ContentTypes          *[]LibraryContentType  `json:"content_types"`
-	RelationTypes         *[]LibraryRelationType `json:"relation_types"`
-	Template              *string                `json:"template"`
-	Directory             *string                `json:"directory"`
-	SystemRole            *string                `json:"system_role"`
+	NameConfirmations     []ManagedConversionNameConfirmation `json:"name_confirmations,omitempty"`
+	ProductLibraryIDs     *[]string                           `json:"product_library_ids"`
+	DocumentRelationTypes *[]string                           `json:"document_relation_types"`
+	EntityKindMapping     map[string]string                   `json:"entity_kind_mapping"`
+	EntityMode            *string                             `json:"entity_mode"`
+	EntitySchema          *EntitySchema                       `json:"entity_schema"`
+	PromptOverrides       *map[string]string                  `json:"prompt_overrides"`
+	Color                 *int                                `json:"color"`
+	Name                  *string                             `json:"name"`
+	Description           *string                             `json:"description"`
+	ReviewCriteria        *string                             `json:"review_criteria"`
+	ModelTiers            *ModelTierConfig                    `json:"model_tiers"`
+	ChunkingConfig        *ChunkingConfig                     `json:"chunking_config"`
+	SourceEvidenceRule    *string                             `json:"source_evidence_rule"`
+	FeedEnabled           *bool                               `json:"feed_enabled"`
+	ContentTypes          *[]LibraryContentType               `json:"content_types"`
+	RelationTypes         *[]LibraryRelationType              `json:"relation_types"`
+	Template              *string                             `json:"template"`
+	Directory             *string                             `json:"directory"`
+	SystemRole            *string                             `json:"system_role"`
 }
 
 const MaxLibraryPromptChars = 16000

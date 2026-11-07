@@ -277,7 +277,7 @@ func (s *EntityService) MergeManagedEntities(ctx context.Context, id string, inp
 		if err := tx.Where("space_id=? AND entity_id=?", spaceID, source.ID).Delete(&types.EntityAlias{}).Error; err != nil {
 			return err
 		}
-		if err := saveManagedAliases(tx, target, aliases); err != nil {
+		if err := saveManagedAliases(tx, library, target, aliases, input.NameConfirmations); err != nil {
 			return err
 		}
 		if err := tx.Exec(`INSERT INTO follows (space_id,target_type,target_id,created_at) SELECT space_id,'entity',?,created_at FROM follows WHERE space_id=? AND target_type='entity' AND target_id=? ON CONFLICT (space_id,target_type,target_id) DO UPDATE SET created_at=LEAST(follows.created_at,EXCLUDED.created_at)`, target.ID, spaceID, source.ID).Error; err != nil {
@@ -360,7 +360,7 @@ func (s *EntityService) SplitManagedEntity(ctx context.Context, id string, input
 		if err := tx.Create(target).Error; err != nil {
 			return err
 		}
-		if err := saveManagedAliases(tx, target, in.Aliases); err != nil {
+		if err := saveManagedAliases(tx, library, target, in.Aliases, in.NameConfirmations); err != nil {
 			return err
 		}
 		if err := saveManagedAttributeVersion(ctx, tx, target, input.EffectiveAt); err != nil {

@@ -25,13 +25,14 @@ type EntityReorganization struct {
 }
 
 type ManagedEntityMergeInput struct {
-	DocumentRelationPreference string         `json:"document_relation_preference,omitempty"`
-	DropRelationIDs            []string       `json:"drop_relation_ids,omitempty"`
-	Revision                   int64          `json:"revision"`
-	SourceID                   string         `json:"source_id"`
-	SourceRevision             int64          `json:"source_revision"`
-	Attributes                 map[string]any `json:"attributes"`
-	EffectiveAt                *time.Time     `json:"effective_at,omitempty"`
+	NameConfirmations          []ManagedNameConfirmation `json:"name_confirmations,omitempty"`
+	DocumentRelationPreference string                    `json:"document_relation_preference,omitempty"`
+	DropRelationIDs            []string                  `json:"drop_relation_ids,omitempty"`
+	Revision                   int64                     `json:"revision"`
+	SourceID                   string                    `json:"source_id"`
+	SourceRevision             int64                     `json:"source_revision"`
+	Attributes                 map[string]any            `json:"attributes"`
+	EffectiveAt                *time.Time                `json:"effective_at,omitempty"`
 }
 
 type ManagedEntitySplitInput struct {

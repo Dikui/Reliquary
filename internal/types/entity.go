@@ -7,6 +7,7 @@ import (
 
 // Entity is a canonical identity within a library.
 type Entity struct {
+	KindLabel                string                  `json:"kind_label,omitempty" gorm:"-"`
 	Kind                     string                  `json:"kind" gorm:"not null;default:''"`
 	Code                     string                  `json:"code" gorm:"not null;default:''"`
 	Attributes               map[string]any          `json:"attributes" gorm:"serializer:json;type:jsonb;not null;default:'{}'"`
@@ -71,15 +72,15 @@ func (EntityMergeSuggestion) TableName() string {
 
 // EntryEntity associates an article with a canonical entity.
 type EntryEntity struct {
-	RelationType string `json:"relation_type" gorm:"not null;default:references"`
-	Origin    string           `json:"origin" gorm:"not null;default:extracted"`
-	Excluded  bool             `json:"excluded" gorm:"not null;default:false"`
-	Evidence  []SourceLocation `json:"evidence" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
-	BodyHash  string           `json:"body_hash" gorm:"not null;default:''"`
-	SpaceID   uint64           `json:"space_id" gorm:"not null;index"`
-	EntryID   string           `json:"entry_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_entity"`
-	EntityID  string           `json:"entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_entity;index"`
-	CreatedAt time.Time        `json:"created_at"`
+	RelationType string           `json:"relation_type" gorm:"not null;default:references"`
+	Origin       string           `json:"origin" gorm:"not null;default:extracted"`
+	Excluded     bool             `json:"excluded" gorm:"not null;default:false"`
+	Evidence     []SourceLocation `json:"evidence" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
+	BodyHash     string           `json:"body_hash" gorm:"not null;default:''"`
+	SpaceID      uint64           `json:"space_id" gorm:"not null;index"`
+	EntryID      string           `json:"entry_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_entity"`
+	EntityID     string           `json:"entity_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_entry_entity;index"`
+	CreatedAt    time.Time        `json:"created_at"`
 }
 
 func (EntryEntity) TableName() string { return "entry_entities" }
