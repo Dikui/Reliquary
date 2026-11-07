@@ -2,12 +2,10 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"slices"
 	"time"
 
-	"gorm.io/gorm"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 )
@@ -17,15 +15,14 @@ import (
 const shelfQuerySQL = `WITH RECURSIVE
 vars AS (SELECT ?::text library_id, ?::bigint space_id, ?::timestamptz at, ?::jsonb filters, ?::text ancestor_id),
 nodes AS MATERIALIZED (
- SELECT e.id,e.kind,e.canonical_name,v.attributes FROM entities e JOIN vars x ON e.library_id=x.library_id AND e.space_id=x.space_id
- JOIN LATERAL (SELECT attributes FROM entity_attribute_versions WHERE entity_id=e.id AND space_id=x.space_id AND effective_at<=x.at ORDER BY effective_at DESC,revision DESC LIMIT 1) v ON true
- WHERE e.archived_at IS NULL AND e.merged_into_id=''),
+ SELECT e.id,e.kind,e.canonical_name,e.archived_at,e.merged_into_id,v.attributes FROM entities e JOIN vars x ON e.library_id=x.library_id AND e.space_id=x.space_id
+ LEFT JOIN LATERAL (SELECT attributes FROM entity_attribute_versions WHERE entity_id=e.id AND space_id=x.space_id AND effective_at<=x.at ORDER BY effective_at DESC,revision DESC LIMIT 1) v ON true),
 edges AS MATERIALIZED (SELECT r.* FROM relations r JOIN vars x ON r.library_id=x.library_id AND r.space_id=x.space_id
  WHERE r.valid_from<=x.at AND (r.valid_to IS NULL OR r.valid_to>x.at)),
 ancestors(model_id,id,depth) AS (
  SELECT id,id,0 FROM nodes WHERE kind='model'
  UNION ALL SELECT a.model_id,r.object_id,a.depth+1 FROM ancestors a JOIN edges r ON r.subject_id=a.id AND r.relation_type='belongs_to' JOIN nodes n ON n.id=r.object_id WHERE a.depth<3),
-candidates AS (SELECT n.* FROM nodes n,vars x WHERE n.kind='model' AND (x.ancestor_id='' OR EXISTS (SELECT 1 FROM ancestors a WHERE a.model_id=n.id AND a.id=x.ancestor_id))),
+candidates AS (SELECT n.* FROM nodes n,vars x WHERE n.kind='model' AND n.archived_at IS NULL AND n.merged_into_id='' AND n.attributes IS NOT NULL AND (x.ancestor_id='' OR EXISTS (SELECT 1 FROM ancestors a WHERE a.model_id=n.id AND a.id=x.ancestor_id))),
 parts AS MATERIALIZED (SELECT r.subject_id model_id,r.object_id part_id,r.attributes->>'module_type' module FROM edges r JOIN nodes n ON n.id=r.object_id AND n.kind='part' WHERE r.relation_type='composed_of'),
 filters AS (SELECT (ordinality-1)::int step,value FROM vars,jsonb_array_elements(filters) WITH ORDINALITY),
 facts AS (
@@ -47,7 +44,7 @@ facts AS (
   SELECT jsonb_agg(jsonb_build_object('module_type',p.module,'part_ids',jsonb_build_array(p.part_id))) FROM parts p
   WHERE p.model_id=m.id AND p.part_id IN (c.attributes->'certification'->>'owner_id',c.attributes->'certification'->>'cell_part_id')
  ),'[]'::jsonb)
- FROM candidates m CROSS JOIN filters f JOIN nodes c ON c.kind='certification'
+ FROM candidates m CROSS JOIN filters f JOIN nodes c ON c.kind='certification' AND c.archived_at IS NULL AND c.merged_into_id=''
  JOIN edges link ON link.relation_type='has_certification' AND link.subject_id=c.attributes->'certification'->>'owner_id' AND link.object_id=c.id
  WHERE f.value->>'type'='certification'
  AND (NOT jsonb_exists(f.value,'standard') OR c.attributes->'certification'->>'standard'=f.value->>'standard')
@@ -73,13 +70,11 @@ SELECT (SELECT count(*) FROM matched) total,coalesce((SELECT jsonb_agg(to_jsonb(
 
 func (s *EntityService) ShelfQuery(ctx context.Context, libraryID string, input types.ShelfQueryRequest) (*types.ShelfQueryResult, error) {
 	var result *types.ShelfQueryResult
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		reader := *s
-		reader.db = tx
+	err := s.readShelfSnapshot(ctx, func(reader *EntityService) error {
 		var err error
 		result, err = reader.shelfQuery(ctx, libraryID, input)
 		return err
-	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	})
 	return result, err
 }
 
@@ -176,7 +171,7 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 	}
 	result := &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, Total: row.Total, AsOf: at}
 	for _, match := range matches {
-		detail, err := s.ShelfGet(ctx, libraryID, match.ID, types.ShelfReadOptions{AsOf: &at})
+		detail, err := s.shelfGet(ctx, libraryID, match.ID, types.ShelfReadOptions{AsOf: &at})
 		if err != nil {
 			return nil, err
 		}

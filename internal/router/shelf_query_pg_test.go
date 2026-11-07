@@ -113,6 +113,14 @@ func TestShelfQueryParameterAndCompositionUseSameCombination(t *testing.T) {
 	f.request(http.MethodPost, path, input, http.StatusOK, &result)
 	require.Zero(t, result.Total)
 	for _, tc := range []struct {
+		max   int
+		total int
+	}{{8, 0}, {9, 1}} {
+		input["parameters"] = []any{map[string]any{"field": "energy", "max": tc.max}}
+		f.request(http.MethodPost, path, input, http.StatusOK, &result)
+		require.EqualValues(t, tc.total, result.Total)
+	}
+	for _, tc := range []struct {
 		part    string
 		count   int
 		partial bool
@@ -196,6 +204,99 @@ func TestShelfQueryCertificationCoverageIncludesAllOptions(t *testing.T) {
 			require.NotEmpty(t, fact.Conditions)
 		}
 	}
+	combination, _ := json.Marshal(map[string]string{"module_a": shelfNode(nodes, "a")})
+	var selected types.ShelfNodeDetail
+	f.request(http.MethodGet, "/libraries/"+library.ID+"/shelf/nodes/"+shelfNode(nodes, "model")+"?combination="+url.QueryEscape(string(combination)), nil, http.StatusOK, &selected)
+	require.Len(t, selected.Shelf.Certifications, 1)
+	links := 0
+	for _, fact := range selected.Facts {
+		if fact.Field == "has_certification" {
+			links++
+			require.NotEmpty(t, fact.Conditions)
+			require.False(t, fact.PartialOptions)
+		}
+	}
+	require.Equal(t, 1, links, "certification links must follow the same combination as their records")
+}
+
+// Medium regression, task 06 / ADR 0022: archiving a component hides its catalog
+// entry but retains recorded model usage for detail and reverse lookup.
+func TestShelfQueryArchivedComponentsKeepRecordedUsage(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	archived := true
+	f.request(http.MethodPatch, "/entities/"+shelfNode(nodes, "fixed"), types.ManagedEntityPatch{Revision: 1, Archived: &archived}, http.StatusOK, nil)
+	var detail types.ShelfNodeDetail
+	f.request(http.MethodGet, "/libraries/"+library.ID+"/shelf/nodes/"+shelfNode(nodes, "model"), nil, http.StatusOK, &detail)
+	require.Len(t, detail.Shelf.Composition, 2)
+	var result types.ShelfQueryResult
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/query", map[string]any{"part_id": shelfNode(nodes, "fixed")}, http.StatusOK, &result)
+	require.EqualValues(t, 2, result.Total)
+}
+
+// Medium regression, task 06: a successor composition relation cites the edit
+// that created it, while the prior interval retains its original source.
+func TestShelfQueryRelationSuccessorsKeepTheirSources(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	var original types.Relation
+	for _, item := range nodes.Items {
+		if item.ID == "model_a" {
+			require.NoError(t, json.Unmarshal(item.After, &original))
+		}
+	}
+	require.NotEmpty(t, original.ID)
+	before := time.Now().UTC().Format(time.RFC3339Nano)
+	var saved types.ShelfChangeset
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "agent", AgentName: "Composition editor"}, Confirmed: true, Operations: []types.ShelfOperation{{ID: "edit", Type: "save_relation", RelationID: original.ID, Relation: &types.ManagedRelationInput{Version: original.Version, SubjectID: original.SubjectID, ObjectID: original.ObjectID, RelationType: original.RelationType, Attributes: original.Attributes}}}}, http.StatusCreated, &saved)
+	var successor types.Relation
+	require.NoError(t, json.Unmarshal(saved.Items[0].After, &successor))
+	require.NotEqual(t, original.ID, successor.ID)
+	var detail types.ShelfNodeDetail
+	path := "/libraries/" + library.ID + "/shelf/nodes/" + shelfNode(nodes, "model")
+	for _, tc := range []struct{ suffix, relationID, sourceID string }{{"", successor.ID, saved.ID}, {"?as_of=" + url.QueryEscape(before), original.ID, nodes.ID}} {
+		f.request(http.MethodGet, path+tc.suffix, nil, http.StatusOK, &detail)
+		found := false
+		for _, fact := range detail.Facts {
+			if fact.RelationID == tc.relationID {
+				found = true
+				require.Equal(t, tc.sourceID, fact.Evidence.ChangesetID)
+				require.NotEmpty(t, fact.Evidence.OperationLogID)
+			}
+		}
+		require.True(t, found)
+	}
+}
+
+// Medium spec, task 06: overlapping certificate conditions can cover three of
+// four combinations; filling the remaining combination removes the partial tag.
+func TestShelfQueryCoverageAcrossOptionalModules(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	configureCertificationStandards(f, &library)
+	path := "/libraries/" + library.ID + "/shelf/changesets"
+	var saved types.ShelfChangeset
+	f.request(http.MethodPost, path, types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{
+		{ID: "alternative", Type: "create_entity", Entity: &types.ManagedEntityInput{Kind: "part", Name: "Alternative module B"}},
+		{ID: "composition", Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: shelfNode(nodes, "model"), ObjectID: "$alternative", RelationType: "composed_of", Attributes: map[string]any{"module_type": "module_b"}}},
+	}}, http.StatusCreated, &saved)
+	alternative := shelfNode(saved, "alternative")
+	create := func(name string, conditions []types.ShelfCondition) types.ShelfOperation {
+		return types.ShelfOperation{ID: name, Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: name, ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, "model"), Standard: "standard_a", CertificationObject: "Object", Region: "Country", Conditions: conditions}}}
+	}
+	f.request(http.MethodPost, path, types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{
+		create("First coverage", []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(nodes, "a")}}}),
+		create("Second coverage", []types.ShelfCondition{{ModuleType: "module_b", PartIDs: []string{shelfNode(nodes, "fixed")}}}),
+	}}, http.StatusCreated, nil)
+	var result types.ShelfQueryResult
+	query := "/libraries/" + library.ID + "/shelf/query"
+	input := map[string]any{"certification": map[string]any{"standard": "standard_a"}}
+	f.request(http.MethodPost, query, input, http.StatusOK, &result)
+	require.EqualValues(t, 1, result.Total)
+	require.True(t, result.Items[0].PartialOptions)
+	f.request(http.MethodPost, path, types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{
+		create("Remaining coverage", []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(nodes, "b")}}, {ModuleType: "module_b", PartIDs: []string{alternative}}}),
+	}}, http.StatusCreated, nil)
+	f.request(http.MethodPost, query, input, http.StatusOK, &result)
+	require.EqualValues(t, 1, result.Total)
+	require.False(t, result.Items[0].PartialOptions)
 }
 
 // Medium spec, task 06 / ADR 0022: unrelated and scheduled edits must not
@@ -272,13 +373,17 @@ func TestShelfQueryValidatesFiltersAndLibraryScope(t *testing.T) {
 	} {
 		f.request(http.MethodPost, path, input, http.StatusBadRequest, nil)
 	}
-	f.request(http.MethodGet, "/libraries/"+library.ID+"/shelf/find?q=%25", nil, http.StatusOK, &types.ShelfFindResult{})
+	var found types.ShelfFindResult
+	f.request(http.MethodGet, "/libraries/"+library.ID+"/shelf/find?q=%25", nil, http.StatusOK, &found)
+	require.Zero(t, found.Total)
 	f.request(http.MethodGet, "/libraries/"+library.ID+"/shelf/find?q=x&limit=invalid", nil, http.StatusBadRequest, nil)
 	f.request(http.MethodGet, "/libraries/"+library.ID+"/shelf/nodes/missing", nil, http.StatusNotFound, nil)
 	var other types.Library
 	f.request(http.MethodPost, "/libraries", map[string]any{"directory": "another-shelf", "name": "Another shelf", "entity_mode": "managed", "shelf_enabled": true}, http.StatusCreated, &other)
 	f.request(http.MethodGet, "/libraries/"+other.ID+"/shelf/nodes/"+shelfNode(nodes, "model"), nil, http.StatusNotFound, nil)
-	f.request(http.MethodPost, "/libraries/"+other.ID+"/shelf/query", map[string]any{"part_id": shelfNode(nodes, "a")}, http.StatusOK, &types.ShelfQueryResult{})
+	var result types.ShelfQueryResult
+	f.request(http.MethodPost, "/libraries/"+other.ID+"/shelf/query", map[string]any{"part_id": shelfNode(nodes, "a")}, http.StatusOK, &result)
+	require.Zero(t, result.Total)
 	f.request(http.MethodGet, "/libraries/"+f.library.ID+"/shelf/find?q=x", nil, http.StatusBadRequest, nil)
 }
 

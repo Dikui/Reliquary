@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 
@@ -10,6 +11,14 @@ import (
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 )
+
+func (s *EntityService) readShelfSnapshot(ctx context.Context, read func(*EntityService) error) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		reader := *s
+		reader.db = tx
+		return read(&reader)
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+}
 
 func (s *EntityService) shelfLibraryForRead(ctx context.Context, id string) (*types.Library, error) {
 	spaceID, err := s.requireSpace(ctx)
@@ -41,6 +50,16 @@ func shelfPage(limit, offset int) (int, error) {
 
 // ShelfFind returns every matching identity, including cross-category ambiguity.
 func (s *EntityService) ShelfFind(ctx context.Context, libraryID string, input types.ShelfFindRequest) (*types.ShelfFindResult, error) {
+	var result *types.ShelfFindResult
+	err := s.readShelfSnapshot(ctx, func(reader *EntityService) error {
+		var err error
+		result, err = reader.shelfFind(ctx, libraryID, input)
+		return err
+	})
+	return result, err
+}
+
+func (s *EntityService) shelfFind(ctx context.Context, libraryID string, input types.ShelfFindRequest) (*types.ShelfFindResult, error) {
 	library, err := s.shelfLibraryForRead(ctx, libraryID)
 	if err != nil {
 		return nil, err

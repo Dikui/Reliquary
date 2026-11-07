@@ -15,6 +15,16 @@ import (
 
 // ShelfGet shares composition and certification semantics with entity detail.
 func (s *EntityService) ShelfGet(ctx context.Context, libraryID, id string, options types.ShelfReadOptions) (*types.ShelfNodeDetail, error) {
+	var result *types.ShelfNodeDetail
+	err := s.readShelfSnapshot(ctx, func(reader *EntityService) error {
+		var err error
+		result, err = reader.shelfGet(ctx, libraryID, id, options)
+		return err
+	})
+	return result, err
+}
+
+func (s *EntityService) shelfGet(ctx context.Context, libraryID, id string, options types.ShelfReadOptions) (*types.ShelfNodeDetail, error) {
 	library, err := s.shelfLibraryForRead(ctx, libraryID)
 	if err != nil {
 		return nil, err
@@ -22,6 +32,9 @@ func (s *EntityService) ShelfGet(ctx context.Context, libraryID, id string, opti
 	at := time.Now()
 	if options.AsOf != nil {
 		at = *options.AsOf
+	}
+	if at.IsZero() {
+		return nil, apperrors.NewBadRequestError("as_of must be a nonzero time")
 	}
 	var entity types.Entity
 	if err := s.db.WithContext(ctx).Where("id=? AND library_id=? AND space_id=?", id, library.ID, library.SpaceID).First(&entity).Error; err != nil {
@@ -96,7 +109,13 @@ func (s *EntityService) ShelfGet(ctx context.Context, libraryID, id string, opti
 	}
 	sort.Strings(keys)
 	for _, field := range keys {
-		if result.Shelf != nil && field == "sale_statuses" {
+		if field == "certification" && result.Entity.Kind == "certification" {
+			var record types.ShelfCertification
+			if err := types.DecodeShelfValue(result.Entity.Attributes[field], &record); err != nil {
+				return nil, err
+			}
+			appendFact(result.Entity, field, record, record.Conditions, "self")
+		} else if result.Shelf != nil && field == "sale_statuses" {
 			for _, row := range result.Shelf.SaleStatuses {
 				appendFact(result.Entity, field, row, row.Conditions, "self")
 			}
@@ -123,15 +142,17 @@ func (s *EntityService) ShelfGet(ctx context.Context, libraryID, id string, opti
 			}
 		}
 	}
+	certifications := map[string]types.ShelfCertification{}
 	if result.Shelf != nil {
 		for _, cert := range result.Shelf.Certifications {
+			certifications[cert.Entity.ID] = cert.Certification
 			conditions := shelfCertificationConditions(cert.Certification, composition)
 			appendFact(cert.Entity, "certification", cert.Certification, conditions, cert.Origin)
 		}
 	}
 	// Relationships are facts too, with their own effective interval and source.
 	var relations []types.Relation
-	if err := s.db.WithContext(ctx).Where("library_id=? AND space_id=? AND subject_id=? AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", library.ID, library.SpaceID, id, at, at).Order("relation_type,object_id,id").Find(&relations).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("library_id=? AND space_id=? AND subject_id=? AND relation_type IN ('belongs_to','composed_of','has_certification') AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", library.ID, library.SpaceID, id, at, at).Order("relation_type,object_id,id").Find(&relations).Error; err != nil {
 		return nil, err
 	}
 	if len(relations) > 0 {
@@ -145,6 +166,13 @@ func (s *EntityService) ShelfGet(ctx context.Context, libraryID, id string, opti
 		}
 		for _, relation := range relations {
 			conditions := []types.ShelfCondition{}
+			if relation.RelationType == "has_certification" {
+				record, ok := certifications[relation.ObjectID]
+				if !ok {
+					continue
+				}
+				conditions = shelfCertificationConditions(record, composition)
+			}
 			if relation.RelationType == "composed_of" {
 				module, _ := relation.Attributes["module_type"].(string)
 				if options.Combination != nil && options.Combination[module] != "" && options.Combination[module] != relation.ObjectID {
@@ -154,7 +182,7 @@ func (s *EntityService) ShelfGet(ctx context.Context, libraryID, id string, opti
 			}
 			evidence := types.ShelfEvidence{EffectiveAt: relation.ValidFrom, RecordedAt: relation.CreatedAt}
 			for _, log := range relationLogs {
-				if log.ObjectID == relation.ID && log.OperationType == "create_relation" {
+				if log.ObjectID == relation.ID && (log.OperationType == "create_relation" || log.OperationType == "update_relation") {
 					evidence.OperationLogID, evidence.Source, evidence.ChangesetID = log.ID, log.Source, log.ChangesetID
 					break
 				}
