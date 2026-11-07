@@ -35,6 +35,12 @@ HTTP 接口位于 `/api/v1`，成功数据在 `data` 中。模式、类别和属
 | `GET /entries/:id/entity-links` | 包含人工排除项，返回 entity、origin、excluded、evidence、body_hash |
 | `PUT /entries/:id/entity-links/:entity_id` | `{excluded:false}` 补关联或恢复；`{excluded:true}` 排除 |
 
+货架通过 `POST /libraries`（同时指定 `entity_mode: "managed"`）或 `PUT /libraries/:id` 的 `shelf_enabled: true` 开启。服务端替换未使用的旧配置，写入八个固定类别以及 `belongs_to`、`composed_of`、`applies_to`、`has_certification`、`has_document`、`fulfills` 关系类型。已有不兼容实体、属性或关系时拒绝开启并保留数据，不推断迁移。开启后不能关闭货架或修改固定的层级和关系端点；可继续定义实体与关系字段。
+
+库的 `shelf_config` 保存 `module_types`、`regions`、`stages` 三个列表。每项为 `{ "key": "stable_key", "name": "原样名称" }`，各列表最多 100 项，名称最多 100 字符。更新时提交完整 `shelf_config`，保留已有键，可追加、改名和重排；阶段按数组从前到后推进。空列表可省略。`GET /libraries` 和 `GET /libraries/:id` 返回持久化配置，各库独立。
+
+货架的 `product_library_ids` 必须为空，也不能出现在其他库的自动匹配目标中。开启前须先从其他库的目标列表移除。后台处理会再次过滤货架，保留人工关联和排除决定；普通人工维护库的名称匹配行为不变。
+
 同类别的名称、别名或代码冲突返回 409，不能用确认跳过。跨类别同名也返回 409，`error.details.type` 为 `cross_kind_name_confirmation_required`；`conflicts` 逐项给出提交的写法与类别，以及另一实体的 `other_entity_id`、`other_name`、`other_kind` 和 `other_kind_label`。确认具体对象后，在原请求增加：
 
 ```json

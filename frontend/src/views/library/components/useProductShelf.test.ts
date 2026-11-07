@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url)
 function fixture() {
   const entity = (id: string, kind: string): Entity => ({ id, kind, canonical_name: id, entity_type: 'product', space_id: 1, library_id: 'products', aliases: [], created_at: '', updated_at: '' })
   const nodes = [entity('line', 'product_line'), entity('platform', 'platform'), entity('product', 'product'), entity('model', 'model')]
-  const extras = [entity('configuration', 'configuration'), entity('market', 'market_scope'), entity('scope', 'verification_scope'), entity('task', 'certification_task'), entity('criterion', 'criterion'), entity('document', 'credential'), entity('source', 'source_record'), entity('ancestor-scope', 'verification_scope'), entity('ancestor-report', 'credential'), entity('second-scope', 'verification_scope')]
+  const extras = [entity('part', 'part'), entity('cert', 'certification'), entity('document', 'document_file'), entity('requirement', 'document_requirement'), entity('ancestor-cert', 'certification'), entity('ancestor-file', 'document_file')]
   const entities = new Map([...nodes, ...extras].map(item => [item.id, item]))
   entities.get('document')!.aliases = ['Original document alias']
   const links = new Map<string, EntityRelation[]>()
@@ -23,11 +23,9 @@ function fixture() {
     links.set(object, [...(links.get(object) || []), { ...relation, direction: 'incoming', peer: { ...entities.get(subject)!, aliases: undefined } }])
   }
   addLink('platform', 'line', 'belongs_to'); addLink('product', 'platform', 'belongs_to'); addLink('model', 'product', 'belongs_to')
-  addLink('configuration', 'model', 'configuration_of'); addLink('configuration', 'market', 'sale_status')
-  addLink('scope', 'model', 'covers'); addLink('task', 'scope', 'evidence_for'); addLink('task', 'criterion', 'verification_item')
-  addLink('second-scope', 'model', 'covers'); addLink('task', 'second-scope', 'evidence_for')
-  addLink('model', 'document', 'has_document'); addLink('source', 'task', 'source_for')
-  addLink('ancestor-scope', 'platform', 'covers'); addLink('ancestor-report', 'ancestor-scope', 'evidence_for')
+  addLink('model', 'part', 'composed_of'); addLink('part', 'cert', 'has_certification')
+  addLink('model', 'document', 'has_document'); addLink('document', 'requirement', 'fulfills')
+  addLink('platform', 'ancestor-cert', 'has_certification'); addLink('platform', 'ancestor-file', 'has_document')
   const entries: EntityEntry[] = [{ id: 'ordinary-entry', library_id: 'products', title: 'Ordinary material', created_at: '2026-01-01T00:00:00Z' }]
   let rejectLink = false, createCount = 0
   const writes: ManagedRelationInput[] = []
@@ -35,7 +33,7 @@ function fixture() {
   const entityApi = {
     listEntities: async ({ kind }: { kind: string }) => ({ success: true, data: nodes.filter(item => item.kind === kind) }),
     getEntity: async (id: string) => ({ success: true, data: { entity: entities.get(id), entries: id === 'model' ? entries : [] } }),
-    createManagedEntity: async () => { createCount++; const saved = entity('new-configuration', 'configuration'); entities.set(saved.id, saved); return { success: true, data: saved } },
+    createManagedEntity: async () => { createCount++; const saved = entity('new-document', 'document_file'); entities.set(saved.id, saved); return { success: true, data: saved } },
   }
   const relationApi = {
     listEntityRelations: async (id: string) => ({ success: true, data: [{ relation_type: 'fixture', relations: links.get(id) || [] }] }),
@@ -54,7 +52,7 @@ function fixture() {
   return { shelf, nodes, entries, writes, entityApi, createCount: () => createCount, failLink: (value: boolean) => { rejectLink = value } }
 }
 
-// Four-level shelf contract: attached evidence retains its owner and ordinary Entry materials remain separate.
+// Small spec, task 02 / ADR 0023: attached evidence retains its owner and ordinary Entry materials remain separate.
 test('selecting a shelf model groups related records with ancestor provenance', async t => {
   const { shelf, nodes, entries } = fixture(); t.after(() => shelf.dispose())
   await shelf.load()
@@ -63,23 +61,21 @@ test('selecting a shelf model groups related records with ancestor provenance', 
   await shelf.select(nodes[3]!)
   const sections = Object.fromEntries(['attrs', 'market', 'certs', 'docs'].map(section => [section, shelf.records.value.filter(row => row.section === section).map(row => row.entity.id).sort()]))
   assert.deepEqual(sections, {
-    attrs: ['configuration'], market: ['market'],
-    certs: ['ancestor-report', 'ancestor-scope', 'criterion', 'scope', 'second-scope', 'task', 'task'], docs: ['document', 'source'],
+    attrs: ['part'], market: [], certs: ['ancestor-cert', 'cert'], docs: ['ancestor-file', 'document', 'requirement'],
   })
-  assert.deepEqual(shelf.records.value.filter(row => row.ancestor).map(row => row.entity.id).sort(), ['ancestor-report', 'ancestor-scope'])
-  assert.equal(shelf.records.value.find(row => row.entity.id === 'ancestor-scope')!.owner.id, 'platform')
-  assert.equal(shelf.records.value.filter(row => row.entity.id === 'task').length, 2)
+  assert.deepEqual(shelf.records.value.filter(row => row.ancestor).map(row => row.entity.id).sort(), ['ancestor-cert', 'ancestor-file'])
+  assert.equal(shelf.records.value.find(row => row.entity.id === 'ancestor-cert')!.owner.id, 'platform')
   assert.deepEqual(shelf.records.value.find(row => row.entity.id === 'document')!.entity.aliases, ['Original document alias'])
   assert.deepEqual(shelf.entries.value, entries)
   assert.equal(shelf.detailError.value, '')
 })
 
-// A saved entity survives a failed link; retry must not create the entity again.
+// Small regression, task 02: a saved entity survives a failed link; retry must not create the entity again.
 test('retrying a failed shelf attachment only repeats the relationship write', async t => {
   const context = fixture(), { shelf, nodes, entityApi } = context; t.after(() => shelf.dispose())
   await shelf.load(); await shelf.select(nodes[3]!)
   const created = await entityApi.createManagedEntity()
-  const input = { subject_id: created.data.id, object_id: 'model', relation_type: 'configuration_of' }
+  const input = { subject_id: 'model', object_id: created.data.id, relation_type: 'has_document' }
   context.failLink(true)
   await shelf.attach(created.data, input)
   assert.equal(shelf.pending.value!.entity.id, created.data.id)

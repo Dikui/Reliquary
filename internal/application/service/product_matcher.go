@@ -31,13 +31,16 @@ type productMatcherCache struct {
 
 // Callers hold the space identity barrier until their associations are saved.
 func (c *productMatcherCache) load(tx *gorm.DB, library *types.Library) (*productMatcher, error) {
+	if library.ShelfEnabled {
+		return &productMatcher{}, nil
+	}
 	ids := append([]string{}, library.ProductLibraryIDs...)
 	if library.ManagesEntities() {
 		ids = appendUniqueEntityString(ids, library.ID)
 	}
 	var targets []types.Library
 	if len(ids) > 0 {
-		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id IN ? AND space_id=? AND entity_mode=?", ids, library.SpaceID, types.EntityModeManaged).Order("id").Find(&targets).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id IN ? AND space_id=? AND entity_mode=? AND shelf_enabled=false", ids, library.SpaceID, types.EntityModeManaged).Order("id").Find(&targets).Error; err != nil {
 			return nil, err
 		}
 	}

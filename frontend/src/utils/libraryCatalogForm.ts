@@ -6,7 +6,7 @@ export function validTypes(rows: Array<{ name: string }>) {
   return names.every(name => !!name && Array.from(name).length <= 100) && new Set(names).size === names.length
 }
 export function librarySettingsPayload(draft: LibraryCatalogItem, baseline?: LibraryCatalogItem) {
-  const changed = (key: 'entity_mode' | 'entity_schema' | 'relation_types') => !baseline || JSON.stringify(draft[key]) !== JSON.stringify(baseline[key])
+  const changed = (key: 'entity_mode' | 'entity_schema' | 'relation_types' | 'shelf_enabled' | 'shelf_config') => !baseline || JSON.stringify(draft[key]) !== JSON.stringify(baseline[key])
   const chunking = draft.chunking_config ? { ...draft.chunking_config, token_limit: Number(draft.chunking_config.token_limit || 0) } : undefined
   if (chunking) fillParentChunkDefaults(chunking)
   return {
@@ -17,6 +17,8 @@ export function librarySettingsPayload(draft: LibraryCatalogItem, baseline?: Lib
     ...(draft.product_library_ids ? { product_library_ids: draft.product_library_ids } : {}),
     ...(draft.document_relation_types ? { document_relation_types: draft.document_relation_types } : {}),
     ...(draft.entity_kind_mapping ? { entity_kind_mapping: draft.entity_kind_mapping } : {}),
+    ...(draft.shelf_enabled !== undefined && changed('shelf_enabled') ? { shelf_enabled: draft.shelf_enabled } : {}),
+    ...(draft.shelf_config && changed('shelf_config') ? { shelf_config: draft.shelf_config } : {}),
     feed_enabled: draft.feed_enabled,
     ...(draft.entity_mode && changed('entity_mode') ? { entity_mode: draft.entity_mode } : {}),
     ...(draft.entity_schema && changed('entity_schema') ? { entity_schema: draft.entity_schema } : {}),

@@ -98,7 +98,7 @@ onBeforeUnmount(() => { request++ })
         <label>{{ t('managed.code') }}<Input v-model="draft.code" /></label>
         <label>{{ t('ikb18.description') }}<Textarea v-model="draft.description" :rows="4" /></label>
         <label>{{ t('managed.aliases') }}<Textarea v-model="aliases" :rows="3" /></label>
-        <ManagedNameMatching :model-value="draft.auto_match || {}" :name="draft.name" :code="draft.code" :aliases="aliases.split('\n')" @update:model-value="draft.auto_match = $event" />
+        <ManagedNameMatching v-if="!library.shelf_enabled" :model-value="draft.auto_match || {}" :name="draft.name" :code="draft.code" :aliases="aliases.split('\n')" @update:model-value="draft.auto_match = $event" />
         <label>{{ t('managed.effectiveAt') }}<input v-model="effectiveAt" type="datetime-local" class="rq-control"></label><p>{{ t('managed.effectiveHint') }}</p>
         <ManagedAttributes v-model="draft.attributes" :fields="fields" :library-id="library.id" :kind="draft.kind" />
         <p v-if="error" role="alert">{{ error }}</p>

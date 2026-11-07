@@ -448,7 +448,7 @@ they changed since load, so ordinary edits do not request the exclusive space lo
 Merge drafts keep only fields that apply to the target kind, show preserved archived
 target values read-only, and list source values that will not carry over before
 confirmation; choosing another source recalculates them. Both entity modes can select
-other product libraries for automatic matching; a managed library always matches its
+other product libraries for automatic matching; a managed library without a shelf always matches its
 own products.
 
 Search optionally includes descendants and retains that choice in URL state.
@@ -456,22 +456,28 @@ Parent context is displayed when supplied, while the click target remains the
 original matched location. Existing extracted libraries retain their merge and
 automatic-extraction workflows.
 
-### Editable four-level product shelf
+### Product shelf
 
-A managed library with product_line, platform, product and model kinds opens the shelf
-from the entity workbench. Library settings can add the compatible shelf definitions
-to the draft; the existing settings Save persists them. Conflicting definitions leave
-the whole draft unchanged. No product records are created by this configuration step.
+Shelf availability uses the persisted library flag. Enabling a shelf in settings
+edits the current draft; Save installs the server-owned structure and adopts the
+returned library as the next baseline. Failed saves preserve the draft for retry.
+No product records are created by enabling a shelf. Existing incompatible records
+are preserved and cause the update to fail.
 
-The shelf reads current entities and relationships using existing APIs. Node selection
-preserves the canvas viewport; the four detail tabs show parameters, sale status,
-certifications and documents. Configuration facts remain separate from model facts.
-Ancestor evidence is labelled as a scope candidate. Candidate parents use a separate
-non-hierarchical relationship and do not become formal parents by display selection.
+Shelf settings append, rename and reorder module types, regions and stages. Names
+retain their submitted spelling. Keys stay stable and list order defines stage
+progression. Existing values cannot be removed through these operations. Up and
+Down buttons provide keyboard-accessible ordering. All changes share the parent
+settings Save and discard behavior.
 
-Creating a child preselects its kind and then links it to the selected parent. If the
-link fails after creation, the created identity remains visible in the retry notice;
-Retry only writes the relationship. Existing editors own revisions, validation and
-relationship history. Documents include linked Entry records as well as credential
-URL and attachment fields. Spreadsheet imports and automatic certification verdicts
-are outside this workflow.
+Shelf libraries use explicit material associations. They neither match their own
+products nor select other libraries for automatic matching, and other libraries
+cannot select them as automatic targets. Ordinary managed libraries retain their
+matching controls and behavior.
+
+The current shelf hierarchy uses a semantic four-column button list. Detail tabs
+use parts, certifications, document requirements and document files. Child creation
+preselects its category and then links the saved identity to its parent. If linking
+fails, Retry only repeats the relationship write. Existing editors own revisions,
+validation and relationship history. The later status-table and change-set flows
+are separate tasks.

@@ -28,14 +28,14 @@ function library(id: string, entity_mode: 'managed' | 'extracted' = 'managed'): 
   }
 }
 
-async function fixture(items = [library('current'), library('other'), library('articles', 'extracted')], locale = 'en-US') {
+async function fixture(items = [library('current'), library('other'), library('articles', 'extracted')], locale = 'en-US', saveData?: LibraryCatalogItem) {
   const requests: Array<{ id: string; payload: LibraryPatch }> = []
   // Replace HTTP and unrelated model controls; matching and schema editors run as real SFCs.
   const api = {
     listLibraries: async () => ({ success: true, data: items }),
     getCatalogLibrary: async (id: string) => ({ success: true, data: structuredClone(items.find(item => item.id === id)) }),
     getEntityConversion: async () => ({ success: true, data: { entity_counts: {} } }),
-    saveCatalogLibrary: async (id: string, payload: LibraryPatch) => { requests.push({ id, payload: JSON.parse(JSON.stringify(payload)) }); return { success: true } },
+    saveCatalogLibrary: async (id: string, payload: LibraryPatch) => { requests.push({ id, payload: JSON.parse(JSON.stringify(payload)) }); return { success: true, data: saveData } },
   }
   const ui = { Button: loadUiComponent('Button'), LibMark: loadUiComponent('LibMark'), Tag: loadUiComponent('Tag'),
     Dialog: defineComponent({ render: () => null }), toast: { success() {} },
@@ -59,6 +59,52 @@ async function fixture(items = [library('current'), library('other'), library('a
   const editorRoot = root.querySelector('section')!
   return { root, editorRoot, requests, async cleanup() { app.unmount(); root.remove(); await settle() } }
 }
+
+// Small spec, task 02 / ADR 0023: all three lists use the existing draft/save
+// workflow, retaining stable identities and the submitted name spelling.
+test('shelf settings append, rename and reorder all three lists before saving', async t => {
+  const f = await fixture(); t.after(() => f.cleanup())
+  const enable = f.editorRoot.querySelectorAll('button').find(button => button.textContent === 'Enable shelf')!
+  await send(enable, 'click')
+  assert.ok(!f.editorRoot.textContent.includes('Products in this library always participate'))
+  for (const key of ['module_types', 'regions', 'stages'] as const) {
+    const group = f.editorRoot.querySelector(`[data-shelf-list="${key}"]`)!
+    for (const value of [' First value ', 'Second value']) {
+      const field = group.querySelectorAll('input').at(-1)!
+      field.value = value; await send(field, 'input')
+      await send(group.querySelectorAll('button').find(button => button.textContent === 'Add')!, 'click')
+    }
+    const first = group.querySelectorAll('input')[0]!
+    first.value = ' Renamed value '; await send(first, 'input')
+    await send(group.querySelectorAll('button').find(button => button.textContent === 'Move down')!, 'click')
+  }
+  await send(f.root.querySelector('form')!, 'submit')
+  const payload = f.requests[0]!.payload
+  assert.equal(payload.shelf_enabled, true)
+  assert.deepEqual(payload.product_library_ids, [])
+  for (const key of ['module_types', 'regions', 'stages'] as const) {
+    assert.deepEqual(payload.shelf_config![key]!.map(item => item.name), ['Second value', ' Renamed value '])
+    assert.equal(new Set(payload.shelf_config![key]!.map(item => item.key)).size, 2)
+  }
+})
+
+// Small spec, task 02 / ADR 0024: shelf libraries are never offered as targets.
+test('automatic matching choices exclude shelves', async t => {
+  const f = await fixture([library('current'), { ...library('shelf'), shelf_enabled: true }, library('ordinary')]); t.after(() => f.cleanup())
+  const choices = f.editorRoot.querySelectorAll('input[type="checkbox"]')
+  assert.deepEqual(choices.map(choice => choice.parentElement!.textContent), ['ordinary'])
+})
+
+// Small regression, task 02: enabling installs a server-owned schema, so a
+// successful save must adopt the returned library as the next editing baseline.
+test('saving shelf settings adopts the structure returned by the server', async t => {
+  const saved = { ...library('current'), shelf_enabled: true, entity_schema: { kinds: [], fields: [{ key: 'confirmed_field', name: 'Server confirmed field', type: 'text' as const, kinds: [] }] } }
+  const f = await fixture(undefined, 'en-US', saved); t.after(() => f.cleanup())
+  await send(f.editorRoot.querySelectorAll('button').find(button => button.textContent === 'Enable shelf')!, 'click')
+  await send(f.root.querySelector('form')!, 'submit')
+  assert.ok(f.root.querySelectorAll('input').some(input => input.value === 'Server confirmed field'))
+  assert.equal(f.root.querySelector('button[type="submit"]')!.disabled, true)
+})
 
 test('a managed library can save other product libraries as automatic matching targets', async t => {
   const f = await fixture(); t.after(() => f.cleanup())

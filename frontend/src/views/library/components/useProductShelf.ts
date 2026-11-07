@@ -13,12 +13,12 @@ export function useProductShelf(library: Ref<LibraryCatalogItem>) {
   const pending = ref<{ entity: Entity; input: ManagedRelationInput }>()
   let generation = 0, detailGeneration = 0
   const relations = computed(() => {
-    const unique = new Map<string, { child: string; parent: string; candidate: boolean; relation: EntityRelation }>()
+    const unique = new Map<string, { child: string; parent: string; relation: EntityRelation }>()
     for (const [id, rows] of Object.entries(links.value)) for (const relation of rows) {
-      if (!['belongs_to', 'candidate_parent'].includes(relation.relation_type)) continue
+      if (relation.relation_type !== 'belongs_to') continue
       const child = relation.direction === 'outgoing' ? id : relation.peer.id
       const parent = relation.direction === 'outgoing' ? relation.peer.id : id
-      unique.set(relation.id, { child, parent, candidate: relation.relation_type === 'candidate_parent', relation })
+      unique.set(relation.id, { child, parent, relation })
     }
     return [...unique.values()]
   })
@@ -73,9 +73,9 @@ export function useProductShelf(library: Ref<LibraryCatalogItem>) {
           const peer = relation.peer
           if (shelfLevel(peer.kind || '') !== null || peer.archived_at) continue
           const incoming = relation.direction === 'incoming'
-          const permitted = incoming ? ['configuration_of', 'covers', 'evidence_for', 'source_for'] : ['sale_status', 'has_document', 'verification_item']
+          const permitted = incoming ? ['applies_to'] : ['composed_of', 'has_certification', 'has_document', 'fulfills']
           if (!permitted.includes(relation.relation_type)) continue
-          const section = relation.relation_type === 'evidence_for' || relation.relation_type === 'verification_item' || relation.relation_type === 'covers' ? 'certs' : shelfSection(peer.kind || '')
+          const section = shelfSection(peer.kind || '')
           let full = fullRecords.get(peer.id)
           if (!full) {
             const response = await getEntity(peer.id)

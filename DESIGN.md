@@ -270,11 +270,13 @@ entity details retain the existing workbench scroll ownership.
 
 ### Editable product shelf
 
-Managed product libraries can add the four-level shelf schema in their settings draft.
-The shelf uses the existing Swiss tokens, Cytoscape canvas, shared editor dialogs and
-four detail tabs: parameters, sale status, certifications and documents. Selecting a
-node updates the detail rail while keeping graph pan and zoom. Below 1100px the rail
-follows the graph. A semantic four-column button list provides keyboard access to the
-same nodes. Candidate parents have dashed edges; missing parents remain navigation
-groups rather than saved entities. Long entity and relation forms keep Save in the
-shared dialog footer. These views contain no bundled business data.
+Managed libraries enable a shelf through the existing settings draft and Save action.
+The server installs the eight fixed categories and relationship rules. Module types,
+regions and ordered stages use the same labelled inputs and shared buttons as other
+settings; their names are user data. Stable keys survive renaming and reordering.
+
+The shelf uses the Swiss tokens, a four-column hierarchy list and shared editor
+dialogs. It no longer has a relation graph or candidate-parent vocabulary. The
+existing detail tabs display parts, certifications and document records while the
+later status-table workflow is implemented. Below 1100px details follow the list.
+These views contain no bundled business data.

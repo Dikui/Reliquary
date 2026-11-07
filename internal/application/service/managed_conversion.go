@@ -129,11 +129,11 @@ func validateProductLibraries(tx *gorm.DB, library *types.Library) error {
 			continue
 		}
 		var count int64
-		if err := tx.Model(&types.Library{}).Where("id=? AND space_id=? AND entity_mode='managed'", id, library.SpaceID).Count(&count).Error; err != nil {
+		if err := tx.Model(&types.Library{}).Where("id=? AND space_id=? AND entity_mode='managed' AND shelf_enabled=false", id, library.SpaceID).Count(&count).Error; err != nil {
 			return err
 		}
 		if count != 1 {
-			return apperrors.NewBadRequestError("product libraries must be managed libraries in this space")
+			return apperrors.NewBadRequestError("automatic product targets must be managed libraries in this space without a shelf")
 		}
 	}
 	// In-use document relationship names cannot disappear from their product library.

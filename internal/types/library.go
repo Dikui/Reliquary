@@ -20,6 +20,8 @@ const (
 
 // Library represents a library entity
 type Library struct {
+	ShelfEnabled          bool                  `json:"shelf_enabled" gorm:"not null;default:false"`
+	ShelfConfig           ShelfConfig           `json:"shelf_config" gorm:"serializer:json;type:jsonb;not null;default:'{}'"`
 	ProductLibraryIDs     []string              `json:"product_library_ids" gorm:"serializer:json;type:jsonb;not null;default:'[]'"`
 	DocumentRelationTypes []string              `json:"document_relation_types" gorm:"serializer:json;type:jsonb;not null;default:'[\"references\",\"specification\",\"test_report\",\"comparison\"]'"`
 	EntityMode            string                `json:"entity_mode" gorm:"not null;default:extracted"`

@@ -20,7 +20,12 @@ var relationValidityDefaults = map[string]map[string]any{
 	"relations": {"valid_from": nil, "valid_to": nil},
 }
 
+var productShelfDefaults = map[string]map[string]any{
+	"libraries": {"shelf_enabled": false, "shelf_config": map[string]any{}},
+}
+
 func projectManagedEntitiesSnapshot(snapshot *Snapshot, targetVersion int64) {
+	projectEntityDefaultsSnapshot(snapshot, targetVersion, 42, productShelfDefaults)
 	projectEntityDefaultsSnapshot(snapshot, targetVersion, 37, managedEntityDefaults)
 	projectManagedEvolutionSnapshot(snapshot, targetVersion)
 	projectEntityDefaultsSnapshot(snapshot, targetVersion, 39, entityAutoMatchDefaults)
@@ -49,6 +54,7 @@ func projectEntityDefaultsSnapshot(snapshot *Snapshot, targetVersion, version in
 }
 
 func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	expected, actual = projectEntityDefaultsManifest(expected, actual, 42, productShelfDefaults)
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 37, managedEntityDefaults)
 	expected, actual = projectManagedEvolutionManifest(expected, actual)
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 39, entityAutoMatchDefaults)

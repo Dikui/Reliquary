@@ -163,8 +163,8 @@ test('graph filter options come from enabled relation types in the selected libr
 })
 
 // Side-record links must retain their own profile instead of selecting the first shelf product line.
-test('a credential deep link keeps the entity profile in a configured product library', async () => {
-  const { state } = await renderWorkbench({ initialEntityId: 'certificate', libraries: [{ id: 'library-a', name: 'Products', entity_mode: 'managed', entity_schema: { kinds: ['product_line', 'platform', 'product', 'model'].map(key => ({ key, name: key, parent_kinds: [] })), fields: [] } }], api: { getEntity: () => envelope({ entity: { ...entity, id: 'certificate', kind: 'credential' }, entries: [] }) }, scenario: async state => { await state.loadCatalog(); await state.selectInitialEntity('certificate') } })
+test('a document file deep link keeps the entity profile in a configured product library', async () => {
+  const { state } = await renderWorkbench({ initialEntityId: 'certificate', libraries: [{ id: 'library-a', name: 'Products', entity_mode: 'managed', shelf_enabled: true, entity_schema: { kinds: ['product_line', 'platform', 'product', 'model'].map(key => ({ key, name: key, parent_kinds: [] })), fields: [] } }], api: { getEntity: () => envelope({ entity: { ...entity, id: 'certificate', kind: 'document_file' }, entries: [] }) }, scenario: async state => { await state.loadCatalog(); await state.selectInitialEntity('certificate') } })
   assert.equal(state.selectedEntity.value.id, 'certificate')
   assert.equal(state.shelfView.value, false)
 })

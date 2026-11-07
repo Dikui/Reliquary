@@ -79,6 +79,8 @@ func (r LibraryRelationType) MarshalJSON() ([]byte, error) {
 // LibraryPatch intentionally includes immutable fields so attempts to write
 // them are rejected instead of silently ignored by JSON decoding.
 type LibraryPatch struct {
+	ShelfEnabled          *bool                               `json:"shelf_enabled"`
+	ShelfConfig           *ShelfConfig                        `json:"shelf_config"`
 	NameConfirmations     []ManagedConversionNameConfirmation `json:"name_confirmations,omitempty"`
 	ProductLibraryIDs     *[]string                           `json:"product_library_ids"`
 	DocumentRelationTypes *[]string                           `json:"document_relation_types"`
@@ -139,6 +141,8 @@ func (l *Library) ProcessingModelTiers() []ModelTier {
 }
 
 type CreateLibraryRequest struct {
+	ShelfEnabled          bool         `json:"shelf_enabled"`
+	ShelfConfig           ShelfConfig  `json:"shelf_config"`
 	ProductLibraryIDs     []string     `json:"product_library_ids"`
 	DocumentRelationTypes []string     `json:"document_relation_types"`
 	EntityMode            string       `json:"entity_mode"`

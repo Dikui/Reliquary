@@ -127,7 +127,7 @@ async function save() {
     const payload = librarySettingsPayload(draft.value, JSON.parse(saved.value))
     const response = await saveCatalogLibrary(draft.value.id, payload)
     if (!response.success) throw new Error(response.message)
-    Object.assign(draft.value, payload)
+    Object.assign(draft.value, response.data || payload)
     saved.value = JSON.stringify(draft.value)
     notifySaved(draft.value)
     toast.success(t('libraryEditor.messages.updateSuccess'))

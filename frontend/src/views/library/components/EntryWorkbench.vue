@@ -209,7 +209,7 @@ async function selectInitialEntity(id: string, preview?: Entity) {
 const libraries = ref<LibraryCatalogItem[]>([]), catalogLoading = ref(false), catalogError = ref('')
 const selectedLibrary = computed(() => libraries.value.find(item => item.id === selectedLibraryId.value))
 const shelfView = ref(false)
-const shelfConfigured = computed(() => isProductShelf(selectedLibrary.value?.entity_schema))
+const shelfConfigured = computed(() => isProductShelf(selectedLibrary.value))
 watch([selectedLibraryId, shelfConfigured], () => { shelfView.value = managed.value && shelfConfigured.value && !(props.initialEntityId === selectedEntity.value?.id && shelfLevel(selectedEntity.value?.kind || '') === null) }, { immediate: true })
 const graphRelationTypes = computed(() => (selectedLibrary.value?.relation_types || []).filter(type => type.enabled).map(type => type.name))
 const relationAsOf = ref('')

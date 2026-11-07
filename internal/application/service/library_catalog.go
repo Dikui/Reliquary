@@ -28,6 +28,10 @@ func (s *libraryService) CreateLibrary(ctx context.Context, request types.Create
 	library := &types.Library{ID: uuid.NewString(), SpaceID: types.MustSpaceIDFromContext(ctx), Name: request.Name, Description: request.Description, Template: request.Template, Directory: request.Directory, CreatedAt: time.Now(), UpdatedAt: time.Now(), ContentTypes: []types.LibraryContentType{}, RelationTypes: []types.LibraryRelationType{}}
 	library.EntityMode, library.EntitySchema = request.EntityMode, request.EntitySchema
 	library.ProductLibraryIDs, library.DocumentRelationTypes = request.ProductLibraryIDs, request.DocumentRelationTypes
+	library.ShelfEnabled, library.ShelfConfig = request.ShelfEnabled, request.ShelfConfig
+	if library.ShelfEnabled {
+		library.EntitySchema, library.RelationTypes = types.ProductShelfSchema(), types.ProductShelfRelations()
+	}
 	if request.Color != nil {
 		if err := types.ValidateLibraryColor(*request.Color); err != nil {
 			return nil, apperrors.NewBadRequestError(err.Error())
@@ -40,10 +44,16 @@ func (s *libraryService) CreateLibrary(ctx context.Context, request types.Create
 	if err := types.ValidateLibrary(library); err != nil {
 		return nil, apperrors.NewBadRequestError(err.Error())
 	}
-	if err := validateProductLibraries(s.db.WithContext(ctx), library); err != nil {
-		return nil, err
-	}
-	if err := s.repo.CreateLibrary(ctx, library); err != nil {
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockEntitySpaceShared(tx, library.SpaceID); err != nil {
+			return err
+		}
+		if err := validateProductLibraries(tx, library); err != nil {
+			return err
+		}
+		return repository.NewLibraryRepository(tx).CreateLibrary(ctx, library)
+	})
+	if err != nil {
 		return nil, libraryWriteError(err)
 	}
 	return s.repo.GetLibraryByID(ctx, library.ID)
@@ -79,7 +89,7 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 	var result *types.Library
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		lock := lockEntitySpaceShared
-		if patch.EntityMode != nil || patch.EntitySchema != nil || patch.RelationTypes != nil {
+		if patch.EntityMode != nil || patch.EntitySchema != nil || patch.RelationTypes != nil || patch.ShelfEnabled != nil || patch.ShelfConfig != nil || patch.ProductLibraryIDs != nil {
 			lock = lockEntitySpace
 		}
 		if err := lock(tx, types.MustSpaceIDFromContext(ctx)); err != nil {
@@ -95,6 +105,12 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 			return err
 		}
 		previous := *library
+		if patch.ShelfEnabled != nil {
+			library.ShelfEnabled = *patch.ShelfEnabled
+		}
+		if patch.ShelfConfig != nil {
+			library.ShelfConfig = *patch.ShelfConfig
+		}
 		if patch.ProductLibraryIDs != nil {
 			library.ProductLibraryIDs = *patch.ProductLibraryIDs
 		}
@@ -155,10 +171,16 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 				library.RelationTypes[i].Position = i
 			}
 		}
+		if library.ShelfEnabled && !previous.ShelfEnabled {
+			library.EntitySchema, library.RelationTypes = types.ProductShelfSchema(), types.ProductShelfRelations()
+		}
+		if err := validateProductShelfChange(tx, &previous, library); err != nil {
+			return err
+		}
 		if err := types.ValidateLibrary(library); err != nil {
 			return apperrors.NewBadRequestError(err.Error())
 		}
-		if previous.EntityMode != library.EntityMode || !slices.Equal(previous.ProductLibraryIDs, library.ProductLibraryIDs) || !slices.Equal(previous.DocumentRelationTypes, library.DocumentRelationTypes) {
+		if previous.EntityMode != library.EntityMode || previous.ShelfEnabled != library.ShelfEnabled || !slices.Equal(previous.ProductLibraryIDs, library.ProductLibraryIDs) || !slices.Equal(previous.DocumentRelationTypes, library.DocumentRelationTypes) {
 			if err := validateProductLibraries(tx, library); err != nil {
 				return err
 			}

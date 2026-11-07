@@ -57,6 +57,10 @@ func TestIngestContractMigrationUpDownUpAndPreservation(t *testing.T) {
 				require.Equal(t, []any{"references", "specification", "test_report", "comparison"}, row["document_relation_types"])
 				delete(row, "product_library_ids")
 				delete(row, "document_relation_types")
+				require.Equal(t, false, row["shelf_enabled"])
+				require.Empty(t, row["shelf_config"])
+				delete(row, "shelf_enabled")
+				delete(row, "shelf_config")
 				require.Equal(t, "standard", row["template"])
 				row["template"] = "own" // Migration 34 replaces this fixture's old marker.
 			}

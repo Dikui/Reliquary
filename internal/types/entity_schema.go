@@ -51,6 +51,9 @@ func (s EntitySchema) Kind(key string) (EntityKind, bool) {
 var entitySchemaKey = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 func ValidateEntitySchema(l *Library) error {
+	if err := ValidateProductShelf(l); err != nil {
+		return err
+	}
 	if len(l.ProductLibraryIDs) > 100 || len(l.DocumentRelationTypes) > 100 {
 		return fmt.Errorf("at most 100 product libraries or document relationship types are allowed")
 	}

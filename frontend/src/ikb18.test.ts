@@ -241,7 +241,8 @@ test('mounted relation source opens its exact saved-body position', async () => 
   const location = { start: 2, end: 5, paragraph: 2, body_hash: '', heading_path: ['H'], mapping: 'exact' }
   const relation = { id: 'rel', relation_type: '合作', direction: 'incoming', peer: { id: 'peer', canonical_name: 'Peer' }, library_id: 'mine', library_name: 'Notes', source_count: 1, sources: [{ entry_id: 'source', title: 'Source title', body_hash: 'saved-hash', evidence: [{ locations: [location], speaker: { name: 'Speaker' } }] }] }
   const opened: any[] = []
-  const component = loadComponent(new URL('./views/library/components/EntityRelations.vue', import.meta.url), { ...entryPresentationTestModules, '@/api/relations': { deleteEntityRelation: async () => ({ success: true }) } })
+  // This extracted-library scenario never renders the managed attribute or relation editors.
+  const component = loadComponent(new URL('./views/library/components/EntityRelations.vue', import.meta.url), { ...entryPresentationTestModules, './ManagedAttributes.vue': empty, './ManagedRelationEditor.vue': empty, '@/api/relations': { deleteEntityRelation: async () => ({ success: true }) } })
   const root = element('root'), app = renderer.createApp(component, { entityId: 'entity', entityName: 'Center', groups: [{ relation_type: '合作', relations: [relation] }], onOpenSource: (...args: any[]) => opened.push(args) })
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } })); app.mount(root)
   try {
