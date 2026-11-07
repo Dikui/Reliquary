@@ -313,3 +313,41 @@ func TestShelfCertificationDeferredReferencesCanBeConfirmed(t *testing.T) {
 	require.Len(t, detail.Shelf.Certifications, 1)
 	require.Equal(t, deferred.Items[0].EntityID, detail.Shelf.Certifications[0].Entity.ID)
 }
+
+// Medium regression, task 05 / ADR 0023: a future certification remains bound
+// to its declared owner even before the first attribute snapshot becomes active.
+func TestShelfCertificationFutureOwnerCannotBeChangedByRelation(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	configureCertificationStandards(f, &library)
+	path := "/libraries/" + library.ID + "/shelf/changesets"
+	future := time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
+	var created types.ShelfChangeset
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": future, "certification": map[string]any{"name": "Future certificate", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "Country"}}}}, http.StatusCreated, &created)
+	var proposed types.Entity
+	require.NoError(t, types.DecodeShelfValue(created.Items[0].After, &proposed))
+	require.Contains(t, proposed.Attributes, "certification")
+	var draft types.ShelfChangeset
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "wrong_owner", "type": "save_relation", "relation": map[string]any{"subject_id": shelfNode(nodes, "single"), "object_id": created.Items[0].EntityID, "relation_type": "has_certification"}}}}, http.StatusCreated, &draft)
+	require.Equal(t, "uncertain", draft.Items[0].Conflicts[0].Type)
+	f.request(http.MethodPost, path+"/"+draft.ID+"/confirm", map[string]any{"revision": draft.Revision, "decisions": []any{map[string]any{"item_id": "wrong_owner", "action": "apply"}}}, http.StatusConflict, nil)
+	var detail types.EntityDetail
+	f.request(http.MethodGet, "/entities/"+shelfNode(nodes, "model"), nil, http.StatusOK, &detail)
+	require.Empty(t, detail.Shelf.Certifications)
+	f.request(http.MethodGet, "/entities/"+shelfNode(nodes, "model")+"?as_of="+url.QueryEscape(future), nil, http.StatusOK, &detail)
+	require.Len(t, detail.Shelf.Certifications, 1)
+}
+
+// Medium regression, task 05: an ancestor's conjunctive conditions must be
+// satisfiable by one descendant, rather than by separate unrelated models.
+func TestShelfCertificationAncestorConditionsNeedOnePossibleModel(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	configureCertificationStandards(f, &library)
+	path := "/libraries/" + library.ID + "/shelf/changesets"
+	var part types.Entity
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "part", "name": "Single-only part"}, http.StatusCreated, &part)
+	var saved types.ShelfChangeset
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "composition", "type": "save_relation", "relation": map[string]any{"subject_id": shelfNode(nodes, "single"), "object_id": part.ID, "relation_type": "composed_of", "attributes": map[string]any{"module_type": "module_b"}}}}}, http.StatusCreated, &saved)
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Impossible parent certificate", "owner_id": shelfNode(nodes, "product"), "standard": "standard_a", "certification_object": "Container", "region": "Country", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "a")}}, map[string]any{"module_type": "module_b", "part_ids": []string{part.ID}}}}}}}, http.StatusCreated, &saved)
+	require.Equal(t, "uncertain", saved.Items[0].Conflicts[0].Type)
+	f.request(http.MethodPost, path+"/"+saved.ID+"/confirm", map[string]any{"revision": saved.Revision, "decisions": []any{map[string]any{"item_id": "cert", "action": "apply"}}}, http.StatusConflict, nil)
+}

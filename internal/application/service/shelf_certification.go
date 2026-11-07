@@ -112,6 +112,29 @@ func validateShelfCertificationRecord(tx *gorm.DB, library *types.Library, recor
 	if owner.Kind == "model" {
 		return validateShelfConditions(tx, library, owner.ID, record.Conditions, at)
 	}
+	if len(record.Conditions) > 0 {
+		var relations []types.Relation
+		if err := tx.Where("library_id=? AND subject_id IN ? AND relation_type='composed_of' AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", library.ID, models, at, at).Find(&relations).Error; err != nil {
+			return err
+		}
+		for _, modelID := range models {
+			modules := map[string][]types.Entity{}
+			for _, relation := range relations {
+				if relation.SubjectID == modelID {
+					module, _ := relation.Attributes["module_type"].(string)
+					modules[module] = append(modules[module], types.Entity{ID: relation.ObjectID})
+				}
+			}
+			composition := []types.ShelfComposition{}
+			for module, parts := range modules {
+				composition = append(composition, types.ShelfComposition{ModuleType: module, Parts: parts})
+			}
+			if shelfCertificationFitsComposition(record, composition) {
+				return nil
+			}
+		}
+		return apperrors.NewBadRequestError("uncertain: certification conditions cannot be satisfied by one model in the owner scope")
+	}
 	return nil
 }
 
@@ -226,6 +249,9 @@ func (s *EntityService) writeShelfCertification(ctx context.Context, draft *type
 		if _, err := s.SaveManagedRelation(ctx, draft.LibraryID, "", types.ManagedRelationInput{SubjectID: record.OwnerID, ObjectID: entity.ID, RelationType: "has_certification", ValidFrom: &relationAt}); err != nil {
 			return nil, err
 		}
+		if err := hydrateManagedEntityAttributes(ctx, s.db, []*types.Entity{entity}, at); err != nil {
+			return nil, err
+		}
 		return entity, nil
 	}
 	entity, err := s.resolveShelfCertification(ctx, draft, op, at, item.Decision)
@@ -301,7 +327,7 @@ func (s *EntityService) shelfCertificationViews(ctx context.Context, library *ty
 	return result, nil
 }
 
-func (s *EntityService) shelfNodeCertifications(ctx context.Context, library *types.Library, entity *types.Entity, at time.Time, composition []types.ShelfComposition, combination map[string]string, standard string) ([]types.ShelfCertificationView, error) {
+func (s *EntityService) shelfNodeCertifications(ctx context.Context, library *types.Library, entity *types.Entity, at time.Time, composition []types.ShelfComposition, combination map[string]string) ([]types.ShelfCertificationView, error) {
 	owners := map[string]string{entity.ID: "self"}
 	if entity.Kind == "model" {
 		partCount := 0
@@ -332,7 +358,7 @@ func (s *EntityService) shelfNodeCertifications(ctx context.Context, library *ty
 			owners[id] = "ancestor"
 		}
 	}
-	rows, err := s.shelfCertificationViews(ctx, library, standard, at)
+	rows, err := s.shelfCertificationViews(ctx, library, "", at)
 	if err != nil {
 		return nil, err
 	}

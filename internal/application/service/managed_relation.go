@@ -40,15 +40,26 @@ func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types
 		if err := hydrateManagedEntityAttributes(tx.Statement.Context, tx, []*types.Entity{&object}, relation.ValidFrom); err != nil {
 			return err
 		}
-		if raw, ok := object.Attributes["certification"]; ok {
-			var record types.ShelfCertification
-			if err := types.DecodeShelfValue(raw, &record); err != nil {
-				return apperrors.NewBadRequestError(err.Error())
+		raw, ok := object.Attributes["certification"]
+		if !ok {
+			var first types.EntityAttributeVersion
+			err := tx.Where("entity_id=? AND effective_at>?", object.ID, relation.ValidFrom).Order("effective_at,revision DESC").First(&first).Error
+			if err != nil && err != gorm.ErrRecordNotFound {
+				return err
 			}
-			if record.OwnerID != subject.ID {
-				return apperrors.NewBadRequestError("uncertain: certification link must match its recorded owner")
-			}
+			raw, ok = first.Attributes["certification"]
 		}
+		if !ok {
+			return apperrors.NewBadRequestError("certification record is required before linking")
+		}
+		var record types.ShelfCertification
+		if err := types.DecodeShelfValue(raw, &record); err != nil {
+			return apperrors.NewBadRequestError(err.Error())
+		}
+		if record.OwnerID != subject.ID {
+			return apperrors.NewBadRequestError("uncertain: certification link must match its recorded owner")
+		}
+
 	}
 	if library.ShelfEnabled && relation.RelationType == "composed_of" {
 		module, _ := relation.Attributes["module_type"].(string)

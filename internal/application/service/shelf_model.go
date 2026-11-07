@@ -30,10 +30,7 @@ func (s *EntityService) shelfModelDetail(ctx context.Context, entity *types.Enti
 		if combination != nil {
 			return nil, apperrors.NewBadRequestError("a combination requires a shelf model")
 		}
-		if !slices.Contains([]string{"part", "product", "platform"}, entity.Kind) {
-			return nil, nil
-		}
-		records, err := s.shelfNodeCertifications(ctx, &library, entity, at, nil, nil, "")
+		records, err := s.shelfNodeCertifications(ctx, &library, entity, at, nil, nil)
 		return &types.ShelfModelDetail{Certifications: records}, err
 	}
 	var relations []types.Relation
@@ -128,7 +125,7 @@ func (s *EntityService) shelfModelDetail(ctx context.Context, entity *types.Enti
 			}
 		}
 	}
-	records, err := s.shelfNodeCertifications(ctx, &library, entity, at, result.Composition, combination, "")
+	records, err := s.shelfNodeCertifications(ctx, &library, entity, at, result.Composition, combination)
 	result.Certifications = records
 	return result, err
 }
