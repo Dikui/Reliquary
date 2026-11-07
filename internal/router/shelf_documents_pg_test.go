@@ -16,9 +16,14 @@ import (
 
 func shelfUpload(t *testing.T, f *managedNamesFixture, libraryID, content string, status int) types.EntityAttachment {
 	t.Helper()
+	return shelfUploadNamed(t, f, libraryID, "synthetic-manual.pdf", content, status)
+}
+
+func shelfUploadNamed(t *testing.T, f *managedNamesFixture, libraryID, name, content string, status int) types.EntityAttachment {
+	t.Helper()
 	var body bytes.Buffer
 	form := multipart.NewWriter(&body)
-	part, err := form.CreateFormFile("file", "synthetic-manual.pdf")
+	part, err := form.CreateFormFile("file", name)
 	require.NoError(t, err)
 	_, err = part.Write([]byte(content))
 	require.NoError(t, err)

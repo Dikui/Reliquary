@@ -58,6 +58,8 @@ func shelfOperationValid(op types.ShelfOperation) error {
 	}
 	valid := false
 	switch op.Type {
+	case "reparse_document":
+		valid = op.Reparse != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
 	case "add_document_version":
 		valid = op.Document != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
 	case "create_certification", "update_certification":
@@ -89,6 +91,9 @@ func shelfOperationValid(op types.ShelfOperation) error {
 		valid = false
 	}
 	if op.Type != "add_document_version" && op.Document != nil {
+		valid = false
+	}
+	if op.Type != "reparse_document" && op.Reparse != nil {
 		valid = false
 	}
 	if op.Type != "configure_shelf" && op.Library != nil {
@@ -523,6 +528,10 @@ func (s *EntityService) shelfEntity(ctx context.Context, libraryID, id string) (
 
 func (s *EntityService) shelfBefore(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem) (types.JSON, error) {
 	op := item.Operation
+	if op.Type == "reparse_document" {
+		version, err := s.shelfReparseVersion(ctx, draft, shelfResolvedOperation(draft, op))
+		return shelfJSON(version), err
+	}
 	if op.Type == "add_document_version" {
 		return s.shelfDocumentBefore(ctx, draft, item)
 	}
@@ -646,6 +655,9 @@ func shelfResolvedConditions(draft *types.ShelfChangeset, raw []types.ShelfCondi
 
 func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem) (any, error) {
 	op := shelfResolvedOperation(draft, item.Operation)
+	if op.Type == "reparse_document" {
+		return s.writeShelfReparse(ctx, draft, op)
+	}
 	confirmations := []types.ManagedNameConfirmation{}
 	if item.Decision != nil {
 		confirmations = item.Decision.NameConfirmations

@@ -542,3 +542,17 @@ func TestCompletedBodyDoesNotSkipPendingEnrichment(t *testing.T) {
 	jobState(t, c, info.ID, TaskStateCompleted)
 	require.EqualValues(t, 1, calls.Load(), "completed body indexing must not suppress enrichment recovery")
 }
+
+// Medium regression, task 09: a malformed shelf payload can still reach the
+// durable archive without requiring a document version to be updated.
+func TestMalformedShelfParseCanBeArchived(t *testing.T) {
+	db := pgtest.Open(t)
+	c := testClient(t, db)
+	require.NoError(t, c.Start(context.Background(), HandlerFunc(func(context.Context, *Task) error { return SkipRetry }), testConfig()))
+	info, err := c.Enqueue(NewTask(types.TypeShelfParse, []byte(`{"tenant_id":1,"version_id":"missing","attempt":"invalid"}`)), MaxRetry(0))
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		task, err := c.GetTaskInfo(context.Background(), types.QueueDefault, info.ID)
+		return err == nil && task.State == TaskStateArchived
+	}, 10*time.Second, 20*time.Millisecond)
+}

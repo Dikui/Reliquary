@@ -26,12 +26,13 @@ import (
 )
 
 type personalAuthFixture struct {
-	db     *gorm.DB
-	router *gin.Engine
-	params RouterParams
-	token  string
-	key    string
-	userID string
+	entities *service.EntityService
+	db       *gorm.DB
+	router   *gin.Engine
+	params   RouterParams
+	token    string
+	key      string
+	userID   string
 }
 
 func personalRequest(t *testing.T, r *gin.Engine, method, path, body, credential string, apiKey bool) *httptest.ResponseRecorder {
@@ -75,7 +76,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	require.NoError(t, err)
 	settings := service.NewSystemSettingService(apprepo.NewSystemSettingRepository(db), cfg)
 	system := handler.NewSystemHandler(cfg, spaceSvc, users, settings, keys, nil, nil)
-	entities := service.NewEntityService(db, nil)
+	entities := service.NewEntityService(db, models)
 	entities.SetEntityFileService(file.NewResourceCatalogFileService(file.NewLocalFileService(t.TempDir(), ""), service.NewResourceCatalog(apprepo.NewResourceRepository(db))))
 	params := RouterParams{
 		Config: cfg, UserService: users, SpaceService: spaceSvc,
@@ -99,7 +100,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	RegisterEntityRoutes(v1, params.EntityHandler)
 	RegisterEntryRoutes(v1, params.EntryHandler, guards)
 	RegisterLibraryRoutes(v1, params.LibraryHandler, guards)
-	f := &personalAuthFixture{db: db, router: r, params: params}
+	f := &personalAuthFixture{db: db, router: r, params: params, entities: entities}
 	sole, err := users.EnsureSoleUser(context.Background())
 	require.NoError(t, err)
 	f.userID = sole.ID

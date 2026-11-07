@@ -35,6 +35,7 @@ type TaskParams struct {
 	Reports             *service.VaultDocumentService `optional:"true"`
 	SpanTracker         service.SpanTracker
 	Cleaner             interfaces.ResourceCleaner
+	Entities            *service.EntityService `optional:"true"`
 }
 
 // backgroundTaskMiddleware tags every task's context as a background worker
@@ -86,6 +87,9 @@ func RunTaskServer(params TaskParams) *queue.ServeMux {
 		mux.HandleFunc(graphreplica.TypeRebuild, params.GraphReplica.HandleRebuild)
 	}
 	mux.HandleFunc(types.TypeDocumentProcess, params.EntryService.ProcessDocument)
+	if params.Entities != nil {
+		mux.HandleFunc(types.TypeShelfParse, params.Entities.HandleShelfParse)
+	}
 	mux.HandleFunc(types.TypeManualProcess, params.EntryService.ProcessManualUpdate)
 	mux.HandleFunc(types.TypeEntryListDelete, params.EntryService.ProcessEntryListDelete)
 	mux.HandleFunc(types.TypeEntryListReparse, params.EntryService.ProcessEntryListReparse)

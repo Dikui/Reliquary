@@ -242,6 +242,20 @@ func (c *Client) finish(ctx context.Context, j *Job, t *Task, taskErr error, int
 			updates["process_at"] = now.Add(c.config.RetryDelayFunc(current.Retried, taskErr, t))
 			updates["delivery"] = current.Delivery + 1
 		}
+		if current.TaskType == types.TypeShelfParse {
+			var payload types.ShelfParsePayload
+			if json.Unmarshal(current.Payload, &payload) == nil && payload.VersionID != "" && payload.SpaceID == types.SingleSpaceID && payload.Attempt > 0 {
+				status := "retrying"
+				if archived {
+					status = "failed"
+				}
+				if err := tx.Model(&types.ShelfDocumentVersion{}).
+					Where("id=? AND space_id=? AND parse_attempt=? AND parse_status IN ?", payload.VersionID, payload.SpaceID, payload.Attempt, []string{"pending", "parsing", "retrying"}).
+					Updates(map[string]any{"parse_status": status, "parse_error": NormalizeError(taskErr.Error())}).Error; err != nil {
+					return err
+				}
+			}
+		}
 		return tx.Model(&current).Updates(updates).Error
 	})
 	if err == nil && archived && c.config.OnDeadLetter != nil {

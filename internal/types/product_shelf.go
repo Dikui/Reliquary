@@ -14,11 +14,14 @@ type ShelfOption struct {
 }
 
 type ShelfConfig struct {
-	MaxFileBytes int64           `json:"max_file_bytes,omitempty"`
-	Standards    []ShelfStandard `json:"standards,omitempty"`
-	ModuleTypes  []ShelfOption   `json:"module_types,omitempty"`
-	Regions      []ShelfOption   `json:"regions,omitempty"`
-	Stages       []ShelfOption   `json:"stages,omitempty"`
+	Parsers       []ShelfParser     `json:"parsers,omitempty"`
+	DefaultParser string            `json:"default_parser,omitempty"`
+	ParserRules   []ShelfParserRule `json:"parser_rules,omitempty"`
+	MaxFileBytes  int64             `json:"max_file_bytes,omitempty"`
+	Standards     []ShelfStandard   `json:"standards,omitempty"`
+	ModuleTypes   []ShelfOption     `json:"module_types,omitempty"`
+	Regions       []ShelfOption     `json:"regions,omitempty"`
+	Stages        []ShelfOption     `json:"stages,omitempty"`
 }
 
 func ProductShelfSchema() EntitySchema {
@@ -60,6 +63,9 @@ func (c ShelfConfig) FileSizeLimit() int64 {
 }
 
 func ValidateProductShelf(l *Library) error {
+	if err := ValidateShelfParsers(l.ShelfConfig); err != nil {
+		return err
+	}
 	if l.ShelfConfig.MaxFileBytes < 0 || l.ShelfConfig.MaxFileBytes > int64(^uint64(0)>>1)-(1<<20)-1 {
 		return fmt.Errorf("invalid shelf file size limit")
 	}
@@ -68,7 +74,7 @@ func ValidateProductShelf(l *Library) error {
 	}
 
 	if !l.ShelfEnabled {
-		if len(l.ShelfConfig.ModuleTypes)+len(l.ShelfConfig.Regions)+len(l.ShelfConfig.Stages)+len(l.ShelfConfig.Standards) != 0 {
+		if len(l.ShelfConfig.ModuleTypes)+len(l.ShelfConfig.Regions)+len(l.ShelfConfig.Stages)+len(l.ShelfConfig.Standards)+len(l.ShelfConfig.Parsers) != 0 {
 			return fmt.Errorf("shelf configuration requires an enabled shelf")
 		}
 		return nil

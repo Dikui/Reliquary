@@ -1,7 +1,10 @@
 package repository
 
 import (
+	"slices"
+
 	"gorm.io/gorm"
+
 	"reliquary/internal/types"
 )
 
@@ -13,6 +16,11 @@ func libraryModelUsageBindings(library *types.Library, modelID string) []types.M
 	if library.SummaryModelID == modelID {
 		bindings = append(bindings, types.ModelUsageBindingSummaryModel)
 	}
+	for _, parser := range library.ShelfConfig.Parsers {
+		if parser.Type == "vision" && parser.ModelID == modelID && !slices.Contains(bindings, types.ModelUsageBinding("generation_model_tier")) {
+			bindings = append(bindings, types.ModelUsageBinding("generation_model_tier"))
+		}
+	}
 	return bindings
 }
 
@@ -21,7 +29,8 @@ func libraryModelUsageBindings(library *types.Library, modelID string) []types.M
 func scopeLibrariesByModelID(db *gorm.DB, modelID string) *gorm.DB {
 	return db.Where(
 		"EXISTS (SELECT 1 FROM spaces WHERE spaces.id=libraries.space_id AND spaces.embedding_model_id=?) OR summary_model_id = ? OR "+
-			"model_tiers->>'light' = ? OR model_tiers->>'entity_resolution' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'rerank' = ?",
-		modelID, modelID, modelID, modelID, modelID, modelID,
+			"model_tiers->>'light' = ? OR model_tiers->>'entity_resolution' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'rerank' = ? OR "+
+			"EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(shelf_config->'parsers','[]'::jsonb)) p WHERE p->>'type'='vision' AND p->>'model_id'=?)",
+		modelID, modelID, modelID, modelID, modelID, modelID, modelID,
 	)
 }

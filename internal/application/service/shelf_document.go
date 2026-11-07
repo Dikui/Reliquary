@@ -155,8 +155,38 @@ func (s *EntityService) writeShelfDocument(ctx context.Context, draft *types.She
 	if input.EntryID != "" {
 		version.ParseStatus = "completed"
 	}
+	library, err := managedLibrary(s.db, draft.SpaceID, draft.LibraryID)
+	if err != nil {
+		return nil, err
+	}
+	version.FileCategory = input.FileCategory
+	if input.RequirementID != "" && version.FileCategory == "" {
+		requirement, err := s.shelfEntity(ctx, library.ID, input.RequirementID)
+		if err != nil {
+			return nil, err
+		}
+		if raw, ok := requirement.Attributes["requirement"]; ok {
+			var metadata types.ShelfRequirement
+			if err := types.DecodeShelfValue(raw, &metadata); err != nil {
+				return nil, err
+			}
+			version.FileCategory = metadata.FileCategory
+		}
+	}
+	if input.EntryID == "" && input.AttachmentID != "" {
+		attachment, err := s.EntityAttachment(ctx, input.AttachmentID)
+		if err != nil {
+			return nil, err
+		}
+		version.ParserKey = library.ShelfConfig.SelectParser(attachment.Name, input.RequirementID, version.FileCategory)
+	}
 	if err = s.db.WithContext(ctx).Create(version).Error; err != nil {
 		return nil, err
+	}
+	if input.EntryID == "" {
+		if err = s.enqueueShelfParse(ctx, version, library); err != nil {
+			return nil, err
+		}
 	}
 	if input.EntryID != "" {
 		if err = s.SetEntryEntityLink(ctx, input.EntryID, file.ID, false, nil); err != nil {
@@ -219,7 +249,7 @@ func (s *EntityService) validateShelfDocument(ctx context.Context, library *type
 			return apperrors.NewBadRequestError("cloud_url must be an HTTP(S) link without credentials")
 		}
 	}
-	for _, text := range []string{input.Name, input.VersionLabel, input.Origin, input.CertificateNumber, input.CloudURL} {
+	for _, text := range []string{input.Name, input.VersionLabel, input.Origin, input.CertificateNumber, input.CloudURL, input.FileCategory} {
 		if len([]rune(text)) > 20000 {
 			return apperrors.NewBadRequestError("document text is too long")
 		}

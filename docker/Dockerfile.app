@@ -71,7 +71,7 @@ RUN if [ -n "$APK_MIRROR_ARG" ]; then \
     fi && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-        libstdc++6 postgresql-client tzdata sed curl bash python3 gosu git && \
+        libstdc++6 postgresql-client poppler-utils tzdata sed curl bash python3 gosu git && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

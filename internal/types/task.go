@@ -41,7 +41,7 @@ type QueueDefinition struct {
 
 var queueDefinitions = []QueueDefinition{
 	{Name: QueueDefault, Pool: WorkerPoolCore, Weight: 1, SharedWeight: 3, TaskTypes: []string{
-		TypeDocumentProcess, TypeManualProcess,
+		TypeDocumentProcess, TypeManualProcess, TypeShelfParse,
 	}},
 	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild, TypeEmbeddingRebuild, TypeEntryVector, TypeTopicBackfill}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
@@ -187,6 +187,7 @@ type WorkerServerStat struct {
 }
 
 const (
+	TypeShelfParse                 = "shelf:parse"
 	TypeDocumentProcess            = "document:process"       // 文档处理任务
 	TypeEntryListDelete            = "knowledge:list_delete"  // 批量删除知识任务
 	TypeEntryListReparse           = "knowledge:list_reparse" // 批量重解析知识任务

@@ -5,6 +5,7 @@ import "time"
 // ShelfDocumentInput classifies a staged original or an external link.
 // Text is optional; file parsing is handled separately from version creation.
 type ShelfDocumentInput struct {
+	FileCategory      string           `json:"file_category,omitempty"`
 	Name              string           `json:"name,omitempty"`
 	OwnerID           string           `json:"owner_id"`
 	RequirementID     string           `json:"requirement_id,omitempty"`
@@ -20,6 +21,10 @@ type ShelfDocumentInput struct {
 }
 
 type ShelfDocumentVersion struct {
+	FileCategory      string           `json:"file_category,omitempty"`
+	ParserKey         string           `json:"parser_key,omitempty"`
+	ParseAttempt      int64            `json:"parse_attempt"`
+	ParseError        string           `json:"parse_error,omitempty"`
 	ID                string           `json:"id" gorm:"primaryKey"`
 	SpaceID           uint64           `json:"space_id"`
 	LibraryID         string           `json:"library_id"`

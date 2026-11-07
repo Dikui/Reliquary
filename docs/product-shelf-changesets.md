@@ -28,6 +28,7 @@ HTTP 路径以 `/api/v1` 为前缀，成功结果在 `data` 中。
 | `save_relation` | `relation`；修改时另带 `relation_id` 和 `relation.version` |
 | `end_relation` | `relation_id`、`revision`（关系版本），可带 `valid_to`；保留历史关系 |
 | `set_entity_link` | `entry_id`、`entity_id`、`revision`、`excluded`，可带 `relation_type` |
+| `reparse_document` | `entity_id`、文件 `revision`、`reparse:{version_id,parser_key}`，保持同一版本 |
 | `configure_shelf` | `library`（已有库设置请求）、`library_updated_at`（读取到的库更新时间） |
 
 决定为 `{item_id, action}`。`apply` 接受提议；`discard` 放弃；`defer` 暂缓。`replace` 附 `replacement` 提交修正后的完整操作，原项 ID 保留。跨类别同名的 `apply` 附 `name_confirmations`，确认具体对象和类别。`same_entity` 附 `target_entity_id`、`target_revision`，只把提议名称及别名加入已有同类别实体，不自动合并提议属性。后续 `$操作id` 引用指向所选的已有实体。
@@ -137,13 +138,13 @@ HTTP 路径以 `/api/v1` 为前缀，成功结果在 `data` 中。
 
 证书报告的 `owner_id` 指向认证记录，同时提供与认证记录一致的 `certificate_number`。仅提供编号时，必须在本库活动认证记录中唯一匹配；不匹配或重复编号返回 `uncertain`，提交方须修正或明确指定认证记录。编号只用于确定认证归属，不用于判断两份文件是否为同一文件；没有资料要求时，追加版本仍须明确指定已有文件。不根据文件名称猜归属。
 
-版本可带 `entry_id` 指向通过现有收录接口保存的本库文本资料，每个版本使用独立资料。确认后显式关联到资料文件与所属节点，不按正文名称匹配。无文本时返回 `parse_status:"not_parsed"`，本操作不执行文件解析。有显式文本时返回 `completed`，表示已有文本，不代表完成后续模型处理。适用条件沿用模块与部件的合取写法，并校验所属节点范围。
+版本可带 `entry_id` 指向通过现有收录接口保存的本库文本资料，每个版本使用独立资料。确认后显式关联到资料文件与所属节点，不按正文名称匹配。无显式文本且有本机原件时，确认后按库配置选择解析器并在后台解析；未配置解析器或选择不解析时返回 `parse_status:"not_parsed"`。解析配置、状态与重解析操作见[货架资料解析](product-shelf-parsers.md)。有显式文本时返回 `completed`，表示已有文本，不代表完成后续模型处理。适用条件沿用模块与部件的合取写法，并校验所属节点范围。
 
 `GET /entities/:entity_id/document-versions` 按顺序号倒序返回全部版本，包含当前标记、来源、时间、文本引用与归类信息。`GET /entities/:entity_id/document-versions/:version_id/download` 下载指定版本的本机原件；仅有云盘链接的版本返回 404，可使用版本中的链接。版本引用的附件不能删除，包括历史版本。新增版本沿用 `update_entity` 操作日志类型，以 `document_version` 保存版本详情，并保留变更集来源。
 
 通过 `configure_shelf` 的 `library.shelf_config.max_file_bytes` 配置单文件字节上限，省略或 0 使用 32 MiB 默认值，正数自定义上限。普通人工维护库仍使用 32 MiB。上传按实际字节检查，归类确认时再次检查最新限制，调整上限不会改写已有版本或原件。
 
-迁移 46 新增版本表并注册现有导出、完整备份和恢复校验，原件继续保存在已有本机附件存储目录。旧副本升级只补空版本表。存在资料版本、相关变更集或文件大小配置时拒绝降级，避免遗失业务数据。解析、当前版本检索过滤和资料清单计算由后续能力实现。
+迁移 46 新增版本表并注册现有导出、完整备份和恢复校验，原件继续保存在已有本机附件存储目录。旧副本升级只补空版本表。存在资料版本、相关变更集或文件大小配置时拒绝降级，避免遗失业务数据。当前版本检索过滤由后续能力实现。
 
 ## 资料要求与阶段
 

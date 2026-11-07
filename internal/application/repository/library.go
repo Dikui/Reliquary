@@ -212,6 +212,7 @@ func (r *libraryRepository) ListModelUsages(
 		Select(
 			"id", "name", "space_id", "embedding_model_id", "summary_model_id",
 			"model_tiers",
+			"shelf_config",
 		).
 		Where("space_id = ?", spaceID)
 	query = scopeLibrariesByModelID(query, modelID)

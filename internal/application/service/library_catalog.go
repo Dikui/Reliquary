@@ -51,6 +51,9 @@ func (s *libraryService) CreateLibrary(ctx context.Context, request types.Create
 		if err := validateProductLibraries(tx, library); err != nil {
 			return err
 		}
+		if err := validateShelfParserReferences(tx, library); err != nil {
+			return err
+		}
 		return repository.NewLibraryRepository(tx).CreateLibrary(ctx, library)
 	})
 	if err != nil {

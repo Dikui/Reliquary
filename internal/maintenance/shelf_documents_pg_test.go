@@ -55,7 +55,7 @@ func TestShelfDocumentsMigrationAndRestoreRetainOriginals(t *testing.T) {
 		require.NoError(t, err)
 		ordinal := int64(i + 1)
 		row := types.ShelfDocumentVersion{ID: []string{"old-version", "current-version"}[i], SpaceID: 1, LibraryID: "library", FileID: "document-file", OwnerID: "entity-a", AttachmentID: &attachment.ID, Ordinal: ordinal, VersionLabel: []string{"Customer version", "2"}[i], Stage: "final", IsCurrent: i == 1, Origin: "Synthetic source", OccurredAt: time.Now(), CreatedAt: time.Now(), Source: types.OperationSource{Type: "web"}, ChangesetID: "document-batch", ParseStatus: "not_parsed", Conditions: []types.ShelfCondition{}}
-		require.NoError(t, db.Create(&row).Error)
+		require.NoError(t, db.Omit("ParserKey", "ParseAttempt", "ParseError", "FileCategory").Create(&row).Error)
 	}
 	snapshot, err := maintenance.Capture(ctx, db)
 	require.NoError(t, err)

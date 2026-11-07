@@ -7,6 +7,9 @@ import (
 )
 
 func validateProductShelfChange(tx *gorm.DB, before, after *types.Library) error {
+	if err := validateShelfParserReferences(tx, after); err != nil {
+		return err
+	}
 	if after.ShelfEnabled {
 		for _, field := range after.EntitySchema.Fields {
 			seen := map[string]bool{}
@@ -59,6 +62,37 @@ func validateProductShelfChange(tx *gorm.DB, before, after *types.Library) error
 			if !ok || resolved.Key != previous.Key {
 				return apperrors.NewBadRequestError("retain previous standard names and aliases when renaming")
 			}
+		}
+	}
+	return nil
+}
+
+func validateShelfParserReferences(tx *gorm.DB, library *types.Library) error {
+	for _, rule := range library.ShelfConfig.ParserRules {
+		if rule.RequirementID == "" {
+			continue
+		}
+		var count int64
+		if err := tx.Model(&types.Entity{}).Where("id=? AND space_id=? AND library_id=? AND kind='document_requirement' AND merged_into_id=''", rule.RequirementID, library.SpaceID, library.ID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count != 1 {
+			return apperrors.NewBadRequestError("parser rule requirement is missing or outside this library")
+		}
+	}
+	for _, parser := range library.ShelfConfig.Parsers {
+		if parser.Type != "vision" {
+			continue
+		}
+		var model types.Model
+		if err := tx.Where("id=? AND space_id=?", parser.ModelID, library.SpaceID).First(&model).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return apperrors.NewBadRequestError("vision parser model is missing")
+			}
+			return err
+		}
+		if !model.SupportsImageProcessing() {
+			return apperrors.NewBadRequestError("vision parser model must support images")
 		}
 	}
 	return nil

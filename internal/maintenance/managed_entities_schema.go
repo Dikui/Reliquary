@@ -30,7 +30,12 @@ var shelfSourceDefaults = map[string]map[string]any{
 	"operation_logs": {"source": map[string]any{}, "changeset_id": ""},
 }
 
+var shelfParserDefaults = map[string]map[string]any{
+	"shelf_document_versions": {"parser_key": "", "parse_attempt": 0, "parse_error": "", "file_category": ""},
+}
+
 func projectManagedEntitiesSnapshot(snapshot *Snapshot, targetVersion int64) {
+	projectEntityDefaultsSnapshot(snapshot, targetVersion, 48, shelfParserDefaults)
 	defer projectShelfFieldsSnapshot(snapshot, targetVersion)
 	if snapshot.schemaVersion < 46 && targetVersion >= 46 {
 		if _, exists := snapshot.Tables["shelf_document_versions"]; !exists {
@@ -72,6 +77,7 @@ func projectEntityDefaultsSnapshot(snapshot *Snapshot, targetVersion, version in
 }
 
 func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	expected, actual = projectEntityDefaultsManifest(expected, actual, 48, shelfParserDefaults)
 	expected, actual = projectEmptyPersistentTableManifest(expected, actual, "shelf_document_versions", 46)
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 43, shelfSourceDefaults)
 	expected, actual = projectEmptyPersistentTableManifest(expected, actual, "shelf_changesets", 43)
@@ -180,6 +186,19 @@ func projectEntityDefaultsManifest(expected, actual *Manifest, version int64, de
 		for group, files := range left.Files {
 			for i, file := range files {
 				if file.Path == path && file.SHA256 == sum(before) && file.Size == int64(len(before)) {
+					// Import can retain the exact old replica file while adding SQL
+					// defaults. Accept only that original checksum or the regenerated
+					// file below; database rows still compare with projected defaults.
+					unchanged := false
+					for _, candidate := range actual.Files[group] {
+						if candidate == file {
+							unchanged = true
+							break
+						}
+					}
+					if unchanged {
+						continue
+					}
 					file.SHA256, file.Size = sum(after), int64(len(after))
 					left.Files[group][i] = file
 				}
