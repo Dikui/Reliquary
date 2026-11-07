@@ -58,6 +58,10 @@ func shelfOperationValid(op types.ShelfOperation) error {
 	}
 	valid := false
 	switch op.Type {
+	case "set_sale_statuses":
+		valid = op.SaleStatuses != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
+	case "set_parameter_values":
+		valid = op.ParameterValues != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
 	case "configure_shelf":
 		valid = op.Library != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
 	case "create_entity":
@@ -70,6 +74,12 @@ func shelfOperationValid(op types.ShelfOperation) error {
 		valid = op.Entity == nil && op.Patch == nil && op.Relation != nil
 	case "end_relation", "set_entity_link":
 		valid = op.Entity == nil && op.Patch == nil && op.Relation == nil
+	}
+	if op.EffectiveAt != nil && op.Type != "set_sale_statuses" && op.Type != "set_parameter_values" {
+		valid = false
+	}
+	if (op.Type != "set_sale_statuses" && op.SaleStatuses != nil) || (op.Type != "set_parameter_values" && op.ParameterValues != nil) {
+		valid = false
 	}
 	if op.Type != "configure_shelf" && op.Library != nil {
 		valid = false
@@ -284,6 +294,7 @@ func (s *EntityService) previewShelf(ctx context.Context, tx *gorm.DB, draft *ty
 	var previewErr error
 	for i := range draft.Items {
 		item := &draft.Items[i]
+		item.Warnings = nil
 		item.Before = types.JSON("null")
 		item.After = types.JSON("null")
 		item.Conflicts = append([]types.ShelfConflict{}, item.Operation.Issues...)
@@ -348,6 +359,11 @@ func (s *EntityService) previewShelf(ctx context.Context, tx *gorm.DB, draft *ty
 			continue
 		}
 		item.After = shelfJSON(result)
+		item.Warnings, err = bound.shelfStatusWarnings(ctx, draft, item)
+		if err != nil {
+			previewErr = err
+			break
+		}
 		if item.Decision != nil && slices.Contains([]string{"discard", "defer", "keep"}, item.Decision.Action) {
 			if err := tx.RollbackTo("shelf_item").Error; err != nil {
 				previewErr = err
@@ -391,6 +407,9 @@ func shelfErrorConflict(err error) types.ShelfConflict {
 		}
 		if names != nil {
 			conflict.Type = "cross_kind_same_name"
+		}
+		if strings.HasPrefix(app.Message, "uncertain:") {
+			conflict.Type = "uncertain"
 		}
 		if strings.Contains(app.Message, "required") {
 			conflict.Type = "required_missing"
@@ -541,11 +560,53 @@ func shelfResolvedOperation(draft *types.ShelfChangeset, op types.ShelfOperation
 		relation.ObjectID = shelfReference(draft, relation.ObjectID)
 		op.Relation = &relation
 	}
+	if op.SaleStatuses != nil {
+		values := append([]types.ShelfSaleStatus{}, (*op.SaleStatuses)...)
+		for i := range values {
+			values[i].Conditions = shelfResolvedConditions(draft, values[i].Conditions)
+		}
+		op.SaleStatuses = &values
+	}
+	if op.ParameterValues != nil {
+		fields := map[string][]types.ShelfParameterValue{}
+		for key, raw := range *op.ParameterValues {
+			values := append([]types.ShelfParameterValue{}, raw...)
+			for i := range values {
+				values[i].Conditions = shelfResolvedConditions(draft, values[i].Conditions)
+			}
+			fields[key] = values
+		}
+		op.ParameterValues = &fields
+	}
+	if op.Library != nil && op.Library.EntitySchema != nil {
+		patch := *op.Library
+		schema := *patch.EntitySchema
+		schema.Fields = append([]types.EntityFieldDefinition{}, schema.Fields...)
+		for i := range schema.Fields {
+			schema.Fields[i].ProductLineIDs = append([]string{}, schema.Fields[i].ProductLineIDs...)
+			for j, id := range schema.Fields[i].ProductLineIDs {
+				schema.Fields[i].ProductLineIDs[j] = shelfReference(draft, id)
+			}
+		}
+		patch.EntitySchema = &schema
+		op.Library = &patch
+	}
 	return op
 }
 
+func shelfResolvedConditions(draft *types.ShelfChangeset, raw []types.ShelfCondition) []types.ShelfCondition {
+	conditions := append([]types.ShelfCondition{}, raw...)
+	for i := range conditions {
+		conditions[i].PartIDs = append([]string{}, conditions[i].PartIDs...)
+		for j, id := range conditions[i].PartIDs {
+			conditions[i].PartIDs[j] = shelfReference(draft, id)
+		}
+	}
+	return conditions
+}
+
 func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem) (any, error) {
-	op := item.Operation
+	op := shelfResolvedOperation(draft, item.Operation)
 	confirmations := []types.ManagedNameConfirmation{}
 	if item.Decision != nil {
 		confirmations = item.Decision.NameConfirmations
@@ -593,6 +654,9 @@ func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChan
 	}
 	if op.Type == "save_relation" {
 		input := *op.Relation
+		if draft.Source.Type == "import" {
+			input.ValidFrom = draft.Source.FileDate
+		}
 		input.SubjectID = shelfReference(draft, input.SubjectID)
 		input.ObjectID = shelfReference(draft, input.ObjectID)
 		if input.SubjectID == "" || input.ObjectID == "" || input.RelationType == "" {
@@ -610,6 +674,9 @@ func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChan
 			return nil, err
 		}
 		var err error
+		if draft.Source.Type == "import" {
+			op.ValidTo = draft.Source.FileDate
+		}
 		if op.ValidTo != nil {
 			err = s.DeleteManagedRelation(ctx, op.RelationID, op.Revision, *op.ValidTo)
 		} else {
@@ -632,6 +699,8 @@ func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChan
 	}
 	patch := types.ManagedEntityPatch{Revision: op.Revision, NameConfirmations: confirmations}
 	switch op.Type {
+	case "set_sale_statuses", "set_parameter_values":
+		return s.setShelfModelValues(ctx, draft, entity, op)
 	case "update_entity":
 		patch = *op.Patch
 		patch.NameConfirmations = append(append([]types.ManagedNameConfirmation{}, patch.NameConfirmations...), confirmations...)

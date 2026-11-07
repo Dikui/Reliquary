@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -55,7 +56,22 @@ func (h *EntityHandler) Entities(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
 }
 func (h *EntityHandler) EntityDetail(c *gin.Context) {
-	item, err := h.service.EntityDetail(c.Request.Context(), c.Param("entity_id"))
+	options := types.ShelfReadOptions{}
+	if raw, ok := c.GetQuery("combination"); ok {
+		if json.Unmarshal([]byte(raw), &options.Combination) != nil || options.Combination == nil {
+			c.Error(werrors.NewBadRequestError("combination must be a module-to-part object"))
+			return
+		}
+	}
+	if raw, ok := c.GetQuery("as_of"); ok {
+		at, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil || at.IsZero() {
+			c.Error(werrors.NewBadRequestError("as_of must be an RFC3339 time"))
+			return
+		}
+		options.AsOf = &at
+	}
+	item, err := h.service.EntityDetail(c.Request.Context(), c.Param("entity_id"), options)
 	if err != nil {
 		c.Error(err)
 		return

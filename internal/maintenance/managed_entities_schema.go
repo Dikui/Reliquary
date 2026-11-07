@@ -31,6 +31,7 @@ var shelfSourceDefaults = map[string]map[string]any{
 }
 
 func projectManagedEntitiesSnapshot(snapshot *Snapshot, targetVersion int64) {
+	defer projectShelfFieldsSnapshot(snapshot, targetVersion)
 	projectEntityDefaultsSnapshot(snapshot, targetVersion, 43, shelfSourceDefaults)
 	if snapshot.schemaVersion < 43 && targetVersion >= 43 {
 		if _, exists := snapshot.Tables["shelf_changesets"]; !exists {
@@ -73,6 +74,7 @@ func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Man
 	expected, actual = projectManagedEvolutionManifest(expected, actual)
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 39, entityAutoMatchDefaults)
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 40, relationValidityDefaults)
+	expected, actual = projectShelfFieldsManifest(expected, actual)
 	return projectManagedNamesManifest(expected, actual)
 }
 

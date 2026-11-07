@@ -13,7 +13,7 @@ func validateManagedAttributeReferences(tx *gorm.DB, library *types.Library, att
 func validateAttributeReferences(tx *gorm.DB, spaceID uint64, libraryID string, fields []types.EntityFieldDefinition, attributes map[string]any) error {
 	for _, field := range fields {
 		value, present := attributes[field.Key]
-		if !present || (field.Type != "entity_ref" && field.Type != "attachment") {
+		if !present || len(field.ProductLineIDs) > 0 || (field.Type != "entity_ref" && field.Type != "attachment") {
 			continue
 		}
 		id, ok := value.(string)
@@ -41,9 +41,10 @@ func validateAttributeReferences(tx *gorm.DB, spaceID uint64, libraryID string, 
 func managedValueReferenced(tx *gorm.DB, spaceID uint64, id, excludingEntity string) (bool, error) {
 	var referenced bool
 	err := tx.Raw(`SELECT
-		EXISTS (SELECT 1 FROM entities e, jsonb_each_text(e.attributes) a WHERE e.space_id=? AND e.id<>? AND a.value=?) OR
-		EXISTS (SELECT 1 FROM entity_attribute_versions v, jsonb_each_text(v.attributes) a WHERE v.space_id=? AND v.entity_id<>? AND a.value=?) OR
-		EXISTS (SELECT 1 FROM relations r, jsonb_each_text(r.attributes) a WHERE r.space_id=? AND a.value=?)`,
-		spaceID, excludingEntity, id, spaceID, excludingEntity, id, spaceID, id).Scan(&referenced).Error
+  EXISTS (SELECT 1 FROM entities e WHERE e.space_id=? AND e.id<>? AND jsonb_path_query_array(e.attributes,'$.**') @> jsonb_build_array(?::text)) OR
+  EXISTS (SELECT 1 FROM entity_attribute_versions v WHERE v.space_id=? AND v.entity_id<>? AND jsonb_path_query_array(v.attributes,'$.**') @> jsonb_build_array(?::text)) OR
+  EXISTS (SELECT 1 FROM relations r WHERE r.space_id=? AND jsonb_path_query_array(r.attributes,'$.**') @> jsonb_build_array(?::text)) OR
+  EXISTS (SELECT 1 FROM libraries l WHERE l.space_id=? AND jsonb_path_query_array(l.entity_schema,'$.fields[*].product_line_ids[*]') @> jsonb_build_array(?::text))`,
+		spaceID, excludingEntity, id, spaceID, excludingEntity, id, spaceID, id, spaceID, id).Scan(&referenced).Error
 	return referenced, err
 }

@@ -36,6 +36,25 @@ func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types
 	if err := validateManagedEndpoints(library, rule, &subject, &object); err != nil {
 		return err
 	}
+	if library.ShelfEnabled && relation.RelationType == "composed_of" {
+		module, _ := relation.Attributes["module_type"].(string)
+		if !shelfOptionExists(library.ShelfConfig.ModuleTypes, module) {
+			return apperrors.NewBadRequestError("composition module_type is required and must be configured")
+		}
+		if err := hydrateManagedEntityAttributes(tx.Statement.Context, tx, []*types.Entity{&object}, relation.ValidFrom); err != nil {
+			return err
+		}
+		if partModule, ok := object.Attributes["module_type"]; ok && partModule != module {
+			return apperrors.NewBadRequestError("composition module does not match the part module type")
+		}
+		var count int64
+		if err := tx.Model(&types.Relation{}).Where("library_id=? AND object_id=? AND relation_type='composed_of' AND id<>? AND valid_to IS NULL AND attributes->>'module_type'<>?", library.ID, object.ID, excludeID, module).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return apperrors.NewBadRequestError("a part cannot belong to different module types")
+		}
+	}
 	if !rule.Hierarchical {
 		return nil
 	}
@@ -156,6 +175,9 @@ func (s *EntityService) SaveManagedRelation(ctx context.Context, libraryID, id s
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
+		if err := validateShelfStructure(tx, library, row.ValidFrom); err != nil {
+			return err
+		}
 		if id != "" {
 			if err := copyManagedRelationSources(tx, before.ID, row.ID); err != nil {
 				return err
@@ -214,6 +236,9 @@ func (s *EntityService) DeleteManagedRelation(ctx context.Context, id string, ve
 			at = validTo[0]
 		}
 		if err := endManagedRelation(tx, row, at); err != nil {
+			return err
+		}
+		if err := validateShelfStructure(tx, library, at); err != nil {
 			return err
 		}
 		return NewOperationLogService(tx).RecordTx(ctx, tx, "delete_relation", id, before, nil)

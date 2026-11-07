@@ -231,7 +231,7 @@ func (s *EntityService) ListEntities(ctx context.Context, q types.EntityQuery) (
 	}
 	return entities, nil
 }
-func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.EntityDetail, error) {
+func (s *EntityService) EntityDetail(ctx context.Context, id string, options ...types.ShelfReadOptions) (*types.EntityDetail, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -243,19 +243,31 @@ func (s *EntityService) EntityDetail(ctx context.Context, id string) (*types.Ent
 		return nil, err
 	}
 	if entity.MergedIntoID != "" {
-		return s.EntityDetail(ctx, entity.MergedIntoID)
+		return s.EntityDetail(ctx, entity.MergedIntoID, options...)
+	}
+	at := time.Now()
+	var combination map[string]string
+	if len(options) > 0 {
+		combination = options[0].Combination
+		if options[0].AsOf != nil {
+			at = *options[0].AsOf
+		}
 	}
 	entities := []types.Entity{entity}
 	if err := s.loadAliases(ctx, spaceID, entities); err != nil {
 		return nil, err
 	}
-	if err := hydrateManagedEntityAttributes(ctx, s.db, []*types.Entity{&entities[0]}, time.Now()); err != nil {
+	if err := hydrateManagedEntityAttributes(ctx, s.db, []*types.Entity{&entities[0]}, at); err != nil {
 		return nil, err
 	}
 	if err := hydrateManagedKindLabels(ctx, s.db, []*types.Entity{&entities[0]}); err != nil {
 		return nil, err
 	}
 	result := &types.EntityDetail{Entity: entities[0], Entries: []types.Entry{}, LibraryGroups: []types.EntityLibraryGroup{}}
+	result.Shelf, err = s.shelfModelDetail(ctx, &result.Entity, at, combination)
+	if err != nil {
+		return nil, err
+	}
 	err = s.db.WithContext(ctx).Model(&types.Entry{}).Joins("JOIN entry_entities links ON links.entry_id=entries.id AND links.space_id=entries.space_id").Where("entries.space_id=? AND links.entity_id=? AND links.excluded=false", spaceID, entity.ID).Order("entries.created_at DESC,entries.id").Find(&result.Entries).Error
 	if err == nil {
 		entries := make([]*types.Entry, len(result.Entries))

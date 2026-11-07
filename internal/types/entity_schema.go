@@ -28,13 +28,14 @@ type EntityKind struct {
 }
 
 type EntityFieldDefinition struct {
-	Key      string   `json:"key"`
-	Name     string   `json:"name"`
-	Type     string   `json:"type"`
-	Unit     string   `json:"unit,omitempty"`
-	Options  []string `json:"options,omitempty"`
-	Kinds    []string `json:"kinds"`
-	Archived bool     `json:"archived"`
+	ProductLineIDs []string `json:"product_line_ids,omitempty"`
+	Key            string   `json:"key"`
+	Name           string   `json:"name"`
+	Type           string   `json:"type"`
+	Unit           string   `json:"unit,omitempty"`
+	Options        []string `json:"options,omitempty"`
+	Kinds          []string `json:"kinds"`
+	Archived       bool     `json:"archived"`
 }
 
 func (l *Library) ManagesEntities() bool { return l != nil && l.EntityMode == EntityModeManaged }
@@ -102,10 +103,23 @@ func ValidateEntitySchema(l *Library) error {
 			return err
 		}
 	}
+	for _, field := range l.EntitySchema.Fields {
+		if len(field.ProductLineIDs) > 0 && (!l.ShelfEnabled || !slices.Equal(field.Kinds, []string{"model"}) || len(field.ProductLineIDs) > 100) {
+			return fmt.Errorf("product-line parameters require shelf model fields")
+		}
+		if strings.HasPrefix(field.Type, "shelf_") && (!l.ShelfEnabled || !((field.Key == "sale_statuses" && field.Type == "shelf_statuses") || (field.Key == "combination_rules" && field.Type == "shelf_rules")) || !slices.Equal(field.Kinds, []string{"model"}) || len(field.ProductLineIDs) > 0) {
+			return fmt.Errorf("reserved shelf field definition is invalid")
+		}
+	}
 	if err := validateFieldDefinitions(l.EntitySchema.Fields, validateKinds); err != nil {
 		return err
 	}
 	for _, r := range l.RelationTypes {
+		for _, field := range r.Fields {
+			if len(field.ProductLineIDs) > 0 || strings.HasPrefix(field.Type, "shelf_") {
+				return fmt.Errorf("relationship fields cannot define shelf values")
+			}
+		}
 		if err := validateFieldDefinitions(r.Fields, func(keys []string) error {
 			if len(keys) > 0 {
 				return fmt.Errorf("relationship fields do not use entity kinds")
@@ -138,7 +152,7 @@ func validateFieldDefinitions(definitions []EntityFieldDefinition, validateKinds
 			return fmt.Errorf("entity fields require unique keys and names of 1-100 characters")
 		}
 		fields[f.Key] = true
-		if !slices.Contains([]string{"text", "number", "boolean", "date", "select", "multiselect", "list", "entity_ref", "url", "attachment"}, f.Type) {
+		if !slices.Contains([]string{"text", "number", "boolean", "date", "select", "multiselect", "list", "entity_ref", "url", "attachment", "shelf_statuses", "shelf_rules"}, f.Type) {
 			return fmt.Errorf("invalid field type: %s", f.Type)
 		}
 		if err := validateKinds(f.Kinds); err != nil {
@@ -185,8 +199,22 @@ func ValidateFieldAttributes(definitions []EntityFieldDefinition, attributes map
 		if value == nil {
 			return fmt.Errorf("remove field %s instead of storing null", key)
 		}
+		if len(f.ProductLineIDs) > 0 {
+			if err := validateShelfParameter(f, value); err != nil {
+				return err
+			}
+			continue
+		}
 		valid := false
 		switch f.Type {
+		case "shelf_statuses":
+			if err := ValidateShelfStatuses(value); err != nil {
+				return err
+			}
+			valid = true
+		case "shelf_rules":
+			var rules [][]ShelfCondition
+			valid = DecodeShelfValue(value, &rules) == nil && rules != nil && len(rules) == 0
 		case "text":
 			v, ok := value.(string)
 			valid = ok && len([]rune(v)) <= 20000

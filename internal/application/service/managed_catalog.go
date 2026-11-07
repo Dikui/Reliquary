@@ -182,7 +182,7 @@ func changedManagedFields(before, after []types.EntityFieldDefinition) []string 
 	changed := []string{}
 	for _, old := range before {
 		field, exists := next[old.Key]
-		if !exists || old.Type != field.Type || old.Unit != field.Unit || !slices.Equal(old.Options, field.Options) || !slices.Equal(old.Kinds, field.Kinds) {
+		if !exists || old.Type != field.Type || old.Unit != field.Unit || !slices.Equal(old.Options, field.Options) || !slices.Equal(old.Kinds, field.Kinds) || !slices.Equal(old.ProductLineIDs, field.ProductLineIDs) {
 			changed = append(changed, old.Key)
 		}
 	}
@@ -197,6 +197,13 @@ func validateUsedFieldDefinitions(before, after []types.EntityFieldDefinition, a
 	for _, old := range before {
 		if _, used := attributes[old.Key]; !used {
 			continue
+		}
+		if field, exists := next[old.Key]; exists {
+			for _, line := range old.ProductLineIDs {
+				if !slices.Contains(field.ProductLineIDs, line) {
+					return apperrors.NewBadRequestError("used parameter product-line scope cannot be removed")
+				}
+			}
 		}
 		if field, exists := next[old.Key]; exists && (old.Type != field.Type || old.Unit != field.Unit) {
 			return apperrors.NewBadRequestError("used field types and units cannot change; create a new field")

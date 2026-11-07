@@ -7,6 +7,24 @@ import (
 )
 
 func validateProductShelfChange(tx *gorm.DB, before, after *types.Library) error {
+	if after.ShelfEnabled {
+		for _, field := range after.EntitySchema.Fields {
+			seen := map[string]bool{}
+			for _, id := range field.ProductLineIDs {
+				if seen[id] {
+					return apperrors.NewBadRequestError("parameter product lines must be unique")
+				}
+				seen[id] = true
+				var count int64
+				if err := tx.Model(&types.Entity{}).Where("id=? AND library_id=? AND space_id=? AND kind='product_line' AND merged_into_id=''", id, after.ID, after.SpaceID).Count(&count).Error; err != nil {
+					return err
+				}
+				if count != 1 {
+					return apperrors.NewBadRequestError("parameter product line is missing or outside this library")
+				}
+			}
+		}
+	}
 	if before.ShelfEnabled && !after.ShelfEnabled {
 		return apperrors.NewBadRequestError("an enabled shelf cannot be disabled")
 	}

@@ -150,6 +150,7 @@ func TestShelfChangesetMissingRowsNeedRetireOrKeep(t *testing.T) {
 // accepting that identity saves the submitted spelling as an alias.
 func TestShelfChangesetSuspectedIdentityBecomesAlias(t *testing.T) {
 	f, library := newProductShelfFixture(t)
+	f.request(http.MethodPut, "/libraries/"+library.ID, map[string]any{"shelf_config": types.ShelfConfig{ModuleTypes: []types.ShelfOption{{Key: "module_a", Name: "Synthetic module"}}}}, http.StatusOK, nil)
 	var entity types.Entity
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "part", "name": "Synthetic cell"}, http.StatusCreated, &entity)
 	var model types.Entity
@@ -158,7 +159,7 @@ func TestShelfChangesetSuspectedIdentityBecomesAlias(t *testing.T) {
 	var draft types.ShelfChangeset
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "agent", "agent_name": "Import helper"}, "operations": []any{
 		map[string]any{"id": "alias", "type": "create_entity", "candidate_entity_id": entity.ID, "entity": map[string]any{"kind": "part", "name": " Synthetic cell variant "}},
-		map[string]any{"id": "composition", "type": "save_relation", "relation": map[string]any{"subject_id": model.ID, "object_id": "$alias", "relation_type": "composed_of"}},
+		map[string]any{"id": "composition", "type": "save_relation", "relation": map[string]any{"subject_id": model.ID, "object_id": "$alias", "relation_type": "composed_of", "attributes": map[string]any{"module_type": "module_a"}}},
 	}}, http.StatusCreated, &draft)
 	require.Equal(t, "suspected_same", draft.Items[0].Conflicts[0].Type)
 	require.Equal(t, entity.ID, draft.Items[0].Conflicts[0].Candidates[0].OtherEntityID)
@@ -389,7 +390,7 @@ func TestShelfChangesetStaysWithinItsLibrary(t *testing.T) {
 func TestShelfChangesetTypedEditsPreserveAttributeTime(t *testing.T) {
 	f, library := newProductShelfFixture(t)
 	schema := library.EntitySchema
-	schema.Fields = []types.EntityFieldDefinition{{Key: "capacity", Name: "Capacity", Type: "number", Kinds: []string{"part"}}}
+	schema.Fields = append(schema.Fields, types.EntityFieldDefinition{Key: "capacity", Name: "Capacity", Type: "number", Kinds: []string{"part"}})
 	f.request(http.MethodPut, "/libraries/"+library.ID, map[string]any{"entity_schema": schema}, http.StatusOK, nil)
 	path := "/libraries/" + library.ID + "/shelf/changesets"
 	var draft types.ShelfChangeset

@@ -29,7 +29,7 @@ func ProductShelfSchema() EntitySchema {
 		{Key: "document_requirement", Name: "资料要求", ParentKinds: []string{}},
 		{Key: "certification", Name: "认证记录", ParentKinds: []string{}},
 		{Key: "document_file", Name: "资料文件", ParentKinds: []string{}},
-	}, Fields: []EntityFieldDefinition{}}
+	}, Fields: ProductShelfFields()}
 }
 
 func ProductShelfRelations() []LibraryRelationType {
@@ -70,6 +70,17 @@ func ValidateProductShelf(l *Library) error {
 			return fmt.Errorf("shelf parent kinds are fixed: %s", kind.Key)
 		}
 	}
+	for _, required := range ProductShelfFields() {
+		found := false
+		for _, field := range l.EntitySchema.Fields {
+			if field.Key == required.Key {
+				found = field.Type == required.Type && slices.Equal(field.Kinds, required.Kinds) && len(field.ProductLineIDs) == 0 && !field.Archived
+			}
+		}
+		if !found {
+			return fmt.Errorf("shelf field definition is fixed: %s", required.Key)
+		}
+	}
 	rules := ProductShelfRelations()
 	if len(l.RelationTypes) != len(rules) {
 		return fmt.Errorf("shelf relationship types are fixed")
@@ -78,6 +89,17 @@ func ValidateProductShelf(l *Library) error {
 		found := false
 		for _, actual := range l.RelationTypes {
 			if actual.Name == rule.Name {
+				if actual.Name == "composed_of" {
+					moduleField := false
+					for _, field := range actual.Fields {
+						if field.Key == "module_type" && field.Type == "text" && !field.Archived && len(field.Kinds) == 0 {
+							moduleField = true
+						}
+					}
+					if !moduleField {
+						return fmt.Errorf("composition module_type field is fixed")
+					}
+				}
 				found = actual.Enabled && actual.Hierarchical == rule.Hierarchical && slices.Equal(actual.SubjectKinds, rule.SubjectKinds) && slices.Equal(actual.ObjectKinds, rule.ObjectKinds)
 			}
 		}

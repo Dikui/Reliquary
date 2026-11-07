@@ -121,6 +121,7 @@ type EntityLibraryGroup struct {
 	Entries     []Entry `json:"entries"`
 }
 type EntityDetail struct {
+	Shelf         *ShelfModelDetail    `json:"shelf,omitempty"`
 	LibraryGroups []EntityLibraryGroup `json:"library_groups"`
 	Entity        Entity               `json:"entity"`
 	Entries       []Entry              `json:"entries"`

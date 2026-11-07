@@ -175,6 +175,13 @@ func (s *EntityService) createManagedEntity(ctx context.Context, libraryID strin
 				return apperrors.NewBadRequestError("archived fields cannot be assigned")
 			}
 		}
+		at := time.Now()
+		if input.EffectiveAt != nil {
+			at = *input.EffectiveAt
+		}
+		if err := validateShelfEntityValues(tx, library, &entity, at); err != nil {
+			return err
+		}
 		if err := validateManagedAttributeReferences(tx, library, entity.Attributes); err != nil {
 			return err
 		}
@@ -265,6 +272,13 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 			return err
 		}
 		if err := validateManagedEntity(library, &entity); err != nil {
+			return err
+		}
+		at := time.Now()
+		if patch.EffectiveAt != nil {
+			at = *patch.EffectiveAt
+		}
+		if err := validateShelfEntityValues(tx, library, &entity, at); err != nil {
 			return err
 		}
 		if err := validateManagedAttributeReferences(tx, library, entity.Attributes); err != nil {
