@@ -119,10 +119,9 @@ func (b *importMapBuilder) parseRecords(workbook *importWorkbookData) error {
 						kind = "uncertain"
 					}
 					if b.plan.FileKind == "atq" {
-						identity := importRequirementNameCell(variant)
-						if strings.TrimSpace(identity.Value) == "" || slices.Contains(b.plan.Definition.MissingValues, identity.Value) || identity.Formula != nil || identity.Type == "e" || identity.FormattedNumber {
-							b.skippedSheets[mapping.Worksheet] = true
-						}
+						// A rejected row may be an unresolved old requirement or
+						// a group heading. Neither proves absence on this sheet.
+						b.skippedSheets[mapping.Worksheet] = true
 					}
 					b.issue(kind, err.Error(), raw)
 				}

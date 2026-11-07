@@ -440,3 +440,14 @@ func TestShelfImportOverseasChecksCombinedCertificationCoverage(t *testing.T) {
 		}
 	}
 }
+
+// Medium regression, task 12: a group heading with an unknown deadline is not
+// sufficient evidence to archive previously confirmed requirements on that sheet.
+func TestShelfImportATQGroupTitleCannotProposeArchive(t *testing.T) {
+	f, l, n := checklistSetup(t)
+	importRecordPlan(f, l, "atq", []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}}, map[string]any{"product_line_id": shelfNode(n, "line")})
+	confirmImport(t, f, l.ID, importUpload(t, f, l.ID, "atq_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Original document", "Final custom"), ""), http.StatusCreated))
+	draft := importUpload(t, f, l.ID, "atq_20261029.xlsx", "", importWorkbook(t, importRecordRow(3, "Grouping heading", ""), ""), http.StatusCreated)
+	require.Len(t, draft.Items, 1)
+	require.Equal(t, "uncertain", draft.Items[0].Conflicts[0].Type)
+}
