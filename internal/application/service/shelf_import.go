@@ -119,6 +119,7 @@ type importMapBuilder struct {
 	nodes          map[string]importMapNode
 	seenModelNames map[string]bool
 	seenModelIDs   map[string]bool
+	seenRecordKeys map[string]bool
 	present        map[string]bool
 	skippedSheets  map[string]bool
 	ops            []types.ShelfOperation
@@ -126,18 +127,18 @@ type importMapBuilder struct {
 }
 
 func (s *EntityService) newImportMapBuilder(ctx context.Context, library *types.Library, plan *types.ShelfImportPlan, at time.Time) (*importMapBuilder, error) {
-	b := &importMapBuilder{ctx: ctx, service: s, library: library, plan: plan, at: at, parents: map[string]types.Relation{}, nodes: map[string]importMapNode{}, seenModelNames: map[string]bool{}, seenModelIDs: map[string]bool{}, present: map[string]bool{}, skippedSheets: map[string]bool{}}
+	b := &importMapBuilder{ctx: ctx, service: s, library: library, plan: plan, at: at, parents: map[string]types.Relation{}, nodes: map[string]importMapNode{}, seenModelNames: map[string]bool{}, seenModelIDs: map[string]bool{}, seenRecordKeys: map[string]bool{}, present: map[string]bool{}, skippedSheets: map[string]bool{}}
 	if err := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND archived_at IS NULL AND merged_into_id=''", library.SpaceID, library.ID).Order("id").Find(&b.entities).Error; err != nil {
 		return nil, err
 	}
 	if err := s.loadAliases(ctx, library.SpaceID, b.entities); err != nil {
 		return nil, err
 	}
-	models := []*types.Entity{}
+	pointers := []*types.Entity{}
 	for i := range b.entities {
-		models = append(models, &b.entities[i])
+		pointers = append(pointers, &b.entities[i])
 	}
-	if err := hydrateManagedEntityAttributes(ctx, s.db, models, at); err != nil {
+	if err := hydrateManagedEntityAttributes(ctx, s.db, pointers, at); err != nil {
 		return nil, err
 	}
 	var relations []types.Relation

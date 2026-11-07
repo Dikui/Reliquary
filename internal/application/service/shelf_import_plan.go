@@ -140,3 +140,104 @@ func importColumnNumber(column string) int {
 	}
 	return n
 }
+
+func (s *EntityService) validateRecordImportSheet(ctx context.Context, library *types.Library, kind string, sheet types.ShelfImportSheet) error {
+	if kind != "atq" && !slices.Contains([]string{"model", "part", "product", "platform"}, sheet.OwnerKind) {
+		return apperrors.NewBadRequestError("record worksheet requires an explicit owner_kind")
+	}
+	if sheet.ModuleType != "" && !shelfOptionExists(library.ShelfConfig.ModuleTypes, sheet.ModuleType) {
+		return apperrors.NewBadRequestError("worksheet module_type must be configured")
+	}
+	if kind == "certification_report" && strings.TrimSpace(sheet.Progress) == "" {
+		return apperrors.NewBadRequestError("report worksheet requires a confirmed completed progress spelling")
+	}
+	if kind == "atq" {
+		if (sheet.ProductLineID == "") == (sheet.ModuleType == "") {
+			return apperrors.NewBadRequestError("ATQ worksheet requires exactly one product line or module binding")
+		}
+	}
+	if sheet.ProductLineID != "" {
+		line, err := s.shelfEntity(ctx, library.ID, sheet.ProductLineID)
+		if err != nil {
+			return err
+		}
+		if line.Kind != "product_line" || line.ArchivedAt != nil {
+			return apperrors.NewBadRequestError("worksheet requires an active product line")
+		}
+	}
+
+	for raw := range sheet.CheckValues {
+		if strings.TrimSpace(raw) == "" || kind != "overseas_sales" {
+			return apperrors.NewBadRequestError("check_values require nonblank overseas flags")
+		}
+	}
+	fields, columns := map[string]bool{}, map[string]bool{}
+	for _, c := range sheet.Columns {
+		if !shelfImportColumn.MatchString(c.Column) || importColumnNumber(c.Column) > 16384 || columns[c.Column] || fields[c.Field+":"+c.Key] {
+			return apperrors.NewBadRequestError("import columns and mapped fields must be distinct")
+		}
+		columns[c.Column], fields[c.Field+":"+c.Key] = true, true
+		if kind == "overseas_sales" && c.Field == "certification" {
+			standard, ok := library.ShelfConfig.Standard(c.Key)
+			if !ok || standard.Key != c.Key || strings.TrimSpace(sheet.Progress) == "" || len(sheet.CheckValues) == 0 {
+				return apperrors.NewBadRequestError("certification checks require a configured standard key, completed progress spelling and check_values")
+			}
+			continue
+		}
+		if (kind == "overseas_sales" && c.Field == "sale_status") || (kind == "atq" && c.Field == "market") {
+			if !shelfOptionExists(library.ShelfConfig.Regions, c.Key) {
+				return apperrors.NewBadRequestError("sales check requires a configured region")
+			}
+			continue
+		}
+		if kind == "atq" {
+			if c.Key != "" || !slices.Contains([]string{"name", "name_zh", "name_en", "file_category", "stage_label", "due_stages", "owner", "priority", "source_list", "source_version"}, c.Field) {
+				return apperrors.NewBadRequestError("unknown ATQ import field")
+			}
+			continue
+		}
+		allowed := []string{"name", "owner", "standard", "year", "certification_object", "cell_part", "region", "agency", "progress", "start_date", "obtained_date", "issued_date", "validity", "number", "cloud_url"}
+		if kind == "certification_report" {
+			allowed = append(allowed, "model", "pack_model", "cluster_model", "container_model")
+		}
+		if kind == "overseas_sales" {
+			allowed = []string{"owner", "standard", "certification_object", "cell_part", "region", "agency", "progress", "validity", "number", "cloud_url"}
+		}
+		if c.Key != "" || !slices.Contains(allowed, c.Field) {
+			return apperrors.NewBadRequestError("unknown field for this import file_kind")
+		}
+	}
+	required := []string{"owner:", "standard:", "certification_object:", "region:"}
+	if kind == "overseas_sales" {
+		required = []string{"owner:"}
+	}
+	if kind == "atq" {
+		required = []string{"name:", "due_stages:"}
+		if !fields["name:"] {
+			if fields["name_zh:"] {
+				required[0] = "name_zh:"
+			} else if fields["name_en:"] {
+				required[0] = "name_en:"
+			}
+		}
+	}
+	for _, field := range required {
+		if !fields[field] {
+			return apperrors.NewBadRequestError("worksheet is missing required field " + strings.TrimSuffix(field, ":"))
+		}
+	}
+	if kind == "overseas_sales" {
+		hasCheck := fields["standard:"] || slices.ContainsFunc(sheet.Columns, func(c types.ShelfImportColumn) bool { return c.Field == "sale_status" || c.Field == "certification" })
+		if !hasCheck {
+			return apperrors.NewBadRequestError("overseas worksheet needs a status or certification check")
+		}
+		metadata := slices.ContainsFunc(sheet.Columns, func(c types.ShelfImportColumn) bool {
+			return slices.Contains([]string{"agency", "progress", "number", "validity", "cloud_url", "cell_part"}, c.Field)
+		})
+		if metadata && !fields["standard:"] {
+			return apperrors.NewBadRequestError("certification metadata checks require a standard column")
+		}
+	}
+
+	return nil
+}

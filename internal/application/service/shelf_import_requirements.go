@@ -17,7 +17,7 @@ func (b *importMapBuilder) requirementRow(mapping types.ShelfImportSheet, cells 
 		return fmt.Errorf("uncertain: requirement name is missing or a placeholder")
 	}
 	identity := normalizeEntityName(name)
-	if b.seenModelNames[identity] {
+	if b.seenRecordKeys["requirement-name:"+identity] {
 		return fmt.Errorf("uncertain: requirement appears in multiple rows; submitter must decide whether to merge")
 	}
 	draft, final, err := b.importDueStages(cells["due_stages:"].Value)
@@ -28,7 +28,7 @@ func (b *importMapBuilder) requirementRow(mapping types.ShelfImportSheet, cells 
 	if err != nil && existing.ID != "" {
 		return err
 	}
-	if existing.ID != "" && b.seenModelIDs[existing.ID] {
+	if existing.ID != "" && b.seenRecordKeys["requirement-id:"+existing.ID] {
 		return fmt.Errorf("uncertain: multiple rows resolve to the same requirement")
 	}
 	requirement := types.ShelfRequirement{}
@@ -100,8 +100,8 @@ func (b *importMapBuilder) requirementRow(mapping types.ShelfImportSheet, cells 
 			return fmt.Errorf("uncertain: requirement module binding differs from the shelf")
 		}
 	}
-	b.seenModelNames[identity] = true
-	b.seenModelIDs[id] = true
+	b.seenRecordKeys["requirement-name:"+identity] = true
+	b.seenRecordKeys["requirement-id:"+id] = true
 	return nil
 }
 
@@ -214,10 +214,14 @@ func (b *importMapBuilder) disappearedRequirements() error {
 }
 
 func importRequirementName(cells map[string]importCell) string {
+	return importRequirementNameCell(cells).Value
+}
+
+func importRequirementNameCell(cells map[string]importCell) importCell {
 	for _, field := range []string{"name:", "name_zh:", "name_en:"} {
 		if cell, ok := cells[field]; ok {
-			return cell.Value
+			return cell
 		}
 	}
-	return ""
+	return importCell{}
 }

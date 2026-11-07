@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/types"
@@ -366,4 +367,76 @@ func TestShelfImportATQBilingualNamesAndConfirmedDeadlineMapping(t *testing.T) {
 	require.Equal(t, " Original drawing ", meta["name_en"])
 	require.Equal(t, "early", meta["draft_due_stage"])
 	require.Equal(t, "final_due", meta["final_due_stage"])
+}
+
+// Medium regression, task 12: a formula's cached name cannot prove that an
+// old requirement disappeared from an ATQ edition.
+func TestShelfImportATQUntrustedIdentityCannotProposeArchive(t *testing.T) {
+	f, l, n := checklistSetup(t)
+	importRecordPlan(f, l, "atq", []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}}, map[string]any{"product_line_id": shelfNode(n, "line")})
+	confirmImport(t, f, l.ID, importUpload(t, f, l.ID, "atq_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Original document", "Final custom"), ""), http.StatusCreated))
+	row := importRecordRow(3, "Untrusted name", "Final custom")
+	row = strings.Replace(row, `<c r="A3" t="inlineStr"><is><t>Untrusted name</t></is></c>`, `<c r="A3"><f>CONCAT("Untrusted", " name")</f><v>Untrusted name</v></c>`, 1)
+	draft := importUpload(t, f, l.ID, "atq_20261029.xlsx", "", importWorkbook(t, row, ""), http.StatusCreated)
+	require.Len(t, draft.Items, 1)
+	require.Equal(t, "unparseable", draft.Items[0].Conflicts[0].Type)
+	require.Contains(t, draft.Items[0].Operation.ImportLocation.Values, "A3.formula")
+}
+
+// Medium spec, task 12: an AC project's confirmed model separators can attach
+// one certified cell part to multiple models without duplicating the part.
+func TestShelfImportReportProjectModelsShareOnePart(t *testing.T) {
+	f, l, n := shelfModelSetup(t)
+	configureCertificationStandards(f, &l)
+	importRecordPlan(f, l, "certification_report", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "cell_part"}, {Column: "F", Field: "model"}}, map[string]any{"owner_kind": "part", "module_type": "module_a", "progress": "Completed"})
+	var plans []types.ShelfImportPlan
+	f.request(http.MethodGet, "/libraries/"+l.ID+"/shelf/import-plans", nil, http.StatusOK, &plans)
+	def := plans[0].Definition
+	def.ModelSeparators = []string{";"}
+	plan := types.ShelfImportPlanInput{Key: "map", Name: "Synthetic records", FileKind: "certification_report", Revision: 1, ShelfImportDefinition: def}
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{{ID: "plan", Type: "save_import_plan", ImportPlan: &plan}}}, http.StatusCreated, nil)
+	draft := importUpload(t, f, l.ID, "report_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Shared cell", "standard_a", "Cell", "Country", "Shared cell", "Synthetic model;Synthetic single"), ""), http.StatusCreated)
+	require.Len(t, draft.Items, 4)
+	require.Equal(t, "part", draft.Items[0].Operation.Entity.Kind)
+	replacement := draft.Items[3].Operation
+	replacement.Type = "create_certification"
+	replacement.Certification.Name = "Shared cell certificate"
+	decisions := []types.ShelfDecision{}
+	for _, item := range draft.Items {
+		decisions = append(decisions, types.ShelfDecision{ItemID: item.ID, Action: "apply"})
+	}
+	decisions[3].Action = "replace"
+	decisions[3].Replacement = &replacement
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets/"+draft.ID+"/confirm", types.ShelfChangesetReview{Revision: draft.Revision, Decisions: decisions}, http.StatusOK, &draft)
+	partID := draft.Items[0].EntityID
+	for _, model := range []string{"model", "single"} {
+		var detail types.EntityDetail
+		f.request(http.MethodGet, "/entities/"+shelfNode(n, model), nil, http.StatusOK, &detail)
+		found := false
+		for _, group := range detail.Shelf.Composition {
+			for _, part := range group.Parts {
+				found = found || part.ID == partID
+			}
+		}
+		require.True(t, found)
+	}
+}
+
+// Medium regression, task 12 / ADR 0023: certificates for complementary part
+// options collectively cover a model and must not be reported as a contradiction.
+func TestShelfImportOverseasChecksCombinedCertificationCoverage(t *testing.T) {
+	f, l, n := shelfModelSetup(t)
+	configureCertificationStandards(f, &l)
+	importRecordPlan(f, l, "overseas_sales", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "certification", Key: "standard_a"}}, map[string]any{"progress": "Completed", "check_values": map[string]bool{"√": true, "×": false}})
+	data := importWorkbook(t, importRecordRow(3, "Synthetic model", "√"), "")
+	for _, part := range []string{"a", "b"} {
+		f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Certificate for " + part, "owner_id": shelfNode(n, part), "standard": "standard_a", "certification_object": "Cell", "region": "Country", "progress": "Completed"}}}}, http.StatusCreated, nil)
+		draft := importUpload(t, f, l.ID, "overseas.xlsx", time.Now().UTC().Format(time.RFC3339Nano), data, http.StatusCreated)
+		if part == "a" {
+			require.Len(t, draft.Items[0].Conflicts, 1)
+			require.Contains(t, draft.Items[0].Conflicts[0].Details.(map[string]any)["field"], "partial_options")
+		} else {
+			require.Empty(t, draft.Items[0].Conflicts)
+		}
+	}
 }

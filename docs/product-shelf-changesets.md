@@ -189,7 +189,6 @@ HTTP 路径以 `/api/v1` 为前缀，成功结果在 `data` 中。
 
 产品名称与型号用 `attributes.current_stage` 保存配置阶段键，仍走 `update_entity` 并检查修订号。型号没有该字段时沿用产品名称；移除型号字段恢复继承。两层都未填写时只显示文件有无。完整属性快照及 `effective_at`、导入文件日期沿用现有时间线规则。
 
-
 ## 导入核对提示
 
 `import_notice` 是不写货架的核对操作，`issues` 只接受 `cross_table_contradiction`，也可为空表示核对一致。其差异是提示，普通 `apply` 可以确认，确认前后均不改变货架数据。身份、日期或文本无法判断时仍使用阻塞冲突。表格方案与字段约定见[货架表格导入](product-shelf-import.md)。
