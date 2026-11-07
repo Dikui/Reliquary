@@ -248,6 +248,8 @@ func registerTools(server *mcp.Server, services Services) {
 			"content_types": stringArray("内容类型名称，取所选库内容类型清单中的值；先调用 list_libraries 查看"),
 			"entity_ids":    stringArray("实体 ID 列表"), "topic_ids": stringArray("主题 ID 列表"),
 			"include_descendants": boolean("实体筛选包含所选托管库中层级关系的后代，默认 false"),
+			"shelf_node_ids":      stringArray("所选货架库的节点 ID，范围含节点、下级与组成部件的已归属资料文件，最多 100 个"),
+			"include_history":     boolean("包含货架资料历史版本，默认 false；同一文件合并返回，historical_match 提示旧版命中，other_version_matches 保留其他命中版本"),
 			"sources":             stringArray("来源类别：article（外部收录资料）、report（AI产出，即 acquisition=model_written）、mine（旧版导入的个人资料）"),
 			"starred":             boolean("true 只查星标资料，false 只查未星标，省略查全部"),
 			"published_from":      text("发布时间下限，YYYY-MM-DD 或 RFC3339；缺少发布时间的资料会排除"),

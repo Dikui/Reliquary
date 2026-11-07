@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math"
 	"slices"
@@ -16,10 +17,11 @@ import (
 )
 
 type entrySearchFilters struct {
-	request types.EntrySearchRequest
-	from    *time.Time
-	to      *time.Time
-	toDate  bool
+	request       types.EntrySearchRequest
+	shelfOwnerIDs []string
+	from          *time.Time
+	to            *time.Time
+	toDate        bool
 }
 
 func normalizeEntrySearch(request types.EntrySearchRequest) (entrySearchFilters, error) {
@@ -47,7 +49,7 @@ func normalizeEntrySearch(request types.EntrySearchRequest) (entrySearchFilters,
 			return f, apperrors.NewBadRequestError("unsupported sources value: " + source)
 		}
 	}
-	for name, ids := range map[string][]string{"entity_ids": request.EntityIDs, "topic_ids": request.TopicIDs} {
+	for name, ids := range map[string][]string{"entity_ids": request.EntityIDs, "topic_ids": request.TopicIDs, "shelf_node_ids": request.ShelfNodeIDs} {
 		if len(ids) > 100 {
 			return f, apperrors.NewBadRequestError(name + " accepts at most 100 IDs")
 		}
@@ -267,6 +269,13 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 		retrievalLibrary.ID = ""
 		retrievalLibrary.IndexingStrategy.KeywordEnabled = keywordEnabled || vectorUnavailable
 		reader.db = tx
+		if len(f.request.ShelfNodeIDs) > 0 {
+			var err error
+			f.shelfOwnerIDs, err = reader.shelfSearchOwners(ctx, spaceID, f.request.Libraries, f.request.ShelfNodeIDs)
+			if err != nil {
+				return err
+			}
+		}
 		if f.from != nil || f.to != nil {
 			var err error
 			response.ExcludedMissingPublishedAt, err = reader.countMissingArticleDates(ctx, spaceID, &retrievalLibrary, f, queryVector, modelID, config)
@@ -279,8 +288,11 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 			return err
 		}
 		merged, err = reader.mergeEntryHits(ctx, spaceID, lanes, config)
-		return err
-	})
+		if err != nil {
+			return err
+		}
+		return reader.attachShelfSearchVersions(ctx, spaceID, merged)
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return nil, err
 	}
@@ -294,6 +306,7 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 	execution.RerankModelID = &rerankID
 	ctx = types.WithSearchExecution(ctx, execution)
 	merged, response.RerankStatus = s.rerankEntryResults(ctx, library, f.request.Query, merged)
+	merged = mergeShelfSearchVersions(merged)
 	if f.request.CollapseSimilar == nil || *f.request.CollapseSimilar {
 		set.ModelID = modelID
 		merged, err = s.collapseArticleReports(ctx, spaceID, merged, config, set)
@@ -324,6 +337,14 @@ func (s *searchService) Search(ctx context.Context, request types.EntrySearchReq
 func (s *searchService) eligibleEntries(ctx context.Context, spaceID uint64, libraryID string, f entrySearchFilters, dates bool) *gorm.DB {
 	query := s.db.WithContext(ctx).Table("entries AS k").Where(`k.space_id = ?
 		AND k.deleted_at IS NULL AND k.parse_status = 'completed' AND k.enable_status = 'enabled'`, spaceID)
+	if !f.request.IncludeHistory {
+		query = query.Where(`NOT EXISTS (SELECT 1 FROM shelf_document_versions v
+			WHERE v.space_id=k.space_id AND v.library_id=k.library_id AND v.entry_id=k.id AND NOT v.is_current)`)
+	}
+	if len(f.request.ShelfNodeIDs) > 0 {
+		query = query.Where(`EXISTS (SELECT 1 FROM shelf_document_versions v
+			WHERE v.space_id=k.space_id AND v.library_id=k.library_id AND v.entry_id=k.id AND v.owner_id IN ?)`, f.shelfOwnerIDs)
+	}
 	if len(f.request.Libraries) > 0 {
 		query = query.Where("k.library_id IN ?", f.request.Libraries)
 	}

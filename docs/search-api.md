@@ -66,6 +66,27 @@ const exactText = body.slice(utf16Start, utf16End)
 
 响应级 `vector_unavailable=true` 表示查询向量不可用，本次使用全文检索。`rerank_status` 为 `unconfigured`、`unavailable`、`applied` 或 `no_candidates`。重排服务失败时保留融合排序；不会把失败当成无命中。
 
+## 货架范围与版本
+
+HTTP 和 MCP 的普通检索共用以下可选参数：
+
+```json
+{
+  "libraries": ["shelf-library-id"],
+  "query": "耐压测试",
+  "shelf_node_ids": ["model-id"],
+  "include_history": false
+}
+```
+
+`shelf_node_ids` 接受最多 100 个产品线、平台、产品名称、型号或部件 ID，多个节点取并集。节点须是所选库中的活动货架节点，无效 ID 返回 400，不退回整库检索。范围包含节点本身、沿当前层级关系向下的节点，以及这些型号的组成部件。也包含归属于范围内节点或部件的认证记录所挂的证书与报告。部件范围不反向扩展到使用它的型号，型号范围不向上扩展到产品名称或平台。范围只认变更集确认的资料文件版本归属，未归属的独立文本仍可普通全文检索。范围、其他筛选和当前版本过滤在所有召回通道排序及截断前生效。
+
+货架资料默认只检索当前版本，无论是否传入范围。`include_history:true` 允许历史版本参与召回，范围仍使用当前有效的货架关系。未被登记为资料文件版本的普通资料不受版本过滤影响。此参数不提供货架业务时间或部件组合筛选。
+
+每个命中版本返回 `shelf_document`：`file_id` 为资料文件实体 ID，`version_id`、`version_label`、`ordinal` 和 `is_current` 标识该条文本对应的版本。检索结果在最终条数限制前按文件合并，当前版本也命中时由它代表文件，否则保留排名最高的历史命中。文件分数取各命中版本的最高分；`historical_match:true` 表示有历史版本命中，即使只有旧版命中也会提示。`other_version_matches` 保存同一文件其余召回版本的完整结果，各自保留 `entry_id`、版本标记、片段与位置，引用时使用相应版本的文本 ID。未命中的版本不作为命中返回。
+
+文件版本合并独立于 `collapse_similar`，关闭相似报道折叠仍合并同一文件。相似报道折叠继续遵循原开关与条件。原件继续通过资料文件版本接口下载。响应快照及检索记录保留范围和历史开关。
+
 ## 向量重建及切换
 
 `GET /api/v1/embeddings/rebuild` 返回最近一次运行及失败项。已有重建控制动作继续可用。`POST` 同一路径：

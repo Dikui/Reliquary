@@ -69,6 +69,10 @@ func rewriteEntrySearch(ctx context.Context, rewriter *storageurl.Rewriter, resp
 		for i, report := range result.SimilarReports {
 			copy.SimilarReports[i] = copyResult(report)
 		}
+		copy.OtherVersionMatches = make([]*types.EntrySearchResult, len(result.OtherVersionMatches))
+		for i, version := range result.OtherVersionMatches {
+			copy.OtherVersionMatches[i] = copyResult(version)
+		}
 		return &copy
 	}
 	copy := *response

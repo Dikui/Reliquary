@@ -14,7 +14,9 @@ type EntrySearchRequest struct {
 	Query              string          `json:"query"`
 	ContentTypes       []string        `json:"content_types,omitempty"`
 	IncludeDescendants bool            `json:"include_descendants,omitempty"`
+	IncludeHistory     bool            `json:"include_history,omitempty"`
 	EntityIDs          []string        `json:"entity_ids,omitempty"`
+	ShelfNodeIDs       []string        `json:"shelf_node_ids,omitempty"`
 	TopicIDs           []string        `json:"topic_ids,omitempty"`
 	Sources            []string        `json:"sources,omitempty"`
 	Starred            *bool           `json:"starred,omitempty"`
@@ -77,6 +79,19 @@ type EntrySearchResult struct {
 	SimilarReports   []*EntrySearchResult `json:"similar_reports"`
 	VaultPath        string               `json:"vault_path"`
 	OriginalURL      string               `json:"original_url"`
+
+	ShelfDocument       *EntrySearchDocument `json:"shelf_document,omitempty"`
+	HistoricalMatch     bool                 `json:"historical_match,omitempty"`
+	OtherVersionMatches []*EntrySearchResult `json:"other_version_matches,omitempty"`
+}
+
+// EntrySearchDocument identifies the exact file version behind a text hit.
+type EntrySearchDocument struct {
+	FileID       string `json:"file_id"`
+	VersionID    string `json:"version_id"`
+	VersionLabel string `json:"version_label"`
+	Ordinal      int64  `json:"ordinal"`
+	IsCurrent    bool   `json:"is_current"`
 }
 
 type EntrySearchResponse struct {

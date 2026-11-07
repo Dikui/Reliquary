@@ -24,6 +24,9 @@ type stubSearchService struct {
 func (s *stubSearchService) Search(_ context.Context, _ types.EntrySearchRequest) (*types.EntrySearchResponse, error) {
 	return &types.EntrySearchResponse{Results: []*types.EntrySearchResult{{EntryID: "article",
 		Snippets: []types.EntrySearchSnippet{{Content: "chunk ![c](" + testResourceHandle + ")"}},
+		// Medium regression, task 10: public URL mode also covers historical
+		// version evidence nested in a merged file result.
+		OtherVersionMatches: []*types.EntrySearchResult{{EntryID: "old-version", Snippets: []types.EntrySearchSnippet{{Content: "old ![o](" + testResourceHandle + ")", Context: "parent ![p](" + testResourceHandle + ")"}}}},
 	}}}, nil
 }
 
@@ -92,4 +95,5 @@ func TestSearchEntry_DefaultKeepsHandles(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.Len(t, resp.Data.Results, 1)
 	assert.Contains(t, resp.Data.Results[0].Snippets[0].Content, testResourceHandle)
+	assert.Contains(t, resp.Data.Results[0].OtherVersionMatches[0].Snippets[0].Content, testResourceHandle)
 }

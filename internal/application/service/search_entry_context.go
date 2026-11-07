@@ -28,6 +28,7 @@ func (s *searchService) expandEntryParentContext(ctx context.Context, spaceID ui
 				}
 			}
 			collect(row.SimilarReports)
+			collect(row.OtherVersionMatches)
 		}
 	}
 	collect(results)
