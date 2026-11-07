@@ -45,7 +45,7 @@ func (h *EntityHandler) ManagedEntityHistory(c *gin.Context) {
 		c.Error(apperrors.NewBadRequestError("invalid history pagination"))
 		return
 	}
-	result, err := h.service.ManagedEntityHistory(c.Request.Context(), c.Param("entity_id"), page, size)
+	result, err := h.service.ManagedEntityHistory(c.Request.Context(), c.Param("entity_id"), page, size, operationSourceQuery(c))
 	if err != nil {
 		c.Error(err)
 		return

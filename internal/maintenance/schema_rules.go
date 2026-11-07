@@ -116,6 +116,11 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 			rule.Sidecar = strings.TrimSpace(strings.ReplaceAll(rule.Sidecar, " valid_from valid_to", ""))
 			copy["relations"] = rule
 		}
+		if migration.Version < 43 {
+			rule := copy["operation_logs"]
+			rule.Sidecar = strings.TrimSpace(strings.ReplaceAll(rule.Sidecar, " source changeset_id", ""))
+			copy["operation_logs"] = rule
+		}
 		if migration.Version < 42 {
 			rule := copy["libraries"]
 			rule.Configuration = strings.TrimSpace(strings.ReplaceAll(rule.Configuration, " shelf_enabled shelf_config", ""))

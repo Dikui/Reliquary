@@ -251,6 +251,7 @@ func appendLogs(path string, rows []map[string]any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
+	sourceColumns := hasOperationSourceColumns(rows)
 	existing := map[string][]byte{}
 	file, err := os.Open(path)
 	if err == nil {
@@ -263,6 +264,9 @@ func appendLogs(path string, rows []map[string]any) error {
 				return fmt.Errorf("invalid append-only operation log: %w", err)
 			}
 			addLogDefaults(row)
+			if sourceColumns {
+				addOperationSourceDefaults(row)
+			}
 			canonical, _ := json.Marshal(row)
 			existing[fmt.Sprint(row["id"])] = canonical
 		}

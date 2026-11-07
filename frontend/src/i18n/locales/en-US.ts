@@ -1278,6 +1278,7 @@ export default {
     loadFailed: 'Could not load the operation log. Try again.',
     empty: 'No operations match these filters.',
     types: {
+      configure_shelf: 'Update shelf settings',
       switch_entity_library: 'Switch entity library mode',
       merge_managed_entities: 'Merge managed entities',
       split_managed_entity: 'Split managed entity',

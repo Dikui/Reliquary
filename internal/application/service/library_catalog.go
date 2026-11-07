@@ -88,11 +88,9 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 	}
 	var result *types.Library
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		lock := lockEntitySpaceShared
-		if patch.EntityMode != nil || patch.EntitySchema != nil || patch.RelationTypes != nil || patch.ShelfEnabled != nil || patch.ShelfConfig != nil || patch.ProductLibraryIDs != nil {
-			lock = lockEntitySpace
-		}
-		if err := lock(tx, types.MustSpaceIDFromContext(ctx)); err != nil {
+		// Shelf metadata also enters a changeset. Take the writer barrier before
+		// the library row lock so nested confirmation never upgrades a shared lock.
+		if err := lockEntitySpace(tx, types.MustSpaceIDFromContext(ctx)); err != nil {
 			return err
 		}
 		var locked types.Library
@@ -103,6 +101,17 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 		library, err := repo.GetLibraryByID(ctx, id)
 		if err != nil {
 			return err
+		}
+		if library.ShelfEnabled {
+			if _, internal := ctx.Value(shelfWriteContextKey{}).(shelfWriteContext); !internal {
+				op := types.ShelfOperation{Type: "configure_shelf", Library: &patch, LibraryUpdatedAt: &library.UpdatedAt}
+				_, _, err := NewEntityService(tx, nil).shelfSingleEdit(ctx, id, op)
+				if err != nil {
+					return err
+				}
+				result, err = repo.GetLibraryByID(ctx, id)
+				return err
+			}
 		}
 		previous := *library
 		if patch.ShelfEnabled != nil {

@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"reliquary/internal/application/service"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/types"
 )
 
 type OperationLogHandler struct{ service *service.OperationLogService }
@@ -21,10 +22,14 @@ func (h *OperationLogHandler) List(c *gin.Context) {
 		c.Error(werrors.NewBadRequestError("invalid pagination"))
 		return
 	}
-	result, err := h.service.List(c.Request.Context(), c.Query("operation_type"), page, size)
+	result, err := h.service.List(c.Request.Context(), c.Query("operation_type"), page, size, operationSourceQuery(c))
 	if err != nil {
 		c.Error(err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}
+
+func operationSourceQuery(c *gin.Context) types.OperationSource {
+	return types.OperationSource{Type: c.Query("source_type"), AgentName: c.Query("agent_name"), ImportBatchID: c.Query("import_batch_id")}
 }

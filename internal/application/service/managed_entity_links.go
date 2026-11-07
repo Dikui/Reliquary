@@ -59,6 +59,13 @@ func (s *EntityService) EntryEntityLinks(ctx context.Context, entryID string) ([
 }
 
 func (s *EntityService) SetEntryEntityLink(ctx context.Context, entryID, entityID string, excluded bool, relationTypes ...*string) error {
+	op := types.ShelfOperation{Type: "set_entity_link", EntryID: entryID, EntityID: entityID, Excluded: excluded}
+	if len(relationTypes) > 0 {
+		op.RelationType = relationTypes[0]
+	}
+	if _, handled, err := s.shelfSingleEdit(ctx, "", op); handled {
+		return err
+	}
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return err
@@ -84,6 +91,9 @@ func (s *EntityService) SetEntryEntityLink(ctx context.Context, entryID, entityI
 		}
 		target, err := managedLibrary(tx, spaceID, entity.LibraryID)
 		if err != nil {
+			return err
+		}
+		if err := requireShelfChangeset(ctx, target); err != nil {
 			return err
 		}
 		if !excluded && entity.ArchivedAt != nil {

@@ -37,6 +37,8 @@ HTTP 接口位于 `/api/v1`，成功数据在 `data` 中。模式、类别和属
 
 货架通过 `POST /libraries`（同时指定 `entity_mode: "managed"`）或 `PUT /libraries/:id` 的 `shelf_enabled: true` 开启。服务端替换未使用的旧配置，写入八个固定类别以及 `belongs_to`、`composed_of`、`applies_to`、`has_certification`、`has_document`、`fulfills` 关系类型。已有不兼容实体、属性或关系时拒绝开启并保留数据，不推断迁移。开启后不能关闭货架或修改固定的层级和关系端点；可继续定义实体与关系字段。
 
+货架写入统一通过[变更集](product-shelf-changesets.md)校验和确认，原单项编辑接口会创建并当场确认一个变更集。批量提议、保存决定、暂缓项转移、原子确认和来源查询见该接口说明。
+
 库的 `shelf_config` 保存 `module_types`、`regions`、`stages` 三个列表。每项为 `{ "key": "stable_key", "name": "原样名称" }`，各列表最多 100 项，名称最多 100 字符。更新时提交完整 `shelf_config`，保留已有键，可追加、改名和重排；阶段按数组从前到后推进。空列表可省略。`GET /libraries` 和 `GET /libraries/:id` 返回持久化配置，各库独立。
 
 货架的 `product_library_ids` 必须为空，也不能出现在其他库的自动匹配目标中。开启前须先从其他库的目标列表移除。后台处理会再次过滤货架，保留人工关联和排除决定；普通人工维护库的名称匹配行为不变。

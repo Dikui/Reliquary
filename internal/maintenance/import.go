@@ -76,6 +76,9 @@ func Load(root string) (*Snapshot, error) {
 				if err != nil {
 					return nil, err
 				}
+				if manifest.SchemaVersion >= 43 {
+					addOperationSourceDefaults(row)
+				}
 				rows = append(rows, row)
 			}
 			if err := scanner.Err(); err != nil {

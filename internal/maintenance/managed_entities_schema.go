@@ -1,7 +1,9 @@
 package maintenance
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"sort"
 )
 
@@ -24,7 +26,17 @@ var productShelfDefaults = map[string]map[string]any{
 	"libraries": {"shelf_enabled": false, "shelf_config": map[string]any{}},
 }
 
+var shelfSourceDefaults = map[string]map[string]any{
+	"operation_logs": {"source": map[string]any{}, "changeset_id": ""},
+}
+
 func projectManagedEntitiesSnapshot(snapshot *Snapshot, targetVersion int64) {
+	projectEntityDefaultsSnapshot(snapshot, targetVersion, 43, shelfSourceDefaults)
+	if snapshot.schemaVersion < 43 && targetVersion >= 43 {
+		if _, exists := snapshot.Tables["shelf_changesets"]; !exists {
+			snapshot.Tables["shelf_changesets"] = []map[string]any{}
+		}
+	}
 	projectEntityDefaultsSnapshot(snapshot, targetVersion, 42, productShelfDefaults)
 	projectEntityDefaultsSnapshot(snapshot, targetVersion, 37, managedEntityDefaults)
 	projectManagedEvolutionSnapshot(snapshot, targetVersion)
@@ -54,6 +66,8 @@ func projectEntityDefaultsSnapshot(snapshot *Snapshot, targetVersion, version in
 }
 
 func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	expected, actual = projectEntityDefaultsManifest(expected, actual, 43, shelfSourceDefaults)
+	expected, actual = projectEmptyPersistentTableManifest(expected, actual, "shelf_changesets", 43)
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 42, productShelfDefaults)
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 37, managedEntityDefaults)
 	expected, actual = projectManagedEvolutionManifest(expected, actual)
@@ -65,10 +79,13 @@ func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Man
 // Only an empty confirmation table is implied by upgrading an older replica.
 // Saved decisions remain authoritative and must still compare exactly.
 func projectManagedNamesManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
-	if expected.SchemaVersion >= 41 || actual.SchemaVersion < 41 {
+	return projectEmptyPersistentTableManifest(expected, actual, "entity_name_confirmations", 41)
+}
+
+func projectEmptyPersistentTableManifest(expected, actual *Manifest, table string, version int64) (*Manifest, *Manifest) {
+	if expected.SchemaVersion >= version || actual.SchemaVersion < version {
 		return expected, actual
 	}
-	const table = "entity_name_confirmations"
 	if _, exists := expected.Tables[table]; exists {
 		return expected, actual
 	}
@@ -146,6 +163,11 @@ func projectEntityDefaultsManifest(expected, actual *Manifest, version int64, de
 		if registration, ok := PersistentTables[table]; ok {
 			path = ".reliquary/" + registration.File
 		}
+		if table == "operation_logs" {
+			path = ".reliquary/operation_logs.jsonl"
+			before = operationLogReplicaBytes(item.Data, columns, true)
+			after = operationLogReplicaBytes(rows, nil, false)
+		}
 		for group, files := range left.Files {
 			for i, file := range files {
 				if file.Path == path && file.SHA256 == sum(before) && file.Size == int64(len(before)) {
@@ -156,4 +178,28 @@ func projectEntityDefaultsManifest(expected, actual *Manifest, version int64, de
 		}
 	}
 	return &left, actual
+}
+
+// Portable logs retain the established append-only JSONL representation.
+func operationLogReplicaBytes(rows []map[string]any, remove map[string]any, strip bool) []byte {
+	copies := namedRows(rows, true)
+	sort.Slice(copies, func(i, j int) bool {
+		a, b := fmt.Sprint(copies[i]["created_at"]), fmt.Sprint(copies[j]["created_at"])
+		if a == b {
+			return fmt.Sprint(copies[i]["id"]) < fmt.Sprint(copies[j]["id"])
+		}
+		return a < b
+	})
+	var data bytes.Buffer
+	for _, row := range copies {
+		if strip {
+			for key := range remove {
+				delete(row, key)
+			}
+		}
+		encoded, _ := json.Marshal(row)
+		data.Write(encoded)
+		data.WriteByte('\n')
+	}
+	return data.Bytes()
 }

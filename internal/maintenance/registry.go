@@ -22,6 +22,7 @@ type PersistentTable struct {
 const RegistryVersion = 1
 
 var PersistentTables = map[string]PersistentTable{
+	"shelf_changesets":          {Columns: Rule{Sidecar: "id space_id library_id revision status source items deferred_changeset_id created_at updated_at confirmed_at"}, File: "data/shelf_changesets.json", After: []string{"spaces", "libraries"}, Since: 43},
 	"entity_name_confirmations": {Columns: Rule{Sidecar: "space_id library_id entity_a_id kind_a entity_b_id kind_b normalized_name confirmed_at"}, File: "data/entity_name_confirmations.json", After: []string{"spaces", "libraries", "entities"}, Since: 41},
 	"entity_attribute_versions": {Columns: Rule{Sidecar: "id space_id entity_id revision effective_at recorded_at attributes"}, File: "data/entity_attribute_versions.json", After: []string{"spaces", "entities"}, Since: 38},
 	"entity_reorganizations":    {Columns: Rule{Sidecar: "id space_id library_id kind source_id target_id created_at"}, File: "data/entity_reorganizations.json", After: []string{"spaces", "libraries", "entities"}, Since: 38},

@@ -136,6 +136,18 @@ func queueManagedEntity(tx *gorm.DB, entity *types.Entity) error {
 }
 
 func (s *EntityService) CreateManagedEntity(ctx context.Context, libraryID string, input types.ManagedEntityInput) (*types.Entity, error) {
+	if data, handled, err := s.shelfSingleEdit(ctx, libraryID, types.ShelfOperation{Type: "create_entity", Entity: &input}); handled {
+		if err != nil {
+			return nil, err
+		}
+		var entity types.Entity
+		err = json.Unmarshal(data, &entity)
+		return &entity, err
+	}
+	return s.createManagedEntity(ctx, libraryID, input, uuid.NewString())
+}
+
+func (s *EntityService) createManagedEntity(ctx context.Context, libraryID string, input types.ManagedEntityInput, id string) (*types.Entity, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -143,13 +155,16 @@ func (s *EntityService) CreateManagedEntity(ctx context.Context, libraryID strin
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, apperrors.NewUnauthorizedError("entity editor required")
 	}
-	entity := types.Entity{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: libraryID, EntityType: "product", Kind: input.Kind, Code: input.Code, CanonicalName: input.Name, Description: input.Description, Attributes: input.Attributes, AutoMatch: input.AutoMatch, Revision: 1, EmbeddingNeedsRebuild: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	entity := types.Entity{ID: id, SpaceID: spaceID, LibraryID: libraryID, EntityType: "product", Kind: input.Kind, Code: input.Code, CanonicalName: input.Name, Description: input.Description, Attributes: input.Attributes, AutoMatch: input.AutoMatch, Revision: 1, EmbeddingNeedsRebuild: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
 		library, err := managedLibrary(tx, spaceID, libraryID)
 		if err != nil {
+			return err
+		}
+		if err := requireShelfChangeset(ctx, library); err != nil {
 			return err
 		}
 		if err := validateManagedEntity(library, &entity); err != nil {
@@ -188,6 +203,14 @@ func (s *EntityService) CreateManagedEntity(ctx context.Context, libraryID strin
 }
 
 func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patch types.ManagedEntityPatch) (*types.Entity, error) {
+	if data, handled, err := s.shelfSingleEdit(ctx, "", types.ShelfOperation{Type: "update_entity", EntityID: id, Patch: &patch}); handled {
+		if err != nil {
+			return nil, err
+		}
+		var entity types.Entity
+		err = json.Unmarshal(data, &entity)
+		return &entity, err
+	}
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -237,6 +260,9 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		}
 		if patch.AutoMatch != nil {
 			entity.AutoMatch = *patch.AutoMatch
+		}
+		if err := requireShelfChangeset(ctx, library); err != nil {
+			return err
 		}
 		if err := validateManagedEntity(library, &entity); err != nil {
 			return err
@@ -375,8 +401,12 @@ func (s *EntityService) DeleteManagedEntity(ctx context.Context, id string, revi
 		if err := tx.Where("id=? AND space_id=?", id, spaceID).First(&entity).Error; err != nil {
 			return err
 		}
-		if _, err := managedLibrary(tx, spaceID, entity.LibraryID); err != nil {
+		library, err := managedLibrary(tx, spaceID, entity.LibraryID)
+		if err != nil {
 			return err
+		}
+		if library.ShelfEnabled {
+			return apperrors.NewBadRequestError("shelf entities must be archived through a changeset")
 		}
 		if revision != entity.Revision {
 			return apperrors.NewConflictError("entity changed; reload before deleting")
@@ -394,7 +424,7 @@ func (s *EntityService) DeleteManagedEntity(ctx context.Context, id string, revi
 		if referenced {
 			return apperrors.NewConflictError("only products without documents, relationships or reorganization history can be deleted; exclude document links or archive the product first")
 		}
-		referenced, err := managedValueReferenced(tx, spaceID, id, id)
+		referenced, err = managedValueReferenced(tx, spaceID, id, id)
 		if err != nil {
 			return err
 		}
@@ -441,7 +471,7 @@ func (s *EntityService) DeleteManagedEntity(ctx context.Context, id string, revi
 	return managedWriteError(err)
 }
 
-func (s *EntityService) ManagedEntityHistory(ctx context.Context, id string, page, pageSize int) (*types.OperationLogPage, error) {
+func (s *EntityService) ManagedEntityHistory(ctx context.Context, id string, page, pageSize int, sources ...types.OperationSource) (*types.OperationLogPage, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -455,6 +485,10 @@ func (s *EntityService) ManagedEntityHistory(ctx context.Context, id string, pag
 	}
 	query := s.db.WithContext(ctx).Model(&types.OperationLog{}).Where("space_id=?", spaceID).
 		Where("object_id=? OR before_value->>'subject_id'=? OR before_value->>'object_id'=? OR after_value->>'subject_id'=? OR after_value->>'object_id'=? OR after_value->>'entity_id'=? OR before_value->>'source_id'=? OR before_value->>'target_id'=? OR after_value->>'source_id'=? OR after_value->>'target_id'=?", id, id, id, id, id, id, id, id, id, id)
+	query, err = filterOperationSource(query, sources)
+	if err != nil {
+		return nil, err
+	}
 	result := &types.OperationLogPage{Items: []types.OperationLog{}, Page: page, PageSize: pageSize}
 	if err := query.Count(&result.Total).Error; err != nil {
 		return nil, err

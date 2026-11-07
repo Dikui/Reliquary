@@ -1653,6 +1653,7 @@ export default {
     loadFailed: '无法加载操作日志，请重试。',
     empty: '没有符合条件的操作日志。',
     types: {
+      configure_shelf: '修改货架设置',
       switch_entity_library: '切换实体库模式',
       merge_managed_entities: '合并维护实体',
       split_managed_entity: '拆分维护实体',

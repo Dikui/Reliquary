@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"time"
 
@@ -76,6 +77,14 @@ func queueManagedRelation(tx *gorm.DB, relation types.Relation, deleted bool) er
 }
 
 func (s *EntityService) SaveManagedRelation(ctx context.Context, libraryID, id string, input types.ManagedRelationInput) (*types.Relation, error) {
+	if data, handled, err := s.shelfSingleEdit(ctx, libraryID, types.ShelfOperation{Type: "save_relation", RelationID: id, Relation: &input}); handled {
+		if err != nil {
+			return nil, err
+		}
+		var row types.Relation
+		err = json.Unmarshal(data, &row)
+		return &row, err
+	}
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -99,6 +108,9 @@ func (s *EntityService) SaveManagedRelation(ctx context.Context, libraryID, id s
 		}
 		library, err := managedLibrary(tx, spaceID, libraryID)
 		if err != nil {
+			return err
+		}
+		if err := requireShelfChangeset(ctx, library); err != nil {
 			return err
 		}
 		if err := graph.Lock(tx, spaceID); err != nil {
@@ -158,6 +170,13 @@ func (s *EntityService) SaveManagedRelation(ctx context.Context, libraryID, id s
 }
 
 func (s *EntityService) DeleteManagedRelation(ctx context.Context, id string, version int64, validTo ...time.Time) error {
+	op := types.ShelfOperation{Type: "end_relation", RelationID: id, Revision: version}
+	if len(validTo) > 0 {
+		op.ValidTo = &validTo[0]
+	}
+	if _, handled, err := s.shelfSingleEdit(ctx, "", op); handled {
+		return err
+	}
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return err
@@ -173,7 +192,11 @@ func (s *EntityService) DeleteManagedRelation(ctx context.Context, id string, ve
 		if err := tx.Where("space_id=? AND id=?", spaceID, id).First(&row).Error; err != nil {
 			return err
 		}
-		if _, err := managedLibrary(tx, spaceID, row.LibraryID); err != nil {
+		library, err := managedLibrary(tx, spaceID, row.LibraryID)
+		if err != nil {
+			return err
+		}
+		if err := requireShelfChangeset(ctx, library); err != nil {
 			return err
 		}
 		if row.ValidTo != nil || row.Version != version {

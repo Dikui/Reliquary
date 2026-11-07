@@ -4,23 +4,25 @@ import "time"
 
 // OperationLog records a deliberate user action, including API key callers.
 type OperationLog struct {
-	ID            string    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	SpaceID       uint64    `json:"space_id"`
-	Actor         string    `json:"actor"`
-	ActorName     string    `json:"actor_name,omitempty" gorm:"-"`
-	APIKeyID      uint64    `json:"api_key_id,omitempty" gorm:"not null;default:0"`
-	APIKeyName    string    `json:"api_key_name,omitempty" gorm:"type:text;not null;default:''"`
-	OperationType string    `json:"operation_type"`
-	ObjectID      string    `json:"object_id"`
-	Before        JSON      `json:"before" gorm:"column:before_value;type:jsonb"`
-	After         JSON      `json:"after" gorm:"column:after_value;type:jsonb"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            string          `json:"id" gorm:"type:varchar(36);primaryKey"`
+	SpaceID       uint64          `json:"space_id"`
+	Actor         string          `json:"actor"`
+	ActorName     string          `json:"actor_name,omitempty" gorm:"-"`
+	APIKeyID      uint64          `json:"api_key_id,omitempty" gorm:"not null;default:0"`
+	APIKeyName    string          `json:"api_key_name,omitempty" gorm:"type:text;not null;default:''"`
+	Source        OperationSource `json:"source" gorm:"serializer:json;type:jsonb"`
+	ChangesetID   string          `json:"changeset_id,omitempty"`
+	OperationType string          `json:"operation_type"`
+	ObjectID      string          `json:"object_id"`
+	Before        JSON            `json:"before" gorm:"column:before_value;type:jsonb"`
+	After         JSON            `json:"after" gorm:"column:after_value;type:jsonb"`
+	CreatedAt     time.Time       `json:"created_at"`
 }
 
 func (OperationLog) TableName() string { return "operation_logs" }
 
 var OperationTypes = []string{
-	"create_entity", "update_entity", "delete_entity", "update_pending_entity_attributes",
+	"configure_shelf", "create_entity", "update_entity", "delete_entity", "update_pending_entity_attributes",
 	"create_relation", "update_relation", "set_entity_link",
 	"switch_entity_library", "merge_managed_entities", "split_managed_entity",
 	"ingest", "write_report", "delete_document",

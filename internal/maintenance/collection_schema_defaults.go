@@ -151,3 +151,21 @@ func projectCollectionSchemaDefaults(expected, actual *Manifest, legacyFormat in
 	}
 	return &left, actual
 }
+
+// A historical JSONL row may predate migration 43 even in a newer replica;
+// append-only files retain those bytes. Only exact empty defaults are implied.
+func addOperationSourceDefaults(row map[string]any) {
+	for column, value := range shelfSourceDefaults["operation_logs"] {
+		if _, exists := row[column]; !exists {
+			row[column] = value
+		}
+	}
+}
+func hasOperationSourceColumns(rows []map[string]any) bool {
+	for _, row := range rows {
+		if _, exists := row["source"]; exists {
+			return true
+		}
+	}
+	return false
+}

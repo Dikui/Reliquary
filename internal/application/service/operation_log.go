@@ -56,13 +56,15 @@ func (s *OperationLogService) RecordTx(ctx context.Context, tx *gorm.DB, operati
 			}
 		}
 	}
+	provenance, _ := ctx.Value(shelfWriteContextKey{}).(shelfWriteContext)
 	return tx.WithContext(ctx).Create(&types.OperationLog{ID: uuid.NewString(), SpaceID: spaceID,
+		Source: provenance.Source, ChangesetID: provenance.ChangesetID,
 		Actor: actor.StorageID(), OperationType: operationType, ObjectID: objectID,
 		APIKeyID: keyID, APIKeyName: keyName,
 		Before: types.JSON(oldValue), After: types.JSON(newValue), CreatedAt: time.Now()}).Error
 }
 
-func (s *OperationLogService) List(ctx context.Context, operationType string, page, pageSize int) (*types.OperationLogPage, error) {
+func (s *OperationLogService) List(ctx context.Context, operationType string, page, pageSize int, sources ...types.OperationSource) (*types.OperationLogPage, error) {
 	spaceID, ok := types.SpaceIDFromContext(ctx)
 	if !ok || spaceID == 0 {
 		return nil, werrors.NewUnauthorizedError("personal space is required")
@@ -77,11 +79,15 @@ func (s *OperationLogService) List(ctx context.Context, operationType string, pa
 	if operationType != "" {
 		query = query.Where("operation_type=?", operationType)
 	}
+	query, err := filterOperationSource(query, sources)
+	if err != nil {
+		return nil, err
+	}
 	result := &types.OperationLogPage{Items: []types.OperationLog{}, Page: page, PageSize: pageSize}
 	if err := query.Count(&result.Total).Error; err != nil {
 		return nil, err
 	}
-	err := query.Order("created_at DESC,id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&result.Items).Error
+	err = query.Order("created_at DESC,id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&result.Items).Error
 	if err != nil {
 		return nil, err
 	}

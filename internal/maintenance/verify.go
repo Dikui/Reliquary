@@ -452,6 +452,7 @@ func VerifyReplica(ctx context.Context, db *gorm.DB, root, uploads string, repai
 }
 
 func checkLogs(path string, expected []map[string]any) error {
+	sourceColumns := hasOperationSourceColumns(expected)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -466,6 +467,9 @@ func checkLogs(path string, expected []map[string]any) error {
 			return err
 		}
 		addLogDefaults(row)
+		if sourceColumns {
+			addOperationSourceDefaults(row)
+		}
 		rows = append(rows, row)
 	}
 	sortRows(rows)

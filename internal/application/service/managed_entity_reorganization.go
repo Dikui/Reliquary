@@ -215,6 +215,9 @@ func (s *EntityService) MergeManagedEntities(ctx context.Context, id string, inp
 		if err != nil {
 			return err
 		}
+		if err := requireShelfChangeset(ctx, library); err != nil {
+			return err
+		}
 		if err := graph.Lock(tx, spaceID); err != nil {
 			return err
 		}
@@ -338,6 +341,9 @@ func (s *EntityService) SplitManagedEntity(ctx context.Context, id string, input
 		}
 		library, err := managedLibrary(tx, spaceID, source.LibraryID)
 		if err != nil {
+			return err
+		}
+		if err := requireShelfChangeset(ctx, library); err != nil {
 			return err
 		}
 		if err := graph.Lock(tx, spaceID); err != nil {
