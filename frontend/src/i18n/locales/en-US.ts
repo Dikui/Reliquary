@@ -1278,6 +1278,8 @@ export default {
     loadFailed: 'Could not load the operation log. Try again.',
     empty: 'No operations match these filters.',
     types: {
+      save_import_plan: 'Save import plan',
+      reparse_document: 'Reparse document',
       configure_shelf: 'Update shelf settings',
       switch_entity_library: 'Switch entity library mode',
       merge_managed_entities: 'Merge managed entities',

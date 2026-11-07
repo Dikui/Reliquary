@@ -58,6 +58,8 @@ func shelfOperationValid(op types.ShelfOperation) error {
 	}
 	valid := false
 	switch op.Type {
+	case "save_import_plan":
+		valid = op.ImportPlan != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
 	case "reparse_document":
 		valid = op.Reparse != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
 	case "add_document_version":
@@ -91,6 +93,9 @@ func shelfOperationValid(op types.ShelfOperation) error {
 		valid = false
 	}
 	if op.Type != "add_document_version" && op.Document != nil {
+		valid = false
+	}
+	if op.Type != "save_import_plan" && op.ImportPlan != nil {
 		valid = false
 	}
 	if op.Type != "reparse_document" && op.Reparse != nil {
@@ -386,6 +391,7 @@ func (s *EntityService) previewShelf(ctx context.Context, tx *gorm.DB, draft *ty
 			}
 		}
 		created := (item.Operation.Type == "create_entity" || item.Operation.Type == "create_certification") && (item.Decision == nil || item.Decision.Action != "same_entity")
+		created = created || (item.Operation.Type == "save_import_plan" && string(item.Before) == "null")
 		created = created || (item.Operation.Type == "add_document_version" && string(item.Before) == "null")
 		created = created || (item.Operation.Type == "save_relation" && item.Operation.RelationID == "") || (item.Operation.Type == "set_entity_link" && string(item.Before) == "null")
 		if created {
@@ -528,6 +534,13 @@ func (s *EntityService) shelfEntity(ctx context.Context, libraryID, id string) (
 
 func (s *EntityService) shelfBefore(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem) (types.JSON, error) {
 	op := item.Operation
+	if op.Type == "save_import_plan" {
+		plan, err := s.shelfImportPlan(ctx, draft.LibraryID, op.ImportPlan.Key)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return types.JSON("null"), nil
+		}
+		return shelfJSON(plan), err
+	}
 	if op.Type == "reparse_document" {
 		version, err := s.shelfReparseVersion(ctx, draft, shelfResolvedOperation(draft, op))
 		return shelfJSON(version), err
@@ -655,6 +668,15 @@ func shelfResolvedConditions(draft *types.ShelfChangeset, raw []types.ShelfCondi
 
 func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem) (any, error) {
 	op := shelfResolvedOperation(draft, item.Operation)
+	if op.ImportLocation != nil && draft.Source.Type == "import" {
+		source := draft.Source
+		source.Worksheet = op.ImportLocation.Worksheet
+		source.Cells = op.ImportLocation.Cells
+		ctx = context.WithValue(ctx, shelfWriteContextKey{}, shelfWriteContext{source, draft.ID})
+	}
+	if op.Type == "save_import_plan" {
+		return s.writeShelfImportPlan(ctx, draft, *op.ImportPlan)
+	}
 	if op.Type == "reparse_document" {
 		return s.writeShelfReparse(ctx, draft, op)
 	}

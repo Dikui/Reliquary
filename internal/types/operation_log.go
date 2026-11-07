@@ -22,7 +22,7 @@ type OperationLog struct {
 func (OperationLog) TableName() string { return "operation_logs" }
 
 var OperationTypes = []string{
-	"configure_shelf", "reparse_document", "create_entity", "update_entity", "delete_entity", "update_pending_entity_attributes",
+	"save_import_plan", "configure_shelf", "reparse_document", "create_entity", "update_entity", "delete_entity", "update_pending_entity_attributes",
 	"create_relation", "update_relation", "set_entity_link",
 	"switch_entity_library", "merge_managed_entities", "split_managed_entity",
 	"ingest", "write_report", "delete_document",

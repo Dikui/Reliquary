@@ -1653,6 +1653,8 @@ export default {
     loadFailed: '无法加载操作日志，请重试。',
     empty: '没有符合条件的操作日志。',
     types: {
+      save_import_plan: '保存导入方案',
+      reparse_document: '重新解析资料',
       configure_shelf: '修改货架设置',
       switch_entity_library: '切换实体库模式',
       merge_managed_entities: '合并维护实体',

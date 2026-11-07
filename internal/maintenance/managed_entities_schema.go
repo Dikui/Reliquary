@@ -37,6 +37,11 @@ var shelfParserDefaults = map[string]map[string]any{
 func projectManagedEntitiesSnapshot(snapshot *Snapshot, targetVersion int64) {
 	projectEntityDefaultsSnapshot(snapshot, targetVersion, 48, shelfParserDefaults)
 	defer projectShelfFieldsSnapshot(snapshot, targetVersion)
+	if snapshot.schemaVersion < 49 && targetVersion >= 49 {
+		if _, exists := snapshot.Tables["shelf_import_plans"]; !exists {
+			snapshot.Tables["shelf_import_plans"] = []map[string]any{}
+		}
+	}
 	if snapshot.schemaVersion < 46 && targetVersion >= 46 {
 		if _, exists := snapshot.Tables["shelf_document_versions"]; !exists {
 			snapshot.Tables["shelf_document_versions"] = []map[string]any{}
@@ -77,6 +82,7 @@ func projectEntityDefaultsSnapshot(snapshot *Snapshot, targetVersion, version in
 }
 
 func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
+	expected, actual = projectEmptyPersistentTableManifest(expected, actual, "shelf_import_plans", 49)
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 48, shelfParserDefaults)
 	expected, actual = projectEmptyPersistentTableManifest(expected, actual, "shelf_document_versions", 46)
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 43, shelfSourceDefaults)

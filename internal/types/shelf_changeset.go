@@ -5,6 +5,12 @@ import "time"
 // OperationSource identifies the submitter independently of the confirming user.
 type OperationSource struct {
 	Type          string     `json:"type,omitempty"`
+	ImportPlanKey string     `json:"import_plan_key,omitempty"`
+	PlanRevision  int64      `json:"plan_revision,omitempty"`
+	FileName      string     `json:"file_name,omitempty"`
+	FileSHA256    string     `json:"file_sha256,omitempty"`
+	Worksheet     string     `json:"worksheet,omitempty"`
+	Cells         []string   `json:"cells,omitempty"`
 	AgentName     string     `json:"agent_name,omitempty"`
 	ImportBatchID string     `json:"import_batch_id,omitempty"`
 	FileDate      *time.Time `json:"file_date,omitempty"`
@@ -13,6 +19,8 @@ type OperationSource struct {
 // ShelfOperation is a closed set of typed proposals. Later shelf capabilities
 // add operation types here and execute them through the same confirmation path.
 type ShelfOperation struct {
+	ImportPlan        *ShelfImportPlanInput             `json:"import_plan,omitempty"`
+	ImportLocation    *ShelfImportLocation              `json:"import_location,omitempty"`
 	Reparse           *ShelfReparseInput                `json:"reparse,omitempty"`
 	Document          *ShelfDocumentInput               `json:"document,omitempty"`
 	Certification     *ShelfCertificationInput          `json:"certification,omitempty"`

@@ -79,3 +79,12 @@ func (h *EntityHandler) ShelfCertifications(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
 }
+
+func (h *EntityHandler) ShelfImportPlans(c *gin.Context) {
+	result, err := h.service.ShelfImportPlans(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}

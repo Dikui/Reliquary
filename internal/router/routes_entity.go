@@ -12,6 +12,8 @@ func RegisterEntityRoutes(r *gin.RouterGroup, h *handler.EntityHandler) {
 	r.DELETE("/relations/:relation_id", h.DeleteRelation)
 	r.PATCH("/relations/:relation_id", h.SaveManagedRelation)
 	r.POST("/libraries/:id/entities", h.CreateManagedEntity)
+	r.GET("/libraries/:id/shelf/import-plans", h.ShelfImportPlans)
+	r.POST("/libraries/:id/shelf/imports", h.ImportShelfWorkbook)
 	r.GET("/libraries/:id/shelf/find", h.ShelfFind)
 	r.GET("/libraries/:id/shelf/nodes/:node_id", h.ShelfGet)
 	r.POST("/libraries/:id/shelf/query", h.ShelfQuery)
