@@ -10,7 +10,7 @@ import (
 )
 
 func (s *EntityService) shelfModelDetail(ctx context.Context, entity *types.Entity, at time.Time, combination map[string]string) (*types.ShelfModelDetail, error) {
-	if !slices.Contains([]string{"model", "part", "product", "platform"}, entity.Kind) {
+	if !slices.Contains([]string{"model", "part", "product", "platform", "product_line"}, entity.Kind) {
 		if combination != nil {
 			return nil, apperrors.NewBadRequestError("a combination requires a shelf model")
 		}
@@ -31,7 +31,11 @@ func (s *EntityService) shelfModelDetail(ctx context.Context, entity *types.Enti
 			return nil, apperrors.NewBadRequestError("a combination requires a shelf model")
 		}
 		records, err := s.shelfNodeCertifications(ctx, &library, entity, at, nil, nil)
-		return &types.ShelfModelDetail{Certifications: records}, err
+		if err != nil {
+			return nil, err
+		}
+		result := &types.ShelfModelDetail{Certifications: records, Checklist: []types.ShelfChecklistItem{}}
+		return result, s.addShelfChecklist(ctx, &library, entity, at, nil, result)
 	}
 	var relations []types.Relation
 	if err := s.db.WithContext(ctx).Where("library_id=? AND space_id=? AND subject_id=? AND relation_type='composed_of' AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", entity.LibraryID, entity.SpaceID, entity.ID, at, at).Order("created_at,id").Find(&relations).Error; err != nil {
@@ -127,7 +131,10 @@ func (s *EntityService) shelfModelDetail(ctx context.Context, entity *types.Enti
 	}
 	records, err := s.shelfNodeCertifications(ctx, &library, entity, at, result.Composition, combination)
 	result.Certifications = records
-	return result, err
+	if err != nil {
+		return nil, err
+	}
+	return result, s.addShelfChecklist(ctx, &library, entity, at, combination, result)
 }
 
 func cloneShelfCombination(value map[string]string) map[string]string {

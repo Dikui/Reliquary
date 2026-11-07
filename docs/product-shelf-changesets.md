@@ -144,3 +144,44 @@ HTTP 路径以 `/api/v1` 为前缀，成功结果在 `data` 中。
 通过 `configure_shelf` 的 `library.shelf_config.max_file_bytes` 配置单文件字节上限，省略或 0 使用 32 MiB 默认值，正数自定义上限。普通人工维护库仍使用 32 MiB。上传按实际字节检查，归类确认时再次检查最新限制，调整上限不会改写已有版本或原件。
 
 迁移 46 新增版本表并注册现有导出、完整备份和恢复校验，原件继续保存在已有本机附件存储目录。旧副本升级只补空版本表。存在资料版本、相关变更集或文件大小配置时拒绝降级，避免遗失业务数据。解析、当前版本检索过滤和资料清单计算由后续能力实现。
+
+## 资料要求与阶段
+
+资料要求仍使用 `create_entity`、`update_entity`，类别为 `document_requirement`，完整字段快照放在 `attributes.requirement`。确认前只产生提议；网页单项编辑沿用自动确认的单操作变更集。示例：
+
+```json
+{
+  "id": "manual",
+  "type": "create_entity",
+  "entity": {
+    "name": "提交方给定的资料名称",
+    "kind": "document_requirement",
+    "attributes": {
+      "requirement": {
+        "name_zh": "中文原名",
+        "name_en": "Original English name",
+        "file_category": "提交方文件类别",
+        "stage_label": "原表阶段标注",
+        "draft_due_stage": "configured_draft_stage",
+        "final_due_stage": "configured_final_stage",
+        "markets": {"configured_region": "required"},
+        "owner": "提交方负责人",
+        "priority": "提交方优先级",
+        "source_list": "来源清单",
+        "source_version": "客户版本"
+      }
+    }
+  }
+}
+```
+
+`final_due_stage` 必填，`draft_due_stage` 可省略。阶段使用本库配置键，初稿不能晚于终稿。`stage_label` 只展示原表写法，不参与到期判断。市场键来自本库区域配置，值为 `required`（必需）、`optional`（可选）或 `not_needed`（不需要）；未提供的市场保留未知，不代填。其他文字原样保存。
+
+适用范围通过 `save_relation` 的 `applies_to` 关系保存：
+
+- 产品线要求：`subject_id` 为资料要求，`object_id` 为产品线，不填模块属性。
+- 模块要求：模块类型属于库配置，不新增模块实体；`subject_id` 与 `object_id` 均为该资料要求，关系属性为 `{"module_types":["configured_module"]}`，可包含多个不同的配置键。该自引用只用于货架资料要求的模块适用范围。
+
+同一要求可以同时绑定产品线与模块，计算清单会去重。未完成资料要求字段的实体不能新建适用关系。已有资料要求的完整字段不能清空以隐藏义务，须明确归档。清单更新使用已有变更集差异流程：新增项创建，修改项带修订号更新，消失项用 `missing_entity` 提议并由人选择 `retire` 后归档；也可明确使用 `archive_entity`。消失本身不归档、不删除文件，归档后所有型号按当前活动要求计算。
+
+产品名称与型号用 `attributes.current_stage` 保存配置阶段键，仍走 `update_entity` 并检查修订号。型号没有该字段时沿用产品名称；移除型号字段恢复继承。两层都未填写时只显示文件有无。完整属性快照及 `effective_at`、导入文件日期沿用现有时间线规则。

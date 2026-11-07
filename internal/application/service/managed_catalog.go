@@ -158,7 +158,7 @@ func managedRelationType(library *types.Library, name string) (types.LibraryRela
 }
 
 func validateManagedEndpoints(library *types.Library, rule types.LibraryRelationType, subject, object *types.Entity) error {
-	if subject.ID == object.ID {
+	if subject.ID == object.ID && !(library.ShelfEnabled && rule.Name == "applies_to" && subject.Kind == "document_requirement") {
 		return apperrors.NewBadRequestError("an entity cannot relate to itself")
 	}
 	if (len(rule.SubjectKinds) > 0 && !slices.Contains(rule.SubjectKinds, subject.Kind)) || (len(rule.ObjectKinds) > 0 && !slices.Contains(rule.ObjectKinds, object.Kind)) {

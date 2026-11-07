@@ -27,7 +27,7 @@ func TestShelfCertificationMigrationAndReplicaPreserveFacts(t *testing.T) {
 	schema := types.ProductShelfSchema()
 	schema.Fields = nil
 	for _, field := range types.ProductShelfFields() {
-		if field.Key != "certification" {
+		if field.Key != "certification" && field.Key != "current_stage" && field.Key != "requirement" {
 			schema.Fields = append(schema.Fields, field)
 		}
 	}
@@ -51,7 +51,13 @@ func TestShelfCertificationMigrationAndReplicaPreserveFacts(t *testing.T) {
 	require.Empty(t, CompareManifest(oldManifest, current))
 	var saved types.Library
 	require.NoError(t, db.First(&saved, "id='library'").Error)
-	require.Equal(t, types.ProductShelfFields(), saved.EntitySchema.Fields)
+	fields := []types.EntityFieldDefinition{}
+	for _, field := range types.ProductShelfFields() {
+		if field.Key != "current_stage" && field.Key != "requirement" {
+			fields = append(fields, field)
+		}
+	}
+	require.Equal(t, fields, saved.EntitySchema.Fields)
 	restored := pgtest.Open(t)
 	_, err = Import(ctx, restored, oldRoot, "", nil)
 	require.NoError(t, err)

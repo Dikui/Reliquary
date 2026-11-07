@@ -38,7 +38,7 @@ func ProductShelfRelations() []LibraryRelationType {
 	rules := []LibraryRelationType{
 		{Name: "belongs_to", Hierarchical: true, SubjectKinds: []string{"platform", "product", "model"}, ObjectKinds: []string{"product_line", "platform", "product"}},
 		{Name: "composed_of", SubjectKinds: []string{"model"}, ObjectKinds: []string{"part"}, Fields: []EntityFieldDefinition{{Key: "module_type", Name: "模块类型", Type: "text", Kinds: []string{}}}},
-		{Name: "applies_to", SubjectKinds: []string{"document_requirement"}, ObjectKinds: []string{"product_line"}},
+		{Name: "applies_to", SubjectKinds: []string{"document_requirement"}, ObjectKinds: []string{"product_line", "document_requirement"}, Fields: []EntityFieldDefinition{{Key: "module_types", Name: "适用模块类型", Type: "list", Kinds: []string{}}}},
 		{Name: "has_certification", SubjectKinds: []string{"platform", "product", "model", "part"}, ObjectKinds: []string{"certification"}},
 		{Name: "has_document", SubjectKinds: []string{"platform", "product", "model", "part", "certification"}, ObjectKinds: []string{"document_file"}},
 		{Name: "fulfills", SubjectKinds: []string{"document_file"}, ObjectKinds: []string{"document_requirement"}},
@@ -105,6 +105,13 @@ func ValidateProductShelf(l *Library) error {
 		found := false
 		for _, actual := range l.RelationTypes {
 			if actual.Name == rule.Name {
+				if actual.Name == "applies_to" {
+					if !slices.ContainsFunc(actual.Fields, func(f EntityFieldDefinition) bool {
+						return f.Key == "module_types" && f.Type == "list" && len(f.Kinds) == 0 && !f.Archived
+					}) {
+						return fmt.Errorf("requirement module_types field is fixed")
+					}
+				}
 				if actual.Name == "composed_of" {
 					moduleField := false
 					for _, field := range actual.Fields {

@@ -81,6 +81,7 @@ func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Man
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 39, entityAutoMatchDefaults)
 	expected, actual = projectEntityDefaultsManifest(expected, actual, 40, relationValidityDefaults)
 	expected, actual = projectShelfFieldsManifest(expected, actual)
+	expected, actual = projectShelfBindingsManifest(expected, actual)
 	return projectManagedNamesManifest(expected, actual)
 }
 

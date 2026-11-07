@@ -14,7 +14,7 @@ import (
 )
 
 func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types.Relation, excludeID string) error {
-	if relation.SubjectID == relation.ObjectID {
+	if relation.SubjectID == relation.ObjectID && !(library.ShelfEnabled && relation.RelationType == "applies_to") {
 		return apperrors.NewBadRequestError("an entity cannot relate to itself")
 	}
 	rule, ok := managedRelationType(library, relation.RelationType)
@@ -28,13 +28,25 @@ func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types
 		return err
 	}
 	var subject, object types.Entity
-	for id, entity := range map[string]*types.Entity{relation.SubjectID: &subject, relation.ObjectID: &object} {
+	for i, entity := range []*types.Entity{&subject, &object} {
+		id := []string{relation.SubjectID, relation.ObjectID}[i]
 		if err := tx.Where("id=? AND space_id=? AND library_id=? AND archived_at IS NULL AND merged_into_id=''", id, library.SpaceID, library.ID).First(entity).Error; err != nil {
 			return managedWriteError(err)
 		}
 	}
 	if err := validateManagedEndpoints(library, rule, &subject, &object); err != nil {
 		return err
+	}
+	if library.ShelfEnabled && relation.RelationType == "applies_to" {
+		if object.Kind == "document_requirement" && subject.ID != object.ID {
+			return apperrors.NewBadRequestError("module applicability must refer to the requirement itself")
+		}
+		if _, ok := subject.Attributes["requirement"]; !ok {
+			return apperrors.NewBadRequestError("uncertain: complete the requirement metadata before binding")
+		}
+		if err := validateShelfRequirementBinding(library, relation); err != nil {
+			return err
+		}
 	}
 	if library.ShelfEnabled && relation.RelationType == "has_certification" {
 		if err := hydrateManagedEntityAttributes(tx.Statement.Context, tx, []*types.Entity{&object}, relation.ValidFrom); err != nil {

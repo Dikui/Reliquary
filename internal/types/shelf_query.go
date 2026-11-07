@@ -62,6 +62,7 @@ type ShelfCertificationFilter struct {
 }
 
 type ShelfQueryRequest struct {
+	DocumentGaps  bool                      `json:"document_gaps,omitempty"`
 	AncestorID    string                    `json:"ancestor_id,omitempty"`
 	SaleStatuses  []ShelfStatusFilter       `json:"sale_statuses,omitempty"`
 	Parameters    []ShelfParameterFilter    `json:"parameters,omitempty"`

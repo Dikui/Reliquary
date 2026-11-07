@@ -17,6 +17,10 @@ type ShelfComposition struct {
 }
 
 type ShelfModelDetail struct {
+	CurrentStage     string                           `json:"current_stage,omitempty"`
+	StageOwnerID     string                           `json:"stage_owner_id,omitempty"`
+	Checklist        []ShelfChecklistItem             `json:"checklist"`
+	ChecklistSummary *ShelfChecklistSummary           `json:"checklist_summary,omitempty"`
 	Certifications   []ShelfCertificationView         `json:"certifications"`
 	Composition      []ShelfComposition               `json:"composition"`
 	SaleStatuses     []ShelfSaleStatus                `json:"sale_statuses"`
@@ -64,6 +68,8 @@ func ProductShelfFields() []EntityFieldDefinition {
 		{Key: "sale_statuses", Name: "可售状态", Type: "shelf_statuses", Kinds: []string{"model"}},
 		{Key: "combination_rules", Name: "组合规则", Type: "shelf_rules", Kinds: []string{"model"}},
 		{Key: "certification", Name: "认证记录", Type: "shelf_certification", Kinds: []string{"certification"}},
+		{Key: "current_stage", Name: "当前阶段", Type: "text", Kinds: []string{"product", "model"}},
+		{Key: "requirement", Name: "资料要求", Type: "shelf_requirement", Kinds: []string{"document_requirement"}},
 	}
 }
 

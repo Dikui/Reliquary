@@ -157,7 +157,7 @@ func validateFieldDefinitions(definitions []EntityFieldDefinition, validateKinds
 			return fmt.Errorf("entity fields require unique keys and names of 1-100 characters")
 		}
 		fields[f.Key] = true
-		if !slices.Contains([]string{"text", "number", "boolean", "date", "select", "multiselect", "list", "entity_ref", "url", "attachment", "shelf_statuses", "shelf_rules", "shelf_certification"}, f.Type) {
+		if !slices.Contains([]string{"text", "number", "boolean", "date", "select", "multiselect", "list", "entity_ref", "url", "attachment", "shelf_statuses", "shelf_rules", "shelf_certification", "shelf_requirement"}, f.Type) {
 			return fmt.Errorf("invalid field type: %s", f.Type)
 		}
 		if err := validateKinds(f.Kinds); err != nil {
@@ -212,6 +212,11 @@ func ValidateFieldAttributes(definitions []EntityFieldDefinition, attributes map
 		}
 		valid := false
 		switch f.Type {
+		case "shelf_requirement":
+			if err := ValidateShelfRequirement(value); err != nil {
+				return err
+			}
+			valid = true
 		case "shelf_certification":
 			if err := ValidateShelfCertification(value); err != nil {
 				return err

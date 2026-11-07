@@ -40,6 +40,9 @@ facts AS (
  UNION ALL
  SELECT p.model_id,f.step,jsonb_build_array(jsonb_build_object('module_type',p.module,'part_ids',jsonb_build_array(p.part_id))) FROM parts p CROSS JOIN filters f WHERE f.value->>'type'='part' AND p.part_id=f.value->>'part_id'
  UNION ALL
+ SELECT m.id,f.step,gap->'conditions' FROM candidates m CROSS JOIN filters f CROSS JOIN LATERAL jsonb_array_elements(f.value->'gaps') gap
+ WHERE f.value->>'type'='document_gap' AND gap->>'model_id'=m.id
+ UNION ALL
  SELECT m.id,f.step,coalesce(nullif(c.attributes->'certification'->'conditions','null'::jsonb),'[]'::jsonb)||coalesce((
   SELECT jsonb_agg(jsonb_build_object('module_type',p.module,'part_ids',jsonb_build_array(p.part_id))) FROM parts p
   WHERE p.model_id=m.id AND p.part_id IN (c.attributes->'certification'->>'owner_id',c.attributes->'certification'->>'cell_part_id')
@@ -69,6 +72,7 @@ SELECT (SELECT count(*) FROM matched) total,coalesce((SELECT jsonb_agg(to_jsonb(
 ) page),'[]'::jsonb) items`
 
 func (s *EntityService) ShelfQuery(ctx context.Context, libraryID string, input types.ShelfQueryRequest) (*types.ShelfQueryResult, error) {
+	ctx = context.WithValue(ctx, shelfChecklistCacheKey{}, &shelfChecklistCache{})
 	var result *types.ShelfQueryResult
 	err := s.readShelfSnapshot(ctx, func(reader *EntityService) error {
 		var err error
@@ -150,6 +154,25 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 			filter["region"] = *cert.Region
 		}
 		filters = append(filters, filter)
+	}
+	if input.DocumentGaps {
+		data, err := s.loadShelfChecklist(ctx, library, at)
+		if err != nil {
+			return nil, err
+		}
+		gaps := []map[string]any{}
+		for id, e := range data.nodes {
+			if e.Kind != "model" || e.ArchivedAt != nil || e.MergedIntoID != "" {
+				continue
+			}
+			_, _, rows := data.model(id, nil)
+			for _, r := range rows {
+				if r.Status == "missing" {
+					gaps = append(gaps, map[string]any{"model_id": id, "conditions": r.Conditions})
+				}
+			}
+		}
+		filters = append(filters, map[string]any{"type": "document_gap", "gaps": gaps})
 	}
 	data, err := json.Marshal(filters)
 	if err != nil {

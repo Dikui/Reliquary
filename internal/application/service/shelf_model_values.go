@@ -58,6 +58,9 @@ func validateShelfEntityValues(tx *gorm.DB, library *types.Library, entity *type
 	if !library.ShelfEnabled {
 		return nil
 	}
+	if err := validateShelfChecklistValues(tx, library, entity); err != nil {
+		return err
+	}
 	if entity.Kind == "certification" {
 		var record types.ShelfCertification
 		raw, ok := entity.Attributes["certification"]
