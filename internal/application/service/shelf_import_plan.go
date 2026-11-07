@@ -91,7 +91,10 @@ func (s *EntityService) writeShelfImportPlan(ctx context.Context, draft *types.S
 			return nil, apperrors.NewBadRequestError("model separators must be nonblank")
 		}
 	}
-	for _, status := range input.StatusValues {
+	for raw, status := range input.StatusValues {
+		if strings.TrimSpace(raw) == "" {
+			return nil, apperrors.NewBadRequestError("uncertain: blank regional cells need an explicit per-row decision")
+		}
 		if !slices.Contains([]string{"GA", "DEV", "Planning", "EOM", "待定"}, status.Status) {
 			return nil, apperrors.NewBadRequestError("invalid mapped sale status")
 		}

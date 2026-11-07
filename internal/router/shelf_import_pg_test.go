@@ -411,6 +411,29 @@ func TestShelfImportCrossKindNamesRequireConfirmation(t *testing.T) {
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets/"+draft.ID+"/confirm", types.ShelfChangesetReview{Revision: draft.Revision, Decisions: decisions}, http.StatusConflict, nil)
 }
 
+// Medium regression, task 11: customer names remain literal data even when
+// their spelling contains an existing entity identifier.
+func TestShelfImportPreservesIDLikeCustomerNames(t *testing.T) {
+	f, library := importSetup(t)
+	draft := confirmImport(t, f, library.ID, importUpload(t, f, library.ID, "map_20261028.xlsx", "", importWorkbook(t, importRow(3, "Map platform", "Map product", "Model A", "GA", "12"), ""), http.StatusCreated))
+	id := ""
+	for _, item := range draft.Items {
+		if item.Operation.Entity != nil && item.Operation.Entity.Name == "Model A" {
+			id = item.EntityID
+		}
+	}
+	name := "entity:" + id
+	draft = importUpload(t, f, library.ID, "map_20261029.xlsx", "", importWorkbook(t, importRow(3, "Map platform", "Map product", "Model A", "GA", "12")+importRow(4, "Map platform", "Map product", name, "GA", "12"), ""), http.StatusCreated)
+	found := false
+	for _, item := range draft.Items {
+		for _, c := range item.Conflicts {
+			require.Contains(t, []string{"new", "modified"}, c.Type, c.Message)
+		}
+		found = found || (item.Operation.Entity != nil && item.Operation.Entity.Name == name)
+	}
+	require.True(t, found)
+}
+
 // Medium spec, task 11 / ADR 0023: import plans are reviewed shelf operations,
 // survive reads and cannot overwrite a newer revision.
 func TestShelfImportPlanRequiresConfirmationAndRevision(t *testing.T) {
@@ -432,4 +455,19 @@ func TestShelfImportPlanRequiresConfirmationAndRevision(t *testing.T) {
 	require.Equal(t, "Synthetic map", plans[0]["name"])
 	f.request(http.MethodPost, path+"/changesets", map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "stale", "type": "save_import_plan", "import_plan": plan}}}, http.StatusCreated, &draft)
 	require.Equal(t, "revision_conflict", draft.Items[0].Conflicts[0].Type)
+}
+
+// Medium spec, task 11 / ADR 0023: blank regional cells require a row decision;
+// a reusable plan cannot turn all blanks into an inferred status.
+func TestShelfImportPlanCannotDefaultBlankRegionalCells(t *testing.T) {
+	f, library := importSetup(t)
+	var plans []types.ShelfImportPlan
+	f.request(http.MethodGet, "/libraries/"+library.ID+"/shelf/import-plans", nil, http.StatusOK, &plans)
+	definition := plans[0].Definition
+	definition.StatusValues[""] = types.ShelfImportStatus{Status: "待定"}
+	plan := types.ShelfImportPlanInput{Key: "map", Name: "Synthetic map", FileKind: "product_map", Revision: 1, ShelfImportDefinition: definition}
+	var draft types.ShelfChangeset
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Operations: []types.ShelfOperation{{ID: "plan", Type: "save_import_plan", ImportPlan: &plan}}}, http.StatusCreated, &draft)
+	require.Equal(t, "uncertain", draft.Items[0].Conflicts[0].Type)
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets/"+draft.ID+"/confirm", types.ShelfChangesetReview{Revision: draft.Revision, Decisions: []types.ShelfDecision{{ItemID: "plan", Action: "apply"}}}, http.StatusConflict, nil)
 }

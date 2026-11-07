@@ -100,23 +100,24 @@ type importMapNode struct {
 	Entity      types.Entity
 }
 type importMapBuilder struct {
-	ctx           context.Context
-	service       *EntityService
-	library       *types.Library
-	plan          *types.ShelfImportPlan
-	at            time.Time
-	entities      []types.Entity
-	parents       map[string]types.Relation
-	nodes         map[string]importMapNode
-	seenModels    map[string]bool
-	present       map[string]bool
-	skippedSheets map[string]bool
-	ops           []types.ShelfOperation
-	location      *types.ShelfImportLocation
+	ctx            context.Context
+	service        *EntityService
+	library        *types.Library
+	plan           *types.ShelfImportPlan
+	at             time.Time
+	entities       []types.Entity
+	parents        map[string]types.Relation
+	nodes          map[string]importMapNode
+	seenModelNames map[string]bool
+	seenModelIDs   map[string]bool
+	present        map[string]bool
+	skippedSheets  map[string]bool
+	ops            []types.ShelfOperation
+	location       *types.ShelfImportLocation
 }
 
 func (s *EntityService) newImportMapBuilder(ctx context.Context, library *types.Library, plan *types.ShelfImportPlan, at time.Time) (*importMapBuilder, error) {
-	b := &importMapBuilder{ctx: ctx, service: s, library: library, plan: plan, at: at, parents: map[string]types.Relation{}, nodes: map[string]importMapNode{}, seenModels: map[string]bool{}, present: map[string]bool{}, skippedSheets: map[string]bool{}}
+	b := &importMapBuilder{ctx: ctx, service: s, library: library, plan: plan, at: at, parents: map[string]types.Relation{}, nodes: map[string]importMapNode{}, seenModelNames: map[string]bool{}, seenModelIDs: map[string]bool{}, present: map[string]bool{}, skippedSheets: map[string]bool{}}
 	if err := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND archived_at IS NULL AND merged_into_id=''", library.SpaceID, library.ID).Order("id").Find(&b.entities).Error; err != nil {
 		return nil, err
 	}
@@ -267,11 +268,11 @@ func (b *importMapBuilder) parse(workbook *importWorkbookData) error {
 				if len(b.ops) > 500 {
 					return apperrors.NewBadRequestError("import exceeds 500 changeset operations; split the workbook")
 				}
-				if b.seenModels[normalizeEntityName(name)] {
+				if b.seenModelNames[normalizeEntityName(name)] {
 					b.issue("uncertain", "model appears in multiple rows; submitter must decide whether to merge", values)
 					continue
 				}
-				b.seenModels[normalizeEntityName(name)] = true
+				b.seenModelNames[normalizeEntityName(name)] = true
 				start := len(b.ops)
 				saved := map[string]importMapNode{}
 				for key, node := range b.nodes {
@@ -325,7 +326,7 @@ func (b *importMapBuilder) modelRow(mapping types.ShelfImportSheet, cells map[st
 	if err != nil {
 		return fmt.Errorf("uncertain: %w", err)
 	}
-	if b.seenModels["entity:"+model.Ref] {
+	if b.seenModelIDs[model.Ref] {
 		return fmt.Errorf("uncertain: multiple rows resolve to the same model; submitter must decide whether to merge")
 	}
 	attrs := map[string]any{}
@@ -396,7 +397,7 @@ func (b *importMapBuilder) modelRow(mapping types.ShelfImportSheet, cells map[st
 		patch.Description = &description.Value
 	}
 	b.append(types.ShelfOperation{Type: "update_entity", EntityID: model.Ref, Patch: &patch})
-	b.seenModels["entity:"+model.Ref] = true
+	b.seenModelIDs[model.Ref] = true
 	return nil
 }
 
