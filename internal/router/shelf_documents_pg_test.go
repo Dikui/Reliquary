@@ -54,6 +54,8 @@ func TestShelfDocumentsOriginalVersionsRequireConfirmation(t *testing.T) {
 	f.request(http.MethodGet, "/entities/"+fileID+"/document-versions", nil, http.StatusOK, &versions)
 	require.Len(t, versions, 1)
 	require.Equal(t, " Rev A ", versions[0]["version_label"])
+	require.Equal(t, "Synthetic supplier", versions[0]["origin"])
+	require.Equal(t, "2026-11-01T00:00:00Z", versions[0]["occurred_at"])
 	require.Equal(t, "not_parsed", versions[0]["parse_status"])
 	require.Equal(t, "Synthetic document assistant", versions[0]["source"].(map[string]any)["agent_name"])
 	firstID := versions[0]["id"].(string)
@@ -185,6 +187,11 @@ func TestShelfDocumentsCertificateNumberIdentifiesRecord(t *testing.T) {
 		}
 	}
 	require.True(t, found)
+	firstFileID := draft.Items[0].EntityID
+	record["owner_id"] = certID
+	record["name"] = "Separate numbered report file"
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "separate_report", "type": "add_document_version", "document": record}}}, http.StatusCreated, &draft)
+	require.NotEqual(t, firstFileID, draft.Items[0].EntityID, "a certificate number identifies the certification, not the file")
 	record["owner_id"] = certID
 	record["certificate_number"] = "Wrong number"
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "wrong", "type": "add_document_version", "document": record}}}, http.StatusCreated, &draft)

@@ -46,12 +46,9 @@ func (s *EntityService) shelfDocumentBefore(ctx context.Context, draft *types.Sh
 			return nil, err
 		}
 		file = found
-	} else if op.Document.RequirementID != "" || op.Document.CertificateNumber != "" {
+	} else if op.Document.RequirementID != "" {
 		var versions []types.ShelfDocumentVersion
 		query := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND owner_id=? AND COALESCE(requirement_id,'')=? AND is_current", draft.SpaceID, draft.LibraryID, op.Document.OwnerID, op.Document.RequirementID)
-		if op.Document.RequirementID == "" {
-			query = query.Where("certificate_number=?", op.Document.CertificateNumber)
-		}
 		err := query.Find(&versions).Error
 		if err != nil {
 			return nil, err

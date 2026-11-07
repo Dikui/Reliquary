@@ -44,7 +44,7 @@ func TestShelfDocumentsMigrationAndRestoreRetainOriginals(t *testing.T) {
 	require.NoError(t, maintenance.VerifyImportedReplica(ctx, restoredOld, oldRoot))
 	require.NoError(t, migration.Migrate(45), "an empty document table can be removed")
 	require.NoError(t, migration.Migrate(46))
-	require.NoError(t, db.Exec(`UPDATE libraries SET entity_mode='managed',shelf_enabled=true,shelf_config='{"max_file_bytes":1024}' WHERE id='library';
+	require.NoError(t, db.Exec(`UPDATE libraries SET entity_mode='managed',shelf_enabled=true,shelf_config='{}' WHERE id='library';
  INSERT INTO entities(id,space_id,library_id,entity_type,kind,canonical_name,normalized_name,created_at,updated_at) VALUES('document-file',1,'library','product','document_file','Synthetic file','synthetic file',now(),now());
  INSERT INTO shelf_changesets(id,space_id,library_id,revision,status,source,items,created_at,updated_at) VALUES('document-batch',1,'library',1,'confirmed','{"type":"web"}','[]',now(),now())`).Error)
 	uploads, root, restoredUploads := t.TempDir(), t.TempDir(), t.TempDir()
@@ -84,5 +84,5 @@ func TestShelfDocumentsMigrationAndRestoreRetainOriginals(t *testing.T) {
 		require.NoError(t, reader.Close())
 		require.Equal(t, []string{"Synthetic current original", "Synthetic historical original"}[i], string(content))
 	}
-	require.ErrorContains(t, migration.Migrate(45), "shelf document data exists")
+	require.ErrorContains(t, migration.Migrate(45), "shelf document data exists", "versions alone prevent a lossy downgrade")
 }
