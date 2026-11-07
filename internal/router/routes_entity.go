@@ -12,6 +12,7 @@ func RegisterEntityRoutes(r *gin.RouterGroup, h *handler.EntityHandler) {
 	r.DELETE("/relations/:relation_id", h.DeleteRelation)
 	r.PATCH("/relations/:relation_id", h.SaveManagedRelation)
 	r.POST("/libraries/:id/entities", h.CreateManagedEntity)
+	r.GET("/libraries/:id/shelf/certifications", h.ShelfCertifications)
 	r.POST("/libraries/:id/shelf/changesets", h.SubmitShelfChangeset)
 	r.GET("/libraries/:id/shelf/changesets", h.ShelfChangesets)
 	r.GET("/libraries/:id/shelf/changesets/:changeset_id", h.ShelfChangeset)

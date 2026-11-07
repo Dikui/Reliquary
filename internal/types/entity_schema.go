@@ -107,8 +107,13 @@ func ValidateEntitySchema(l *Library) error {
 		if len(field.ProductLineIDs) > 0 && (!l.ShelfEnabled || !slices.Equal(field.Kinds, []string{"model"}) || len(field.ProductLineIDs) > 100) {
 			return fmt.Errorf("product-line parameters require shelf model fields")
 		}
-		if strings.HasPrefix(field.Type, "shelf_") && (!l.ShelfEnabled || !((field.Key == "sale_statuses" && field.Type == "shelf_statuses") || (field.Key == "combination_rules" && field.Type == "shelf_rules")) || !slices.Equal(field.Kinds, []string{"model"}) || len(field.ProductLineIDs) > 0) {
-			return fmt.Errorf("reserved shelf field definition is invalid")
+		if strings.HasPrefix(field.Type, "shelf_") {
+			reserved := slices.ContainsFunc(ProductShelfFields(), func(required EntityFieldDefinition) bool {
+				return field.Key == required.Key && field.Type == required.Type && slices.Equal(field.Kinds, required.Kinds)
+			})
+			if !l.ShelfEnabled || !reserved || len(field.ProductLineIDs) > 0 {
+				return fmt.Errorf("reserved shelf field definition is invalid")
+			}
 		}
 	}
 	if err := validateFieldDefinitions(l.EntitySchema.Fields, validateKinds); err != nil {
@@ -152,7 +157,7 @@ func validateFieldDefinitions(definitions []EntityFieldDefinition, validateKinds
 			return fmt.Errorf("entity fields require unique keys and names of 1-100 characters")
 		}
 		fields[f.Key] = true
-		if !slices.Contains([]string{"text", "number", "boolean", "date", "select", "multiselect", "list", "entity_ref", "url", "attachment", "shelf_statuses", "shelf_rules"}, f.Type) {
+		if !slices.Contains([]string{"text", "number", "boolean", "date", "select", "multiselect", "list", "entity_ref", "url", "attachment", "shelf_statuses", "shelf_rules", "shelf_certification"}, f.Type) {
 			return fmt.Errorf("invalid field type: %s", f.Type)
 		}
 		if err := validateKinds(f.Kinds); err != nil {
@@ -207,6 +212,11 @@ func ValidateFieldAttributes(definitions []EntityFieldDefinition, attributes map
 		}
 		valid := false
 		switch f.Type {
+		case "shelf_certification":
+			if err := ValidateShelfCertification(value); err != nil {
+				return err
+			}
+			valid = true
 		case "shelf_statuses":
 			if err := ValidateShelfStatuses(value); err != nil {
 				return err

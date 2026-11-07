@@ -17,6 +17,7 @@ type ShelfComposition struct {
 }
 
 type ShelfModelDetail struct {
+	Certifications   []ShelfCertificationView         `json:"certifications"`
 	Composition      []ShelfComposition               `json:"composition"`
 	SaleStatuses     []ShelfSaleStatus                `json:"sale_statuses"`
 	Parameters       map[string][]ShelfParameterValue `json:"parameters"`
@@ -62,6 +63,7 @@ func ProductShelfFields() []EntityFieldDefinition {
 		{Key: "container_model", Name: "集装箱型号", Type: "text", Kinds: []string{"part"}},
 		{Key: "sale_statuses", Name: "可售状态", Type: "shelf_statuses", Kinds: []string{"model"}},
 		{Key: "combination_rules", Name: "组合规则", Type: "shelf_rules", Kinds: []string{"model"}},
+		{Key: "certification", Name: "认证记录", Type: "shelf_certification", Kinds: []string{"certification"}},
 	}
 }
 

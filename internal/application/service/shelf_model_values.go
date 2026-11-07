@@ -58,6 +58,17 @@ func validateShelfEntityValues(tx *gorm.DB, library *types.Library, entity *type
 	if !library.ShelfEnabled {
 		return nil
 	}
+	if entity.Kind == "certification" {
+		var record types.ShelfCertification
+		raw, ok := entity.Attributes["certification"]
+		if !ok {
+			return apperrors.NewBadRequestError("certification record is required")
+		}
+		if err := types.DecodeShelfValue(raw, &record); err != nil {
+			return apperrors.NewBadRequestError(err.Error())
+		}
+		return validateShelfCertificationRecord(tx, library, record, at)
+	}
 	if value, ok := entity.Attributes["module_type"]; ok {
 		module, _ := value.(string)
 		if !shelfOptionExists(library.ShelfConfig.ModuleTypes, module) {
@@ -244,5 +255,31 @@ func validateShelfStructure(tx *gorm.DB, library *types.Library, at time.Time) e
 			}
 		}
 	}
+	var certifications []types.Entity
+	if err := tx.Where("library_id=? AND kind='certification' AND archived_at IS NULL AND merged_into_id=''", library.ID).Find(&certifications).Error; err != nil {
+		return err
+	}
+	for i := range certifications {
+		entity := &certifications[i]
+		if err := hydrateManagedEntityAttributes(tx.Statement.Context, tx, []*types.Entity{entity}, at); err != nil {
+			return err
+		}
+		if _, ok := entity.Attributes["certification"]; ok {
+			if err := validateShelfCertificationStructure(tx, library, entity, at); err != nil {
+				return err
+			}
+		}
+		var pending []types.EntityAttributeVersion
+		if err := tx.Where("entity_id=? AND effective_at>?", entity.ID, at).Find(&pending).Error; err != nil {
+			return err
+		}
+		for _, version := range pending {
+			entity.Attributes = version.Attributes
+			if err := validateShelfCertificationStructure(tx, library, entity, version.EffectiveAt); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }

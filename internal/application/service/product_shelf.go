@@ -49,5 +49,17 @@ func validateProductShelfChange(tx *gorm.DB, before, after *types.Library) error
 			}
 		}
 	}
+	for _, previous := range before.ShelfConfig.Standards {
+		next, ok := after.ShelfConfig.Standard(previous.Key)
+		if !ok || next.Key != previous.Key {
+			return apperrors.NewBadRequestError("existing standard keys must be retained")
+		}
+		for _, name := range append([]string{previous.Name}, previous.Aliases...) {
+			resolved, ok := after.ShelfConfig.Standard(name)
+			if !ok || resolved.Key != previous.Key {
+				return apperrors.NewBadRequestError("retain previous standard names and aliases when renaming")
+			}
+		}
+	}
 	return nil
 }

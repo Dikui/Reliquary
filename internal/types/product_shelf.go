@@ -14,9 +14,10 @@ type ShelfOption struct {
 }
 
 type ShelfConfig struct {
-	ModuleTypes []ShelfOption `json:"module_types,omitempty"`
-	Regions     []ShelfOption `json:"regions,omitempty"`
-	Stages      []ShelfOption `json:"stages,omitempty"`
+	Standards   []ShelfStandard `json:"standards,omitempty"`
+	ModuleTypes []ShelfOption   `json:"module_types,omitempty"`
+	Regions     []ShelfOption   `json:"regions,omitempty"`
+	Stages      []ShelfOption   `json:"stages,omitempty"`
 }
 
 func ProductShelfSchema() EntitySchema {
@@ -52,7 +53,7 @@ func ProductShelfRelations() []LibraryRelationType {
 
 func ValidateProductShelf(l *Library) error {
 	if !l.ShelfEnabled {
-		if len(l.ShelfConfig.ModuleTypes)+len(l.ShelfConfig.Regions)+len(l.ShelfConfig.Stages) != 0 {
+		if len(l.ShelfConfig.ModuleTypes)+len(l.ShelfConfig.Regions)+len(l.ShelfConfig.Stages)+len(l.ShelfConfig.Standards) != 0 {
 			return fmt.Errorf("shelf configuration requires an enabled shelf")
 		}
 		return nil
@@ -120,5 +121,5 @@ func ValidateProductShelf(l *Library) error {
 			keys[item.Key], names[name] = true, true
 		}
 	}
-	return nil
+	return validateShelfStandards(l.ShelfConfig.Standards)
 }

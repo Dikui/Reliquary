@@ -13,6 +13,7 @@ type OperationSource struct {
 // ShelfOperation is a closed set of typed proposals. Later shelf capabilities
 // add operation types here and execute them through the same confirmation path.
 type ShelfOperation struct {
+	Certification     *ShelfCertificationInput          `json:"certification,omitempty"`
 	SaleStatuses      *[]ShelfSaleStatus                `json:"sale_statuses,omitempty"`
 	ParameterValues   *map[string][]ShelfParameterValue `json:"parameter_values,omitempty"`
 	EffectiveAt       *time.Time                        `json:"effective_at,omitempty"`

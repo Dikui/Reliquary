@@ -36,6 +36,20 @@ func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types
 	if err := validateManagedEndpoints(library, rule, &subject, &object); err != nil {
 		return err
 	}
+	if library.ShelfEnabled && relation.RelationType == "has_certification" {
+		if err := hydrateManagedEntityAttributes(tx.Statement.Context, tx, []*types.Entity{&object}, relation.ValidFrom); err != nil {
+			return err
+		}
+		if raw, ok := object.Attributes["certification"]; ok {
+			var record types.ShelfCertification
+			if err := types.DecodeShelfValue(raw, &record); err != nil {
+				return apperrors.NewBadRequestError(err.Error())
+			}
+			if record.OwnerID != subject.ID {
+				return apperrors.NewBadRequestError("uncertain: certification link must match its recorded owner")
+			}
+		}
+	}
 	if library.ShelfEnabled && relation.RelationType == "composed_of" {
 		module, _ := relation.Attributes["module_type"].(string)
 		if !shelfOptionExists(library.ShelfConfig.ModuleTypes, module) {

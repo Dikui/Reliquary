@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	apperrors "reliquary/internal/errors"
@@ -54,6 +55,24 @@ func (h *EntityHandler) ReviewShelfChangeset(c *gin.Context) {
 		return
 	}
 	result, err := h.service.ReviewShelfChangeset(c.Request.Context(), c.Param("id"), c.Param("changeset_id"), input, c.Request.Method == http.MethodPost)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}
+
+func (h *EntityHandler) ShelfCertifications(c *gin.Context) {
+	at := time.Now()
+	if raw, ok := c.GetQuery("as_of"); ok {
+		parsed, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil || parsed.IsZero() {
+			c.Error(apperrors.NewBadRequestError("as_of must be an RFC3339 time"))
+			return
+		}
+		at = parsed
+	}
+	result, err := h.service.ShelfCertifications(c.Request.Context(), c.Param("id"), c.Query("standard"), at)
 	if err != nil {
 		c.Error(err)
 		return

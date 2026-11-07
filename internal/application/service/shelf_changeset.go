@@ -58,6 +58,8 @@ func shelfOperationValid(op types.ShelfOperation) error {
 	}
 	valid := false
 	switch op.Type {
+	case "create_certification", "update_certification":
+		valid = op.Certification != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
 	case "set_sale_statuses":
 		valid = op.SaleStatuses != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
 	case "set_parameter_values":
@@ -75,10 +77,13 @@ func shelfOperationValid(op types.ShelfOperation) error {
 	case "end_relation", "set_entity_link":
 		valid = op.Entity == nil && op.Patch == nil && op.Relation == nil
 	}
-	if op.EffectiveAt != nil && op.Type != "set_sale_statuses" && op.Type != "set_parameter_values" {
+	if op.EffectiveAt != nil && op.Type != "set_sale_statuses" && op.Type != "set_parameter_values" && op.Type != "create_certification" && op.Type != "update_certification" {
 		valid = false
 	}
 	if (op.Type != "set_sale_statuses" && op.SaleStatuses != nil) || (op.Type != "set_parameter_values" && op.ParameterValues != nil) {
+		valid = false
+	}
+	if op.Type != "create_certification" && op.Type != "update_certification" && op.Certification != nil {
 		valid = false
 	}
 	if op.Type != "configure_shelf" && op.Library != nil {
@@ -122,7 +127,7 @@ func (s *EntityService) SubmitShelfChangeset(ctx context.Context, libraryID stri
 		}
 		seen[op.ID] = true
 		id := op.EntityID
-		if op.Type == "create_entity" {
+		if op.Type == "create_entity" || op.Type == "create_certification" {
 			id = uuid.NewString()
 		}
 		draft.Items = append(draft.Items, types.ShelfChangesetItem{ID: op.ID, EntityID: id, Operation: op, Before: types.JSON("null"), After: types.JSON("null"), Conflicts: []types.ShelfConflict{}})
@@ -181,9 +186,9 @@ func shelfDecisions(draft *types.ShelfChangeset, decisions []types.ShelfDecision
 			if err := shelfOperationValid(op); err != nil {
 				return err
 			}
-			if op.Type == "create_entity" && item.Operation.Type != "create_entity" {
+			if (op.Type == "create_entity" || op.Type == "create_certification") && item.Operation.Type != op.Type {
 				item.EntityID = uuid.NewString()
-			} else if op.Type != "create_entity" {
+			} else if op.Type != "create_entity" && op.Type != "create_certification" {
 				item.EntityID = op.EntityID
 			}
 			item.Operation = op
@@ -370,7 +375,7 @@ func (s *EntityService) previewShelf(ctx context.Context, tx *gorm.DB, draft *ty
 				break
 			}
 		}
-		created := item.Operation.Type == "create_entity" && (item.Decision == nil || item.Decision.Action != "same_entity")
+		created := (item.Operation.Type == "create_entity" || item.Operation.Type == "create_certification") && (item.Decision == nil || item.Decision.Action != "same_entity")
 		created = created || (item.Operation.Type == "save_relation" && item.Operation.RelationID == "") || (item.Operation.Type == "set_entity_link" && string(item.Before) == "null")
 		if created {
 			item.Conflicts = append(item.Conflicts, types.ShelfConflict{Type: "new"})
@@ -465,7 +470,10 @@ func (s *EntityService) confirmShelf(ctx context.Context, tx *gorm.DB, draft *ty
 		case "defer":
 			copy := *item
 			copy.Operation = shelfResolvedOperation(draft, copy.Operation)
-			if copy.Operation.Type != "create_entity" {
+			if copy.Operation.Type == "update_certification" && copy.Operation.EntityID == "" {
+				copy.Operation.EntityID = copy.EntityID
+			}
+			if copy.Operation.Type != "create_entity" && copy.Operation.Type != "create_certification" {
 				copy.EntityID = copy.Operation.EntityID
 			}
 			copy.Decision = nil
@@ -514,7 +522,7 @@ func (s *EntityService) shelfBefore(ctx context.Context, draft *types.ShelfChang
 		err := s.db.WithContext(ctx).Where("id=? AND space_id=?", draft.LibraryID, draft.SpaceID).First(&library).Error
 		return shelfJSON(library), err
 	}
-	if op.Type == "create_entity" {
+	if op.Type == "create_entity" || op.Type == "create_certification" {
 		return types.JSON("null"), nil
 	}
 	if op.Type == "set_entity_link" {
@@ -532,6 +540,14 @@ func (s *EntityService) shelfBefore(ctx context.Context, draft *types.ShelfChang
 		var row types.Relation
 		err := s.db.WithContext(ctx).Where("id=? AND library_id=? AND space_id=?", op.RelationID, draft.LibraryID, draft.SpaceID).First(&row).Error
 		return shelfJSON(row), managedWriteError(err)
+	}
+	if op.Type == "update_certification" {
+		resolved := shelfResolvedOperation(draft, op)
+		entity, err := s.resolveShelfCertification(ctx, draft, resolved, shelfCertificationTime(draft, resolved), item.Decision)
+		if err == nil {
+			item.EntityID = entity.ID
+		}
+		return shelfJSON(entity), err
 	}
 	entity, err := s.shelfEntity(ctx, draft.LibraryID, shelfReference(draft, op.EntityID))
 	return shelfJSON(entity), err
@@ -554,6 +570,13 @@ func shelfReference(draft *types.ShelfChangeset, id string) string {
 // Freeze references before a deferred item leaves its original batch.
 func shelfResolvedOperation(draft *types.ShelfChangeset, op types.ShelfOperation) types.ShelfOperation {
 	op.EntityID = shelfReference(draft, op.EntityID)
+	if op.Certification != nil {
+		record := *op.Certification
+		record.OwnerID = shelfReference(draft, record.OwnerID)
+		record.CellPartID = shelfReference(draft, record.CellPartID)
+		record.Conditions = shelfResolvedConditions(draft, record.Conditions)
+		op.Certification = &record
+	}
 	if op.Relation != nil {
 		relation := *op.Relation
 		relation.SubjectID = shelfReference(draft, relation.SubjectID)
@@ -611,6 +634,9 @@ func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChan
 	if item.Decision != nil {
 		confirmations = item.Decision.NameConfirmations
 	}
+	if op.Type == "create_certification" || op.Type == "update_certification" {
+		return s.writeShelfCertification(ctx, draft, item, op)
+	}
 	if op.Type == "configure_shelf" {
 		var before types.Library
 		if err := s.db.WithContext(ctx).Where("id=? AND space_id=?", draft.LibraryID, draft.SpaceID).First(&before).Error; err != nil {
@@ -631,6 +657,9 @@ func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChan
 	}
 	if op.Type == "create_entity" {
 		input := *op.Entity
+		if input.Kind == "certification" {
+			return nil, apperrors.NewBadRequestError("use create_certification to create a certification record")
+		}
 		input.NameConfirmations = append(append([]types.ManagedNameConfirmation{}, input.NameConfirmations...), confirmations...)
 		if draft.Source.Type == "import" {
 			input.EffectiveAt = draft.Source.FileDate
@@ -703,6 +732,12 @@ func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChan
 		return s.setShelfModelValues(ctx, draft, entity, op)
 	case "update_entity":
 		patch = *op.Patch
+		if patch.Kind != nil && *patch.Kind != entity.Kind && (entity.Kind == "certification" || *patch.Kind == "certification") {
+			return nil, apperrors.NewBadRequestError("certification kind cannot be changed")
+		}
+		if patch.Attributes != nil && entity.Kind == "certification" {
+			return nil, apperrors.NewBadRequestError("use update_certification to replace a certification record")
+		}
 		patch.NameConfirmations = append(append([]types.ManagedNameConfirmation{}, patch.NameConfirmations...), confirmations...)
 	case "add_alias":
 		if strings.TrimSpace(op.Alias) == "" {

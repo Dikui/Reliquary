@@ -7,7 +7,7 @@ import (
 )
 
 func projectShelfFieldsSnapshot(snapshot *Snapshot, targetVersion int64) {
-	if snapshot.schemaVersion >= 44 || targetVersion < 44 {
+	if snapshot.schemaVersion >= 45 || targetVersion < 44 {
 		return
 	}
 	for _, row := range snapshot.Tables["libraries"] {
@@ -26,6 +26,9 @@ func projectShelfFieldsSnapshot(snapshot *Snapshot, targetVersion int64) {
 		_ = json.Unmarshal(data, &defaults)
 		for _, definition := range defaults {
 			candidate := definition.(map[string]any)
+			if candidate["key"] == "certification" && targetVersion < 45 {
+				continue
+			}
 			found := false
 			for _, field := range fields {
 				if item, ok := field.(map[string]any); ok && item["key"] == candidate["key"] {
@@ -42,7 +45,7 @@ func projectShelfFieldsSnapshot(snapshot *Snapshot, targetVersion int64) {
 }
 
 func projectShelfFieldsManifest(expected, actual *Manifest) (*Manifest, *Manifest) {
-	if expected.SchemaVersion >= 44 || actual.SchemaVersion < 44 {
+	if expected.SchemaVersion >= 45 || actual.SchemaVersion < 44 {
 		return expected, actual
 	}
 	item, ok := expected.Tables["libraries"]
