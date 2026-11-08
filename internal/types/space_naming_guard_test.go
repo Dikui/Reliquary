@@ -57,6 +57,7 @@ var namingExceptions = map[string]namingException{
 	"internal/types/entity_name_embedding_rebuild.go":                      {Reason: "旧任务 payload 的持久字段、双键读取或诊断探针，写入键不变", Tokens: []string{"tenant_id"}},
 	"internal/types/space_payload.go":                                      {Reason: "旧任务 payload 的持久字段、双键读取或诊断探针，写入键不变", Tokens: []string{"tenant_id"}},
 	"internal/types/space_payload_test.go":                                 {Reason: "验证八类旧任务 payload、双键兼容和冲突拒绝", Tokens: []string{"tenant_id"}},
+	"internal/types/shelf_parser.go":                                       {Reason: "任务 payload 沿用队列统一的空间写入键", Tokens: []string{"tenant_id"}},
 	"internal/types/task.go":                                               {Reason: "旧任务 payload 的持久字段、双键读取或诊断探针，写入键不变", Tokens: []string{"tenant_id"}},
 	"internal/types/task_dead_letter.go":                                   {Reason: "死信的已持久化 scope 取值不变", Tokens: []string{"tenant"}},
 	"cmd/server/maintenance_legacy_pg_test.go":                             {Reason: "验证旧结构离线维护后原版本及 schema 保持不变", Tokens: []string{"tenant_id", "tenants"}},

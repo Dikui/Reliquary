@@ -95,6 +95,18 @@ var entryNamingExceptions = map[string]entryNamingException{
 		Reason: "旧设置书签 section 参数的兼容断言",
 		Tokens: []string{"knowledge"},
 	},
+	"internal/router/shelf_import_suggest_pg_test.go": {
+		Reason: "既有模型类型 KnowledgeQA 保持原值",
+		Tokens: []string{"KnowledgeQA"},
+	},
+	"internal/router/shelf_parsers_pg_test.go": {
+		Reason: "既有模型类型 KnowledgeQA 保持原值",
+		Tokens: []string{"KnowledgeQA"},
+	},
+	"frontend/src/views/library/components/ShelfSettingsPage.vue": {
+		Reason: "既有模型类型 KnowledgeQA 保持原值",
+		Tokens: []string{"KnowledgeQA"},
+	},
 	"cmd/server/maintenance_credentials_pg_test.go": {
 		Reason: "既有模型类型 KnowledgeQA 保持原值；旧数据库维护 fixture 使用历史表与 payload",
 		Tokens: []string{"KnowledgeQA"},

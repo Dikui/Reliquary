@@ -15,6 +15,7 @@ func TestMarkdownOnlyCapabilityGuard(t *testing.T) {
 		t.Fatal(err)
 	}
 	retired := regexp.MustCompile(`(?i)anydoc|mineru|duckdb|resolve_processing_review|convert_to_mine|/space/kv/parser-engine-config|/processing-review|/system/parser-engines|/entries/[^\s"` + "`" + `]*/(?:download|preview)`)
+	localeTopKey := regexp.MustCompile(`^  ["']?(\w+)["']?: \{`)
 	frontendRetired := regexp.MustCompile(`(?i)多模态文档解析|文档解析|解析引擎|原件|处理待复核|待复核|不确定|摘要加链接|转为本人文档|multimodalParsing|document[ -]+pars(?:e|ing)|parser[ -]+(?:engine|provider)|(?:download|preview)[ -]+original|original[ -]+(?:download|preview)|original[ -]+(?:file|document|attachment)|processing[ -]+review|uncertain|summary[ -]+only|summary[ -]+(?:and|with|plus)[ -]+link|convert[^\n]*personal[ -]+document|personal[ -]+document|\bconvert\w*\b`)
 	// These exact lines describe retained personal-document ingest/deletion or
 	// unrelated data conversions. Do not whitelist whole locale files: a new
@@ -73,8 +74,17 @@ func TestMarkdownOnlyCapabilityGuard(t *testing.T) {
 			}
 			t.Errorf("retired capability %q in %s", hit, relative)
 		}
-		if strings.HasPrefix(relative, "frontend/src/") {
+		// ADR 0024 restores originals, parsing and uncertain-item review for shelf libraries only.
+		shelfFile := strings.Contains(strings.ToLower(filepath.Base(relative)), "shelf")
+		if strings.HasPrefix(relative, "frontend/src/") && !shelfFile {
+			shelfBlock := false
 			for number, line := range strings.Split(string(data), "\n") {
+				if top := localeTopKey.FindStringSubmatch(line); top != nil {
+					shelfBlock = strings.Contains(strings.ToLower(top[1]), "shelf")
+				}
+				if shelfBlock {
+					continue
+				}
 				// An unknown retry outcome is unrelated to retired content types.
 				if !frontendRetired.MatchString(strings.ReplaceAll(line, "retryUncertain", "")) {
 					continue
