@@ -59,6 +59,8 @@ test('型号页默认显示适用条件及部件和上层认证来源', async t 
   const text = visibleText(root)
   assert.match(text, /Synthetic model/); assert.match(text, /产品线原名.*平台原名.*产品原名/)
   assert.match(text, /评审阶段.*沿用产品名称/)
+  const summary = descendants(root).find(node => node.tag === 'dl' && node.props.class === 'facts')!
+  assert.match(visibleText(summary), /北区 GA.*电芯 ∈ \{Alpha cell\}/)
   for (const name of ['组成', '可售状态', '认证', '资料清单', '参数', '其他文件', '操作历史']) assert.ok(text.includes(name), name)
   assert.match(visibleText(section(root, 'cert')), /整机.*整机标准.*来自部件.*部件标准.*Alpha cell.*来自上层.*系列标准.*平台原名/)
   assert.match(visibleText(section(root, 'cert')), /电芯 ∈ \{Alpha cell\}/)

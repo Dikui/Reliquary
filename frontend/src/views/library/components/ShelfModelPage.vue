@@ -112,7 +112,10 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
         <div>
           <dt>{{ t('shelfModel.sections.sale') }}</dt>
           <dd>
-            <span v-for="region in library.shelf_config?.regions?.filter(region => detail?.sale_statuses.some(status => status.region === region.key))" :key="region.key">{{ region.name }} </span>
+            <div v-for="(status, index) in detail?.sale_statuses" :key="index">
+              <span>{{ library.shelf_config?.regions?.find(region => region.key === status.region)?.name || status.region }} {{ status.status }}</span>
+              <small v-if="!selected" class="condition">{{ conditionText(status.conditions) }}</small>
+            </div>
             <span v-if="!detail?.sale_statuses.length">{{ t('shelfStatus.noRecord') }}</span>
           </dd>
         </div>
@@ -213,7 +216,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
               <template v-for="group in groups" :key="group.origin">
                 <tbody v-if="group.rows.length">
                   <tr class="group">
-                    <th colspan="8" scope="colgroup">{{ t(`shelfModel.origins.${group.origin}`) }}</th>
+                    <th colspan="8" scope="rowgroup">{{ t(`shelfModel.origins.${group.origin}`) }}</th>
                   </tr>
                   <tr v-for="cert in group.rows" :key="cert.entity.id">
                     <td>
