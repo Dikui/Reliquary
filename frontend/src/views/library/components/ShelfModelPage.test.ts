@@ -292,6 +292,21 @@ test('新增认证保留原文、年份、电芯部件和适用条件，成功�
   assert.match(visibleText(section(root, 'cert')), /新增合成标准/)
 })
 
+// Small spec, task 27 / ADR 0023: name is optional; identity fields remain required.
+test('新增认证可留空名称，仍要求标准、认证对象和地区', async t => {
+  const config = { ...library, shelf_config: { ...library.shelf_config, standards: [{ key: 'standard', name: '合成标准', aliases: [] }] } }
+  const { root, writes } = await mountPage(t, { config })
+  await click(button(root, '新增认证'))
+  await select(root, 'cert-standard', 'standard')
+  await input(root, 'cert-object', ' 整机原文 ')
+  await submit(root)
+  assert.equal(writes.length, 0)
+  await input(root, 'cert-region', ' 地区原文 ')
+  await submit(root)
+  assert.equal(writes.length, 1)
+  assert.deepEqual({ ...writes[0][0].certification }, { name: '', owner_id: 'model', standard: 'standard', certification_object: ' 整机原文 ', region: ' 地区原文 ', conditions: [] })
+})
+
 // Small regression, task 24: editing a filtered read must not drop facts for other options.
 test('选配视图编辑时读取完整属性并能修改带条件的参数区间', async t => {
   let last: any

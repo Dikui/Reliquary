@@ -47,7 +47,7 @@ onBeforeUnmount(() => { active = false })
 async function save() {
   if (busy.value || loading.value) return
   if (!name.value.trim() || (props.mode === 'composition' && (!module.value || !availableParts.value.some(item => item.id === part.value)))) { error.value = t('managed.required'); return }
-  if (props.mode === 'certification' && (['name', 'standard', 'certification_object', 'region'].some(key => !certification.value[key]?.trim()) || conditions.value.some(condition => !condition.module_type || !condition.part_ids.length) || (certification.value.year && (!Number.isInteger(Number(certification.value.year)) || Number(certification.value.year) <= 0)))) { error.value = t('managed.required'); return }
+  if (props.mode === 'certification' && (['standard', 'certification_object', 'region'].some(key => !certification.value[key]?.trim()) || conditions.value.some(condition => !condition.module_type || !condition.part_ids.length) || (certification.value.year && (!Number.isInteger(Number(certification.value.year)) || Number(certification.value.year) <= 0)))) { error.value = t('managed.required'); return }
   busy.value = true; error.value = ''
   try {
     const stageAttributes = { ...attributes.value }; if (stage.value) stageAttributes.current_stage = stage.value; else delete stageAttributes.current_stage
@@ -82,7 +82,7 @@ async function save() {
         <ShelfParametersEditor v-model="attributes" :fields="parameterFields" :library="library" :composition="composition" />
         </template>
         <template v-if="mode === 'certification'">
-          <Field id="cert-name" :label="t('shelfReview.cert.name')"><Input id="cert-name" v-model="certification.name" required /></Field>
+          <Field id="cert-name" :label="t('shelfReview.cert.optionalName')"><Input id="cert-name" v-model="certification.name" /></Field>
           <Field id="cert-standard" :label="t('shelfModel.standard')"><Select id="cert-standard" v-model="certification.standard" required><option value="" disabled>{{ t('shelfModel.standard') }}</option><option v-for="item in library.shelf_config?.standards" :key="item.key" :value="item.key">{{ item.name }}</option></Select></Field>
           <Field id="cert-object" :label="t('shelfModel.certObject')"><Input id="cert-object" v-model="certification.certification_object" required /></Field>
           <Field id="cert-region" :label="t('shelfReview.cert.region')"><Input id="cert-region" v-model="certification.region" required /></Field>

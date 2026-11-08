@@ -42,7 +42,7 @@ func managedWriteError(err error) error {
 
 func validateManagedEntity(library *types.Library, entity *types.Entity) error {
 	entity.Description = strings.TrimSpace(entity.Description)
-	if strings.TrimSpace(entity.CanonicalName) == "" || (entity.Code != "" && strings.TrimSpace(entity.Code) == "") || len([]rune(entity.CanonicalName)) > 512 || len([]rune(entity.Code)) > 128 || len([]rune(entity.Description)) > 20000 {
+	if (entity.Kind != "certification" && strings.TrimSpace(entity.CanonicalName) == "") || (entity.Code != "" && strings.TrimSpace(entity.Code) == "") || len([]rune(entity.CanonicalName)) > 512 || len([]rune(entity.Code)) > 128 || len([]rune(entity.Description)) > 20000 {
 		return apperrors.NewBadRequestError("name is required; name, code or description is too long")
 	}
 	entity.NormalizedName = normalizeEntityName(entity.CanonicalName)
@@ -71,7 +71,11 @@ func saveManagedAliases(tx *gorm.DB, library *types.Library, entity *types.Entit
 	}
 	entity.Aliases = []string{}
 	seen := map[string]bool{}
-	for _, alias := range append(aliases, entity.CanonicalName) {
+	spellings := append([]string{}, aliases...)
+	if strings.TrimSpace(entity.CanonicalName) != "" {
+		spellings = append(spellings, entity.CanonicalName)
+	}
+	for _, alias := range spellings {
 		if strings.TrimSpace(alias) == "" || len([]rune(alias)) > 512 {
 			return apperrors.NewBadRequestError("aliases must contain 1-512 characters")
 		}
@@ -356,7 +360,7 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		if patch.Aliases != nil {
 			aliases = *patch.Aliases
 		}
-		if entity.CanonicalName != before.CanonicalName {
+		if entity.CanonicalName != before.CanonicalName && strings.TrimSpace(before.CanonicalName) != "" {
 			aliases = append(append([]string{}, aliases...), before.CanonicalName)
 		}
 		if err := saveManagedAliases(tx, library, &entity, aliases, patch.NameConfirmations); err != nil {

@@ -302,6 +302,7 @@ export default {
   },
   shelfReview: {
     cert: {
+      "optionalName": "名称（可选）",
       "finishUniform": "请先应用整表统一值，或清空输入。",
       "finishEdit": "请先在认证冲突中保存并重新校验，或取消编辑。",
       "region": "地区",

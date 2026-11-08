@@ -115,7 +115,11 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 	for _, column := range mapping.Columns {
 		mappedFields = append(mappedFields, column.Field)
 	}
-	op := types.ShelfOperation{Type: "update_certification", CertificationOwner: &types.ShelfCertificationOwner{MappedFields: mappedFields, Name: cells["owner:"].Value, Kind: mapping.OwnerKind, ProductLineID: mapping.ProductLineID}, Revision: revision, Certification: &types.ShelfCertificationInput{Name: cells["name:"].Value, ShelfCertification: record}}
+	name, hasNameColumn := cells["name:"]
+	if !hasNameColumn {
+		name = cells["standard:"]
+	}
+	op := types.ShelfOperation{Type: "update_certification", CertificationOwner: &types.ShelfCertificationOwner{MappedFields: mappedFields, Name: cells["owner:"].Value, Kind: mapping.OwnerKind, ProductLineID: mapping.ProductLineID}, Revision: revision, Certification: &types.ShelfCertificationInput{Name: name.Value, ShelfCertification: record}}
 	if duplicate {
 		op.Issues = append(op.Issues, types.ShelfConflict{Type: "uncertain", Message: "certification key appears in multiple rows; submitter must decide whether to merge"})
 	}

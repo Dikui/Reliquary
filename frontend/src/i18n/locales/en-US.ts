@@ -302,6 +302,7 @@ export default {
   },
   shelfReview: {
     cert: {
+      "optionalName": "Name (optional)",
       "finishUniform": "Apply the uniform worksheet values, or clear the inputs first.",
       "finishEdit": "Save and revalidate the certification correction, or cancel its editor first.",
       "region": "Region",

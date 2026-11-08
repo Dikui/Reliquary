@@ -235,9 +235,6 @@ func (s *EntityService) writeShelfCertification(ctx context.Context, draft *type
 	}
 	at := shelfCertificationTime(draft, op)
 	if op.Type == "create_certification" {
-		if op.Certification.Name == "" {
-			return nil, apperrors.NewBadRequestError("certification name is required")
-		}
 		entity, err := s.createManagedEntity(ctx, draft.LibraryID, types.ManagedEntityInput{Name: op.Certification.Name, Kind: "certification", Attributes: attrs, EffectiveAt: &at, NameConfirmations: confirmations}, item.EntityID)
 		if err != nil {
 			return nil, err
