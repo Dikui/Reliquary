@@ -2,8 +2,8 @@ export default {
   shelfNode: {
     title: '节点详情', partTitle: '部件详情', models: '下属型号', usedBy: '使用它的型号', summary: '资料清单汇总', files: '本层资料文件',
     ownCerts: '本层认证', ancestorCerts: '来自上层的认证', gaps: '资料缺口', gapCount: '缺 {count} 项（{models} 个型号）',
-    inherited: '沿用产品名称', overridden: '单独设置', fixed: '固定组成', optional: '选配', alternatives: '可选部件',
-    self: '自身', noRequirement: '不对应资料要求', noStage: '未设置', notApplicable: '不适用',
+    overridden: '单独设置', fixed: '固定组成', optional: '选配', alternatives: '可选部件',
+    noRequirement: '不对应资料要求', noStage: '未设置', notApplicable: '不适用',
   },
   shelfModel: {
     title: '型号详情', hierarchy: '层级', onPage: '本页', currentStage: '当前阶段', inheritedStage: '沿用产品名称',

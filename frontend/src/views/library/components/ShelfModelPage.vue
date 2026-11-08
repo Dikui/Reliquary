@@ -52,7 +52,7 @@ function unwrap<T>(response: { success: boolean; data: T; message?: string; erro
   return response.data
 }
 async function load() {
-  const current = ++generation, libraryID = props.library.id, id = props.nodeId
+  const current = ++generation, libraryID = props.library.id, id = props.nodeId, firstLoad = !node.value
   loading.value = true; error.value = ''
   const combination = optional.value.length && optional.value.every(group => choices.value[group.module_type]) ? { ...choices.value } : undefined
   try {
@@ -70,7 +70,7 @@ async function load() {
     if (current === generation) {
       node.value = result; ancestors.value = path; selected.value = !!combination
       // Matrix links target a requirement after its asynchronous detail has rendered.
-      void nextTick(() => {
+      if (firstLoad) void nextTick(() => {
         if (current !== generation || typeof document === 'undefined') return
         const target = window.location.hash.slice(1)
         if (target.startsWith('requirement-')) document.getElementById(decodeURIComponent(target))?.scrollIntoView()

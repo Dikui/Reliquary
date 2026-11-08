@@ -26,14 +26,18 @@ async function mountPage(t: test.TestContext, options: { part?: boolean; locale?
     ...entryPresentationTestModules, '@/utils/productShelf': shelfText, '@/utils/externalUrl': externalUrl,
     '@/api/shelf': {
       getShelfNode: (_: string, id: string, asOf?: string) => { requests.push({ id, asOf }); return success(id === 'platform' ? { entity: parent, facts: [{ field: 'belongs_to', value: { object_id: 'line' } }] } : id === 'line' ? { entity: entity('line', 'product_line', '产品线原名'), facts: [] } : id === 'product' && options.part ? node() : node(!!options.part)) },
-      queryShelf: (_: string, input: object) => { requests.push(input); return success({ items: [model()], total: 1, truncated: false }) },
+      queryShelf: (_: string, input: object) => {
+        requests.push(input)
+        const fixed = model('fixed'); fixed.shelf.composition[0] = { module_type: 'module', optional: false, parts: [part] }
+        return success({ items: options.part ? [model(), fixed] : [model()], total: options.part ? 2 : 1, truncated: false })
+      },
       submitShelfStage: (...args: any[]) => { submissions.push(args); return success({ status: 'confirmed' }) }, ...options.api,
     },
   })
   const selectedID = ref(options.part ? 'part' : 'product')
   const app = renderer.createApp(defineComponent({ setup: () => () => h(component, { library, nodeId: selectedID.value }) }))
   app.use(createI18n({ legacy: false, locale: options.locale || 'zh-CN', messages: { 'zh-CN': zh, 'en-US': en } }))
-  const root = element('root'); app.mount(root); t.after(() => app.unmount()); await settle()
+  const root = element('root'); app.mount(root); t.after(() => app.unmount()); await new Promise<void>(resolve => setImmediate(resolve)); await settle()
   return { root, requests, submissions, selectNode: async (id: string) => { selectedID.value = id; await settle() } }
 }
 const section = (root: Element, id: string) => descendants(root).find(item => item.props.id === id)!
@@ -52,7 +56,7 @@ test('上层节点显示下属型号和选配清单矩阵，单元格链接到�
 test('部件页显示使用型号和组成角色，保留别名及附属属性', async t => {
   const { root, requests } = await mountPage(t, { part: true })
   assert.match(visibleText(root), /部件原名.*别名原文.*Pack 原名/)
-  assert.match(visibleText(section(root, 'models')), /型号 model.*客户模块.*选配.*另一个部件/)
+  assert.match(visibleText(section(root, 'models')), /型号 model.*产品线原名.*客户模块.*选配.*另一个部件.*型号 fixed.*固定组成/)
   assert.ok(requests.some(item => item.part_id === 'part'))
   assert.doesNotMatch(visibleText(root), /当前阶段|可售状态|资料缺口/)
   assert.match(visibleText(section(root, 'node-certifications')), /认证地区.*标准原文.*客户进度.*客户机构.*原表日期.*长期原文.*TEST-17/)
@@ -156,4 +160,12 @@ test('资料缺口按不同要求计数并保留受影响型号数量', async t 
     queryShelf: () => success({ items: [model('one'), model('two')], total: 2 }),
   } })
   assert.match(visibleText(root), /缺 1 项（2 个型号）/)
+})
+
+// Small spec, task 17 / approved part design: certifications follow usage before the long checklist.
+test('部件认证在使用型号之后、资料清单之前展示', async t => {
+  const { root } = await mountPage(t, { part: true })
+  const sections = descendants(root).filter(item => item.tag === 'section').map(item => item.props.id)
+  assert.ok(sections.indexOf('models') < sections.indexOf('node-certifications'))
+  assert.ok(sections.indexOf('node-certifications') < sections.indexOf('part-checklist'))
 })

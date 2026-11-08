@@ -161,3 +161,17 @@ test('英文界面保留客户名称并翻译栏目与清单状态', async t => 
   assert.match(visibleText(root), /产品原名/)
   assert.doesNotMatch(visibleText(root), /shelfModel\./)
 })
+
+// Small spec, task 17: a matrix deep link scrolls to its requirement once;
+// later option changes keep the user's reading position.
+test('资料行链接首次读取后定位，切换选配不重复滚动', async t => {
+  const previousDocument = globalThis.document, previousWindow = globalThis.window
+  const targets: string[] = []
+  globalThis.document = { getElementById: (id: string) => ({ scrollIntoView: () => targets.push(id) }) } as unknown as Document
+  globalThis.window = { location: { hash: '#requirement-drawing' } } as unknown as Window & typeof globalThis
+  t.after(() => { globalThis.document = previousDocument; globalThis.window = previousWindow })
+  const { root } = await mountPage(t)
+  assert.deepEqual(targets, ['requirement-drawing'])
+  await changeOption(root, 'cell', 'beta')
+  assert.deepEqual(targets, ['requirement-drawing'])
+})

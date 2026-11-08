@@ -15,6 +15,7 @@ const paths = ref<Record<string, Entity[]>>({}), identities = ref<Entity[]>([])
 const loading = ref(false), error = ref(''), saving = ref(false), saveError = ref(''), stageDraft = ref('')
 let generation = 0
 const isPart = computed(() => node.value?.entity.kind === 'part')
+const sections = computed(() => isPart.value ? ['certifications', 'part-checklist', 'node-files'] : ['summary', 'node-files', 'certifications'])
 const href = (id: string) => `/platform/entities?${new URLSearchParams({ libraries: props.library.id, entity_id: id })}`
 const statusHref = computed(() => `/platform/entries?${new URLSearchParams({ libraries: props.library.id })}`)
 const kind = (entity: Entity) => props.library.entity_schema?.kinds.find(item => item.key === entity.kind)?.name || t(`productShelf.kinds.${entity.kind}`)
@@ -129,7 +130,7 @@ onBeforeUnmount(() => { generation++ })
         <dl class="facts">
           <template v-if="isPart">
             <div><dt>{{ t('managed.aliases') }}</dt><dd>{{ node.entity.aliases?.join(' · ') || t('shelfStatus.noRecord') }}</dd></div>
-            <div v-for="field in fields" :key="field.key"><dt>{{ field.name }}</dt><dd>{{ valueText(node.entity.attributes?.[field.key]) }} {{ node.entity.attributes?.[field.key] && field.unit ? field.unit : '' }}</dd></div>
+            <div v-for="field in fields" :key="field.key"><dt>{{ field.name }}</dt><dd>{{ valueText(node.entity.attributes?.[field.key]) }} {{ node.entity.attributes?.[field.key] != null && node.entity.attributes?.[field.key] !== '' && field.unit ? field.unit : '' }}</dd></div>
           </template>
           <div v-if="node.entity.kind === 'product'"><dt><label for="node-stage">{{ t('shelfModel.currentStage') }}</label></dt><dd><select id="node-stage" :value="stageDraft" :disabled="saving" @change="changeStage"><option value="">{{ t('shelfNode.noStage') }}</option><option v-for="item in library.shelf_config?.stages" :key="item.key" :value="item.key">{{ item.name }}</option></select></dd></div>
           <div><dt>{{ isPart ? t('shelfNode.usedBy') : t('shelfNode.models') }}</dt><dd>{{ t('shelfStatus.total', { count: models.length }) }}</dd></div>
@@ -149,39 +150,41 @@ onBeforeUnmount(() => { generation++ })
               </template>
               <template v-else>
                 <td><div v-for="(status, index) in model.shelf?.sale_statuses" :key="index" class="sale"><b>{{ library.shelf_config?.regions?.find(item => item.key === status.region)?.name || status.region }}</b> <span class="st" :class="`st-${status.status}`">{{ status.status }}</span> <b v-if="status.planned_eom">{{ t('shelfStatus.planned') }}</b><small>{{ status.notes }}</small><small>{{ condition(status.conditions) }}</small></div><span v-if="!model.shelf?.sale_statuses?.length">{{ t('shelfStatus.noRecord') }}</span></td>
-                <td>{{ stage(model.shelf?.current_stage) }}<small v-if="model.shelf?.stage_owner_id">{{ model.shelf.stage_owner_id === model.entity.id ? t('shelfNode.overridden') : t('shelfNode.inherited') }}</small></td>
+                <td>{{ stage(model.shelf?.current_stage) }}<small v-if="model.shelf?.stage_owner_id">{{ model.shelf.stage_owner_id === model.entity.id ? t('shelfNode.overridden') : t('shelfModel.inheritedStage') }}</small></td>
               </template>
             </tr></tbody>
           </table></div><p v-else>{{ t('productShelf.noRecords') }}</p>
         </section>
-        <section v-if="!isPart" id="checklist-summary">
+        <template v-for="section in sections" :key="section">
+        <section v-if="section === 'summary'" id="checklist-summary">
           <h2>{{ t('shelfNode.summary') }}</h2>
           <div v-if="requirements.length" class="table-wrap matrix"><table>
             <thead><tr><th>{{ t('shelfModel.material') }}</th><th v-for="model in models" :key="model.entity.id"><a :href="href(model.entity.id)">{{ model.entity.canonical_name }}</a></th></tr></thead>
             <tbody><tr v-for="requirement in requirements" :key="requirement.id"><th scope="row">{{ requirement.canonical_name }}</th><td v-for="model in models" :key="model.entity.id"><a v-for="(row, index) in rowsFor(model, requirement.id)" :key="index" :href="`${href(model.entity.id)}#requirement-${encodeURIComponent(requirement.id)}`"><span class="doc" :class="row.status">{{ t(`shelfModel.status.${row.status}`) }}</span><small>{{ condition(row.conditions) }}</small><small v-if="row.ambiguous">{{ t('shelfModel.ambiguous') }}</small></a><span v-if="!rowsFor(model, requirement.id).length">{{ t('shelfNode.notApplicable') }}</span></td></tr></tbody>
           </table></div><p v-else>{{ t('productShelf.noRecords') }}</p>
         </section>
-        <section v-if="isPart" id="part-checklist">
+        <section v-if="section === 'part-checklist'" id="part-checklist">
           <h2>{{ t('shelfModel.sections.docs') }}</h2>
           <div v-if="node.shelf?.checklist?.length" class="table-wrap"><table>
             <thead><tr><th>{{ t('shelfModel.material') }}</th><th>{{ t('shelfModel.draft') }}</th><th>{{ t('shelfModel.final') }}</th><th>{{ t('shelfModel.due') }}</th><th>{{ t('shelfModel.file') }}</th></tr></thead>
             <tbody><tr v-for="(row, index) in node.shelf.checklist" :key="index"><th scope="row">{{ row.requirement.canonical_name }}<small>{{ requirementData(row.requirement).name_en }}</small></th><td>{{ requirementData(row.requirement).draft_due_stage ? stage(requirementData(row.requirement).draft_due_stage) : t('shelfStatus.noRecord') }}</td><td>{{ stage(requirementData(row.requirement).final_due_stage) }}</td><td>{{ requirementData(row.requirement).due_text }}</td><td><span>{{ row.has_file ? t('shelfModel.status.has_file') : t('shelfModel.status.no_file') }}</span><template v-if="row.document"><a :href="href(row.document.file_id)">{{ row.document_name }}</a> <a v-if="documentURL(row.document)" :href="documentURL(row.document)" target="_blank" rel="noopener noreferrer">{{ row.document.attachment_id ? t('shelfModel.download') : t('shelfModel.cloudLink') }}</a><small>{{ row.document.stage === 'draft' ? t('shelfModel.draft') : t('shelfModel.final') }} {{ row.document.version_label }}</small></template><small>{{ condition(row.conditions) }}</small><small v-if="row.ambiguous">{{ t('shelfModel.ambiguous') }}</small></td></tr></tbody>
           </table></div><p v-else>{{ t('productShelf.noRecords') }}</p>
         </section>
-        <section id="node-files">
+        <section v-if="section === 'node-files'" id="node-files">
           <h2>{{ t('shelfNode.files') }}</h2>
           <div v-if="node.shelf?.documents?.length" class="table-wrap"><table>
             <thead><tr><th>{{ t('shelfModel.file') }}</th><th>{{ t('shelfModel.material') }}</th><th>{{ t('shelfModel.version') }}</th></tr></thead>
             <tbody><tr v-for="file in node.shelf.documents" :key="file.document.id"><td><a :href="href(file.entity.id)">{{ file.entity.canonical_name }}</a> <a v-if="documentURL(file.document)" :href="documentURL(file.document)" target="_blank" rel="noopener noreferrer">{{ file.document.attachment_id ? t('shelfModel.download') : t('shelfModel.cloudLink') }}</a></td><td>{{ file.requirement?.canonical_name || t('shelfNode.noRequirement') }}<small>{{ condition(file.document.conditions) }}</small></td><td>{{ file.document.stage === 'draft' ? t('shelfModel.draft') : t('shelfModel.final') }} {{ file.document.version_label }}</td></tr></tbody>
           </table></div><p v-else>{{ t('productShelf.noRecords') }}</p>
         </section>
-        <section id="node-certifications">
+        <section v-if="section === 'certifications'" id="node-certifications">
           <h2>{{ t('shelfModel.sections.cert') }}</h2>
-          <template v-for="group in certGroups" :key="group.title"><div v-if="group.rows.length" class="cert-group"><h3>{{ group.title }}</h3><div class="table-wrap"><table>
+          <template v-for="group in certGroups" :key="group.title"><div v-if="group.rows.length" class="cert-group"><h3 v-if="!isPart">{{ group.title }}</h3><div class="table-wrap"><table>
             <thead><tr><th>{{ t('shelfStatus.region') }}</th><th>{{ t('shelfModel.standard') }}</th><th>{{ t('shelfModel.from') }}</th><th>{{ t('shelfModel.progress') }}</th><th>{{ t('shelfModel.agency') }}</th><th>{{ t('shelfModel.issued_date') }}</th><th>{{ t('shelfModel.validity') }}</th><th>{{ t('shelfModel.number') }}</th></tr></thead>
             <tbody><tr v-for="cert in group.rows" :key="cert.entity.id"><td>{{ cert.certification.region }}</td><td><a :href="href(cert.entity.id)">{{ cert.standard_name }} {{ cert.certification.year || '' }}</a><small>{{ cert.certification.certification_object }}</small></td><td><template v-if="owner(cert.certification.owner_id)">{{ kind(owner(cert.certification.owner_id)!) }} <a :href="href(cert.certification.owner_id)">{{ owner(cert.certification.owner_id)!.canonical_name }}</a></template><small>{{ condition(cert.certification.conditions) }}</small><small v-if="cert.certification.cell_part_id">{{ t('shelfModel.part') }}: {{ owner(cert.certification.cell_part_id)?.canonical_name || cert.certification.cell_part_id }}</small></td><td>{{ cert.certification.progress }}</td><td>{{ cert.certification.agency }}</td><td>{{ cert.certification.issued_date }}</td><td>{{ cert.certification.validity }}</td><td><a v-if="safeExternalUrl(cert.certification.cloud_url)" :href="safeExternalUrl(cert.certification.cloud_url)" target="_blank" rel="noopener noreferrer">{{ cert.certification.number || t('shelfModel.cloudLink') }}</a><span v-else>{{ cert.certification.number }}</span></td></tr></tbody>
           </table></div></div></template><p v-if="!node.shelf?.certifications?.length">{{ t('productShelf.noRecords') }}</p>
         </section>
+        </template>
       </template>
     </template>
   </article>
