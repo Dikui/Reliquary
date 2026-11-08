@@ -13,7 +13,7 @@ import (
 	"reliquary/internal/types"
 )
 
-const shelfExpertNotice = "货架专家须注明来源与数据时点，说明适用条件、来自部件和来自上层；GA 不代表可销售或认证齐全；报告总数并说明截断；同名先澄清；无记录说“货架中没有记录”。先读 reliquary_guide 的 shelf-expert 流程。"
+const shelfExpertNotice = "货架专家须注明来源与数据时点，说明适用条件、来自部件和来自上层；GA 不代表可销售或认证齐全；报告总数并说明截断；同名且影响答案时先澄清；无记录说“货架中没有记录”。先读 reliquary_guide 的 shelf-expert 流程。"
 
 type shelfFindInput struct {
 	LibraryID string `json:"library_id"`

@@ -43,7 +43,7 @@ func TestShelfMCPExpertInstructionsAreDiscoverable(t *testing.T) {
 		if !strings.HasPrefix(tool.Name, "shelf_") {
 			continue
 		}
-		for _, rule := range []string{"来源", "时点", "适用条件", "来自部件", "来自上层", "GA", "可销售", "认证齐全", "总数", "截断", "同名先澄清", "货架中没有记录", "shelf-expert"} {
+		for _, rule := range []string{"来源", "时点", "适用条件", "来自部件", "来自上层", "GA", "可销售", "认证齐全", "总数", "截断", "同名且影响答案时先澄清", "货架中没有记录", "shelf-expert"} {
 			require.Contains(t, tool.Description, rule, tool.Name)
 		}
 	}
