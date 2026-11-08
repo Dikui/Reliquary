@@ -1,11 +1,13 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -99,9 +101,13 @@ func (s *EntityService) shelfGet(ctx context.Context, libraryID, id string, opti
 		if conditions == nil {
 			conditions = []types.ShelfCondition{}
 		}
+		region := ""
+		if status, ok := value.(types.ShelfSaleStatus); ok && field == "sale_statuses" {
+			region = status.Region
+		}
 		result.Facts = append(result.Facts, types.ShelfFact{EntityID: owner.ID, Field: field, Value: value, Conditions: conditions,
 			PartialOptions: options.Combination == nil && shelfConditionsPartial(conditions, composition), Origin: origin, OriginLabel: label,
-			Evidence: shelfAttributeEvidence(owner.ID, field, versions, logs)})
+			Evidence: shelfAttributeEvidence(owner.ID, field, region, versions, logs)})
 	}
 	keys := make([]string, 0, len(result.Entity.Attributes))
 	for key := range result.Entity.Attributes {
@@ -219,16 +225,51 @@ func shelfCertificationConditions(record types.ShelfCertification, composition [
 	return conditions
 }
 
-// Walk back unchanged full fields so an unrelated later edit cannot claim their
-// provenance. Propagated backdated changes carry their own operation log.
-func shelfAttributeEvidence(id, field string, versions []types.EntityAttributeVersion, logs []types.OperationLog) types.ShelfEvidence {
+// Compare regional records as sets, including their condition sets. Array order
+// and nil versus empty conditions do not change the source of a regional fact.
+func shelfEvidenceValue(attributes map[string]any, field, region string) any {
+	if region == "" {
+		return attributes[field]
+	}
+	var statuses []types.ShelfSaleStatus
+	if types.DecodeShelfValue(attributes[field], &statuses) != nil {
+		return attributes[field]
+	}
+	rows := []types.ShelfSaleStatus{}
+	for _, row := range statuses {
+		if row.Region != region {
+			continue
+		}
+		if row.Conditions == nil {
+			row.Conditions = []types.ShelfCondition{}
+		}
+		for _, condition := range row.Conditions {
+			slices.Sort(condition.PartIDs)
+		}
+		slices.SortFunc(row.Conditions, func(a, b types.ShelfCondition) int { return strings.Compare(a.ModuleType, b.ModuleType) })
+		rows = append(rows, row)
+	}
+	slices.SortFunc(rows, func(a, b types.ShelfSaleStatus) int {
+		left, _ := json.Marshal(a)
+		right, _ := json.Marshal(b)
+		return bytes.Compare(left, right)
+	})
+	return rows
+}
+
+// Walk back unchanged fields or regions so an unrelated later edit cannot
+// claim their provenance. Backfilled snapshots carry their own operation log.
+func shelfAttributeEvidence(id, field, region string, versions []types.EntityAttributeVersion, logs []types.OperationLog) types.ShelfEvidence {
+	equal := func(a, b map[string]any) bool {
+		return equalManagedAttributes(map[string]any{field: shelfEvidenceValue(a, field, region)}, map[string]any{field: shelfEvidenceValue(b, field, region)})
+	}
 	var chosen *types.EntityAttributeVersion
 	for i := range versions {
 		version := &versions[i]
 		if version.EntityID != id {
 			continue
 		}
-		if chosen != nil && !equalManagedAttributes(map[string]any{field: chosen.Attributes[field]}, map[string]any{field: version.Attributes[field]}) {
+		if chosen != nil && !equal(chosen.Attributes, version.Attributes) {
 			break
 		}
 		chosen = version
@@ -250,7 +291,7 @@ func shelfAttributeEvidence(id, field string, versions []types.EntityAttributeVe
 			continue
 		}
 		if log.OperationType == "update_pending_entity_attributes" && after.ID == chosen.ID {
-			if json.Unmarshal(log.Before, &before) != nil || equalManagedAttributes(map[string]any{field: before.Attributes[field]}, map[string]any{field: after.Attributes[field]}) {
+			if json.Unmarshal(log.Before, &before) != nil || equal(before.Attributes, after.Attributes) {
 				continue
 			}
 			evidence.RecordedAt = log.CreatedAt

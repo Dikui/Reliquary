@@ -53,6 +53,27 @@ async function mountPage(t: test.TestContext, options: { api?: Record<string, un
 }
 const section = (root: Element, id: string) => descendants(root).find(node => node.props.id === id)!
 
+// Small regression, task 26 / ADR 0023: each region displays its own evidence,
+// so a web edit cannot hide the source workbook of an untouched region.
+test('可售状态按区域展示网页与导入文件来源', async t => {
+  const value = data()
+  value.shelf.sale_statuses.push({ region: 'south', status: 'DEV', conditions: [] })
+  value.facts.push(
+    { entity_id: 'model', field: 'sale_statuses', value: value.shelf.sale_statuses[0], evidence: { source: { type: 'web' }, changeset_id: 'web-change', effective_at: '2026-11-08T12:00:00Z', recorded_at: '2026-11-08T12:00:00Z' } },
+    { entity_id: 'model', field: 'sale_statuses', value: value.shelf.sale_statuses[1], evidence: { source: { type: 'import', file_name: 'synthetic-map.xlsx', worksheet: 'Map', cells: ['F3'], import_batch_id: 'import-batch' }, changeset_id: 'import-change', effective_at: '2026-11-01T00:00:00Z', recorded_at: '2026-11-07T12:00:00Z' } },
+  )
+  for (const locale of ['zh-CN', 'en-US']) {
+    const { root } = await mountPage(t, { value, locale })
+    const regions = descendants(section(root, 'sale')).filter(node => node.tag === 'details')
+    assert.equal(regions.length, 2)
+    assert.match(visibleText(regions[0]!), locale === 'zh-CN' ? /网页.*web-change/ : /Web.*web-change/)
+    assert.doesNotMatch(visibleText(regions[0]!), /synthetic-map|import-change/)
+    assert.match(visibleText(regions[1]!), /synthetic-map.xlsx.*Map.*F3.*import-change/)
+    assert.doesNotMatch(visibleText(regions[1]!), /web-change/)
+    assert.doesNotMatch(visibleText(section(root, 'sale')), /shelfModel\.|managed\./)
+  }
+})
+
 // Small spec, task 16 / ADR 0023/0024: unselected options retain conditions and provenance.
 test('型号页默认显示适用条件及部件和上层认证来源', async t => {
   const { root } = await mountPage(t)

@@ -493,6 +493,9 @@ reads retain the controls and offer Retry. The status-table link returns to the
 owning library. Model operation history uses the existing entity history API and
 twenty-row paging, including directly owned certification and document version
 writes. Component and ancestor history stays on the corresponding node.
+Sale status regions display their own submitting source. An expandable source
+shows the original worksheet and cells when present, the changeset, business
+effective time and recorded time. Editing another region preserves that source.
 Source: ADR 0023, ADR 0024 and docs/product-shelf-query.md.
 
 Shelf upper-node and part links open dedicated details in the entity route.

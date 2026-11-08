@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { Button, EmptyState, ErrorState } from '@/components/ui'
 import { entityHistory, type Entity } from '@/api/entities'
 import { OPERATION_TYPES, type OperationLog, type OperationLogsData } from '@/api/operation-logs'
-import { getShelfNode, type ShelfNode, type ShelfCondition, type ShelfCertification, type ShelfRequirement, type ShelfDocumentVersion } from '@/api/shelf'
+import { getShelfNode, type ShelfNode, type ShelfCondition, type ShelfCertification, type ShelfRequirement, type ShelfDocumentVersion, type ShelfSaleStatus } from '@/api/shelf'
 import type { LibraryCatalogItem } from '@/api/library'
 import { shelfConditionText } from '@/utils/productShelf'
 import { formatDateTime } from '@/utils/dateTime'
@@ -33,6 +33,10 @@ const stage = (key?: string) => props.library.shelf_config?.stages?.find(item =>
 const conditionText = (conditions?: ShelfCondition[] | null) => shelfConditionText(conditions, props.library.shelf_config?.module_types, detail.value?.composition) || t('shelfModel.allConditions')
 const requirement = (entity: Entity) => (entity.attributes?.requirement || {}) as ShelfRequirement
 const certConditions = (cert: ShelfCertification) => node.value?.facts.find(fact => fact.field === 'certification' && fact.entity_id === cert.entity.id)?.conditions || cert.certification.conditions
+const saleRegions = computed(() => (props.library.shelf_config?.regions || []).map(region => ({
+  ...region,
+  evidence: node.value?.facts.find(fact => fact.entity_id === props.nodeId && fact.field === 'sale_statuses' && (fact.value as ShelfSaleStatus).region === region.key)?.evidence,
+})))
 const documentURL = (document: ShelfDocumentVersion) => document.attachment_id ? `/api/v1/entities/${encodeURIComponent(document.file_id)}/document-versions/${encodeURIComponent(document.id)}/download` : safeExternalUrl(document.cloud_url)
 const valueText = (value: unknown): string => {
   if (value === null || value === undefined || value === '') return t('shelfStatus.noRecord')
@@ -43,10 +47,10 @@ const valueText = (value: unknown): string => {
 }
 const parseStatus = (status: string) => te(`shelfModel.parse.${status}`) ? t(`shelfModel.parse.${status}`) : status
 const operationName = (item: OperationLog) => OPERATION_TYPES.includes(item.operation_type) ? t(`operationLogs.types.${item.operation_type}`) : item.operation_type
-function sourceText(item: OperationLog) {
-  if (item.source?.type === 'agent') return `agent · ${item.source.agent_name || item.actor_name || item.actor}`
+function sourceText(item: Pick<OperationLog, 'source'> & Partial<Pick<OperationLog, 'actor_name' | 'actor'>>) {
+  if (item.source?.type === 'agent') return `agent · ${item.source.agent_name || item.actor_name || item.actor || t('shelfStatus.noRecord')}`
   if (item.source?.type === 'import') return `${t('shelfModel.import')} ${item.source.file_name || item.source.import_batch_id || ''}`
-  return item.source?.type === 'web' ? t('shelfModel.web') : item.actor_name || item.actor
+  return item.source?.type === 'web' ? t('shelfModel.web') : item.actor_name || item.actor || t('shelfStatus.noRecord')
 }
 function unwrap<T>(response: { success: boolean; data: T; message?: string; error?: string }): T {
   if (!response.success) throw new Error(response.message || response.error || t('workbench.requestFailed'))
@@ -193,7 +197,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
         <section id="sale">
           <h2>{{ t('shelfModel.sections.sale') }}</h2>
           <div class="regions">
-            <div v-for="region in library.shelf_config?.regions" :key="region.key">
+            <div v-for="region in saleRegions" :key="region.key">
               <h3>{{ region.name }}</h3>
               <div v-for="(status, index) in detail?.sale_statuses.filter(row => row.region === region.key)" :key="index" class="sale-record">
                 <span class="st" :class="`st-${status.status}`">{{ status.status }}</span>
@@ -203,6 +207,13 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
                 <small v-if="!selected" class="condition">{{ conditionText(status.conditions) }}</small>
               </div>
               <small v-if="!detail?.sale_statuses.some(row => row.region === region.key)">{{ t('shelfStatus.noRecord') }}</small>
+              <details v-if="region.evidence" class="sale-source">
+                <summary>{{ t('shelfModel.from') }} {{ sourceText(region.evidence) }}</summary>
+                <small v-if="region.evidence.source.worksheet">{{ region.evidence.source.worksheet }} {{ region.evidence.source.cells?.join(', ') }}</small>
+                <small v-if="region.evidence.changeset_id">{{ t('shelfModel.changeset') }} {{ region.evidence.changeset_id }}</small>
+                <small>{{ t('managed.effectiveAt') }} {{ formatDateTime(region.evidence.effective_at, locale) }}</small>
+                <small>{{ t('managed.recordedAt') }} {{ formatDateTime(region.evidence.recorded_at, locale) }}</small>
+              </details>
             </div>
           </div>
         </section>
@@ -434,6 +445,7 @@ small { display: block; font-size: var(--text-xs); color: var(--muted); white-sp
 .regions { display: flex; border-top: 2px solid var(--rule); overflow-x: auto; }
 .regions > div { flex: 1; min-width: 110px; padding: 8px 12px 8px 0; }
 .sale-record { display: grid; gap: 4px; padding-block: 8px; font-size: var(--text-xs); }
+.sale-source { font-size: var(--text-xs); overflow-wrap: anywhere; }
 .st, .doc { display: inline-block; width: max-content; padding: 1px 8px; font-size: var(--text-xs); font-weight: 800; }
 .st-GA, .delivered { background: var(--success); color: var(--bg); }
 .st-DEV { background: var(--blue); color: var(--on-blue); }
