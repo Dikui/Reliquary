@@ -16,7 +16,7 @@ func (b *importMapBuilder) requirementRow(mapping types.ShelfImportSheet, cells 
 	if strings.TrimSpace(name) == "" || slices.Contains(b.plan.Definition.MissingValues, name) {
 		return fmt.Errorf("uncertain: requirement name is missing or a placeholder")
 	}
-	identity := normalizeEntityName(name)
+	identity := b.requirementPresenceKey(mapping.Worksheet, name)
 	if b.seenRecordKeys["requirement-name:"+identity] {
 		return fmt.Errorf("uncertain: requirement appears in multiple rows; submitter must decide whether to merge")
 	}
@@ -37,6 +37,7 @@ func (b *importMapBuilder) requirementRow(mapping types.ShelfImportSheet, cells 
 			return err
 		}
 	}
+	requirement.ListName = b.requirementListName(mapping.Worksheet)
 	requirement.DraftDueStage, requirement.FinalDueStage = draft, final
 	requirement.DueText = cells["due_stages:"].Value
 	for field, target := range map[string]*string{"name_zh": &requirement.NameZH, "name_en": &requirement.NameEN, "file_category": &requirement.FileCategory, "stage_label": &requirement.StageLabel, "owner": &requirement.Owner, "priority": &requirement.Priority, "source_list": &requirement.SourceList, "source_version": &requirement.SourceVersion} {
@@ -197,12 +198,12 @@ func (b *importMapBuilder) disappearedRequirements() error {
 			}
 			seen[id] = true
 			location := item.Operation.ImportLocation
-			if location != nil && b.skippedSheets[location.Worksheet] {
+			if location == nil || b.skippedSheets[location.Worksheet] || requirementListName(entity.Attributes) != b.requirementListName(location.Worksheet) {
 				continue
 			}
 			present := false
 			for _, name := range append([]string{entity.CanonicalName, entity.Code}, entity.Aliases...) {
-				present = present || b.present[normalizeEntityName(name)]
+				present = present || b.present[b.requirementPresenceKey(location.Worksheet, name)]
 			}
 			if !present {
 				b.location = location
@@ -224,4 +225,17 @@ func importRequirementNameCell(cells map[string]importCell) importCell {
 		}
 	}
 	return importCell{}
+}
+
+// A plan key has no slash; the fixed separator preserves worksheet spelling.
+func (b *importMapBuilder) requirementListName(worksheet string) string {
+	return b.plan.Key + " / " + worksheet
+}
+func (b *importMapBuilder) requirementPresenceKey(worksheet, name string) string {
+	return b.requirementListName(worksheet) + "\x00" + normalizeEntityName(name)
+}
+func requirementListName(attributes map[string]any) string {
+	var r types.ShelfRequirement
+	_ = types.DecodeShelfValue(attributes["requirement"], &r)
+	return r.ListName
 }

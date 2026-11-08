@@ -137,7 +137,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
   "document": {
     "name": "客户原始文件名称",
     "owner_id": "model-id",
-    "requirement_id": "requirement-id",
+    "requirement_ids": ["requirement-id", "another-list-requirement-id"],
     "attachment_id": "attachment-id",
     "version_label": "Rev A",
     "stage": "final",
@@ -148,7 +148,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 }
 ```
 
-`owner_id` 指向本库活动的型号、产品名称、平台或部件。`requirement_id` 可空，非空时必须是本库活动资料要求。原件和 HTTP(S) `cloud_url` 至少提供一项，也可同时提供；云盘链接不触发外部下载。`stage` 必填，使用 `draft` 或 `final`。名称和版本号原样保存，缺少版本号时按该文件的上传顺序编号。新文件需要显式名称，后续版本保留文件名称。`origin` 保存提交方写法，操作来源另由变更集的 `source` 保存；时间优先 `occurred_at`，未给时使用导入文件日期或确认时刻。
+`owner_id` 指向本库活动的型号、产品名称、平台或部件。`requirement_ids` 可空数组，非空时每项必须是本库活动资料要求 ID，不允许重复或空 ID。兼容旧的单值 `requirement_id`；同时提供两种字段时，只接受相同的一项。原件和 HTTP(S) `cloud_url` 至少提供一项，也可同时提供；云盘链接不触发外部下载。`stage` 必填，使用 `draft` 或 `final`。名称和版本号原样保存，缺少版本号时按该文件的上传顺序编号。新文件需要显式名称，后续版本保留文件名称。`origin` 保存提交方写法，操作来源另由变更集的 `source` 保存；时间优先 `occurred_at`，未给时使用导入文件日期或确认时刻。
 
 同节点同资料要求默认匹配原文件。没有资料要求的文件每次默认新建，追加版本须提供操作的 `entity_id` 和读取到的 `revision`。系统在提议中固定所选文件及修订号，确认时检查并发变化；内部修订值 `-1` 表示该提议预期新建。当前版本替换在确认事务中完成，旧版标为 `is_current:false`，原件和元数据保留。通用实体操作不能创建资料文件或更改其类别，通用关系操作不能更改版本的归属或资料要求。
 
@@ -175,6 +175,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
     "kind": "document_requirement",
     "attributes": {
       "requirement": {
+        "list_name": "提交方清单名",
         "name_zh": "中文原名",
         "name_en": "Original English name",
         "file_category": "提交方文件类别",
@@ -213,7 +214,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 资料文件页面使用 `/platform/entries?libraries=<库 ID>&tab=files`，单文件版本页增加 `file=<资料文件 ID>`。货架设置使用同一路由的 `tab=shelf-settings`；普通资料页签仍为 `tab=documents`。模块类型、区域、有序阶段、解析器和按产品线的参数定义通过 `configure_shelf` 保存，带读取到的 `library_updated_at`。资料要求与适用关系在同一变更集中确认。
 
-`GET /libraries/:id/shelf/documents` 返回 `items`、分页前的 `total` 和 `truncated`。每项包含 `entity`、`document` 及可选的 `owner`、`requirement`。筛选参数如下，均在分页前执行：
+`GET /libraries/:id/shelf/documents` 返回 `items`、分页前的 `total` 和 `truncated`。每项包含 `entity`、`document` 及可选的 `owner`、`requirements`。单项关联时仍返回兼容字段 `requirement`。筛选参数如下，均在分页前执行：
 
 | 参数 | 说明 |
 | --- | --- |
@@ -230,7 +231,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 | 操作 | 输入 |
 | --- | --- |
-| `classify_document` | `entity_id`、文件 `revision`、`classification:{owner_id,requirement_id?,certificate_number?,conditions?}` |
+| `classify_document` | `entity_id`、文件 `revision`、`classification:{owner_id,requirement_ids?,certificate_number?,conditions?}` |
 | `select_document_version` | `entity_id`、文件 `revision`、该文件的 `version_id` |
 
 `classify_document` 对整份资料文件及其所有版本改归属，也用于未挂文件补挂。归属必须明确指定，认证归属还须提供匹配编号。归属关系和文本的显式关联一起更新，原件、版本号、解析器及解析状态不变。前后归类完整写入日志；不会根据内容推断归属，也不会合并已占用相同节点及资料要求的另一份文件。
@@ -238,3 +239,13 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 `select_document_version` 将所选旧版本设为当前，不复制原件或新增版本。文件修订号递增，当前标记和选择记录同事务保存；共享清单和检索读取相同当前版本。选择记录保留业务时间查询所需的选择时点；之后上传新版本会照常成为当前。
 
 迁移 50 允许明确未挂的空归属，并保存当前版本选择记录。导出恢复保留这些数据；存在未挂版本、选择记录或新的变更集操作时拒绝降级。
+
+## 资料要求的所属清单与多项关联
+
+资料要求的 `attributes.requirement.list_name` 必填，最长 512 字符，原样保存。手工新建由提交方填写；导入值为 `方案键 / 工作表名`。名称、别名和代码在同一所属清单内唯一，不同清单的同名要求各自独立，“同一条目，保存别名”的决定也只能指向同一所属清单。其他类别仍使用原有名称唯一规则。负责人、应交阶段、市场、来源清单原文 `source_list` 和来源版本 `source_version` 都随各项要求分别保存。设置页的“来源清单”列显示所属清单，另保留来源原文和版本。
+
+`add_document_version.document.requirement_ids` 和 `classify_document.classification.requirement_ids` 接受多项明确要求。一个文件可同时满足多项要求，型号清单逐项应用各自的初稿与终稿期限。取消一项关联后只影响该项的文件判断。新增版本按同一归属与完整要求集合匹配已有文件，数组次序不影响匹配；明确提供文件 ID 时也须保持归类一致，改归类使用 `classify_document`。不同要求集合可能重叠，无法唯一判断文件时须明确文件 ID。
+
+版本、文件列表及节点文件列表返回 `requirement_ids` 或 `requirements`。单项时保留兼容单值字段，多项时不把其中任意一项当作代表。解析器按现有规则顺序选择，规则中的要求匹配所选集合任意一项。未明确文件类别时，仅在所有所选要求的类别一致时沿用该类别，否则保持为空。
+
+迁移 51 为所有没有所属清单的旧要求及其属性历史加入“历史未分清单”。实体 ID、名称、元数据、版本和已有关系不变，旧单项文件关联转换为单元素数组。旧导入可能已混合多个清单的数据，迁移不会猜测其归属，也不能重建此前已被覆盖的值。维护者应通过变更集核对并明确归入实际清单；在此之前，新导入清单会创建独立要求，不自动合并历史要求。维护副本和恢复支持新字段及旧副本升级。存在新的清单身份、多项文件关联或使用多项字段的变更集时拒绝降级。

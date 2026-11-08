@@ -81,6 +81,13 @@ func schemaRules(ctx context.Context, db *gorm.DB) (result map[string]Rule, resu
 		for table, rule := range copy {
 			copy[table] = catalogSchemaRule(table, rule, migration.Version)
 		}
+		if migration.Version < 51 {
+			rule := copy["shelf_document_versions"]
+			rule.Sidecar = strings.ReplaceAll(rule.Sidecar, " requirement_ids", "")
+			if rule.Sidecar != "" {
+				copy["shelf_document_versions"] = rule
+			}
+		}
 		if migration.Version >= 46 && migration.Version < 48 {
 			rule := copy["shelf_document_versions"]
 			rule.Sidecar = strings.TrimSpace(strings.ReplaceAll(rule.Sidecar, " parser_key parse_attempt parse_error file_category", ""))

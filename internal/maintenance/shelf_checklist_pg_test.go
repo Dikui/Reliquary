@@ -75,6 +75,7 @@ func TestShelfChecklistMigrationAndReplicaPreserveRequirements(t *testing.T) {
 	require.NoError(t, VerifyImportedReplica(ctx, fresh, root))
 	actual, err := Capture(ctx, fresh)
 	require.NoError(t, err)
+	saved.Tables["entities"][0]["attributes"].(map[string]any)["requirement"].(map[string]any)["list_name"] = "历史未分清单"
 	require.Equal(t, saved.Tables["entities"], actual.Tables["entities"])
 	require.Equal(t, saved.Tables["relations"], actual.Tables["relations"])
 	require.ErrorContains(t, migration.Migrate(46), "shelf checklist data exists")

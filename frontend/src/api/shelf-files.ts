@@ -4,10 +4,10 @@ import type { LibraryPatch } from './library'
 import type { ShelfCondition, ShelfDocumentVersion, ShelfResponse } from './shelf'
 import type { ShelfReviewChangeset, ShelfReviewOperation } from './shelf-review'
 
-export interface ShelfFileRow { entity: Entity; document: ShelfDocumentVersion; owner?: Entity; requirement?: Entity }
+export interface ShelfFileRow { entity: Entity; document: ShelfDocumentVersion; owner?: Entity; requirements?: Entity[]; requirement?: Entity }
 export interface ShelfFileQuery { q?: string; group?: string; owner_kind?: string; parse_status?: string; include_history?: boolean; offset?: number }
 export interface ShelfDocumentInput {
-  name?: string; unassigned?: boolean; owner_id: string; requirement_id?: string; certificate_number?: string
+  name?: string; unassigned?: boolean; owner_id: string; requirement_ids?: string[]; requirement_id?: string; certificate_number?: string
   attachment_id?: string; cloud_url?: string; version_label: string; stage: 'draft' | 'final'; origin?: string; file_category?: string; conditions: ShelfCondition[]
 }
 const base = (library: string) => `/api/v1/libraries/${encodeURIComponent(library)}/shelf`

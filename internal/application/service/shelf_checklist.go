@@ -193,7 +193,7 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 			covered := []map[string][]string{}
 			for i := range d.documents {
 				v := &d.documents[i]
-				if documentIDValue(v.RequirementID) != r.ID {
+				if !slices.Contains(v.Requirements(), r.ID) {
 					continue
 				}
 				level, ok := owners[documentIDValue(v.OwnerID)]
@@ -291,7 +291,12 @@ func (d *shelfChecklistData) apply(entity *types.Entity, result *types.ShelfMode
 		if documentIDValue(document.OwnerID) != entity.ID {
 			continue
 		}
-		row := types.ShelfNodeDocument{Entity: d.nodes[document.FileID], Document: document}
+		row := types.ShelfNodeDocument{Entity: d.nodes[document.FileID], Document: document, Requirements: []types.Entity{}}
+		for _, id := range document.Requirements() {
+			if requirement, ok := d.nodes[id]; ok {
+				row.Requirements = append(row.Requirements, requirement)
+			}
+		}
 		if requirement, ok := d.nodes[documentIDValue(document.RequirementID)]; ok {
 			row.Requirement = &requirement
 		}
@@ -370,7 +375,7 @@ func (d *shelfChecklistData) partChecklist(entity *types.Entity) []types.ShelfCh
 		found := false
 		for i := range d.documents {
 			document := &d.documents[i]
-			if documentIDValue(document.OwnerID) != entity.ID || documentIDValue(document.RequirementID) != requirement.ID {
+			if documentIDValue(document.OwnerID) != entity.ID || !slices.Contains(document.Requirements(), requirement.ID) {
 				continue
 			}
 			row := d.row(requirement, record, "", document, 0, nil, nil, nil)
@@ -409,7 +414,7 @@ func (d *shelfChecklistData) otherDocuments(id string, composition []types.Shelf
 	rows := []types.ShelfOtherDocument{}
 	for _, document := range d.documents {
 		origin, ok := owners[documentIDValue(document.OwnerID)]
-		if !ok || documentIDValue(document.RequirementID) != "" {
+		if !ok || len(document.Requirements()) > 0 {
 			continue
 		}
 		conditions := append([]types.ShelfCondition{}, document.Conditions...)

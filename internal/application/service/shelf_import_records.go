@@ -15,6 +15,9 @@ func (b *importMapBuilder) recordEntity(kind, name string) (types.Entity, error)
 	var found types.Entity
 	for _, op := range b.ops {
 		if op.Type == "create_entity" && op.Entity != nil && op.Entity.Kind == kind && normalizeEntityName(op.Entity.Name) == normalizeEntityName(name) {
+			if kind == "document_requirement" && requirementListName(op.Entity.Attributes) != b.requirementListName(b.location.Worksheet) {
+				continue
+			}
 			found = types.Entity{ID: "$" + op.ID, Kind: kind, CanonicalName: op.Entity.Name, Attributes: op.Entity.Attributes, Revision: 1}
 		}
 	}
@@ -22,7 +25,7 @@ func (b *importMapBuilder) recordEntity(kind, name string) (types.Entity, error)
 		return found, fmt.Errorf("uncertain: missing %s identity", kind)
 	}
 	for _, entity := range b.entities {
-		if entity.Kind != kind {
+		if entity.Kind != kind || kind == "document_requirement" && requirementListName(entity.Attributes) != b.requirementListName(b.location.Worksheet) {
 			continue
 		}
 		for _, candidate := range append([]string{entity.ID, entity.CanonicalName, entity.Code}, entity.Aliases...) {
@@ -105,7 +108,7 @@ func (b *importMapBuilder) parseRecords(workbook *importWorkbookData) error {
 				var err error
 				switch b.plan.FileKind {
 				case "atq":
-					b.present[normalizeEntityName(importRequirementName(variant))] = true
+					b.present[b.requirementPresenceKey(mapping.Worksheet, importRequirementName(variant))] = true
 					err = b.requirementRow(mapping, variant)
 				case "overseas_sales":
 					err = b.overseasRow(mapping, variant)

@@ -199,7 +199,7 @@ func TestShelfSearchRejectsInvalidScope(t *testing.T) {
 	var other types.Library
 	f.request(http.MethodPost, "/libraries", map[string]any{"name": "Other shelf", "directory": "other-search-shelf", "entity_mode": "managed", "shelf_enabled": true}, http.StatusCreated, &other)
 	var requirement types.Entity
-	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "document_requirement", "name": "Search requirement"}, http.StatusCreated, &requirement)
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "document_requirement", "name": "Search requirement", "attributes": shelfFileRequirementAttributes(f, library)}, http.StatusCreated, &requirement)
 	tooMany := make([]string, 101)
 	for i := range tooMany {
 		tooMany[i] = shelfNode(nodes, "model")

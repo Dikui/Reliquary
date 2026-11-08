@@ -6,10 +6,11 @@ import type { LibraryCatalogItem } from '@/api/library'
 import { deleteEntityAttachment, uploadEntityAttachment, type Entity } from '@/api/entities'
 import { shelfEntities, shelfWriteError, writeShelf, type ShelfDocumentInput } from '@/api/shelf-files'
 import type { ShelfDocumentVersion } from '@/api/shelf'
+import { requirementLabel } from '@/utils/shelfRequirement'
 const props = defineProps<{ library: LibraryCatalogItem; file?: Entity; current?: ShelfDocumentVersion; classify?: boolean }>()
 const emit = defineEmits<{ close: []; saved: [fileId: string] }>(), { t } = useI18n()
 const nodes = ref<Entity[]>([]), loading = ref(true), busy = ref(false), error = ref(''), chosen = ref<File>(), attachmentId = ref(''), committed = ref(false)
-const owner = ref(props.current ? props.current.owner_id || 'unassigned' : ''), name = ref(props.file?.canonical_name || ''), requirement = ref(props.current?.requirement_id || ''), number = ref(props.current?.certificate_number || '')
+const owner = ref(props.current ? props.current.owner_id || 'unassigned' : ''), name = ref(props.file?.canonical_name || ''), selectedRequirements = ref<string[]>([...(props.current?.requirement_ids || (props.current?.requirement_id ? [props.current.requirement_id] : []))]), number = ref(props.current?.certificate_number || '')
 const label = ref(''), stage = ref<'draft' | 'final'>(props.current?.stage || 'draft'), cloud = ref(''), origin = ref(''), category = ref(props.current?.file_category || '')
 const conditions = ref(JSON.parse(JSON.stringify(props.current?.conditions || [])) as { module_type: string; part_ids: string[] }[])
 const owners = computed(() => nodes.value.filter(n => ['model', 'product', 'platform', 'part', 'certification'].includes(n.kind || '')))
@@ -47,7 +48,7 @@ async function save() {
       if (!upload.success) throw new Error(upload.error)
       attachmentId.value = upload.data.id
     }
-    const classification = { owner_id: owner.value === 'unassigned' ? '' : owner.value, requirement_id: owner.value === 'unassigned' ? '' : requirement.value, certificate_number: certification ? number.value : '', conditions: owner.value === 'unassigned' ? [] : conditions.value }
+    const classification = { owner_id: owner.value === 'unassigned' ? '' : owner.value, requirement_ids: owner.value === 'unassigned' ? [] : selectedRequirements.value, certificate_number: certification ? number.value : '', conditions: owner.value === 'unassigned' ? [] : conditions.value }
     const document: ShelfDocumentInput = { ...classification, name: name.value, unassigned: owner.value === 'unassigned', attachment_id: attachmentId.value || undefined, cloud_url: cloud.value || undefined, stage: stage.value, version_label: label.value, origin: origin.value, file_category: category.value }
     const response = await writeShelf(props.library.id, [{ id: 'document', type: props.classify ? 'classify_document' : 'add_document_version', ...(props.file ? { entity_id: props.file.id, revision: props.file.revision } : {}), ...(props.classify ? { classification } : { document }) }])
     if (!response.success || response.data.status !== 'confirmed') throw new Error(response.message)
@@ -55,21 +56,24 @@ async function save() {
   } catch (cause) { error.value = shelfWriteError(cause, t('shelfFiles.saveFailed')) }
   finally { busy.value = false }
 }
-function changeOwner() { requirement.value = ''; number.value = ''; conditions.value = [] }
+function changeOwner() { selectedRequirements.value = []; number.value = ''; conditions.value = [] }
 function selectPart(index: number, id: string, checked: boolean) { const c = conditions.value[index]!; c.part_ids = checked ? [...c.part_ids, id] : c.part_ids.filter(value => value !== id) }
 onMounted(load)
 onBeforeUnmount(() => { active = false; if (attachmentId.value && !committed.value) void deleteEntityAttachment(attachmentId.value).catch(() => {}) })
 </script>
 <template>
   <Dialog :model-value="true" :title="title" :closable="!busy" :close-on-overlay-click="!busy" :close-on-esc-keydown="!busy" @update:model-value="!$event && !busy && emit('close')">
-    <form class="rq-shelf-file-form" @submit.prevent="save">
+    <form novalidate class="rq-shelf-file-form" @submit.prevent="save">
       <p v-if="loading" role="status">{{ t('common.loading') }}</p>
       <p v-if="error" role="alert" class="rq-shelf-error">{{ error }} <Button v-if="!nodes.length && !busy" @click="load">{{ t('common.retry') }}</Button></p>
       <fieldset :disabled="busy || loading" class="rq-shelf-file-fields">
         <Field :label="t('shelfFiles.fileName')" id="shelf-file-name"><Input id="shelf-file-name" v-model="name" :aria-label="t('shelfFiles.fileName')" required :disabled="!!file" /></Field>
         <Field :label="t('shelfFiles.owner')" id="shelf-file-owner"><Select id="shelf-file-owner" v-model="owner" :aria-label="t('shelfFiles.owner')" required :disabled="!!file && !classify" @update:model-value="changeOwner"><option value="" disabled>{{ t('shelfFiles.owner') }}</option><option v-if="!classify" value="unassigned">{{ t('shelfFiles.unassigned') }}</option><option v-for="node in owners" :key="node.id" :value="node.id">{{ library.entity_schema?.kinds.find(kind => kind.key === node.kind)?.name || node.kind }} · {{ node.canonical_name }}</option></Select></Field>
         <template v-if="owner && owner !== 'unassigned'">
-          <Field :label="t('shelfFiles.requirement')" id="shelf-file-requirement"><Select id="shelf-file-requirement" v-model="requirement" :disabled="!!file && !classify"><option value="">{{ t('shelfFiles.none') }}</option><option v-for="node in requirements" :key="node.id" :value="node.id">{{ node.canonical_name }}</option></Select></Field>
+          <fieldset class="rq-shelf-requirement-options" :disabled="!!file && !classify"><legend>{{ t('shelfFiles.requirement') }}</legend>
+            <p v-if="!requirements.length">{{ t('shelfFiles.none') }}</p>
+            <label v-for="node in requirements" :key="node.id"><Checkbox :model-value="selectedRequirements.includes(node.id)" @update:model-value="selectedRequirements = $event ? [...selectedRequirements, node.id] : selectedRequirements.filter(id => id !== node.id)" /> {{ requirementLabel(node) }}</label>
+          </fieldset>
           <Field v-if="selectedOwner?.kind === 'certification'" :label="t('shelfFiles.certificateNumber')" id="shelf-file-number"><Input id="shelf-file-number" v-model="number" required /></Field>
           <fieldset><legend>{{ t('shelfFiles.conditions') }}</legend>
             <p v-if="!conditions.length">{{ t('shelfFiles.allOptions') }}</p>
@@ -98,5 +102,7 @@ onBeforeUnmount(() => { active = false; if (attachmentId.value && !committed.val
 .rq-shelf-file-fields { border: 0; padding: 0; margin: 0; }
 .rq-shelf-condition { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) 0; }
 .rq-shelf-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+.rq-shelf-requirement-options { max-height: 240px; overflow: auto; }
+.rq-shelf-requirement-options label { display: flex; align-items: center; gap: var(--space-2); padding-block: var(--space-1); }
 .rq-shelf-error { color: var(--danger); }
 </style>

@@ -52,6 +52,12 @@ func validateManagedEntity(library *types.Library, entity *types.Entity) error {
 	if err := library.EntitySchema.ValidateAttributes(entity.Kind, entity.Attributes); err != nil {
 		return apperrors.NewBadRequestError(err.Error())
 	}
+	if entity.Kind == "document_requirement" {
+		var requirement types.ShelfRequirement
+		if err := types.DecodeShelfValue(entity.Attributes["requirement"], &requirement); err != nil || strings.TrimSpace(requirement.ListName) == "" {
+			return apperrors.NewBadRequestError("document requirement list_name is required")
+		}
+	}
 	entity.KindLabel = managedKindLabel(library, entity.Kind)
 	return nil
 }

@@ -47,7 +47,7 @@ func TestShelfDocumentsOriginalVersionsRequireConfirmation(t *testing.T) {
 	f, library := newProductShelfFixture(t)
 	var model, requirement types.Entity
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "model", "name": "Synthetic document model"}, http.StatusCreated, &model)
-	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "document_requirement", "name": "Synthetic requirement"}, http.StatusCreated, &requirement)
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "document_requirement", "name": "Synthetic requirement", "attributes": shelfFileRequirementAttributes(f, library)}, http.StatusCreated, &requirement)
 	attachment := shelfUpload(t, f, library.ID, "%PDF synthetic first original", http.StatusCreated)
 	path := "/libraries/" + library.ID + "/shelf/changesets"
 	var draft types.ShelfChangeset
@@ -93,7 +93,7 @@ func TestShelfDocumentsCloudLinksClassifyOnEachAllowedNode(t *testing.T) {
 	f, library := newProductShelfFixture(t)
 	path := "/libraries/" + library.ID + "/shelf/changesets"
 	var requirement types.Entity
-	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "document_requirement", "name": "Cloud document requirement"}, http.StatusCreated, &requirement)
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "document_requirement", "name": "Cloud document requirement", "attributes": shelfFileRequirementAttributes(f, library)}, http.StatusCreated, &requirement)
 	for _, kind := range []string{"model", "part", "product", "platform"} {
 		var owner types.Entity
 		f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": kind, "name": "Link owner " + kind}, http.StatusCreated, &owner)
@@ -245,7 +245,7 @@ func TestShelfDocumentsConcurrentConfirmationRejectsStaleVersion(t *testing.T) {
 	var initial types.ShelfChangeset
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{
 		map[string]any{"id": "owner", "type": "create_entity", "entity": map[string]any{"name": "Concurrent owner", "kind": "model"}},
-		map[string]any{"id": "requirement", "type": "create_entity", "entity": map[string]any{"name": "Concurrent requirement", "kind": "document_requirement"}},
+		map[string]any{"id": "requirement", "type": "create_entity", "entity": map[string]any{"name": "Concurrent requirement", "kind": "document_requirement", "attributes": shelfFileRequirementAttributes(f, library)}},
 		map[string]any{"id": "document", "type": "add_document_version", "document": map[string]any{"owner_id": "$owner", "requirement_id": "$requirement", "name": "Concurrent document", "cloud_url": "https://example.org/first", "stage": "draft"}},
 	}}, http.StatusCreated, &initial)
 	propose := func(link string) types.ShelfChangeset {
@@ -317,7 +317,7 @@ func TestShelfDocumentsDeferredClassificationPreservesTextAndConditions(t *testi
 	path := "/libraries/" + library.ID + "/shelf/changesets"
 	var draft types.ShelfChangeset
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{
-		map[string]any{"id": "requirement", "type": "create_entity", "entity": map[string]any{"name": "Deferred document requirement", "kind": "document_requirement"}},
+		map[string]any{"id": "requirement", "type": "create_entity", "entity": map[string]any{"name": "Deferred document requirement", "kind": "document_requirement", "attributes": shelfFileRequirementAttributes(f, library)}},
 		map[string]any{"id": "document", "type": "add_document_version", "document": map[string]any{"owner_id": shelfNode(nodes, "model"), "requirement_id": "$requirement", "entry_id": entryID, "name": "Deferred text document", "cloud_url": "https://example.org/deferred", "stage": "final", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "a")}}}}},
 	}}, http.StatusCreated, &draft)
 	f.request(http.MethodPost, path+"/"+draft.ID+"/confirm", map[string]any{"revision": draft.Revision, "decisions": []any{map[string]any{"item_id": "requirement", "action": "apply"}, map[string]any{"item_id": "document", "action": "defer"}}}, http.StatusOK, &draft)
@@ -370,7 +370,7 @@ func TestShelfDocumentsCorrectedProposalCanCreateDifferentFile(t *testing.T) {
 	var initial types.ShelfChangeset
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{
 		map[string]any{"id": "owner", "type": "create_entity", "entity": map[string]any{"name": "Correction owner", "kind": "model"}},
-		map[string]any{"id": "requirement", "type": "create_entity", "entity": map[string]any{"name": "Correction requirement", "kind": "document_requirement"}},
+		map[string]any{"id": "requirement", "type": "create_entity", "entity": map[string]any{"name": "Correction requirement", "kind": "document_requirement", "attributes": shelfFileRequirementAttributes(f, library)}},
 		map[string]any{"id": "document", "type": "add_document_version", "document": map[string]any{"owner_id": "$owner", "requirement_id": "$requirement", "name": "Original classified file", "cloud_url": "https://example.org/first", "stage": "draft"}},
 	}}, http.StatusCreated, &initial)
 	var draft types.ShelfChangeset
@@ -381,4 +381,15 @@ func TestShelfDocumentsCorrectedProposalCanCreateDifferentFile(t *testing.T) {
 	f.request(http.MethodGet, "/entities/"+shelfNode(initial, "document")+"/document-versions", nil, http.StatusOK, &versions)
 	require.Len(t, versions, 1)
 	require.True(t, versions[0].IsCurrent)
+}
+
+// File-focused scenarios still submit the required list and configured deadline.
+func shelfFileRequirementAttributes(f *managedNamesFixture, library types.Library) map[string]any {
+	f.t.Helper()
+	f.request(http.MethodGet, "/libraries/"+library.ID, nil, http.StatusOK, &library)
+	if len(library.ShelfConfig.Stages) == 0 {
+		library.ShelfConfig.Stages = []types.ShelfOption{{Key: "file_due", Name: "Synthetic file deadline"}}
+		f.request(http.MethodPut, "/libraries/"+library.ID, map[string]any{"shelf_config": library.ShelfConfig}, http.StatusOK, &library)
+	}
+	return map[string]any{"requirement": map[string]any{"list_name": "Synthetic list", "final_due_stage": library.ShelfConfig.Stages[0].Key}}
 }

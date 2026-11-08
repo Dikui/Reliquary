@@ -424,8 +424,8 @@ func TestShelfParsersMatchSelectorsAndFallback(t *testing.T) {
 	shelfParserSettings(f, &library, config)
 	var owner, req1, req2 types.Entity
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"name": "Rule owner", "kind": "model"}, http.StatusCreated, &owner)
-	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"name": "Rule requirement one", "kind": "document_requirement", "attributes": map[string]any{"requirement": map[string]any{"file_category": "Manual", "final_due_stage": "finish"}}}, http.StatusCreated, &req1)
-	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"name": "Rule requirement two", "kind": "document_requirement"}, http.StatusCreated, &req2)
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"name": "Rule requirement one", "kind": "document_requirement", "attributes": map[string]any{"requirement": map[string]any{"list_name": "Synthetic list", "file_category": "Manual", "final_due_stage": "finish"}}}, http.StatusCreated, &req1)
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"name": "Rule requirement two", "kind": "document_requirement", "attributes": shelfFileRequirementAttributes(f, library)}, http.StatusCreated, &req2)
 	config["parser_rules"] = []any{
 		map[string]any{"parser_key": "first", "extension": ".PDF", "requirement_id": req1.ID, "file_category": "Manual"},
 		map[string]any{"parser_key": "second", "file_category": "Manual"},

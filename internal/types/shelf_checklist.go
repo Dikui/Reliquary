@@ -9,6 +9,7 @@ import (
 // ShelfRequirement retains the submitted list metadata independently of names
 // used to identify the entity. Due stages refer to stable library stage keys.
 type ShelfRequirement struct {
+	ListName      string            `json:"list_name"`
 	NameZH        string            `json:"name_zh,omitempty"`
 	NameEN        string            `json:"name_en,omitempty"`
 	FileCategory  string            `json:"file_category,omitempty"`
@@ -27,6 +28,9 @@ func ValidateShelfRequirement(value any) error {
 	var r ShelfRequirement
 	if err := DecodeShelfValue(value, &r); err != nil {
 		return fmt.Errorf("invalid document requirement: %w", err)
+	}
+	if strings.TrimSpace(r.ListName) == "" || len([]rune(r.ListName)) > 512 {
+		return fmt.Errorf("requirement list_name is required and must contain at most 512 characters")
 	}
 	if strings.TrimSpace(r.FinalDueStage) == "" {
 		return fmt.Errorf("final due stage is required")

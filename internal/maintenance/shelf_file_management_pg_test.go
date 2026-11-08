@@ -42,7 +42,7 @@ func TestShelfFileManagementMigrationAndReplica(t *testing.T) {
 	require.NoError(t, migration.Migrate(49), "empty file management data permits downgrade")
 	require.NoError(t, migration.Migrate(50))
 	version := types.ShelfDocumentVersion{ID: "version", SpaceID: 1, LibraryID: "library", FileID: "file", CloudURL: "https://example.invalid/original", Ordinal: 1, VersionLabel: " Customer original ", Stage: "draft", IsCurrent: true, OccurredAt: time.Now(), CreatedAt: time.Now(), Source: types.OperationSource{Type: "web"}, ChangesetID: "batch", ParseStatus: "not_parsed", Conditions: []types.ShelfCondition{}}
-	require.NoError(t, db.Create(&version).Error)
+	require.NoError(t, db.Omit("RequirementIDs").Create(&version).Error)
 	selection := types.ShelfDocumentSelection{ID: "selection", SpaceID: 1, LibraryID: "library", FileID: "file", VersionID: "version", SelectedAt: time.Now()}
 	require.NoError(t, db.Create(&selection).Error)
 	snapshot, err := maintenance.Capture(ctx, db)

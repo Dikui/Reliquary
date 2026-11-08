@@ -46,9 +46,9 @@ func (s *EntityService) shelfDocumentBefore(ctx context.Context, draft *types.Sh
 			return nil, err
 		}
 		file = found
-	} else if op.Document.RequirementID != "" {
+	} else if len(op.Document.RequirementIDs) > 0 {
 		var versions []types.ShelfDocumentVersion
-		query := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND owner_id=? AND COALESCE(requirement_id,'')=? AND is_current", draft.SpaceID, draft.LibraryID, op.Document.OwnerID, op.Document.RequirementID)
+		query := s.db.WithContext(ctx).Where("space_id=? AND library_id=? AND owner_id=? AND requirement_ids=?::jsonb AND is_current", draft.SpaceID, draft.LibraryID, op.Document.OwnerID, string(shelfJSON(op.Document.RequirementIDs)))
 		err := query.Find(&versions).Error
 		if err != nil {
 			return nil, err
@@ -84,7 +84,7 @@ func (s *EntityService) shelfDocumentBefore(ctx context.Context, draft *types.Sh
 	if err != nil {
 		return nil, err
 	}
-	if len(versions) == 0 || documentIDValue(versions[0].OwnerID) != op.Document.OwnerID || documentIDValue(versions[0].RequirementID) != op.Document.RequirementID {
+	if len(versions) == 0 || documentIDValue(versions[0].OwnerID) != op.Document.OwnerID || !sameRequirementIDs(versions[0].Requirements(), op.Document.RequirementIDs) {
 		return nil, apperrors.NewBadRequestError("uncertain: selected document does not match its owner and requirement")
 	}
 	return shelfJSON(versions[0]), nil
@@ -92,6 +92,9 @@ func (s *EntityService) shelfDocumentBefore(ctx context.Context, draft *types.Sh
 
 func (s *EntityService) writeShelfDocument(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem, op types.ShelfOperation) (*types.ShelfDocumentVersion, error) {
 	input := op.Document
+	if err := normalizeDocumentRequirements(input); err != nil {
+		return nil, err
+	}
 	if input.Stage != "draft" && input.Stage != "final" || input.AttachmentID == "" && input.CloudURL == "" {
 		return nil, apperrors.NewBadRequestError("document owner, draft/final stage and an original or cloud link are required")
 	}
@@ -111,8 +114,8 @@ func (s *EntityService) writeShelfDocument(ctx context.Context, draft *types.She
 				return nil, err
 			}
 		}
-		if input.RequirementID != "" {
-			if _, err = s.SaveManagedRelation(ctx, draft.LibraryID, "", types.ManagedRelationInput{SubjectID: file.ID, ObjectID: input.RequirementID, RelationType: "fulfills"}); err != nil {
+		for _, requirementID := range input.RequirementIDs {
+			if _, err = s.SaveManagedRelation(ctx, draft.LibraryID, "", types.ManagedRelationInput{SubjectID: file.ID, ObjectID: requirementID, RelationType: "fulfills"}); err != nil {
 				return nil, err
 			}
 		}
@@ -142,7 +145,7 @@ func (s *EntityService) writeShelfDocument(ctx context.Context, draft *types.She
 	version := &types.ShelfDocumentVersion{
 		ID:      uuid.NewSHA1(uuid.NameSpaceOID, []byte(draft.ID+":"+item.ID)).String(),
 		SpaceID: draft.SpaceID, LibraryID: draft.LibraryID, FileID: file.ID,
-		OwnerID: optionalDocumentID(input.OwnerID), RequirementID: optionalDocumentID(input.RequirementID),
+		OwnerID: optionalDocumentID(input.OwnerID), RequirementID: optionalDocumentID(input.RequirementID), RequirementIDs: input.RequirementIDs,
 		CertificateNumber: input.CertificateNumber,
 		AttachmentID:      optionalDocumentID(input.AttachmentID), CloudURL: input.CloudURL,
 		EntryID: optionalDocumentID(input.EntryID),
@@ -162,25 +165,32 @@ func (s *EntityService) writeShelfDocument(ctx context.Context, draft *types.She
 		return nil, err
 	}
 	version.FileCategory = input.FileCategory
-	if input.RequirementID != "" && version.FileCategory == "" {
-		requirement, err := s.shelfEntity(ctx, library.ID, input.RequirementID)
-		if err != nil {
-			return nil, err
-		}
-		if raw, ok := requirement.Attributes["requirement"]; ok {
-			var metadata types.ShelfRequirement
-			if err := types.DecodeShelfValue(raw, &metadata); err != nil {
+	if version.FileCategory == "" && len(input.RequirementIDs) > 0 {
+		categories := []string{}
+		for _, id := range input.RequirementIDs {
+			requirement, err := s.shelfEntity(ctx, library.ID, id)
+			if err != nil {
 				return nil, err
 			}
-			version.FileCategory = metadata.FileCategory
+			var metadata types.ShelfRequirement
+			if raw, ok := requirement.Attributes["requirement"]; ok {
+				if err := types.DecodeShelfValue(raw, &metadata); err != nil {
+					return nil, err
+				}
+			}
+			categories = append(categories, metadata.FileCategory)
+		}
+		if len(slices.Compact(categories)) == 1 {
+			version.FileCategory = categories[0]
 		}
 	}
+
 	if input.EntryID == "" && input.AttachmentID != "" {
 		attachment, err := s.EntityAttachment(ctx, input.AttachmentID)
 		if err != nil {
 			return nil, err
 		}
-		version.ParserKey = library.ShelfConfig.SelectParser(attachment.Name, input.RequirementID, version.FileCategory)
+		version.ParserKey = library.ShelfConfig.SelectParserForRequirements(attachment.Name, input.RequirementIDs, version.FileCategory)
 	}
 	if err = s.db.WithContext(ctx).Create(version).Error; err != nil {
 		return nil, err
@@ -294,6 +304,9 @@ func (s *EntityService) validateShelfDocument(ctx context.Context, library *type
 
 // Classification corrects existing metadata without re-uploading its originals.
 func (s *EntityService) validateShelfDocumentClassification(ctx context.Context, library *types.Library, input *types.ShelfDocumentInput) error {
+	if err := normalizeDocumentRequirements(input); err != nil {
+		return err
+	}
 	var err error
 	if len([]rune(input.CertificateNumber)) > 20000 {
 		return apperrors.NewBadRequestError("document certificate number is too long")
@@ -320,9 +333,9 @@ func (s *EntityService) validateShelfDocumentClassification(ctx context.Context,
 		}
 		input.OwnerID = matches[0]
 	}
-	if input.RequirementID != "" {
+	for _, requirementID := range input.RequirementIDs {
 		var count int64
-		if err = s.db.WithContext(ctx).Model(&types.Entity{}).Where("id=? AND space_id=? AND library_id=? AND kind='document_requirement' AND archived_at IS NULL AND merged_into_id=''", input.RequirementID, library.SpaceID, library.ID).Count(&count).Error; err != nil {
+		if err = s.db.WithContext(ctx).Model(&types.Entity{}).Where("id=? AND space_id=? AND library_id=? AND kind='document_requirement' AND archived_at IS NULL AND merged_into_id=''", requirementID, library.SpaceID, library.ID).Count(&count).Error; err != nil {
 			return err
 		}
 		if count != 1 {
@@ -333,7 +346,7 @@ func (s *EntityService) validateShelfDocumentClassification(ctx context.Context,
 		return apperrors.NewBadRequestError(err.Error())
 	}
 	if input.Unassigned {
-		if input.OwnerID != "" || input.RequirementID != "" || input.CertificateNumber != "" || len(input.Conditions) > 0 {
+		if input.OwnerID != "" || len(input.RequirementIDs) > 0 || input.CertificateNumber != "" || len(input.Conditions) > 0 {
 			return apperrors.NewBadRequestError("uncertain: an unassigned file cannot have classification")
 		}
 		return nil
@@ -398,4 +411,30 @@ func (s *EntityService) validateShelfDocumentClassification(ctx context.Context,
 		return apperrors.NewBadRequestError("uncertain: document conditions do not match one model in the owner scope")
 	}
 	return nil
+}
+
+func normalizeDocumentRequirements(input *types.ShelfDocumentInput) error {
+	if input.RequirementID != "" && len(input.RequirementIDs) > 0 && (len(input.RequirementIDs) != 1 || input.RequirementIDs[0] != input.RequirementID) {
+		return apperrors.NewBadRequestError("uncertain: provide requirement_ids or one consistent legacy requirement_id")
+	}
+	ids := append([]string{}, types.RequirementReferences(input.RequirementID, input.RequirementIDs)...)
+	slices.Sort(ids)
+	for i, id := range ids {
+		if id == "" || i > 0 && ids[i-1] == id {
+			return apperrors.NewBadRequestError("uncertain: requirement_ids must contain distinct nonempty identities")
+		}
+	}
+	input.RequirementIDs = ids
+	input.RequirementID = ""
+	if len(ids) == 1 {
+		input.RequirementID = ids[0]
+	}
+	return nil
+}
+func sameRequirementIDs(a, b []string) bool {
+	a = append([]string{}, a...)
+	b = append([]string{}, b...)
+	slices.Sort(a)
+	slices.Sort(b)
+	return slices.Equal(a, b)
 }

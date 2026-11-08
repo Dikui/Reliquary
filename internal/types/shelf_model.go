@@ -31,9 +31,10 @@ type ShelfModelDetail struct {
 }
 
 type ShelfNodeDocument struct {
-	Entity      Entity               `json:"entity"`
-	Document    ShelfDocumentVersion `json:"document"`
-	Requirement *Entity              `json:"requirement,omitempty"`
+	Requirements []Entity             `json:"requirements"`
+	Entity       Entity               `json:"entity"`
+	Document     ShelfDocumentVersion `json:"document"`
+	Requirement  *Entity              `json:"requirement,omitempty"`
 }
 
 type ShelfOtherDocument struct {

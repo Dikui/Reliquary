@@ -12,16 +12,16 @@ export interface ShelfCertification {
   certification: { owner_id: string; standard: string; year?: number; certification_object: string; cell_part_id?: string; region: string; agency?: string; progress?: string; start_date?: string; obtained_date?: string; issued_date?: string; validity?: string; number?: string; cloud_url?: string; conditions: ShelfCondition[] | null }
 }
 export interface ShelfDocumentVersion {
-  id: string; file_id: string; owner_id?: string; is_current?: boolean; parser_key?: string; certificate_number?: string; origin?: string; created_at?: string; requirement_id?: string; attachment_id?: string; cloud_url?: string; entry_id?: string
+  id: string; file_id: string; owner_id?: string; is_current?: boolean; parser_key?: string; certificate_number?: string; origin?: string; created_at?: string; requirement_id?: string; requirement_ids?: string[]; attachment_id?: string; cloud_url?: string; entry_id?: string
   version_label: string; stage: 'draft' | 'final'; ordinal: number; parse_status: string; parse_error?: string; file_category?: string
   conditions: ShelfCondition[] | null; occurred_at: string; source: OperationSource
 }
-export interface ShelfRequirement { name_zh?: string; name_en?: string; file_category?: string; stage_label?: string; due_text?: string; draft_due_stage?: string; final_due_stage?: string; owner?: string; priority?: string; source_list?: string; source_version?: string; markets?: Record<string, string> }
+export interface ShelfRequirement { list_name?: string; name_zh?: string; name_en?: string; file_category?: string; stage_label?: string; due_text?: string; draft_due_stage?: string; final_due_stage?: string; owner?: string; priority?: string; source_list?: string; source_version?: string; markets?: Record<string, string> }
 export interface ShelfChecklistItem {
   requirement: Entity; status: string; has_file: boolean; document?: ShelfDocumentVersion; document_name?: string; owner_id?: string
   origin?: string; conditions: ShelfCondition[] | null; ambiguous?: boolean
 }
-export interface ShelfNodeDocument { entity: Entity; document: ShelfDocumentVersion; requirement?: Entity }
+export interface ShelfNodeDocument { entity: Entity; document: ShelfDocumentVersion; requirements?: Entity[]; requirement?: Entity }
 export interface ShelfChecklistSummary { model_count: number; models_with_gaps: number; counts: Record<string, number> }
 export interface ShelfOtherDocument { entity: Entity; document: ShelfDocumentVersion; owner: Entity; origin: string; conditions: ShelfCondition[] | null }
 export interface ShelfEvidence { source: OperationSource; snapshot_id?: string; operation_log_id?: string; changeset_id?: string; effective_at: string; recorded_at: string }

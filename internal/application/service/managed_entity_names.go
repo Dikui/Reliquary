@@ -47,7 +47,7 @@ func managedKindLabel(library *types.Library, kind string) string {
 }
 
 // The caller holds the existing entity identity barrier and library lock. All
-// spellings share one namespace within a kind, regardless of their field.
+// spellings share one namespace within a kind and requirement list.
 func validateManagedNames(tx *gorm.DB, library *types.Library, entity *types.Entity, aliases []string, confirmations []types.ManagedNameConfirmation) error {
 	names := map[string]string{}
 	if entity.ArchivedAt == nil {
@@ -66,10 +66,10 @@ func validateManagedNames(tx *gorm.DB, library *types.Library, entity *types.Ent
 		keys = append(keys, key)
 	}
 	type owner struct {
-		ID, Kind, CanonicalName, Spelling string
+		ID, Kind, CanonicalName, Spelling, ListName string
 	}
 	var owners []owner
-	if err := tx.Raw(`SELECT DISTINCT e.id,e.kind,e.canonical_name,n.spelling FROM entities e
+	if err := tx.Raw(`SELECT DISTINCT e.id,e.kind,e.canonical_name,n.spelling,COALESCE(e.attributes #>> '{requirement,list_name}','') AS list_name FROM entities e
 	 JOIN LATERAL (
 	  SELECT e.normalized_name AS spelling,false AS is_code WHERE e.archived_at IS NULL
 	  UNION SELECT a.normalized_alias,false FROM entity_aliases a WHERE a.entity_id=e.id AND e.archived_at IS NULL
@@ -83,7 +83,14 @@ func validateManagedNames(tx *gorm.DB, library *types.Library, entity *types.Ent
 	// Unicode and whitespace rules as names before comparing ownership.
 	matched := []owner{}
 	seen := map[[2]string]bool{}
+	var requirement types.ShelfRequirement
+	if entity.Kind == "document_requirement" {
+		_ = types.DecodeShelfValue(entity.Attributes["requirement"], &requirement)
+	}
 	for _, other := range owners {
+		if other.Kind == "document_requirement" && entity.Kind == other.Kind && other.ListName != requirement.ListName {
+			continue
+		}
 		other.Spelling = normalizeEntityName(other.Spelling)
 		key := [2]string{other.ID, other.Spelling}
 		if _, exists := names[other.Spelling]; exists && !seen[key] {

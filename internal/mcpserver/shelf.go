@@ -159,7 +159,7 @@ func shelfOperationSchema() map[string]any {
 			"value": map[string]any{"description": "按配置字段类型提供值，数值也可为闭区间 {min,max}"}, "conditions": shelfConditionsSchema(),
 		}, "value")}},
 		"certification":   shelfPayloadSchema("认证完整字段：name、owner_id、standard、certification_object、cell_part_id、region、year、agency、progress、start_date、obtained_date、issued_date、validity、number、cloud_url、conditions；新增须给 name，日期为 YYYY-MM-DD；不猜所属节点"),
-		"document":        shelfPayloadSchema("资料版本：name、owner_id、requirement_id、certificate_number、attachment_id 或 cloud_url、entry_id、version_label、stage(draft/final)、origin、occurred_at、conditions；归属须明确指定"),
+		"document":        shelfPayloadSchema("资料版本：name、owner_id、requirement_ids（多项资料要求 ID，兼容旧 requirement_id）、certificate_number、attachment_id 或 cloud_url、entry_id、version_label、stage(draft/final)、origin、occurred_at、conditions；归属须明确指定"),
 		"reparse":         object(map[string]any{"version_id": text("原资料版本 ID"), "parser_key": text("配置解析器键")}, "version_id", "parser_key"),
 		"import_plan":     shelfPayloadSchema("保存导入方案，字段与 HTTP 变更集 save_import_plan 相同，含 key、revision、file_kind、name、sheets 等映射"),
 		"import_location": shelfPayloadSchema("导入来源位置，与 HTTP 变更集相同"),

@@ -20,7 +20,7 @@ func checklistSetup(t *testing.T) (*managedNamesFixture, types.Library, types.Sh
 func checklistRequirement(t *testing.T, f *managedNamesFixture, l types.Library, name, draft, final string) types.Entity {
 	t.Helper()
 	var e types.Entity
-	f.request(http.MethodPost, "/libraries/"+l.ID+"/entities", map[string]any{"name": name, "kind": "document_requirement", "attributes": map[string]any{"requirement": map[string]any{"name_zh": " 资料原名 ", "name_en": " Original name ", "file_category": "Drawing", "stage_label": "Source label", "draft_due_stage": draft, "final_due_stage": final, "markets": map[string]string{"region_a": "required"}, "owner": " Owner ", "priority": " P1 ", "source_list": "Synthetic list", "source_version": "Rev 1"}}}, http.StatusCreated, &e)
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/entities", map[string]any{"name": name, "kind": "document_requirement", "attributes": map[string]any{"requirement": map[string]any{"list_name": "Synthetic list", "name_zh": " 资料原名 ", "name_en": " Original name ", "file_category": "Drawing", "stage_label": "Source label", "draft_due_stage": draft, "final_due_stage": final, "markets": map[string]string{"region_a": "required"}, "owner": " Owner ", "priority": " P1 ", "source_list": "Synthetic list", "source_version": "Rev 1"}}}, http.StatusCreated, &e)
 	return e
 }
 func checklistBind(f *managedNamesFixture, l types.Library, r types.Entity, target string, modules ...string) {
@@ -258,7 +258,7 @@ func TestShelfChecklistUsesLatestConfirmedRequirement(t *testing.T) {
 	require.Equal(t, "missing", checklistRead(f, l, model)["checklist"].([]any)[0].(map[string]any)["status"])
 	at := time.Now().UTC().Format(time.RFC3339Nano)
 	var change types.ShelfChangeset
-	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "update", "type": "update_entity", "entity_id": r.ID, "patch": map[string]any{"revision": 1, "attributes": map[string]any{"requirement": map[string]any{"final_due_stage": "final_due", "source_version": "Rev 2"}}}}}}, http.StatusCreated, &change)
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "update", "type": "update_entity", "entity_id": r.ID, "patch": map[string]any{"revision": 1, "attributes": map[string]any{"requirement": map[string]any{"list_name": "Synthetic list", "final_due_stage": "final_due", "source_version": "Rev 2"}}}}}}, http.StatusCreated, &change)
 	require.Equal(t, "missing", checklistRead(f, l, model)["checklist"].([]any)[0].(map[string]any)["status"])
 	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets/"+change.ID+"/confirm", map[string]any{"revision": change.Revision, "decisions": []any{map[string]any{"item_id": "update", "action": "apply"}}}, http.StatusOK, nil)
 	var detail map[string]any

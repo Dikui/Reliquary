@@ -126,7 +126,7 @@ func TestShelfFilesCertificateGroup(t *testing.T) {
 	var result types.ShelfChangeset
 	f.request(http.MethodPost, path+"/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{
 		map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Synthetic certificate", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "Synthetic region", "number": "SYN-GROUP"}},
-		map[string]any{"id": "req", "type": "create_entity", "entity": map[string]any{"kind": "document_requirement", "name": "Synthetic certificate requirement"}},
+		map[string]any{"id": "req", "type": "create_entity", "entity": map[string]any{"kind": "document_requirement", "name": "Synthetic certificate requirement", "attributes": shelfFileRequirementAttributes(f, library)}},
 		map[string]any{"id": "file", "type": "add_document_version", "document": map[string]any{"name": "Synthetic certificate file", "owner_id": "$cert", "requirement_id": "$req", "certificate_number": "SYN-GROUP", "cloud_url": "https://example.invalid/cert", "stage": "final"}},
 	}}, http.StatusCreated, &result)
 	var page types.ShelfDocumentList

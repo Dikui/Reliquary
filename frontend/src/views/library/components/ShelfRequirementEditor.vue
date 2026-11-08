@@ -35,7 +35,7 @@ async function load() {
 }
 async function save() {
   if (busy.value || !loaded.value) return
-  if (!name.value.trim() || !metadata.value.final_due_stage) { error.value = t('shelfSettings.invalid'); return }
+  if (!name.value.trim() || !metadata.value.list_name?.trim() || !metadata.value.final_due_stage) { error.value = t('shelfSettings.invalid'); return }
   busy.value = true; error.value = ''
   try {
     const attributes = { ...props.entity?.attributes, requirement: { ...metadata.value, name_zh: name.value } }
@@ -65,10 +65,11 @@ onBeforeUnmount(() => { active = false })
 </script>
 <template>
   <Dialog :model-value="true" :title="t('shelfSettings.requirements')" :closable="!busy" :close-on-overlay-click="!busy" :close-on-esc-keydown="!busy" @update:model-value="!$event && !busy && emit('close')">
-    <form class="rq-shelf-requirement" @submit.prevent="save">
+    <form novalidate class="rq-shelf-requirement" @submit.prevent="save">
       <p v-if="loading" role="status">{{ t('common.loading') }}</p><p v-if="error" role="alert" class="rq-shelf-error">{{ error }} <Button v-if="!loaded" @click="load">{{ t('common.retry') }}</Button></p>
       <fieldset :disabled="busy || loading || !loaded" class="rq-shelf-fields">
         <Field :label="t('shelfSettings.name')" id="requirement-name"><Input id="requirement-name" v-model="name" :aria-label="t('shelfSettings.name')" required /></Field>
+        <Field :label="t('shelfSettings.listName')" id="requirement-list-name"><Input id="requirement-list-name" v-model="metadata.list_name" :aria-label="t('shelfSettings.listName')" required /></Field>
         <Field v-for="field in textFields" :key="field.key" :label="field.label" :id="`requirement-${field.key}`"><Input :id="`requirement-${field.key}`" v-model="metadata[field.key]" /></Field>
         <Field :label="t('shelfSettings.draftDue')" id="requirement-draft"><Select id="requirement-draft" v-model="metadata.draft_due_stage"><option value="">{{ t('shelfFiles.none') }}</option><option v-for="stage in library.shelf_config?.stages" :key="stage.key" :value="stage.key">{{ stage.name }}</option></Select></Field>
         <Field :label="t('shelfSettings.finalDue')" id="requirement-final"><Select id="requirement-final" v-model="metadata.final_due_stage" required><option value="" disabled>{{ t('shelfSettings.finalDue') }}</option><option v-for="stage in library.shelf_config?.stages" :key="stage.key" :value="stage.key">{{ stage.name }}</option></Select></Field>

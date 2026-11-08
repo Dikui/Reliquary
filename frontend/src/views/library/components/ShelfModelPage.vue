@@ -297,6 +297,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
                   <td>{{ row.requirement.canonical_name }}
                     <small>{{ requirement(row.requirement).name_en }}</small>
                     <small>{{ requirement(row.requirement).file_category }}</small>
+                    <small>{{ requirement(row.requirement).list_name }}</small>
                     <small>{{ requirement(row.requirement).source_list }} {{ requirement(row.requirement).source_version }}</small>
                   </td>
                   <td>{{ requirement(row.requirement).stage_label }}</td>

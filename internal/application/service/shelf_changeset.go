@@ -639,6 +639,7 @@ func shelfResolvedOperation(draft *types.ShelfChangeset, op types.ShelfOperation
 		classification := *op.Classification
 		classification.OwnerID = shelfReference(draft, classification.OwnerID)
 		classification.RequirementID = shelfReference(draft, classification.RequirementID)
+		classification.RequirementIDs = shelfRequirementReferences(draft, classification.RequirementIDs)
 		classification.Conditions = shelfResolvedConditions(draft, classification.Conditions)
 		op.Classification = &classification
 	}
@@ -646,6 +647,7 @@ func shelfResolvedOperation(draft *types.ShelfChangeset, op types.ShelfOperation
 		record := *op.Document
 		record.OwnerID = shelfReference(draft, record.OwnerID)
 		record.RequirementID = shelfReference(draft, record.RequirementID)
+		record.RequirementIDs = shelfRequirementReferences(draft, record.RequirementIDs)
 		record.Conditions = shelfResolvedConditions(draft, record.Conditions)
 		op.Document = &record
 	}
@@ -774,6 +776,9 @@ func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChan
 			target, err := s.shelfEntity(ctx, draft.LibraryID, item.Decision.TargetEntityID)
 			if err != nil {
 				return nil, err
+			}
+			if input.Kind == "document_requirement" && requirementListName(target.Attributes) != requirementListName(input.Attributes) {
+				return nil, apperrors.NewBadRequestError("uncertain: same requirement must belong to the same list")
 			}
 			if target.Kind != input.Kind || target.ArchivedAt != nil {
 				return nil, apperrors.NewBadRequestError("same entity must be an active entity in the same kind")
@@ -1005,4 +1010,12 @@ func (s *EntityService) scheduleShelfHeaders(ctx context.Context, ids []string) 
 	for _, id := range ids {
 		s.headerRefresher.ScheduleRefresh(ctx, id)
 	}
+}
+
+func shelfRequirementReferences(draft *types.ShelfChangeset, ids []string) []string {
+	result := make([]string, len(ids))
+	for i, id := range ids {
+		result[i] = shelfReference(draft, id)
+	}
+	return result
 }

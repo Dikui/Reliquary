@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -35,11 +36,11 @@ func (s *EntityService) shelfDocuments(ctx context.Context, libraryID string, in
 	switch input.Group {
 	case "":
 	case "requirements":
-		query = query.Where("v.requirement_id IS NOT NULL AND owner.kind<>'certification'")
+		query = query.Where("jsonb_array_length(v.requirement_ids)>0 AND owner.kind<>'certification'")
 	case "certificates":
 		query = query.Where("owner.kind='certification'")
 	case "other":
-		query = query.Where("v.requirement_id IS NULL AND (owner.kind IS NULL OR owner.kind<>'certification')")
+		query = query.Where("jsonb_array_length(v.requirement_ids)=0 AND (owner.kind IS NULL OR owner.kind<>'certification')")
 	default:
 		return nil, apperrors.NewBadRequestError("invalid document group")
 	}
@@ -65,7 +66,8 @@ func (s *EntityService) shelfDocuments(ctx context.Context, libraryID string, in
 	}
 	ids := []string{}
 	for _, v := range versions {
-		ids = append(ids, v.FileID, documentIDValue(v.OwnerID), documentIDValue(v.RequirementID))
+		ids = append(ids, v.FileID, documentIDValue(v.OwnerID))
+		ids = append(ids, v.Requirements()...)
 	}
 	entities := []types.Entity{}
 	if len(ids) > 0 {
@@ -85,7 +87,13 @@ func (s *EntityService) shelfDocuments(ctx context.Context, libraryID string, in
 		byID[entities[i].ID] = &entities[i]
 	}
 	for _, v := range versions {
-		result.Items = append(result.Items, types.ShelfDocumentListItem{Entity: *byID[v.FileID], Document: v, Owner: byID[documentIDValue(v.OwnerID)], Requirement: byID[documentIDValue(v.RequirementID)]})
+		requirements := []types.Entity{}
+		for _, id := range v.Requirements() {
+			if entity := byID[id]; entity != nil {
+				requirements = append(requirements, *entity)
+			}
+		}
+		result.Items = append(result.Items, types.ShelfDocumentListItem{Requirements: requirements, Entity: *byID[v.FileID], Document: v, Owner: byID[documentIDValue(v.OwnerID)], Requirement: byID[documentIDValue(v.RequirementID)]})
 	}
 	result.Truncated = int64(input.Offset+len(versions)) < result.Total
 	return result, nil
@@ -121,7 +129,7 @@ func (s *EntityService) shelfDocumentEditBefore(ctx context.Context, draft *type
 	if err != nil {
 		return nil, err
 	}
-	input := types.ShelfDocumentInput{OwnerID: op.Classification.OwnerID, RequirementID: op.Classification.RequirementID, CertificateNumber: op.Classification.CertificateNumber, Conditions: op.Classification.Conditions}
+	input := types.ShelfDocumentInput{OwnerID: op.Classification.OwnerID, RequirementID: op.Classification.RequirementID, RequirementIDs: slices.Clone(op.Classification.RequirementIDs), CertificateNumber: op.Classification.CertificateNumber, Conditions: op.Classification.Conditions}
 	if err = s.validateShelfDocumentClassification(ctx, library, &input); err != nil {
 		return nil, err
 	}
@@ -153,8 +161,12 @@ func (s *EntityService) writeShelfDocumentEdit(ctx context.Context, draft *types
 			return nil, err
 		}
 		c := op.Classification
+		input := types.ShelfDocumentInput{RequirementID: c.RequirementID, RequirementIDs: c.RequirementIDs}
+		if err := normalizeDocumentRequirements(&input); err != nil {
+			return nil, err
+		}
 		// Classification belongs to the file. Its old values remain in this operation log.
-		if err = s.db.WithContext(ctx).Model(&types.ShelfDocumentVersion{}).Where("file_id=?", op.EntityID).Updates(map[string]any{"owner_id": c.OwnerID, "requirement_id": optionalDocumentID(c.RequirementID), "certificate_number": c.CertificateNumber, "conditions": shelfJSON(c.Conditions)}).Error; err != nil {
+		if err = s.db.WithContext(ctx).Model(&types.ShelfDocumentVersion{}).Where("file_id=?", op.EntityID).Updates(map[string]any{"owner_id": c.OwnerID, "requirement_id": optionalDocumentID(input.RequirementID), "requirement_ids": shelfJSON(input.RequirementIDs), "certificate_number": c.CertificateNumber, "conditions": shelfJSON(c.Conditions)}).Error; err != nil {
 			return nil, managedWriteError(err)
 		}
 		var edges []types.Relation
@@ -170,8 +182,8 @@ func (s *EntityService) writeShelfDocumentEdit(ctx context.Context, draft *types
 		if _, err = s.SaveManagedRelation(ctx, draft.LibraryID, "", types.ManagedRelationInput{SubjectID: c.OwnerID, ObjectID: op.EntityID, RelationType: "has_document"}); err != nil {
 			return nil, err
 		}
-		if c.RequirementID != "" {
-			if _, err = s.SaveManagedRelation(ctx, draft.LibraryID, "", types.ManagedRelationInput{SubjectID: op.EntityID, ObjectID: c.RequirementID, RelationType: "fulfills"}); err != nil {
+		for _, requirementID := range input.RequirementIDs {
+			if _, err = s.SaveManagedRelation(ctx, draft.LibraryID, "", types.ManagedRelationInput{SubjectID: op.EntityID, ObjectID: requirementID, RelationType: "fulfills"}); err != nil {
 				return nil, err
 			}
 		}

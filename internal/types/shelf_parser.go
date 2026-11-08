@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -52,12 +53,16 @@ func (c ShelfConfig) Parser(key string) (ShelfParser, bool) {
 }
 
 func (c ShelfConfig) SelectParser(filename, requirementID, category string) string {
+	return c.SelectParserForRequirements(filename, RequirementReferences(requirementID, nil), category)
+}
+
+func (c ShelfConfig) SelectParserForRequirements(filename string, requirementIDs []string, category string) string {
 	extension := strings.ToLower(filepath.Ext(filename))
 	for _, r := range c.ParserRules {
 		if r.Extension != "" && strings.ToLower(r.Extension) != extension {
 			continue
 		}
-		if r.RequirementID != "" && r.RequirementID != requirementID {
+		if r.RequirementID != "" && !slices.Contains(requirementIDs, r.RequirementID) {
 			continue
 		}
 		if r.FileCategory != "" && r.FileCategory != category {
