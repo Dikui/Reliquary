@@ -11,6 +11,35 @@ import (
 	"reliquary/internal/types"
 )
 
+// Medium spec, task 19: import history is filtered before counting and pagination,
+// so unrelated web and agent drafts cannot crowd import batches out of a page.
+func TestShelfChangesetImportHistoryFiltersBeforePagination(t *testing.T) {
+	f, library := newProductShelfFixture(t)
+	path := "/libraries/" + library.ID + "/shelf/changesets"
+	var imported types.ShelfChangeset
+	for _, source := range []map[string]any{
+		{"type": "import", "import_batch_id": "synthetic-batch", "file_name": "synthetic.xlsx", "file_date": "2026-01-01T00:00:00Z"},
+		{"type": "web"}, {"type": "agent", "agent_name": "Synthetic helper"},
+	} {
+		var set types.ShelfChangeset
+		f.request(http.MethodPost, path, map[string]any{"source": source, "operations": []any{map[string]any{"id": "line", "type": "create_entity", "entity": map[string]any{"name": "Synthetic line", "kind": "product_line"}}}}, http.StatusCreated, &set)
+		if source["type"] == "import" {
+			imported = set
+		}
+	}
+	var page types.ShelfChangesetPage
+	f.request(http.MethodGet, path+"?source_type=import&page_size=1", nil, http.StatusOK, &page)
+	require.EqualValues(t, 1, page.Total)
+	require.Len(t, page.Items, 1)
+	require.Equal(t, imported.ID, page.Items[0].ID)
+	f.request(http.MethodPost, path+"/"+imported.ID+"/confirm", map[string]any{"revision": imported.Revision, "decisions": []any{map[string]any{"item_id": "line", "action": "apply"}}}, http.StatusOK, nil)
+	f.request(http.MethodGet, path+"?source_type=import&status=confirmed", nil, http.StatusOK, &page)
+	require.EqualValues(t, 1, page.Total)
+	f.request(http.MethodGet, path+"?source_type=import&status=pending", nil, http.StatusOK, &page)
+	require.Zero(t, page.Total)
+	f.request(http.MethodGet, path+"?source_type=unknown", nil, http.StatusBadRequest, nil)
+}
+
 // Medium spec, task 18 / ADR 0023: returning ambiguous agent data persists the
 // request for clarification, without accepting it or silently deferring it.
 func TestShelfChangesetReturnUncertainItemToSubmitter(t *testing.T) {

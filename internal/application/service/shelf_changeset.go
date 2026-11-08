@@ -245,12 +245,12 @@ func (s *EntityService) ShelfChangeset(ctx context.Context, libraryID, id string
 	return &draft, managedWriteError(err)
 }
 
-func (s *EntityService) ShelfChangesets(ctx context.Context, libraryID, status string, page, size int) (*types.ShelfChangesetPage, error) {
+func (s *EntityService) ShelfChangesets(ctx context.Context, libraryID, status, sourceType string, page, size int) (*types.ShelfChangesetPage, error) {
 	spaceID, err := s.requireSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if page < 1 || size < 1 || size > 100 || (status != "" && status != "pending" && status != "confirmed") {
+	if page < 1 || size < 1 || size > 100 || (status != "" && status != "pending" && status != "confirmed") || (sourceType != "" && sourceType != "web" && sourceType != "agent" && sourceType != "import") {
 		return nil, apperrors.NewBadRequestError("invalid changeset query")
 	}
 	var library types.Library
@@ -260,6 +260,9 @@ func (s *EntityService) ShelfChangesets(ctx context.Context, libraryID, status s
 	q := s.db.WithContext(ctx).Model(&types.ShelfChangeset{}).Where("space_id=? AND library_id=?", spaceID, libraryID)
 	if status != "" {
 		q = q.Where("status=?", status)
+	}
+	if sourceType != "" {
+		q = q.Where("source->>'type'=?", sourceType)
 	}
 	result := &types.ShelfChangesetPage{Items: []types.ShelfChangeset{}, Page: page, PageSize: size}
 	if err := q.Count(&result.Total).Error; err != nil {

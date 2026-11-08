@@ -520,3 +520,20 @@ corrected, rejected or deferred. Stale revisions preserve local decisions and
 require an explicit reload. Navigation warns before discarding progress, and
 pending writes block departure. Confirmation uses the shared dialog and feedback.
 Source: ADR 0023, ADR 0024 and docs/product-shelf-changesets.md.
+
+Shelf imports open in the owning library's Import tab. File selection accepts one
+data-only XLSX workbook up to 32 MiB. Invalid replacements retain the valid file.
+The user explicitly chooses a confirmed plan and may enter a calendar date,
+submitted at midnight UTC. Effective times in batch history are labelled UTC;
+created times use the viewer's timezone. Import failures preserve the file for
+correction. Successful imports open the returned pending or existing changeset.
+
+Plan editing reuses shared Field, Input, Select, Checkbox and Textarea controls.
+Native date and select popup ownership follows the existing platform contract.
+Saving confirms one changeset with the plan revision. Unsaved mappings block
+trial import, navigation warns before discarding edits, and pending writes block
+departure. Model suggestions are explicitly requested only for new plan keys,
+show their uncertainties and require review before replacement and confirmation.
+Stale saves retain edits without an automatic overwrite. Import batch history
+filters by source before twenty-row paging and retains the page in the URL.
+Source: ADR 0023 and docs/product-shelf-import.md.

@@ -40,7 +40,7 @@ func (h *EntityHandler) ShelfChangesets(c *gin.Context) {
 		c.Error(apperrors.NewBadRequestError("invalid changeset pagination"))
 		return
 	}
-	result, err := h.service.ShelfChangesets(c.Request.Context(), c.Param("id"), c.Query("status"), page, size)
+	result, err := h.service.ShelfChangesets(c.Request.Context(), c.Param("id"), c.Query("status"), c.Query("source_type"), page, size)
 	if err != nil {
 		c.Error(err)
 		return

@@ -16,6 +16,8 @@ HTTP 路径以 `/api/v1` 为前缀，成功结果在 `data` 中。
 
 来源有三种形式：`{"type":"web"}`、`{"type":"agent","agent_name":"提交方名称"}`、`{"type":"import","import_batch_id":"批次标识","file_date":"2026-11-01T00:00:00Z"}`。导入日期必须明确提供，不以收录时间代替。导入的属性快照采用文件日期；网页和 agent 可以在操作内指定生效时间。来源归属于提议，之后换人确认不改变来源；日志中的 actor 表示实际确认人。
 
+`GET /libraries/:id/shelf/changesets` 可用 `source_type=web|agent|import` 按来源筛选，可与 `status`、`page` 和 `page_size` 组合。筛选在统计总数和分页前执行；省略来源仍返回所有来源。
+
 ## MCP 提交与确认
 
 `shelf_submit` 使用同一变更集服务，必传 `library_id`。新提议传 `source:{"type":"agent","agent_name":"提交方名称"}` 与 1 到 500 项 `operations`，可附 `decisions`。省略 `confirmed` 或传 `false` 只保存待确认变更集，返回其 ID、修订号、逐项差异与冲突，网页可继续处理。操作类型及对应数据沿用下文，未知字段会被拒绝。

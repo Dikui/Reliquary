@@ -16,13 +16,36 @@ import (
 var shelfImportKey = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 var shelfImportColumn = regexp.MustCompile(`^[A-Z]{1,3}$`)
 
-func (s *EntityService) ShelfImportPlans(ctx context.Context, libraryID string) ([]types.ShelfImportPlan, error) {
+type ShelfImportPlanView struct {
+	types.ShelfImportPlan
+	LastFileName string `json:"last_file_name,omitempty"`
+}
+
+func (s *EntityService) ShelfImportPlans(ctx context.Context, libraryID string) ([]ShelfImportPlanView, error) {
 	if _, err := s.shelfLibrary(ctx, s.db, libraryID); err != nil {
 		return nil, err
 	}
 	rows := []types.ShelfImportPlan{}
-	err := s.db.WithContext(ctx).Where("space_id=? AND library_id=?", types.MustSpaceIDFromContext(ctx), libraryID).Order("key").Find(&rows).Error
-	return rows, err
+	spaceID := types.MustSpaceIDFromContext(ctx)
+	if err := s.db.WithContext(ctx).Where("space_id=? AND library_id=?", spaceID, libraryID).Order("key").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	var files []struct{ Key, FileName string }
+	if err := s.db.WithContext(ctx).Model(&types.ShelfChangeset{}).
+		Select("DISTINCT ON (source->>'import_plan_key') source->>'import_plan_key' AS key, source->>'file_name' AS file_name").
+		Where("space_id=? AND library_id=? AND source->>'type'='import'", spaceID, libraryID).
+		Order("source->>'import_plan_key', created_at DESC, id DESC").Scan(&files).Error; err != nil {
+		return nil, err
+	}
+	latest := make(map[string]string, len(files))
+	for _, file := range files {
+		latest[file.Key] = file.FileName
+	}
+	result := make([]ShelfImportPlanView, 0, len(rows))
+	for _, plan := range rows {
+		result = append(result, ShelfImportPlanView{ShelfImportPlan: plan, LastFileName: latest[plan.Key]})
+	}
+	return result, nil
 }
 
 func (s *EntityService) shelfImportPlan(ctx context.Context, libraryID, key string) (*types.ShelfImportPlan, error) {

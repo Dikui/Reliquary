@@ -83,6 +83,25 @@ func importSetup(t *testing.T) (*managedNamesFixture, types.Library) {
 	return f, library
 }
 
+// Medium spec, task 19: the plan list shows the newest uploaded file for each
+// confirmed plan, including batches whose shelf changes have not been confirmed.
+func TestShelfImportPlanListsLatestFile(t *testing.T) {
+	f, library := importSetup(t)
+	path := "/libraries/" + library.ID + "/shelf/import-plans"
+	var plans []struct {
+		Key          string `json:"key"`
+		LastFileName string `json:"last_file_name"`
+	}
+	f.request(http.MethodGet, path, nil, http.StatusOK, &plans)
+	require.Len(t, plans, 1)
+	require.Empty(t, plans[0].LastFileName)
+	importUpload(t, f, library.ID, "first_20261028.xlsx", "", importWorkbook(t, importRow(3, "Platform", "Product", "Model", "GA", "9"), ""), http.StatusCreated)
+	importUpload(t, f, library.ID, "latest_20261029.xlsx", "", importWorkbook(t, importRow(3, "Platform", "Product", "Model", "DEV", "10"), ""), http.StatusCreated)
+	f.request(http.MethodGet, path, nil, http.StatusOK, &plans)
+	require.Equal(t, "map", plans[0].Key)
+	require.Equal(t, "latest_20261029.xlsx", plans[0].LastFileName)
+}
+
 // Medium spec, task 11: repeated uploads reuse the same pending batch. Only
 // confirmation makes split models, historical statuses and parameters visible.
 func TestShelfImportMapIsDeterministicAndUsesFileDate(t *testing.T) {

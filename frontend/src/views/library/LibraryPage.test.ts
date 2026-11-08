@@ -22,6 +22,7 @@ async function mountPage(t: test.TestContext, shelf = true, query = '') {
     './Library.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('article', 'Original documents') }) },
     './components/ShelfStatusTable.vue': { __esModule: true, default: defineComponent({ props: ['library'], setup: props => () => h('article', `Shelf table ${props.library.id}`) }) },
     './components/ShelfReviewPage.vue': { __esModule: true, default: defineComponent({ props: ['library'], setup: props => () => h('article', `Review changes ${props.library.id}`) }) },
+    './components/ShelfImportPage.vue': { __esModule: true, default: defineComponent({ props: ['library'], setup: props => () => h('article', `Import workbooks ${props.library.id}`) }) },
   })
   const previous = globalThis.window
   globalThis.window = { addEventListener() {}, removeEventListener() {} } as any
@@ -53,6 +54,15 @@ test('document bookmarks in a shelf reopen documents', async t => {
 test('shelf review tab can be opened directly and switched back to status', async t => {
   const { root, router } = await mountPage(t, true, '&tab=review&changeset=set-a')
   assert.match(visibleText(root), /Review changes library-a/)
+  await click(descendants(root).find(node => node.tag === 'button' && visibleText(node) === 'shelfStatus.status')!)
+  await new Promise<void>(resolve => setImmediate(resolve)); await settle()
+  assert.match(visibleText(root), /Shelf table library-a/)
+  assert.equal(router.currentRoute.value.query.tab, 'status')
+})
+// Small spec, task 19: the import workflow has a stable shelf-scoped destination.
+test('shelf import tab can be opened directly and returns to status', async t => {
+  const { root, router } = await mountPage(t, true, '&tab=import')
+  assert.match(visibleText(root), /Import workbooks library-a/)
   await click(descendants(root).find(node => node.tag === 'button' && visibleText(node) === 'shelfStatus.status')!)
   await new Promise<void>(resolve => setImmediate(resolve)); await settle()
   assert.match(visibleText(root), /Shelf table library-a/)
