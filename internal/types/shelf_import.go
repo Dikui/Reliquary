@@ -65,3 +65,14 @@ type ShelfImportLocation struct {
 	Cells     []string          `json:"cells"`
 	Values    map[string]string `json:"values,omitempty"`
 }
+
+// The caller identifies the proposed write; the model only fills the requested
+// values. Models use ParentID instead of Operation to name an existing product.
+type ShelfImportTextInput struct {
+	Kind           string               `json:"kind"`
+	Text           string               `json:"text"`
+	Operation      ShelfOperation       `json:"operation"`
+	ParentID       string               `json:"parent_id,omitempty"`
+	Source         OperationSource      `json:"source"`
+	ImportLocation *ShelfImportLocation `json:"import_location,omitempty"`
+}

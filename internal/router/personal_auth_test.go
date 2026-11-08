@@ -23,6 +23,7 @@ import (
 	"reliquary/internal/middleware"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 )
 
 type personalAuthFixture struct {
@@ -55,7 +56,7 @@ func personalRequest(t *testing.T, r *gin.Engine, method, path, body, credential
 	return rec
 }
 
-func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
+func newPersonalAuthFixture(t *testing.T, processing ...mcpProcessingFixture) *personalAuthFixture {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	db := pgtest.Open(t)
@@ -70,7 +71,10 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	entryRepo := apprepo.NewEntryRepository(db)
 	libraryRepo := apprepo.NewLibraryRepository(db)
 	library := service.NewLibraryService(db, libraryRepo, entryRepo, nil, nil, nil, nil)
-	models := service.NewModelService(apprepo.NewModelRepository(db), libraryRepo, nil, nil, spaceSvc)
+	var models interfaces.ModelService = service.NewModelService(apprepo.NewModelRepository(db), libraryRepo, nil, nil, spaceSvc)
+	if len(processing) > 0 {
+		models = mcpFixtureModels{ModelService: models, chatModel: processing[0].chat}
+	}
 	entry, err := service.NewEntryService(db, cfg, entryRepo, library, spaceRepo, spaceSvc,
 		nil, nil, nil, nil, models, nil, nil, nil, nil, nil)
 	require.NoError(t, err)

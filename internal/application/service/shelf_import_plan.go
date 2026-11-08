@@ -196,7 +196,7 @@ func (s *EntityService) validateRecordImportSheet(ctx context.Context, library *
 			}
 			continue
 		}
-		allowed := []string{"name", "owner", "standard", "year", "certification_object", "cell_part", "region", "agency", "progress", "start_date", "obtained_date", "issued_date", "validity", "number", "cloud_url"}
+		allowed := []string{"name", "owner", "standard", "year", "certification_object", "cell_part", "region", "agency", "progress", "start_date", "obtained_date", "issued_date", "validity", "number", "cloud_url", "sample_description"}
 		if kind == "certification_report" {
 			allowed = append(allowed, "model", "pack_model", "cluster_model", "container_model")
 		}

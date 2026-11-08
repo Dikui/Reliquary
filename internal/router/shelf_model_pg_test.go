@@ -11,9 +11,9 @@ import (
 	"reliquary/internal/types"
 )
 
-func shelfModelSetup(t *testing.T) (*managedNamesFixture, types.Library, types.ShelfChangeset) {
+func shelfModelSetup(t *testing.T, processing ...mcpProcessingFixture) (*managedNamesFixture, types.Library, types.ShelfChangeset) {
 	t.Helper()
-	f, library := newProductShelfFixture(t)
+	f, library := newProductShelfFixture(t, processing...)
 	f.request(http.MethodPut, "/libraries/"+library.ID, map[string]any{"shelf_config": map[string]any{
 		"module_types": []any{map[string]any{"key": "module_a", "name": "Module A"}, map[string]any{"key": "module_b", "name": "Module B"}},
 		"regions":      []any{map[string]any{"key": "region_a", "name": "Region A"}},

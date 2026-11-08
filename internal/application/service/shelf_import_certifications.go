@@ -105,6 +105,9 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 	if len(matches) > 1 {
 		op.Issues = []types.ShelfConflict{{Type: "uncertain", Message: "certification key has multiple candidates; submit a corrected complete record", Details: map[string]any{"candidates": matches, "match_count": len(matches)}}}
 	}
+	if text := cells["sample_description:"].Value; text != "" {
+		op.Issues = append(op.Issues, types.ShelfConflict{Type: "uncertain", Message: "sample description requires explicit part-condition review", Details: map[string]any{"kind": "conditions", "text": text}})
+	}
 	b.append(op)
 	return nil
 }

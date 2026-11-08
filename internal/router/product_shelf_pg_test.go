@@ -60,9 +60,9 @@ func TestProductShelfEnablingPreservesIncompatibleLegacyData(t *testing.T) {
 	require.Equal(t, "Synthetic legacy record", detail.Entity.CanonicalName)
 }
 
-func newProductShelfFixture(t *testing.T) (*managedNamesFixture, types.Library) {
+func newProductShelfFixture(t *testing.T, processing ...mcpProcessingFixture) (*managedNamesFixture, types.Library) {
 	t.Helper()
-	f := &managedNamesFixture{mcpFixture: newMCPFixture(t), t: t}
+	f := &managedNamesFixture{mcpFixture: newMCPFixture(t, processing...), t: t}
 	var library types.Library
 	f.request(http.MethodPost, "/libraries", map[string]any{"name": "Synthetic shelf", "directory": "synthetic-shelf", "entity_mode": "managed", "shelf_enabled": true}, http.StatusCreated, &library)
 	f.libraryID = library.ID

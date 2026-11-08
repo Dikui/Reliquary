@@ -151,7 +151,7 @@ type mcpProcessingFixture struct {
 
 func newMCPFixture(t *testing.T, processing ...mcpProcessingFixture) *mcpFixture {
 	t.Helper()
-	f := newPersonalAuthFixture(t)
+	f := newPersonalAuthFixture(t, processing...)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(types.SingleSpaceID))
 	var key types.APIKey
 	require.NoError(t, f.db.Where("name=?", "personal integration").First(&key).Error)
