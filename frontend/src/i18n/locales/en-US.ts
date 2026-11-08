@@ -1,4 +1,18 @@
 export default {
+  shelfModel: {
+    title: 'Model details', hierarchy: 'Hierarchy', onPage: 'On this page', currentStage: 'Current stage', inheritedStage: 'Inherited from product',
+    allConditions: 'All options', completeCombination: 'Choose every module to view a combination.', noRecord: 'No record in the shelf',
+    certCount: '{count} certifications', module: 'Module type', part: 'Part', pack: 'Pack model', cluster: 'Cluster model', container: 'Container model', optional: 'Options · {count}',
+    standard: 'Standard', certObject: 'Certification object', applies: 'Applies to', progress: 'Progress', agency: 'Agency', dates: 'Dates', validity: 'Validity', number: 'Certificate / report',
+    start_date: 'Start', obtained_date: 'Obtained', issued_date: 'Issued', cloudLink: 'Cloud link', download: 'Download original',
+    state: 'Status', material: 'Material', stageLabel: 'Source stage', due: 'Due', file: 'File', from: 'From', responsible: 'Responsible',
+    draft: 'Draft', final: 'Final', ambiguous: 'Overlapping files at the same level; confirmation needed', category: 'Category', version: 'Version', text: 'Text', openText: 'Open text',
+    import: 'Import', web: 'Web', changeset: 'Changeset',
+    sections: { composition: 'Composition', sale: 'Sale status', cert: 'Certifications', docs: 'Document checklist', params: 'Parameters', files: 'Other files', history: 'Operation history' },
+    origins: { self: 'Model', component: 'From component', ancestor: 'From ancestor' },
+    status: { missing: 'Missing', draft_only: 'Draft only', delivered: 'Delivered', not_due: 'Not due', has_file: 'Has file', no_file: 'No file' },
+    parse: { not_parsed: 'Not parsed', pending: 'Pending', parsing: 'Parsing', completed: 'Parsed', retrying: 'Retrying', failed: 'Parsing failed' },
+  },
   shelfStatus: {
     exportExcel: "Export Excel",
     export: "Export",

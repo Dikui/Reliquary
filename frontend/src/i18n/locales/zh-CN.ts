@@ -1,4 +1,18 @@
 export default {
+  shelfModel: {
+    title: '型号详情', hierarchy: '层级', onPage: '本页', currentStage: '当前阶段', inheritedStage: '沿用产品名称',
+    allConditions: '全部适用', completeCombination: '选齐各模块后查看组合信息。', noRecord: '货架中没有记录',
+    certCount: '{count} 条认证', module: '模块类型', part: '部件', pack: 'Pack 型号', cluster: '簇型号', container: '集装箱型号', optional: '选配 · {count}',
+    standard: '标准', certObject: '认证对象', applies: '适用', progress: '进度', agency: '机构', dates: '日期', validity: '有效期', number: '证书 / 报告',
+    start_date: '开始', obtained_date: '取证', issued_date: '签发', cloudLink: '云盘链接', download: '下载原件',
+    state: '状态', material: '资料', stageLabel: '原表标注', due: '应交', file: '文件', from: '来自', responsible: '负责人',
+    draft: '初稿', final: '终稿', ambiguous: '同层文件重叠，待确认', category: '类别', version: '版本', text: '文本版', openText: '打开文本版',
+    import: '导入', web: '网页', changeset: '变更集',
+    sections: { composition: '组成', sale: '可售状态', cert: '认证', docs: '资料清单', params: '参数', files: '其他文件', history: '操作历史' },
+    origins: { self: '整机', component: '来自部件', ancestor: '来自上层' },
+    status: { missing: '缺', draft_only: '只有初稿', delivered: '已交', not_due: '未到期', has_file: '有文件', no_file: '无文件' },
+    parse: { not_parsed: '未解析', pending: '待解析', parsing: '解析中', completed: '已解析', retrying: '重试中', failed: '解析失败' },
+  },
   shelfStatus: {
     exportExcel: "导出 Excel",
     export: "导出",

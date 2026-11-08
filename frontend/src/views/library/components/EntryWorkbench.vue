@@ -1,5 +1,6 @@
 <template>
-  <section v-if="managed && shelfView && selectedLibrary" class="shelf-workbench">
+  <ShelfModelPage v-if="managed && shelfConfigured && selectedLibrary && selectedEntity?.kind === 'model'" :key="`${selectedLibrary.id}-${selectedEntity.id}`" :library="selectedLibrary" :node-id="selectedEntity.id" />
+  <section v-else-if="managed && shelfView && selectedLibrary" class="shelf-workbench">
     <div class="shelf-library-bar"><Select :model-value="selectedLibraryId" :aria-label="t('entityPage.library')" @update:model-value="changeLibrary"><option v-for="library in libraries" :key="library.id" :value="library.id">{{ library.display_name || library.name }}</option></Select><Button @click="shelfView = false">{{ t('workbench.entities.title') }}</Button></div>
     <ProductShelf v-if="shelfConfigured" :key="selectedLibrary.id" :library="selectedLibrary" :initial-entity-id="initialEntityId" @select-entity="(id, library) => emit('select-entity', id, library)" @open-source="id => emit('open-source', id)" />
     <EmptyState v-else :title="t('productShelf.setupTitle')" :description="t('productShelf.setupHint')"><a href="/platform/settings?section=library">{{ t('productShelf.openSettings') }}</a></EmptyState>
@@ -93,6 +94,7 @@ import ManagedRelationEditor from './ManagedRelationEditor.vue'
 import EntityRelations from './EntityRelations.vue'
 import EntityGraph from './EntityGraph.vue'
 import ProductShelf from './ProductShelf.vue'
+import ShelfModelPage from './ShelfModelPage.vue'
 import { isProductShelf, shelfLevel } from '@/utils/productShelf'
 import type { SourceLocation } from '@/types/search'
 import FollowToggle from '@/components/FollowToggle.vue'

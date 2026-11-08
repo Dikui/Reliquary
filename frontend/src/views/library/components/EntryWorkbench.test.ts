@@ -12,6 +12,11 @@ import zhCN from '../../../i18n/locales/zh-CN'
 import enUS from '../../../i18n/locales/en-US'
 import { ENTITY_TYPES } from '../../../api/entity-types'
 import type { Entity } from '../../../api/entities'
+import { loadComponent } from '../componentTestHarness'
+import { entryPresentationTestModules } from '../entryPresentationTestModules'
+import * as shelfText from '../../../utils/productShelf'
+import * as dates from '../../../utils/dateTime'
+import * as externalUrl from '../../../utils/externalUrl'
 const require = createRequire(import.meta.url), filename = 'EntryWorkbench.vue'
 const source = readFileSync(new URL('./EntryWorkbench.vue', import.meta.url), 'utf8')
 const { descriptor } = parse(source, { filename })
@@ -47,6 +52,13 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
     '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
     '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
     './MergeSuggestions.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('div', { class: 'merge-suggestions-test' }, i18n.global.t('mergeSuggestions.title')) }) } }
+  // Task 16: render the actual model page; only its HTTP boundaries are synthetic.
+  modules['./ShelfModelPage.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfModelPage.vue', import.meta.url), {
+    ...entryPresentationTestModules, '@/utils/productShelf': shelfText, '@/utils/dateTime': dates, '@/utils/externalUrl': externalUrl,
+    'vue-i18n': { useI18n: () => i18n.global },
+    '@/api/operation-logs': { OPERATION_TYPES: [] }, '@/api/entities': { entityHistory: () => envelope({ items: [], total: 0, page: 1, page_size: 20 }) },
+    '@/api/shelf': { getShelfNode: () => envelope({ entity, facts: [], recorded: false }) },
+  }) }
   function evaluate(code: string) { const module = { exports: {} as any }; const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText; new Function('require', 'module', 'exports', output)((name: string) => (['./ProductShelf.vue', './EntityRelations.vue', './EntityGraph.vue', './ManagedEntityEditor.vue', './ManagedRelationEditor.vue', './ManagedAttributes.vue', './ManagedReorganization.vue'].includes(name) ? { __esModule: true, default: defineComponent({ setup: () => () => h('div', { 'data-relation-view': name }) }) } : modules[name]) ?? require(name), module, module.exports); return module.exports }
   const component = evaluate(script.content).default; component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup; let state: any
@@ -174,4 +186,11 @@ test('enabled shelves omit graph views from entity profiles', async () => {
   const { state, html } = await renderWorkbench({ libraries: [{ id: 'library-a', name: 'Shelf', entity_mode: 'managed', shelf_enabled: true }], api: { getEntity: () => envelope({ entity: { ...entity, kind: 'document_file' }, entries: [] }) }, scenario: async state => { await state.loadCatalog(); await state.selectInitialEntity(entity.id) } })
   assert.deepEqual(state.detailTabs.value.map((item: any) => item.value), ['list', 'entries', 'aliases'])
   assert.doesNotMatch(html, /data-relation-view="\.\/EntityGraph.vue"/)
+})
+
+// Small spec, task 16: a model deep link opens the full model page.
+test('货架型号链接打开型号页并保留库与实体身份', async () => {
+  const { html } = await renderWorkbench({ initialEntityId: 'shelf-model', libraries: [{ id: 'library-a', name: 'Shelf', entity_mode: 'managed', shelf_enabled: true }], api: { getEntity: () => envelope({ entity: { ...entity, id: 'shelf-model', kind: 'model' }, entries: [] }) }, scenario: async state => { await state.loadCatalog(); await state.selectInitialEntity('shelf-model') } })
+  assert.match(html, /aria-label="型号详情"/)
+  assert.match(html, /href="\/platform\/entries\?libraries=library-a"/)
 })

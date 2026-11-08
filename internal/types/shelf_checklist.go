@@ -45,6 +45,7 @@ func ValidateShelfRequirement(value any) error {
 }
 
 type ShelfChecklistItem struct {
+	DocumentName   string                `json:"document_name,omitempty"`
 	Ambiguous      bool                  `json:"ambiguous,omitempty"`
 	Requirement    Entity                `json:"requirement"`
 	Status         string                `json:"status"`

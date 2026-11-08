@@ -45,6 +45,16 @@ test('entity list requires the owning library', async () => {
   assert.equal('entityScopeParams' in scope, false)
 })
 
+// Small spec, task 16 / ADR 0023: the HTTP read keeps the selected combination and time.
+test('shelf model reads encode the full component combination and snapshot time', async () => {
+  const requests: Request[] = [], api = loadAPI(requests, './shelf.ts')
+  await api.getShelfNode('library/a', 'model/a', '2026-11-07T12:00:00Z', { module_a: 'part/a', module_b: 'part b' })
+  const url = new URL(requests[0]!.url, 'http://localhost')
+  assert.equal(url.pathname, '/api/v1/libraries/library%2Fa/shelf/nodes/model%2Fa')
+  assert.equal(url.searchParams.get('as_of'), '2026-11-07T12:00:00Z')
+  assert.deepEqual(JSON.parse(url.searchParams.get('combination')!), { module_a: 'part/a', module_b: 'part b' })
+})
+
 test('managed entities keep revision and manual exclusion in their write requests', async () => {
   const requests: Request[] = [], api = loadAPI(requests)
   await api.updateManagedEntity('entity/a', { revision: 3, name: 'New name', attributes: { power: 12 }, auto_match: { 'ab': true, 'new name': false } })

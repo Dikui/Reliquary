@@ -280,3 +280,10 @@ dialogs. It no longer has a relation graph or candidate-parent vocabulary. The
 existing detail tabs display parts, certifications and document records while the
 later status-table workflow is implemented. Below 1100px details follow the list.
 These views contain no bundled business data.
+
+Shelf model details use the full reading area with hierarchy breadcrumbs, stage
+and checklist totals, native radio groups for optional modules, and stacked
+composition, sale, certification, checklist, parameter, file and history sections.
+Semantic tables own their bounded overflow. Component and ancestor certifications
+have separate row groups. The page uses the existing tokens, shared feedback
+states and buttons; it adds no palette or interaction primitive.

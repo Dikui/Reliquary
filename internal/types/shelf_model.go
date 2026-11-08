@@ -17,6 +17,7 @@ type ShelfComposition struct {
 }
 
 type ShelfModelDetail struct {
+	OtherDocuments   []ShelfOtherDocument             `json:"other_documents"`
 	CurrentStage     string                           `json:"current_stage,omitempty"`
 	StageOwnerID     string                           `json:"stage_owner_id,omitempty"`
 	Checklist        []ShelfChecklistItem             `json:"checklist"`
@@ -26,6 +27,14 @@ type ShelfModelDetail struct {
 	SaleStatuses     []ShelfSaleStatus                `json:"sale_statuses"`
 	Parameters       map[string][]ShelfParameterValue `json:"parameters"`
 	CombinationRules [][]ShelfCondition               `json:"combination_rules"`
+}
+
+type ShelfOtherDocument struct {
+	Entity     Entity               `json:"entity"`
+	Document   ShelfDocumentVersion `json:"document"`
+	Owner      Entity               `json:"owner"`
+	Origin     string               `json:"origin"`
+	Conditions []ShelfCondition     `json:"conditions"`
 }
 
 // Conditions are a conjunction; each module admits one of the listed parts.

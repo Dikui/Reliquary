@@ -481,3 +481,16 @@ preselects its category and then links the saved identity to its parent. If link
 fails, Retry only repeats the relationship write. Existing editors own revisions,
 validation and relationship history. The later status-table and change-set flows
 are separate tasks.
+
+Model links in enabled shelves open the full model detail within the entity
+route. With no complete combination selected, all facts keep their conditions.
+Selecting one part in every optional module reads that combination through the
+shared shelf service and hides condition labels. Incomplete selections retain
+the full view and explain that the remaining modules need a choice. Fixed parts
+are implicit. This choice is transient within the model view, like the existing
+entity workbench filters. A newer choice invalidates older responses; failed
+reads retain the controls and offer Retry. The status-table link returns to the
+owning library. Model operation history uses the existing entity history API and
+twenty-row paging, including directly owned certification and document version
+writes. Component and ancestor history stays on the corresponding node.
+Source: ADR 0023, ADR 0024 and docs/product-shelf-query.md.

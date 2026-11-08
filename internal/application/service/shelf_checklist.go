@@ -278,6 +278,7 @@ func (d *shelfChecklistData) status(stage string, r types.ShelfRequirement, v *t
 func (d *shelfChecklistData) apply(entity *types.Entity, result *types.ShelfModelDetail, combination map[string]string) {
 	if entity.Kind == "model" {
 		result.CurrentStage, result.StageOwnerID, result.Checklist = d.model(entity.ID, combination)
+		result.OtherDocuments = d.otherDocuments(entity.ID, result.Composition, combination)
 		return
 	}
 	summary := &types.ShelfChecklistSummary{Counts: map[string]int{}, Models: []types.ShelfChecklistModelSummary{}}
@@ -316,6 +317,47 @@ func (d *shelfChecklistData) apply(entity *types.Entity, result *types.ShelfMode
 		}
 	}
 	result.ChecklistSummary = summary
+}
+
+// Other files use the same current-version snapshot as the checklist, but have
+// no requirement. No precedence hides independently named supporting files.
+func (d *shelfChecklistData) otherDocuments(id string, composition []types.ShelfComposition, combination map[string]string) []types.ShelfOtherDocument {
+	owners := map[string]string{id: "self"}
+	for _, ancestor := range d.ancestors(id) {
+		if ancestor.Kind == "product" || ancestor.Kind == "platform" {
+			owners[ancestor.ID] = "ancestor"
+		}
+	}
+	for _, group := range composition {
+		for _, part := range group.Parts {
+			owners[part.ID] = "component"
+		}
+	}
+	rows := []types.ShelfOtherDocument{}
+	for _, document := range d.documents {
+		origin, ok := owners[document.OwnerID]
+		if !ok || documentIDValue(document.RequirementID) != "" {
+			continue
+		}
+		conditions := append([]types.ShelfCondition{}, document.Conditions...)
+		if origin == "component" {
+			for _, group := range composition {
+				if slices.ContainsFunc(group.Parts, func(part types.Entity) bool { return part.ID == document.OwnerID }) {
+					conditions = append(conditions, types.ShelfCondition{ModuleType: group.ModuleType, PartIDs: []string{document.OwnerID}})
+				}
+			}
+		}
+		if shelfConditionsMatch(conditions, combination) {
+			rows = append(rows, types.ShelfOtherDocument{Entity: d.nodes[document.FileID], Document: document, Owner: d.nodes[document.OwnerID], Origin: origin, Conditions: conditions})
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Entity.CanonicalName == rows[j].Entity.CanonicalName {
+			return rows[i].Entity.ID < rows[j].Entity.ID
+		}
+		return rows[i].Entity.CanonicalName < rows[j].Entity.CanonicalName
+	})
+	return rows
 }
 
 func (s *EntityService) addShelfChecklist(ctx context.Context, l *types.Library, e *types.Entity, at time.Time, combination map[string]string, result *types.ShelfModelDetail) error {
@@ -357,6 +399,7 @@ func (d *shelfChecklistData) row(r types.Entity, record types.ShelfRequirement, 
 	}
 	if v != nil {
 		row.HasFile = true
+		row.DocumentName = d.nodes[v.FileID].CanonicalName
 		row.OwnerID = v.OwnerID
 		row.Origin, row.OriginLabel = "self", "自身"
 		if rank == 1 {

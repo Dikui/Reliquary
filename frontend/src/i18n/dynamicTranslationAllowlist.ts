@@ -1,6 +1,23 @@
 import type { TranslationCall } from './translationCallAudit.ts'
 
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
+  {
+    "file": "views/library/components/ShelfModelPage.vue",
+    "expressions": [
+      "`productShelf.kinds.${entity.kind}`",
+      "`operationLogs.types.${item.operation_type}`",
+      "`shelfModel.status.${item.status}`",
+      "`shelfModel.sections.${section}`",
+      "`shelfModel.origins.${group.origin}`",
+      "`shelfModel.${key}`",
+      "`shelfModel.status.${row.status}`",
+      "`shelfModel.${row.document.stage}`",
+      "`shelfModel.origins.${file.origin}`",
+      "`shelfModel.parse.${status}`"
+    ],
+    "reason": "Shelf categories, checklist states, origins, document stages and date fields are fixed API or UI vocabularies. Operation types and parser states are guarded before translation."
+  },
+
   { file: 'views/settings/ManagedEntitySettings.vue', expressions: ['`productShelf.kinds.${key}`', 'list.label'], reason: 'Shelf categories and list headings use the fixed shelf vocabulary.' },
   { file: 'views/library/components/ProductShelf.vue', expressions: ['`productShelf.${value}`', "shelfRelationLabel(record.relation.relation_type) || 'productShelf.associated'"], reason: 'Shelf tabs and known relation labels are restricted to the product shelf vocabulary.' },
   { file: 'views/settings/ManagedFieldSchema.vue', expressions: ['`managed.types.${type}`'], reason: 'Schema field types come from the fixed supported type list.' },

@@ -497,8 +497,25 @@ func (s *EntityService) ManagedEntityHistory(ctx context.Context, id string, pag
 	if page < 1 || pageSize < 1 || pageSize > 100 {
 		return nil, apperrors.NewBadRequestError("invalid history page")
 	}
+	references := `object_id=@id OR before_value->>'subject_id'=@id OR before_value->>'object_id'=@id
+ OR after_value->>'subject_id'=@id OR after_value->>'object_id'=@id OR after_value->>'entity_id'=@id
+ OR before_value->>'source_id'=@id OR before_value->>'target_id'=@id
+ OR after_value->>'source_id'=@id OR after_value->>'target_id'=@id`
+	if entity.Kind == "model" {
+		var library types.Library
+		if err := s.db.WithContext(ctx).Select("shelf_enabled").Where("id=? AND space_id=?", entity.LibraryID, spaceID).First(&library).Error; err != nil {
+			return nil, err
+		}
+		if library.ShelfEnabled {
+			// Use saved ownership so earlier writes remain visible after records move.
+			references += ` OR before_value#>>'{attributes,certification,owner_id}'=@id
+ OR after_value#>>'{attributes,certification,owner_id}'=@id
+ OR before_value#>>'{document_version,owner_id}'=@id
+ OR after_value#>>'{document_version,owner_id}'=@id`
+		}
+	}
 	query := s.db.WithContext(ctx).Model(&types.OperationLog{}).Where("space_id=?", spaceID).
-		Where("object_id=? OR before_value->>'subject_id'=? OR before_value->>'object_id'=? OR after_value->>'subject_id'=? OR after_value->>'object_id'=? OR after_value->>'entity_id'=? OR before_value->>'source_id'=? OR before_value->>'target_id'=? OR after_value->>'source_id'=? OR after_value->>'target_id'=?", id, id, id, id, id, id, id, id, id, id)
+		Where(references, map[string]any{"id": id})
 	query, err = filterOperationSource(query, sources)
 	if err != nil {
 		return nil, err
