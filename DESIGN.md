@@ -287,3 +287,10 @@ composition, sale, certification, checklist, parameter, file and history section
 Semantic tables own their bounded overflow. Component and ancestor certifications
 have separate row groups. The page uses the existing tokens, shared feedback
 states and buttons; it adds no palette or interaction primitive.
+
+Shelf upper-node and part details reuse the model page's Swiss grid, typography,
+semantic tables and local horizontal scrolling. Upper nodes show descendant
+models, a requirement matrix, files owned at this node and certification origins.
+Parts show configured attributes, reverse model usage, module requirements and
+owned certifications. Product stage selection uses a native labelled control.
+No new palette, font, overlay or responsive layout is introduced.

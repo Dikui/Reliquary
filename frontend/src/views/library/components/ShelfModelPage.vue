@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button, EmptyState, ErrorState } from '@/components/ui'
 import { entityHistory, type Entity } from '@/api/entities'
@@ -67,7 +67,15 @@ async function load() {
       path.unshift(response.entity)
       parent = (response.facts.find(fact => fact.field === 'belongs_to')?.value as { object_id?: string } | undefined)?.object_id
     }
-    if (current === generation) { node.value = result; ancestors.value = path; selected.value = !!combination }
+    if (current === generation) {
+      node.value = result; ancestors.value = path; selected.value = !!combination
+      // Matrix links target a requirement after its asynchronous detail has rendered.
+      void nextTick(() => {
+        if (current !== generation || typeof document === 'undefined') return
+        const target = window.location.hash.slice(1)
+        if (target.startsWith('requirement-')) document.getElementById(decodeURIComponent(target))?.scrollIntoView()
+      })
+    }
   } catch (cause) { if (current === generation) error.value = cause instanceof Error ? cause.message : t('workbench.requestFailed') }
   finally { if (current === generation) loading.value = false }
 }
@@ -269,7 +277,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(row, index) in detail.checklist" :key="`${row.requirement.id}-${index}`">
+                <tr v-for="(row, index) in detail.checklist" :id="detail.checklist.findIndex(item => item.requirement.id === row.requirement.id) === index ? `requirement-${row.requirement.id}` : undefined" :key="`${row.requirement.id}-${index}`">
                   <td>
                     <span class="doc" :class="row.status">{{ t(`shelfModel.status.${row.status}`) }}</span>
                     <small v-if="row.ambiguous" role="status">{{ t('shelfModel.ambiguous') }}</small>
@@ -436,6 +444,7 @@ small { display: block; font-size: var(--text-xs); color: var(--muted); white-sp
 .params > div { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--border); }
 .params dt { color: var(--muted); }
 .params dd { font-weight: 700; }
+.doclist tr[id] { scroll-margin-top: 160px; }
 .tally b { font-family: var(--mono); font-size: var(--text-lg); }
 .history { list-style: none; padding: 0; margin: 0; border-top: 2px solid var(--rule); }
 .history li { display: grid; grid-template-columns: 160px 160px minmax(0, 1fr); gap: 12px; padding-block: 8px; border-bottom: 1px solid var(--border); font-size: var(--text-sm); overflow-wrap: anywhere; }

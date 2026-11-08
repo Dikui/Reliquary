@@ -21,6 +21,8 @@ export interface ShelfChecklistItem {
   requirement: Entity; status: string; has_file: boolean; document?: ShelfDocumentVersion; document_name?: string; owner_id?: string
   origin?: string; conditions: ShelfCondition[] | null; ambiguous?: boolean
 }
+export interface ShelfNodeDocument { entity: Entity; document: ShelfDocumentVersion; requirement?: Entity }
+export interface ShelfChecklistSummary { model_count: number; models_with_gaps: number; counts: Record<string, number> }
 export interface ShelfOtherDocument { entity: Entity; document: ShelfDocumentVersion; owner: Entity; origin: string; conditions: ShelfCondition[] | null }
 export interface ShelfNode {
   entity: Entity & { kind_label?: string }
@@ -36,12 +38,15 @@ export interface ShelfNode {
     checklist?: ShelfChecklistItem[]
     parameters?: Record<string, { value: unknown; conditions: ShelfCondition[] | null }[]>
     other_documents?: ShelfOtherDocument[]
+    documents?: ShelfNodeDocument[]
+    checklist_summary?: ShelfChecklistSummary
   }
 }
 export interface ShelfQueryItem extends ShelfNode { partial_options: boolean; matching_conditions: ShelfCondition[][] }
 export interface ShelfPage<T> { items: T[]; total: number; truncated: boolean; as_of?: string }
 export interface ShelfQuery {
   ancestor_id?: string
+  part_id?: string
   sale_statuses?: { region?: string; status?: string; planned_eom?: boolean; no_record?: boolean }[]
   parameters?: { field: string; min?: number; max?: number }[]
   certification?: { standard: string }
@@ -68,3 +73,15 @@ export const submitShelfStatuses = (library: string, operations: ShelfStatusOper
   source: { type: 'web' }, operations, confirmed,
   ...(confirmed ? { decisions: operations.map(operation => ({ item_id: operation.id, action: 'apply' })) } : {}),
 })
+
+// A stage edit preserves unrelated attributes and uses the shared atomic confirmation path.
+export const submitShelfStage = (library: string, entity: Entity, stage: string) => {
+  const attributes = { ...entity.attributes }
+  if (stage) attributes.current_stage = stage
+  else delete attributes.current_stage
+  return post<ShelfResponse<ShelfChangeset>>(`${base(library)}/changesets`, {
+    source: { type: 'web' }, confirmed: true,
+    operations: [{ id: 'stage', type: 'update_entity', entity_id: entity.id, revision: entity.revision, patch: { revision: entity.revision, attributes } }],
+    decisions: [{ item_id: 'stage', action: 'apply' }],
+  })
+}

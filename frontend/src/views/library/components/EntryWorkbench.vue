@@ -1,5 +1,9 @@
 <template>
   <ShelfModelPage v-if="managed && shelfConfigured && selectedLibrary && selectedEntity?.kind === 'model'" :key="`${selectedLibrary.id}-${selectedEntity.id}`" :library="selectedLibrary" :node-id="selectedEntity.id" />
+  <section v-else-if="managed && shelfConfigured && selectedLibrary && selectedEntity && ['product_line', 'platform', 'product', 'part'].includes(selectedEntity.kind || '')" class="shelf-node-details">
+    <ShelfNodePage :key="`${selectedLibrary.id}-${selectedEntity.id}`" :library="selectedLibrary" :node-id="selectedEntity.id" />
+    <details class="shelf-node-relations"><summary>{{ t('entityGraph.list') }}</summary><EntityRelations :entity-id="selectedEntity.id" :entity-name="selectedEntity.canonical_name" :groups="relations" :as-of="relationAsOf" @query-time="queryRelationTime" :managed-library="selectedLibrary" :entity="selectedEntity" :loading="relationsLoading" :error="relationError" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @retry="loadRelations()" @changed="loadRelations()" /></details>
+  </section>
   <section v-else-if="managed && shelfView && selectedLibrary" class="shelf-workbench">
     <div class="shelf-library-bar"><Select :model-value="selectedLibraryId" :aria-label="t('entityPage.library')" @update:model-value="changeLibrary"><option v-for="library in libraries" :key="library.id" :value="library.id">{{ library.display_name || library.name }}</option></Select><Button @click="shelfView = false">{{ t('workbench.entities.title') }}</Button></div>
     <ProductShelf v-if="shelfConfigured" :key="selectedLibrary.id" :library="selectedLibrary" :initial-entity-id="initialEntityId" @select-entity="(id, library) => emit('select-entity', id, library)" @open-source="id => emit('open-source', id)" />
@@ -95,6 +99,7 @@ import EntityRelations from './EntityRelations.vue'
 import EntityGraph from './EntityGraph.vue'
 import ProductShelf from './ProductShelf.vue'
 import ShelfModelPage from './ShelfModelPage.vue'
+import ShelfNodePage from './ShelfNodePage.vue'
 import { isProductShelf, shelfLevel } from '@/utils/productShelf'
 import type { SourceLocation } from '@/types/search'
 import FollowToggle from '@/components/FollowToggle.vue'
@@ -275,6 +280,10 @@ onMounted(() => { void loadCatalog(); void refreshAll(); void loadPendingCount()
 onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; nameEmbeddingRequest++; catalogRequest++; pendingRequest++; relationRequest++; clearNameEmbeddingPoll(); if (entitySearchTimer) clearTimeout(entitySearchTimer) })
 </script>
 <style scoped>
+.shelf-node-details { min-width: 0; }
+.shelf-node-relations { margin: 0 var(--space-6) var(--space-7); }
+.shelf-node-relations > summary { cursor: pointer; font-weight: 700; }
+.shelf-node-relations > summary:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
 .shelf-workbench { padding: var(--space-4); min-width: 0; overflow: auto; }
 .shelf-library-bar { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .shelf-library-bar :deep(select) { max-width: 320px; }

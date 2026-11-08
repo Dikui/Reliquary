@@ -101,3 +101,17 @@ test('managed relation requests preserve business start and end times', async ()
     { method: 'del', url: '/api/v1/relations/relation%2Fb?version=3' },
   ])
 })
+
+// Small spec, task 17 / ADR 0023: stage edits preserve unrelated attributes,
+// carry revisions and confirm one operation through the changeset HTTP boundary.
+test('product stage edits confirm a single changeset and clearing a stage preserves other attributes', async () => {
+  const requests: Request[] = [], api = loadAPI(requests, './shelf.ts')
+  const entity = { id: 'product', revision: 7, attributes: { current_stage: 'early', customer_value: ' Original ' } }
+  await api.submitShelfStage('library/a', entity, 'late')
+  await api.submitShelfStage('library/a', entity, '')
+  const bodies = requests.map(request => request.body as any)
+  assert.equal(requests[0]!.url, '/api/v1/libraries/library%2Fa/shelf/changesets')
+  assert.deepEqual(bodies[0], { source: { type: 'web' }, confirmed: true, operations: [{ id: 'stage', type: 'update_entity', entity_id: 'product', revision: 7, patch: { revision: 7, attributes: { current_stage: 'late', customer_value: ' Original ' } } }], decisions: [{ item_id: 'stage', action: 'apply' }] })
+  assert.deepEqual(bodies[1].operations[0].patch.attributes, { customer_value: ' Original ' })
+  assert.deepEqual(entity.attributes, { current_stage: 'early', customer_value: ' Original ' })
+})

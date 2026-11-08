@@ -281,6 +281,28 @@ func (d *shelfChecklistData) apply(entity *types.Entity, result *types.ShelfMode
 		result.OtherDocuments = d.otherDocuments(entity.ID, result.Composition, combination)
 		return
 	}
+	result.Documents = []types.ShelfNodeDocument{}
+	for _, document := range d.documents {
+		if document.OwnerID != entity.ID {
+			continue
+		}
+		row := types.ShelfNodeDocument{Entity: d.nodes[document.FileID], Document: document}
+		if requirement, ok := d.nodes[documentIDValue(document.RequirementID)]; ok {
+			row.Requirement = &requirement
+		}
+		result.Documents = append(result.Documents, row)
+	}
+	sort.Slice(result.Documents, func(i, j int) bool {
+		left, right := result.Documents[i].Entity, result.Documents[j].Entity
+		if left.CanonicalName == right.CanonicalName {
+			return left.ID < right.ID
+		}
+		return left.CanonicalName < right.CanonicalName
+	})
+	if entity.Kind == "part" {
+		result.Checklist = d.partChecklist(entity)
+		return
+	}
 	summary := &types.ShelfChecklistSummary{Counts: map[string]int{}, Models: []types.ShelfChecklistModelSummary{}}
 	ids := []string{}
 	for id, e := range d.nodes {
@@ -317,6 +339,52 @@ func (d *shelfChecklistData) apply(entity *types.Entity, result *types.ShelfMode
 		}
 	}
 	result.ChecklistSummary = summary
+}
+
+// Parts have module requirements, but no stage or sale status of their own.
+func (d *shelfChecklistData) partChecklist(entity *types.Entity) []types.ShelfChecklistItem {
+	rows := []types.ShelfChecklistItem{}
+	module, _ := entity.Attributes["module_type"].(string)
+	for _, requirement := range d.requirements {
+		applies := false
+		for _, binding := range d.bindings {
+			if binding.SubjectID != requirement.ID || binding.ObjectID != requirement.ID {
+				continue
+			}
+			var modules []string
+			_ = types.DecodeShelfValue(binding.Attributes["module_types"], &modules)
+			applies = applies || slices.Contains(modules, module)
+		}
+		if !applies {
+			continue
+		}
+		var record types.ShelfRequirement
+		if types.DecodeShelfValue(requirement.Attributes["requirement"], &record) != nil {
+			continue
+		}
+		found := false
+		for i := range d.documents {
+			document := &d.documents[i]
+			if document.OwnerID != entity.ID || documentIDValue(document.RequirementID) != requirement.ID {
+				continue
+			}
+			row := d.row(requirement, record, "", document, 0, nil, nil, nil)
+			row.Conditions = append([]types.ShelfCondition{}, document.Conditions...)
+			rows = append(rows, row)
+			found = true
+		}
+		if !found {
+			rows = append(rows, d.row(requirement, record, "", nil, 0, nil, nil, nil))
+		}
+	}
+	for i := range rows {
+		for j := 0; j < i; j++ {
+			if rows[i].Requirement.ID == rows[j].Requirement.ID && rows[i].Document != nil && rows[j].Document != nil && shelfConditionsOverlap(rows[i].Conditions, rows[j].Conditions) {
+				rows[i].Ambiguous, rows[j].Ambiguous = true, true
+			}
+		}
+	}
+	return rows
 }
 
 // Other files use the same current-version snapshot as the checklist, but have
@@ -361,7 +429,7 @@ func (d *shelfChecklistData) otherDocuments(id string, composition []types.Shelf
 }
 
 func (s *EntityService) addShelfChecklist(ctx context.Context, l *types.Library, e *types.Entity, at time.Time, combination map[string]string, result *types.ShelfModelDetail) error {
-	if e.Kind != "model" && e.Kind != "product" && e.Kind != "platform" && e.Kind != "product_line" {
+	if e.Kind != "model" && e.Kind != "product" && e.Kind != "platform" && e.Kind != "product_line" && e.Kind != "part" {
 		return nil
 	}
 	data, err := s.loadShelfChecklist(ctx, l, at)

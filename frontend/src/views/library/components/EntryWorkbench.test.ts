@@ -59,6 +59,11 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
     '@/api/operation-logs': { OPERATION_TYPES: [] }, '@/api/entities': { entityHistory: () => envelope({ items: [], total: 0, page: 1, page_size: 20 }) },
     '@/api/shelf': { getShelfNode: () => envelope({ entity, facts: [], recorded: false }) },
   }) }
+  modules['./ShelfNodePage.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfNodePage.vue', import.meta.url), {
+    ...entryPresentationTestModules, '@/utils/productShelf': shelfText, '@/utils/externalUrl': externalUrl,
+    'vue-i18n': { useI18n: () => i18n.global },
+    '@/api/shelf': { getShelfNode: () => envelope({ entity, facts: [], recorded: false }) },
+  }) }
   function evaluate(code: string) { const module = { exports: {} as any }; const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText; new Function('require', 'module', 'exports', output)((name: string) => (['./ProductShelf.vue', './EntityRelations.vue', './EntityGraph.vue', './ManagedEntityEditor.vue', './ManagedRelationEditor.vue', './ManagedAttributes.vue', './ManagedReorganization.vue'].includes(name) ? { __esModule: true, default: defineComponent({ setup: () => () => h('div', { 'data-relation-view': name }) }) } : modules[name]) ?? require(name), module, module.exports); return module.exports }
   const component = evaluate(script.content).default; component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup; let state: any
@@ -194,3 +199,14 @@ test('货架型号链接打开型号页并保留库与实体身份', async () =>
   assert.match(html, /aria-label="型号详情"/)
   assert.match(html, /href="\/platform\/entries\?libraries=library-a"/)
 })
+
+// Small spec, task 17: all upper levels and parts use their dedicated shelf details.
+for (const kind of ['product_line', 'platform', 'product', 'part']) {
+  test(`货架 ${kind} 链接打开节点页`, async () => {
+    const { html } = await renderWorkbench({ initialEntityId: 'shelf-node', libraries: [{ id: 'library-a', name: 'Shelf', entity_mode: 'managed', shelf_enabled: true }], api: { getEntity: () => envelope({ entity: { ...entity, id: 'shelf-node', kind }, entries: [] }) }, scenario: async state => { await state.loadCatalog(); await state.selectInitialEntity('shelf-node') } })
+    assert.match(html, /aria-label="节点详情"/)
+    assert.match(html, /data-relation-view="\.\/EntityRelations.vue"/)
+    assert.doesNotMatch(html, /data-relation-view="\.\/EntityGraph.vue"/)
+    assert.match(html, /href="\/platform\/entries\?libraries=library-a"/)
+  })
+}

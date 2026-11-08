@@ -494,3 +494,13 @@ owning library. Model operation history uses the existing entity history API and
 twenty-row paging, including directly owned certification and document version
 writes. Component and ancestor history stays on the corresponding node.
 Source: ADR 0023, ADR 0024 and docs/product-shelf-query.md.
+
+Shelf upper-node and part links open dedicated details in the entity route.
+All model pages in an upper-node summary use the node's business time. The matrix
+retains different states and conditions for optional parts and links to the
+corresponding requirement in the model detail. Query failures show Retry and do
+not present a partial matrix as complete. Part usage shows fixed and optional
+composition roles; part details do not infer sale status or a current stage.
+Product-name stage edits confirm one changeset with revision checking and retain
+unrelated attributes. Failure restores the saved stage and displays the reason.
+A collapsed relationship list retains the existing entity relationship controls.

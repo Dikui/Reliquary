@@ -1,6 +1,7 @@
 import type { TranslationCall } from './translationCallAudit.ts'
 
 export const DYNAMIC_TRANSLATION_ALLOWLIST = [
+  { file: 'views/library/components/ShelfNodePage.vue', expressions: ['`productShelf.kinds.${entity.kind}`', '`shelfModel.status.${row.status}`'], reason: 'Shelf node kinds and checklist statuses are fixed API vocabularies.' },
   {
     "file": "views/library/components/ShelfModelPage.vue",
     "expressions": [

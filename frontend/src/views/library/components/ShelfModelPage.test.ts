@@ -105,6 +105,7 @@ test('多个选配模块选齐后才发送完整组合', async t => {
 // Small spec, task 16 / ADR 0024: checklist states, exact source text and file provenance remain visible.
 test('资料清单保留四种状态、应交原文、版本和来源，文件可打开原件', async t => {
   const { root } = await mountPage(t)
+  assert.ok(descendants(section(root, 'docs')).some(node => node.props.id === 'requirement-drawing'))
   const text = visibleText(section(root, 'docs'))
   for (const value of ['缺', '只有初稿', '已交', '未到期', '原表阶段', '客户交期原文', 'Customer V2', '产品名称 产品原名', '负责人原名', '客户图纸.pdf']) assert.ok(text.includes(value), value)
   assert.ok(descendants(section(root, 'docs')).some(node => node.tag === 'a' && node.props.href === 'https://example.invalid/drawing'))

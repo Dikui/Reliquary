@@ -1,4 +1,10 @@
 export default {
+  shelfNode: {
+    title: 'Node details', partTitle: 'Part details', models: 'Descendant models', usedBy: 'Models using this part', summary: 'Document checklist summary', files: 'Files at this node',
+    ownCerts: 'Certifications at this node', ancestorCerts: 'From ancestors', gaps: 'Document gaps', gapCount: '{count} missing ({models} models)',
+    inherited: 'Inherited from product', overridden: 'Set separately', fixed: 'Fixed component', optional: 'Optional', alternatives: 'Available parts',
+    self: 'Self', noRequirement: 'No document requirement', noStage: 'Not set', notApplicable: 'Not applicable',
+  },
   shelfModel: {
     title: 'Model details', hierarchy: 'Hierarchy', onPage: 'On this page', currentStage: 'Current stage', inheritedStage: 'Inherited from product',
     allConditions: 'All options', completeCombination: 'Choose every module to view a combination.', noRecord: 'No record in the shelf',

@@ -346,6 +346,8 @@ func (s *EntityService) shelfNodeCertifications(ctx context.Context, library *ty
 				owners[part.ID] = origin
 			}
 		}
+	}
+	if entity.Kind == "model" || entity.Kind == "product" {
 		var ancestors []string
 		err := s.db.WithContext(ctx).Raw(`WITH RECURSIVE ancestors(id,depth) AS (
  SELECT ?::varchar,0 UNION ALL SELECT r.object_id,a.depth+1 FROM relations r JOIN ancestors a ON r.subject_id=a.id
