@@ -20,6 +20,11 @@ import (
 // file boundary and retains merges, two headers, rich strings and yellow fills.
 func importWorkbook(t *testing.T, rows, merges string, styleXML ...string) []byte {
 	t.Helper()
+	return importWorkbookWithSheetElements(t, rows, merges, "", styleXML...)
+}
+
+func importWorkbookWithSheetElements(t *testing.T, rows, merges, elements string, styleXML ...string) []byte {
+	t.Helper()
 	var data bytes.Buffer
 	z := zip.NewWriter(&data)
 	styles := `<styleSheet><fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill></fills><cellXfs><xf fillId="0"/><xf fillId="1"/></cellXfs></styleSheet>`
@@ -31,7 +36,7 @@ func importWorkbook(t *testing.T, rows, merges string, styleXML ...string) []byt
 		{"xl/_rels/workbook.xml.rels", `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`},
 		{"xl/styles.xml", styles},
 		{"xl/sharedStrings.xml", `<sst><si><r><t>Shared </t></r><r><t>platform</t></r></si></sst>`},
-		{"xl/worksheets/sheet1.xml", `<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Header group</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Header</t></is></c></row>` + rows + `</sheetData><mergeCells>` + merges + `</mergeCells></worksheet>`},
+		{"xl/worksheets/sheet1.xml", `<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Header group</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Header</t></is></c></row>` + rows + `</sheetData><mergeCells>` + merges + `</mergeCells>` + elements + `</worksheet>`},
 	} {
 		w, err := z.Create(file.name)
 		require.NoError(t, err)
@@ -189,6 +194,77 @@ func confirmImport(t *testing.T, f *managedNamesFixture, libraryID string, draft
 	}
 	f.request(http.MethodPost, "/libraries/"+libraryID+"/shelf/changesets/"+draft.ID+"/confirm", types.ShelfChangesetReview{Revision: draft.Revision, Decisions: decisions}, http.StatusOK, &draft)
 	return draft
+}
+
+// Medium regression, task 29 / ADR 0023: conditional rules are ignored at the
+// upload boundary; cell values and ordinary fills still determine model facts.
+func TestShelfImportMapIgnoresConditionalFormatting(t *testing.T) {
+	f, library := importSetup(t)
+	rows := importRow(3, "Map platform", "Map product", "Plain model", "GA (Demo)", "9~54")
+	rows += strings.Replace(importRow(4, "Map platform", "Map product", "Yellow model", "DEV", "12"), `r="C4" t=`, `r="C4" s="1" t=`, 1)
+	styles := `<styleSheet><fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill></fills><cellXfs><xf fillId="0"/><xf fillId="1"/></cellXfs><dxfs><dxf><fill><patternFill patternType="solid"><fgColor rgb="FFFF0000"/></patternFill></fill></dxf></dxfs></styleSheet>`
+	conditional := `<conditionalFormatting sqref="C3:D4"><cfRule type="expression" dxfId="0" priority="1"><formula>TRUE</formula></cfRule></conditionalFormatting>`
+	draft := importUpload(t, f, library.ID, "map_20261028.xlsx", "", importWorkbookWithSheetElements(t, rows, "", conditional, styles), http.StatusCreated)
+	for _, item := range draft.Items {
+		for _, conflict := range item.Conflicts {
+			require.Contains(t, []string{"new", "modified"}, conflict.Type, conflict.Message)
+		}
+	}
+	draft = confirmImport(t, f, library.ID, draft)
+	models := map[string]types.EntityDetail{}
+	for _, item := range draft.Items {
+		if item.Operation.Entity != nil && item.Operation.Entity.Kind == "model" {
+			var detail types.EntityDetail
+			f.request(http.MethodGet, "/entities/"+item.EntityID, nil, http.StatusOK, &detail)
+			models[detail.Entity.CanonicalName] = detail
+		}
+	}
+	require.Len(t, models, 2)
+	plain := models["Plain model"].Shelf
+	require.NotNil(t, plain)
+	require.Len(t, plain.SaleStatuses, 1)
+	require.Equal(t, "GA", plain.SaleStatuses[0].Status)
+	require.Equal(t, "Demo", plain.SaleStatuses[0].Notes)
+	require.False(t, plain.SaleStatuses[0].PlannedEOM)
+	require.Equal(t, map[string]any{"min": float64(9), "max": float64(54)}, plain.Parameters["energy"][0].Value)
+	yellow := models["Yellow model"].Shelf
+	require.NotNil(t, yellow)
+	require.Len(t, yellow.SaleStatuses, 1)
+	require.Equal(t, "DEV", yellow.SaleStatuses[0].Status)
+	require.True(t, yellow.SaleStatuses[0].PlannedEOM)
+}
+
+// Medium regression, task 29: an absent configured worksheet is still a
+// blocking import conflict, with a diagnostic that only describes its absence.
+func TestShelfImportMissingWorksheetHasDistinctError(t *testing.T) {
+	for _, sample := range []struct {
+		kind    string
+		columns []types.ShelfImportColumn
+	}{
+		{"product_map", []types.ShelfImportColumn{{Column: "A", Field: "platform"}, {Column: "B", Field: "product"}, {Column: "C", Field: "model"}}},
+		{"atq", []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}}},
+	} {
+		t.Run(sample.kind, func(t *testing.T) {
+			f, library, nodes := checklistSetup(t)
+			importRecordPlan(f, library, sample.kind, sample.columns, map[string]any{"worksheet": "Absent", "product_line_id": shelfNode(nodes, "line")})
+			draft := importUpload(t, f, library.ID, "missing_20261028.xlsx", "", importWorkbook(t, "", ""), http.StatusCreated)
+			found := false
+			decisions := []types.ShelfDecision{}
+			for _, item := range draft.Items {
+				action := "discard"
+				if item.Operation.ImportLocation.Worksheet == "Absent" {
+					found = true
+					require.Len(t, item.Conflicts, 1)
+					require.Equal(t, "unparseable", item.Conflicts[0].Type)
+					require.Equal(t, "configured worksheet is missing", item.Conflicts[0].Message)
+					action = "apply"
+				}
+				decisions = append(decisions, types.ShelfDecision{ItemID: item.ID, Action: action})
+			}
+			require.True(t, found, "missing worksheet must produce a conflict")
+			f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets/"+draft.ID+"/confirm", types.ShelfChangesetReview{Revision: draft.Revision, Decisions: decisions}, http.StatusConflict, nil)
+		})
+	}
 }
 
 // Medium spec, task 11 / ADR 0023: later maps propose manual-value conflicts

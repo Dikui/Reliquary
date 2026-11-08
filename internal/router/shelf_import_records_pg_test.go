@@ -36,6 +36,24 @@ func importRecordPlan(f *managedNamesFixture, library types.Library, kind string
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "plan", "type": "save_import_plan", "import_plan": map[string]any{"key": "map", "name": "Synthetic records", "file_kind": kind, "sheets": []any{sheet}}}}}, http.StatusCreated, nil)
 }
 
+// Medium regression, task 29 / ADR 0023: conditional formatting does not
+// prevent a record sheet from importing its explicit cell values.
+func TestShelfImportATQIgnoresConditionalFormatting(t *testing.T) {
+	f, library, nodes := checklistSetup(t)
+	importRecordPlan(f, library, "atq", []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}, {Column: "C", Field: "owner"}}, map[string]any{"product_line_id": shelfNode(nodes, "line")})
+	row := importRecordRow(3, " Original document ", "Final custom", " Original owner ")
+	conditional := `<conditionalFormatting sqref="A3:C3"><cfRule type="expression" priority="1"><formula>TRUE</formula></cfRule></conditionalFormatting>`
+	draft := importUpload(t, f, library.ID, "atq_20261028.xlsx", "", importWorkbookWithSheetElements(t, row, "", conditional), http.StatusCreated)
+	require.Len(t, draft.Items, 2)
+	draft = confirmImport(t, f, library.ID, draft)
+	var detail types.EntityDetail
+	f.request(http.MethodGet, "/entities/"+draft.Items[0].EntityID, nil, http.StatusOK, &detail)
+	require.Equal(t, " Original document ", detail.Entity.CanonicalName)
+	metadata := detail.Entity.Attributes["requirement"].(map[string]any)
+	require.Equal(t, "final_due", metadata["final_due_stage"])
+	require.Equal(t, " Original owner ", metadata["owner"])
+}
+
 // Medium spec, task 12: progress sheets update the unique certification key,
 // preserve unmapped metadata and source spelling, and remain inert until confirmed.
 func TestShelfImportCertificationProgressUsesIdentityAndFileDate(t *testing.T) {

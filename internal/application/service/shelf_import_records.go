@@ -60,9 +60,9 @@ func (b *importMapBuilder) parseRecords(workbook *importWorkbookData) error {
 		}
 		b.location = &types.ShelfImportLocation{Worksheet: mapping.Worksheet, Cells: []string{}}
 		sheet, ok := workbook.Sheets[mapping.Worksheet]
-		if !ok || sheet.ConditionalFormatting {
+		if !ok {
 			b.skippedSheets[mapping.Worksheet] = true
-			b.issue("unparseable", "worksheet missing or uses conditional formatting", nil)
+			b.issue("unparseable", "configured worksheet is missing", nil)
 			continue
 		}
 		for _, row := range sheet.Rows {
