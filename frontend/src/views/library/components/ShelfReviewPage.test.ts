@@ -197,3 +197,38 @@ test('editing a certification region allows text outside configured sale regions
   await click(find(root, 'button', '保存进度'))
   assert.equal(saves[0].decisions[0].replacement.certification.region, ' 新的客户地区 ')
 })
+
+// Small spec, task 25 / ADR 0023: HTTP fixtures replace the batch API. Feedback
+// stays visible without expanding a diff and supports the normal acknowledgement.
+test('reviewer sees unmapped column content and acknowledges it before confirming', async t => {
+  const proposal = {
+    id: 'column-f', operation: { id: 'column-f', type: 'import_notice', import_location: { worksheet: '资料清单', cells: ['F3', 'F4', 'F5'] } },
+    before: null, after: null,
+    conflicts: [{ type: 'unmapped_column', details: { worksheet: '资料清单', column: 'F', header: ' 备注原文 ', nonempty_rows: 17, examples: [' 示例一 ', '0', '示例三'] } }],
+  }
+  const initial = changeset([proposal]); initial.source = { type: 'import', file_name: 'synthetic.xlsx', import_batch_id: 'batch-25' }
+  const { root, saves, confirmations } = await mount(t, initial)
+  const group = descendants(root).find(node => node.tag === 'details' && node.props.class === 'review-group' && visibleText(node).includes('未映射列'))!
+  assert.ok(group)
+  assert.equal(group.props.open, true)
+  const feedback = descendants(group).find(node => node.tag === 'dl')!
+  assert.ok(feedback)
+  for (const value of ['工作表', '资料清单', '列', 'F', '表头原文', ' 备注原文 ', '非空行数', '17', '示例值', ' 示例一 ', '0', '示例三']) assert.ok(visibleText(feedback).includes(value), value)
+  assert.equal(find(root, 'button', '确认写入').props.disabled, true)
+  await click(find(group, 'button', '知道了'))
+  assert.equal(find(root, 'button', '确认写入').props.disabled, false)
+  await click(find(root, 'button', '保存进度'))
+  assert.deepEqual(saves[0].decisions, [{ item_id: 'column-f', action: 'apply' }])
+  await click(find(root, 'button', '确认写入')); await useFeedback().confirmations.at(-1)!.accept(); await settle()
+  assert.deepEqual(confirmations[0], { revision: 5, decisions: [{ item_id: 'column-f', action: 'apply' }] })
+})
+
+// Small regression, task 25: submitters can attach arbitrary issue details.
+// An incomplete notice must not prevent the whole review page from rendering.
+test('incomplete column feedback remains reviewable without a rendering error', async t => {
+  const proposal = { id: 'column', operation: { id: 'column', type: 'import_notice' }, before: null, after: null, conflicts: [{ type: 'unmapped_column', details: { worksheet: 'Map', column: 'F' } }] }
+  const { root } = await mount(t, changeset([proposal]))
+  assert.ok(find(root, 'button', '知道了'))
+  await click(find(root, 'button', '知道了'))
+  assert.equal(find(root, 'button', '确认写入').props.disabled, false)
+})

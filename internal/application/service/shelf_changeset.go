@@ -120,8 +120,11 @@ func shelfOperationValid(op types.ShelfOperation) error {
 		return apperrors.NewBadRequestError("unknown operation type or incompatible operation payload")
 	}
 	for _, issue := range op.Issues {
-		if op.Type == "import_notice" && issue.Type != "cross_table_contradiction" {
-			return apperrors.NewBadRequestError("import notices only accept cross table contradictions")
+		if op.Type == "import_notice" && slices.Contains([]string{"cross_table_contradiction", "unmapped_column"}, issue.Type) {
+			continue
+		}
+		if op.Type == "import_notice" {
+			return apperrors.NewBadRequestError("import notices only accept cross table contradictions or unmapped columns")
 		}
 		if !slices.Contains([]string{"unparseable", "uncertain", "required_missing", "cross_table_contradiction"}, issue.Type) {
 			return apperrors.NewBadRequestError("unsupported submitter issue type")
@@ -498,7 +501,7 @@ func (s *EntityService) confirmShelf(ctx context.Context, tx *gorm.DB, draft *ty
 			continue
 		}
 		for _, conflict := range item.Conflicts {
-			if item.Operation.Type == "import_notice" && conflict.Type == "cross_table_contradiction" {
+			if item.Operation.Type == "import_notice" && slices.Contains([]string{"cross_table_contradiction", "unmapped_column"}, conflict.Type) {
 				continue
 			}
 			if conflict.Type == "new" || conflict.Type == "modified" || (conflict.Type == "disappeared" && item.Decision.Action == "retire") {

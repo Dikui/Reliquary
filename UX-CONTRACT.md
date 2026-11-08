@@ -517,6 +517,13 @@ and submitted source locations for comparison. Missing required values and other
 unresolved blocking findings prevent confirmation; deferred items move into the
 server's new pending changeset after confirmation.
 
+Import batches add an Unmapped columns group when mapped worksheets contain
+content outside the configured columns. Each notice directly shows the worksheet,
+column letter, original header, nonempty row count and up to three examples.
+Acknowledge saves an `apply` decision and permits confirmation without writing
+the column content. Discard and defer retain the existing review behavior.
+Source: ADR 0023 and docs/product-shelf-import.md.
+
 Uncertain agent items can be returned to the submitter. Saving retains the return
 decision for the agent to read, and the changeset stays pending until the item is
 corrected, rejected or deferred. Stale revisions preserve local decisions and

@@ -6,6 +6,9 @@ export interface ShelfNameConfirmation { name: string; other_entity_id: string; 
 export interface ShelfReviewConflict {
   type: string; message?: string; details?: unknown; manual_before?: Record<string, unknown>; candidates?: ShelfNameConfirmation[]
 }
+export interface ShelfImportColumnFeedback {
+  worksheet: string; column: string; header: string; nonempty_rows: number; examples: string[]
+}
 export interface ShelfReviewOperation {
   id: string
   type: string

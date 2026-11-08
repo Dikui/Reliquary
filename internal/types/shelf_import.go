@@ -66,6 +66,15 @@ type ShelfImportLocation struct {
 	Values    map[string]string `json:"values,omitempty"`
 }
 
+// ShelfImportColumnFeedback describes source content excluded by the plan.
+type ShelfImportColumnFeedback struct {
+	Worksheet    string   `json:"worksheet"`
+	Column       string   `json:"column"`
+	Header       string   `json:"header"`
+	NonemptyRows int      `json:"nonempty_rows"`
+	Examples     []string `json:"examples"`
+}
+
 // The caller identifies the proposed write; the model only fills the requested
 // values. Models use ParentID instead of Operation to name an existing product.
 type ShelfImportTextInput struct {

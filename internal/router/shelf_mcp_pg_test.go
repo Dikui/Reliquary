@@ -97,6 +97,25 @@ func TestShelfMCPSubmitWithoutConfirmationPersistsOnlyProposal(t *testing.T) {
 	}
 }
 
+// Medium spec, task 25: the MCP operation contract accepts the same nonblocking
+// column feedback as HTTP and requires an explicit acknowledgement decision.
+func TestShelfMCPSubmitAcknowledgesUnmappedColumnNotice(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	client := f.connect(t, "2025-11-25")
+	var before, after types.EntityDetail
+	f.request(http.MethodGet, "/entities/"+shelfNode(nodes, "model"), nil, http.StatusOK, &before)
+	var result types.ShelfChangeset
+	mcpCall(t, client, "shelf_submit", map[string]any{
+		"library_id": library.ID, "source": map[string]any{"type": "agent", "agent_name": "Synthetic importer"}, "confirmed": true,
+		"operations": []any{map[string]any{"id": "column", "type": "import_notice", "issues": []any{map[string]any{"type": "unmapped_column", "details": map[string]any{"worksheet": "Map", "column": "F", "header": "Original notes", "nonempty_rows": 1, "examples": []string{"Original content"}}}}}},
+		"decisions":  []any{map[string]any{"item_id": "column", "action": "apply"}},
+	}, &result)
+	require.Equal(t, "confirmed", result.Status)
+	require.Equal(t, "unmapped_column", result.Items[0].Conflicts[0].Type)
+	f.request(http.MethodGet, "/entities/"+shelfNode(nodes, "model"), nil, http.StatusOK, &after)
+	require.Equal(t, before, after)
+}
+
 func shelfMCPError(t *testing.T, client *mcp.ClientSession, name string, input any) *mcp.CallToolResult {
 	t.Helper()
 	result, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: input})

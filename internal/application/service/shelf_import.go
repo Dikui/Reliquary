@@ -91,6 +91,10 @@ func (s *EntityService) ImportShelfWorkbook(ctx context.Context, libraryID, plan
 				return err
 			}
 		}
+		builder.unmappedColumns(workbook)
+		if len(builder.ops) > 500 {
+			return apperrors.NewBadRequestError("import exceeds 500 changeset operations; split the workbook")
+		}
 		if len(builder.ops) == 0 {
 			return apperrors.NewBadRequestError("workbook has no importable rows or conflicts")
 		}

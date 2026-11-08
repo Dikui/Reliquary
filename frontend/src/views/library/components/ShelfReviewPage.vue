@@ -5,7 +5,7 @@ import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vu
 import { Button, EmptyState, Select } from '@/components/ui'
 import { confirm, toast } from '@/components/ui/feedback'
 import { formatDateTime } from '@/utils/dateTime'
-import { SHELF_REVIEW_GROUPS, shelfReviewGroup, shelfReviewReady, shelfReviewSubject, shelfOperationForEdit, shelfNameConfirmations } from '@/utils/shelfReview'
+import { SHELF_REVIEW_GROUPS, shelfReviewGroup, shelfReviewReady, shelfReviewSubject, shelfOperationForEdit, shelfNameConfirmations, shelfUnmappedColumnFeedback } from '@/utils/shelfReview'
 import { getEntity } from '@/api/entities'
 import ShelfReviewValue from './ShelfReviewValue.vue'
 import type { LibraryCatalogItem } from '@/api/library'
@@ -21,7 +21,7 @@ const targets = ref<Record<string, string>>({})
 let generation = 0, detailGeneration = 0
 const blocked = computed(() => busy.value || loading.value || detailLoading.value || selected.value?.status !== 'pending')
 const dirty = computed(() => JSON.stringify(decisions.value) !== baseline.value || Object.keys(edits.value).length > 0)
-const groups = computed(() => SHELF_REVIEW_GROUPS.map(type => ({ type, items: selected.value?.items.filter(item => shelfReviewGroup(item) === type) || [] })))
+const groups = computed(() => SHELF_REVIEW_GROUPS.map(type => ({ type, items: selected.value?.items.filter(item => shelfReviewGroup(item) === type) || [] })).filter(group => group.type !== 'unmapped_column' || group.items.length))
 const required = computed(() => selected.value?.items.filter(item => item.conflicts.some(conflict => conflict.type === 'required_missing') && !shelfReviewReady(item, decisions.value[item.id])).length || 0)
 const canConfirm = computed(() => !!selected.value && selected.value.status === 'pending' && !Object.keys(edits.value).length && selected.value.items.every(item => shelfReviewReady(item, decisions.value[item.id])))
 function adopt(set: ShelfReviewChangeset) {
@@ -148,10 +148,18 @@ onBeforeUnmount(() => { generation++; detailGeneration++; if (typeof window !== 
         <div class="review-counts"><span v-for="group in groups" :key="group.type">{{ t(`shelfReview.groups.${group.type}`) }} {{ group.items.length }}</span></div>
         <details v-for="group in groups" :key="group.type" class="review-group" :open="group.items.length > 0">
           <summary><h3>{{ t(`shelfReview.groups.${group.type}`) }}</h3><span>{{ t('shelfReview.groupCount', { count: group.items.length, remaining: group.items.filter(item => !decisions[item.id]).length }) }}</span></summary>
+          <p v-if="group.type === 'unmapped_column'" class="review-hint">{{ t('shelfReview.unmappedHint') }}</p>
           <Button v-if="group.type === 'new' && group.items.length" :disabled="blocked" class="review-bulk" @click="acceptNew">{{ t('shelfReview.acceptGroup') }}</Button>
           <article v-for="item in group.items" :key="item.id" :aria-label="shelfReviewSubject(item).name">
             <div class="review-what">
               <div class="review-object"><span v-if="shelfReviewSubject(item).kind" class="review-kind">{{ library.entity_schema?.kinds?.find(kind => kind.key === shelfReviewSubject(item).kind)?.name || shelfReviewSubject(item).kind }}</span><strong>{{ shelfReviewSubject(item).name || t('shelfReview.unnamed') }}</strong></div>
+              <dl v-if="shelfUnmappedColumnFeedback(item)" class="review-column">
+                <dt>{{ t('shelfReview.columnWorksheet') }}</dt><dd>{{ shelfUnmappedColumnFeedback(item)?.worksheet }}</dd>
+                <dt>{{ t('shelfReview.columnLetter') }}</dt><dd>{{ shelfUnmappedColumnFeedback(item)?.column }}</dd>
+                <dt>{{ t('shelfReview.columnHeader') }}</dt><dd>{{ shelfUnmappedColumnFeedback(item)?.header || t('shelfReview.columnNoHeader') }}</dd>
+                <dt>{{ t('shelfReview.columnRows') }}</dt><dd>{{ shelfUnmappedColumnFeedback(item)?.nonempty_rows.toLocaleString(locale) }}</dd>
+                <dt>{{ t('shelfReview.columnExamples') }}</dt><dd><ul><li v-for="(example, index) in shelfUnmappedColumnFeedback(item)?.examples" :key="index">{{ example }}</li></ul></dd>
+              </dl>
               <p v-for="(conflict, index) in item.conflicts" :key="index">{{ conflict.message }}</p>
               <p v-if="group.type === 'disappeared'">{{ t('shelfReview.disappearedHint') }}</p>
               <p v-for="candidate in shelfNameConfirmations(item)" :key="candidate.other_entity_id">{{ candidate.name }} · {{ library.entity_schema?.kinds?.find(kind => kind.key === candidate.other_kind)?.name || candidate.other_kind }} · {{ candidate.other_entity_id }}</p>
@@ -198,6 +206,10 @@ article { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:var(--spac
 article:last-child { border:0; }
 .review-what { display:grid; gap:var(--space-1); min-width:0; overflow-wrap:anywhere; }
 .review-what p { margin:0; }
+.review-column { display:grid; grid-template-columns:auto minmax(0,1fr); gap:var(--space-1) var(--space-3); margin:var(--space-2) 0; font-size:var(--text-sm); }
+.review-column dt { font-weight:700; }
+.review-column dd { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.review-column ul { list-style:none; margin:0; padding:0; }
 .review-object { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); }
 .review-object strong { font:700 var(--text-sm)/var(--leading) var(--mono); }
 .review-kind { border:1px solid var(--text); padding:0 4px; font-size:var(--text-xs); font-weight:700; }

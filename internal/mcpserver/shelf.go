@@ -164,7 +164,7 @@ func shelfOperationSchema() map[string]any {
 		"import_plan":     shelfPayloadSchema("保存导入方案，字段与 HTTP 变更集 save_import_plan 相同，含 key、revision、file_kind、name、sheets 等映射"),
 		"import_location": shelfPayloadSchema("导入来源位置，与 HTTP 变更集相同"),
 		"issues": map[string]any{"type": "array", "items": object(map[string]any{
-			"type": enum("提交方标出的阻塞问题", "unparseable", "uncertain", "required_missing", "cross_table_contradiction"), "message": text("原始问题说明"), "details": map[string]any{},
+			"type": enum("提交方标出的问题或反馈；unmapped_column 仅用于 import_notice", "unparseable", "uncertain", "required_missing", "cross_table_contradiction", "unmapped_column"), "message": text("原始问题说明"), "details": map[string]any{},
 		}, "type")},
 	}, "type")
 }

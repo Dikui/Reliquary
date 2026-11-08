@@ -206,7 +206,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 ## 导入核对提示
 
-`import_notice` 是不写货架的核对操作，`issues` 只接受 `cross_table_contradiction`，也可为空表示核对一致。其差异是提示，普通 `apply` 可以确认，确认前后均不改变货架数据。身份、日期或文本无法判断时仍使用阻塞冲突。表格方案与字段约定见[货架表格导入](product-shelf-import.md)。
+`import_notice` 是不写货架的反馈操作，`issues` 接受 `cross_table_contradiction`（跨表核对差异）与 `unmapped_column`（未映射但有内容的列），也可为空表示核对一致。其差异是提示，普通 `apply` 可以确认知悉，确认前后均不改变货架数据。其他操作不能使用 `unmapped_column`；身份、日期或文本无法判断时仍使用阻塞冲突。表格方案与反馈字段约定见[货架表格导入](product-shelf-import.md)。
 
 资料要求的可选 `due_text` 保留原表“研发最迟提供时间”的完整写法，初稿与终稿阶段仍使用配置键。
 
