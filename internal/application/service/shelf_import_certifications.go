@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"reliquary/internal/types"
@@ -20,16 +19,15 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 			return err
 		}
 	}
-	owner, ownerErr := b.recordOwner(mapping, cells["owner:"].Value)
-	if ownerErr != nil {
-		owner = types.Entity{}
+	owner, err := b.recordOwner(mapping, cells["owner:"].Value)
+	if err != nil {
+		return err
 	}
-	standard, year, standardErr := b.library.ShelfConfig.ResolveStandardYear(cells["standard:"].Value, 0)
-	if standardErr != nil {
-		year = 0
-		standard.Key = cells["standard:"].Value
+	standard, ok := b.library.ShelfConfig.Standard(cells["standard:"].Value)
+	if !ok {
+		return fmt.Errorf("uncertain: certification standard has no configured name or alias")
 	}
-	record := types.ShelfCertification{Year: year, OwnerID: owner.ID, Standard: standard.Key, CertificationObject: cells["certification_object:"].Value, Region: cells["region:"].Value}
+	record := types.ShelfCertification{OwnerID: owner.ID, Standard: standard.Key, CertificationObject: cells["certification_object:"].Value, Region: cells["region:"].Value}
 	if cell, ok := cells["cell_part:"]; ok && cell.Value != "" {
 		part, err := b.recordEntity("part", cell.Value)
 		if err != nil {
@@ -38,8 +36,9 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 		record.CellPartID = part.ID
 	}
 	key := fmt.Sprintf("cert:%q/%q/%q/%q/%q", record.OwnerID, record.Standard, record.CertificationObject, record.CellPartID, record.Region)
-	completeKey := owner.ID != "" && standardErr == nil && strings.TrimSpace(record.CertificationObject) != "" && strings.TrimSpace(record.Region) != ""
-	duplicate := completeKey && b.seenRecordKeys[key]
+	if b.seenRecordKeys[key] {
+		return fmt.Errorf("uncertain: certification key appears in multiple rows; submitter must decide whether to merge")
+	}
 
 	matches := []types.Entity{}
 	for _, entity := range b.entities {
@@ -62,9 +61,6 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 			return err
 		}
 		revision = matches[0].Revision
-		if year != 0 {
-			record.Year = year
-		}
 	}
 	if b.plan.FileKind == "certification_report" {
 		if cell, ok := cells["progress:"]; ok && cell.Value != mapping.Progress {
@@ -95,32 +91,19 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 		}
 	}
 	if cell, ok := cells["year:"]; ok {
-		record.Year = year
+		record.Year = 0
 		if cell.Value != "" {
-			fieldYear, err := strconv.Atoi(cell.Value)
+			year, err := strconv.Atoi(cell.Value)
 			if err != nil {
 				return fmt.Errorf("invalid certification year %q", cell.Value)
 			}
-			record.Year = fieldYear
-			if year != 0 && year != fieldYear {
-				record.Standard = cells["standard:"].Value
-			}
+			record.Year = year
 		}
 	}
-
-	if completeKey {
-		b.seenRecordKeys[key] = true
-	}
-	mappedFields := make([]string, 0, len(mapping.Columns))
-	for _, column := range mapping.Columns {
-		mappedFields = append(mappedFields, column.Field)
-	}
-	op := types.ShelfOperation{Type: "update_certification", CertificationOwner: &types.ShelfCertificationOwner{MappedFields: mappedFields, Name: cells["owner:"].Value, Kind: mapping.OwnerKind, ProductLineID: mapping.ProductLineID}, Revision: revision, Certification: &types.ShelfCertificationInput{Name: cells["name:"].Value, ShelfCertification: record}}
-	if duplicate {
-		op.Issues = append(op.Issues, types.ShelfConflict{Type: "uncertain", Message: "certification key appears in multiple rows; submitter must decide whether to merge"})
-	}
+	b.seenRecordKeys[key] = true
+	op := types.ShelfOperation{Type: "update_certification", Revision: revision, Certification: &types.ShelfCertificationInput{Name: cells["name:"].Value, ShelfCertification: record}}
 	if len(matches) > 1 {
-		op.Issues = append(op.Issues, types.ShelfConflict{Type: "uncertain", Message: "certification key has multiple candidates; submit a corrected complete record", Details: map[string]any{"candidates": matches, "match_count": len(matches)}})
+		op.Issues = []types.ShelfConflict{{Type: "uncertain", Message: "certification key has multiple candidates; submit a corrected complete record", Details: map[string]any{"candidates": matches, "match_count": len(matches)}}}
 	}
 	if text := cells["sample_description:"].Value; text != "" {
 		op.Issues = append(op.Issues, types.ShelfConflict{Type: "uncertain", Message: "sample description requires explicit part-condition review", Details: map[string]any{"kind": "conditions", "text": text}})
@@ -159,38 +142,19 @@ func (b *importMapBuilder) reportPart(mapping types.ShelfImportSheet, cells map[
 	}
 	attrs["module_type"] = mapping.ModuleType
 	for _, field := range []string{"pack_model", "cluster_model", "container_model"} {
-		// A blank cell means "not provided": it keeps the known value instead of contradicting it.
-		if cell, ok := cells[field+":"]; ok && cell.Value != "" {
+		if cell, ok := cells[field+":"]; ok {
 			attrs[field] = cell.Value
 		}
 	}
 	if part.ID == "" {
 		part.ID = b.append(types.ShelfOperation{Type: "create_entity", Entity: &types.ManagedEntityInput{Kind: "part", Name: name, Attributes: attrs}})
 	} else if !reflect.DeepEqual(attrs, part.Attributes) {
-		merged := false
-		for i := range b.ops {
-			op := &b.ops[i]
-			var pending map[string]any
-			if "$"+op.ID == part.ID {
-				pending = op.Entity.Attributes
-			} else if op.EntityID == part.ID && op.Type == "update_entity" {
-				pending = *op.Patch.Attributes
-			} else {
-				continue
+		for _, op := range b.ops {
+			if op.EntityID == part.ID && op.Type == "update_entity" || "$"+op.ID == part.ID {
+				return fmt.Errorf("uncertain: repeated cell part rows propose different attributes")
 			}
-			// Rows for one part only conflict on differing values; a later row may fill a value an earlier row left blank.
-			for key, value := range attrs {
-				if old, ok := pending[key]; ok && !reflect.DeepEqual(old, value) {
-					return fmt.Errorf("uncertain: repeated cell part rows propose different attributes")
-				}
-				pending[key] = value
-			}
-			merged = true
-			break
 		}
-		if !merged {
-			b.append(types.ShelfOperation{Type: "update_entity", EntityID: part.ID, Patch: &types.ManagedEntityPatch{Revision: part.Revision, Attributes: &attrs}})
-		}
+		b.append(types.ShelfOperation{Type: "update_entity", EntityID: part.ID, Patch: &types.ManagedEntityPatch{Revision: part.Revision, Attributes: &attrs}})
 	}
 	modelName := cells["model:"].Value
 	if modelName == "" && mapping.OwnerKind == "model" {
@@ -210,15 +174,7 @@ func (b *importMapBuilder) reportPart(mapping types.ShelfImportSheet, cells map[
 func (b *importMapBuilder) reportComposition(mapping types.ShelfImportSheet, partID, modelName string) error {
 	model, err := b.recordEntity("model", modelName)
 	if err != nil {
-		for _, op := range b.ops {
-			if details, _ := firstIssueDetails(op); op.Relation != nil && op.Relation.SubjectID == "" && op.Relation.ObjectID == partID && details["owner_name"] == modelName {
-				return nil // one proposal per unidentified model and cell, not one per row
-			}
-		}
-		// Keep the declared composition as a separate, correctable proposal. An
-		// unknown model does not erase the report's certification or part fields.
-		b.append(types.ShelfOperation{Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: "", ObjectID: partID, RelationType: "composed_of", Attributes: map[string]any{"module_type": mapping.ModuleType}}, Issues: []types.ShelfConflict{{Type: "uncertain", Message: "report composition model needs an explicit identity", Details: map[string]any{"owner_name": modelName, "owner_kind": "model"}}}})
-		return nil
+		return err
 	}
 	for _, op := range b.ops {
 		if op.Relation != nil && op.Relation.RelationType == "composed_of" && op.Relation.SubjectID == model.ID && op.Relation.ObjectID == partID {
@@ -264,12 +220,4 @@ func importCertificationDate(cell importCell) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("date cannot be parsed")
-}
-
-func firstIssueDetails(op types.ShelfOperation) (map[string]any, bool) {
-	if len(op.Issues) == 0 {
-		return nil, false
-	}
-	details, ok := op.Issues[0].Details.(map[string]any)
-	return details, ok
 }

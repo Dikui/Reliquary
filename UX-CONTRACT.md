@@ -560,13 +560,3 @@ show their uncertainties and require review before replacement and confirmation.
 Stale saves retain edits without an automatic overwrite. Import batch history
 filters by source before twenty-row paging and retains the page in the URL.
 Source: ADR 0023 and docs/product-shelf-import.md.
-
-Certification import conflicts retain editable records. The reviewer can map an
-owner to an existing node, optionally save its original spelling as an alias,
-correct the name for exact revalidation, or create a separate node with a model
-parent. The existing review editor owns correction and retry. Split suggestions
-require an explicit action, then each standard becomes a reviewable proposal.
-Uniform object and region values apply only to all certification rows of the
-named worksheet in the selected batch. These actions save and revalidate;
-final confirmation alone writes shelf facts and aliases. Failed saves retain
-local corrections. Source: docs/product-shelf-changesets.md.

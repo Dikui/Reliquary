@@ -65,6 +65,11 @@ func (b *importMapBuilder) parseRecords(workbook *importWorkbookData) error {
 			b.issue("unparseable", "configured worksheet is missing", nil)
 			continue
 		}
+		if sheet.ConditionalFormatting {
+			b.skippedSheets[mapping.Worksheet] = true
+			b.issue("uncertain", "conditional formatting requires explicit values and fills", nil)
+			continue
+		}
 		for _, row := range sheet.Rows {
 			if row <= mapping.HeaderRows {
 				continue

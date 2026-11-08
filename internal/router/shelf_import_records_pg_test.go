@@ -36,22 +36,15 @@ func importRecordPlan(f *managedNamesFixture, library types.Library, kind string
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "plan", "type": "save_import_plan", "import_plan": map[string]any{"key": "map", "name": "Synthetic records", "file_kind": kind, "sheets": []any{sheet}}}}}, http.StatusCreated, nil)
 }
 
-// Medium regression, task 29 / ADR 0023: conditional formatting does not
-// prevent a record sheet from importing its explicit cell values.
-func TestShelfImportATQIgnoresConditionalFormatting(t *testing.T) {
+// Medium regression, task 29 (reverted): record sheets with conditional
+// formatting are returned as a conflict, like product maps.
+func TestShelfImportATQConditionalFormattingIsConflict(t *testing.T) {
 	f, library, nodes := checklistSetup(t)
 	importRecordPlan(f, library, "atq", []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}, {Column: "C", Field: "owner"}}, map[string]any{"product_line_id": shelfNode(nodes, "line")})
 	row := importRecordRow(3, " Original document ", "Final custom", " Original owner ")
 	conditional := `<conditionalFormatting sqref="A3:C3"><cfRule type="expression" priority="1"><formula>TRUE</formula></cfRule></conditionalFormatting>`
 	draft := importUpload(t, f, library.ID, "atq_20261028.xlsx", "", importWorkbookWithSheetElements(t, row, "", conditional), http.StatusCreated)
-	require.Len(t, draft.Items, 2)
-	draft = confirmImport(t, f, library.ID, draft)
-	var detail types.EntityDetail
-	f.request(http.MethodGet, "/entities/"+draft.Items[0].EntityID, nil, http.StatusOK, &detail)
-	require.Equal(t, " Original document ", detail.Entity.CanonicalName)
-	metadata := detail.Entity.Attributes["requirement"].(map[string]any)
-	require.Equal(t, "final_due", metadata["final_due_stage"])
-	require.Equal(t, " Original owner ", metadata["owner"])
+	requireConditionalFormattingConflict(t, draft)
 }
 
 // Medium spec, task 12: progress sheets update the unique certification key,
@@ -137,39 +130,6 @@ func TestShelfImportCertificationReportProposesPartAndComposition(t *testing.T) 
 	var model types.EntityDetail
 	f.request(http.MethodGet, "/entities/"+shelfNode(n, "model"), nil, http.StatusOK, &model)
 	require.Len(t, model.Shelf.Composition[0].Parts, 3)
-}
-
-// Medium regression, acceptance round 3: a blank part cell means "not
-// provided" and never contradicts a filled row; rows naming the same
-// unidentified model and cell yield one composition proposal.
-func TestShelfImportReportBlankPartCellsAndUnknownModelCompositionOnce(t *testing.T) {
-	f, l, _ := shelfModelSetup(t)
-	configureCertificationStandards(f, &l)
-	importRecordPlan(f, l, "certification_report", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "cell_part"}, {Column: "F", Field: "pack_model"}, {Column: "G", Field: "cluster_model"}}, map[string]any{"module_type": "module_a", "progress": "Completed"})
-	rows := importRecordRow(3, "Unknown spelling", "standard_a", "Module", "Country", "Shared cell", "PACK-1", "CLUSTER-1") +
-		importRecordRow(4, "Unknown spelling", "standard_a", "Cluster", "Country", "Shared cell", "", "") +
-		importRecordRow(5, "Synthetic model", "standard_a", "Module", "Country", "Shared cell", "", "CLUSTER-1") +
-		importRecordRow(6, "Synthetic model", "standard_a", "Module", "Country", "Late cell", "", "") +
-		importRecordRow(7, "Unknown spelling", "standard_a", "Module", "Country", "Late cell", "PACK-2", "")
-	draft := importUpload(t, f, l.ID, "report_20261028.xlsx", "", importWorkbook(t, rows, ""), http.StatusCreated)
-	unknownCompositions := 0
-	for _, item := range draft.Items {
-		for _, conflict := range item.Conflicts {
-			require.NotContains(t, conflict.Message, "different attributes")
-		}
-		op := item.Operation
-		if op.Type == "create_entity" && op.Entity.Kind == "part" && op.Entity.Name == "Shared cell" {
-			require.Equal(t, "PACK-1", op.Entity.Attributes["pack_model"])
-			require.Equal(t, "CLUSTER-1", op.Entity.Attributes["cluster_model"])
-		}
-		if op.Type == "create_entity" && op.Entity.Kind == "part" && op.Entity.Name == "Late cell" {
-			require.Equal(t, "PACK-2", op.Entity.Attributes["pack_model"]) // filled by a later row
-		}
-		if op.Type == "save_relation" && op.Relation.SubjectID == "" {
-			unknownCompositions++
-		}
-	}
-	require.Equal(t, 2, unknownCompositions) // one per unidentified model and cell
 }
 
 // Medium spec, task 12: overseas lists only report contradictions. Accepting

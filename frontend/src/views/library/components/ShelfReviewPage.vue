@@ -2,13 +2,12 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
-import { Button, EmptyState, Select, Field, Input } from '@/components/ui'
+import { Button, EmptyState, Select } from '@/components/ui'
 import { confirm, toast } from '@/components/ui/feedback'
 import { formatDateTime } from '@/utils/dateTime'
 import { SHELF_REVIEW_GROUPS, shelfReviewGroup, shelfReviewReady, shelfReviewSubject, shelfOperationForEdit, shelfNameConfirmations, shelfUnmappedColumnFeedback, shelfConflictMessage } from '@/utils/shelfReview'
 import { getEntity } from '@/api/entities'
 import ShelfReviewValue from './ShelfReviewValue.vue'
-import ShelfCertificationConflictEditor from './ShelfCertificationConflictEditor.vue'
 import type { LibraryCatalogItem } from '@/api/library'
 import { listShelfChangesets, getShelfChangeset, saveShelfReview, confirmShelfChangeset, type ShelfReviewChangeset, type ShelfReviewDecision, type ShelfReviewItem, type ShelfReviewOperation } from '@/api/shelf-review'
 
@@ -22,54 +21,20 @@ const sets = ref<ShelfReviewChangeset[]>([]), selected = ref<ShelfReviewChangese
 const loading = ref(false), detailLoading = ref(false), busy = ref(false), error = ref(''), notice = ref('')
 const page = ref(1), total = ref(0), baseline = ref('')
 const edits = ref<Record<string, ShelfReviewOperation>>({})
-const uniform = ref<Record<string, { certification_object: string; region: string }>>({})
-const certificationSheets = computed(() => {
-  if (selected.value?.source.type !== 'import') return []
-  const sheets = new Map<string, ShelfReviewItem[]>()
-  for (const item of selected.value.items) {
-    const worksheet = item.operation.import_location?.worksheet
-    if (!item.operation.certification || !worksheet) continue
-    if (!sheets.has(worksheet)) sheets.set(worksheet, [])
-    sheets.get(worksheet)!.push(item)
-  }
-  return Array.from(sheets, ([worksheet, items]) => ({ worksheet, items }))
-})
-function uniformValue(worksheet: string) { return uniform.value[worksheet] ||= { certification_object: '', region: '' } }
-async function applyUniform(worksheet: string) {
-  if (blocked.value || !selected.value || Object.keys(edits.value).length) return
-  const values = uniformValue(worksheet)
-  if (!values.certification_object.trim() && !values.region.trim()) return
-  for (const item of certificationSheets.value.find(sheet => sheet.worksheet === worksheet)?.items || []) {
-   const operation = edits.value[item.id] || decisions.value[item.id]?.replacement || shelfOperationForEdit(item)
-   if (operation.certification) {
-    operation.certification = { ...operation.certification, ...(values.certification_object.trim() ? { certification_object: values.certification_object } : {}), ...(values.region.trim() ? { region: values.region } : {}) }
-    decisions.value[item.id] = { item_id: item.id, action: 'replace', replacement: operation }; delete edits.value[item.id]
-   }
-  }
-  if (await persistReview()) delete uniform.value[worksheet]
-}
 const targets = ref<Record<string, string>>({})
 let generation = 0, detailGeneration = 0
 const blocked = computed(() => busy.value || loading.value || detailLoading.value || selected.value?.status !== 'pending')
-const dirty = computed(() => JSON.stringify(decisions.value) !== baseline.value || Object.keys(edits.value).length > 0 || Object.values(uniform.value).some(value => value.certification_object || value.region))
+const dirty = computed(() => JSON.stringify(decisions.value) !== baseline.value || Object.keys(edits.value).length > 0)
 const groups = computed(() => SHELF_REVIEW_GROUPS.map(type => ({ type, items: selected.value?.items.filter(item => shelfReviewGroup(item) === type) || [] })).filter(group => group.type !== 'unmapped_column' || group.items.length))
 const required = computed(() => selected.value?.items.filter(item => item.conflicts.some(conflict => conflict.type === 'required_missing') && !shelfReviewReady(item, decisions.value[item.id])).length || 0)
-const uniformPending = computed(() => Object.values(uniform.value).some(value => value.certification_object || value.region))
-const certificationEditing = computed(() => Object.values(edits.value).some(operation => operation.certification_owner && operation.certification))
-const canConfirm = computed(() => !!selected.value && selected.value.status === 'pending' && !uniformPending.value && !Object.keys(edits.value).length && selected.value.items.every(item => shelfReviewReady(item, decisions.value[item.id])))
+const canConfirm = computed(() => !!selected.value && selected.value.status === 'pending' && !Object.keys(edits.value).length && selected.value.items.every(item => shelfReviewReady(item, decisions.value[item.id])))
 function adopt(set: ShelfReviewChangeset) {
-  edits.value = {}; targets.value = {}; uniform.value = {}
+  edits.value = {}; targets.value = {}
   selected.value = set; decisions.value = Object.fromEntries(set.items.filter(item => item.decision).map(item => [item.id, item.decision!])); baseline.value = JSON.stringify(decisions.value)
   sets.value = sets.value.map(item => item.id === set.id ? set : item)
 }
-function edit(item: ShelfReviewItem) { if (blocked.value || (Object.keys(edits.value).length && !edits.value[item.id] && (item.operation.certification_owner || certificationEditing.value))) return; edits.value[item.id] = decisions.value[item.id]?.replacement || shelfOperationForEdit(item); notice.value = '' }
+function edit(item: ShelfReviewItem) { if (blocked.value) return; edits.value[item.id] = decisions.value[item.id]?.replacement || shelfOperationForEdit(item); notice.value = '' }
 function applyEdit(item: ShelfReviewItem) { if (blocked.value) return; decisions.value[item.id] = { item_id: item.id, action: 'replace', replacement: edits.value[item.id] }; delete edits.value[item.id] }
-async function resolveCertification(item: ShelfReviewItem, operations: ShelfReviewOperation[]) {
-  if (blocked.value) return
-  for (const other of selected.value?.items || []) if (other.id !== item.id && edits.value[other.id]) applyEdit(other)
-  decisions.value[item.id] = operations.length === 1 ? { item_id: item.id, action: 'replace', replacement: operations[0] } : { item_id: item.id, action: 'replace', replacements: operations }
-  await persistReview()
-}
 function candidates(item: ShelfReviewItem) { return item.conflicts.flatMap(conflict => conflict.type === 'suspected_same' ? conflict.candidates || [] : []) }
 async function sameEntity(item: ShelfReviewItem) {
   const id = targets.value[item.id] || (candidates(item).length === 1 ? candidates(item)[0]!.other_entity_id : '')
@@ -152,19 +117,13 @@ async function load() {
 }
 function decide(item: ShelfReviewItem, action: ShelfReviewDecision['action']) { if (blocked.value) return; decisions.value[item.id] = { item_id: item.id, action }; delete edits.value[item.id]; notice.value = '' }
 async function save() {
-  if (blocked.value || !selected.value || certificationEditing.value || uniformPending.value) return
-  for (const item of selected.value.items) if (edits.value[item.id]) applyEdit(item)
-  await persistReview()
-}
-async function persistReview() {
   if (blocked.value || !selected.value) return
+  for (const item of selected.value.items) if (edits.value[item.id]) applyEdit(item)
   busy.value = true; error.value = ''; notice.value = ''
   try {
     const response = await saveShelfReview(props.library.id, selected.value.id, { revision: selected.value.revision, decisions: Object.values(decisions.value) })
     if (!response.success) throw new Error(response.message)
-    const pendingUniform = uniform.value
-    adopt(response.data); uniform.value = pendingUniform; notice.value = t('shelfReview.saved')
-    return true
+    adopt(response.data); notice.value = t('shelfReview.saved')
   } catch (cause) { error.value = failure(cause, t('shelfReview.saveFailed')) }
   finally { busy.value = false }
 }
@@ -191,14 +150,6 @@ onBeforeUnmount(() => { generation++; detailGeneration++; if (typeof window !== 
       <div v-else-if="selected" class="review-detail">
         <h2>{{ title(selected) }}</h2>
         <div class="review-counts"><span v-for="group in groups" :key="group.type">{{ t(`shelfReview.groups.${group.type}`) }} {{ group.items.length }}</span></div>
-        <form v-for="sheet in certificationSheets" :key="sheet.worksheet" class="review-uniform" :aria-label="`${t('shelfReview.cert.uniform')} · ${sheet.worksheet}`" novalidate @submit.prevent="applyUniform(sheet.worksheet)">
-          <fieldset :disabled="blocked || Object.keys(edits).length > 0"><legend>{{ t('shelfReview.cert.uniform') }} · {{ sheet.worksheet }}</legend>
-            <p>{{ t('shelfReview.cert.uniformHint') }}</p>
-            <Field :label="t('shelfReview.fields.certification_object')"><Input :model-value="uniformValue(sheet.worksheet).certification_object" @update:model-value="uniformValue(sheet.worksheet).certification_object = $event" /></Field>
-            <Field :label="t('shelfReview.cert.region')"><Input :model-value="uniformValue(sheet.worksheet).region" @update:model-value="uniformValue(sheet.worksheet).region = $event" /></Field>
-            <Button :disabled="blocked || Object.keys(edits).length > 0 || (!uniformValue(sheet.worksheet).certification_object.trim() && !uniformValue(sheet.worksheet).region.trim())" @click="applyUniform(sheet.worksheet)">{{ t('shelfReview.cert.applyUniform', { count: sheet.items.length }) }}</Button>
-          </fieldset>
-        </form>
         <details v-for="group in groups" :key="group.type" class="review-group" :open="group.items.length > 0">
           <summary><h3>{{ t(`shelfReview.groups.${group.type}`) }}</h3><span>{{ t('shelfReview.groupCount', { count: group.items.length, remaining: group.items.filter(item => !decisions[item.id]).length }) }}</span></summary>
           <p v-if="group.type === 'unmapped_column'" class="review-hint">{{ t('shelfReview.unmappedHint') }}</p>
@@ -223,13 +174,12 @@ onBeforeUnmount(() => { generation++; detailGeneration++; if (typeof window !== 
             <div class="review-actions" role="group" :aria-label="t('shelfReview.handle', { name: shelfReviewSubject(item).name })">
               <template v-if="group.type === 'suspected_same'"><Select v-if="candidates(item).length > 1" :model-value="targets[item.id] || ''" :aria-label="t('shelfReview.candidate')" :disabled="blocked" @update:model-value="targets[item.id] = $event"><option value="">{{ t('shelfReview.chooseCandidate') }}</option><option v-for="candidate in candidates(item)" :key="candidate.other_entity_id" :value="candidate.other_entity_id">{{ candidate.name }} · {{ candidate.other_kind }} · {{ candidate.other_entity_id }}</option></Select><Button :disabled="blocked || (!targets[item.id] && candidates(item).length !== 1)" :aria-pressed="decisions[item.id]?.action === 'same_entity'" @click="sameEntity(item)">{{ t('shelfReview.actions.same_entity') }}</Button><Button :disabled="blocked" @click="distinctEntity(item)">{{ t('shelfReview.distinct') }}</Button></template>
               <Button v-if="group.type === 'cross_kind_same_name'" :disabled="blocked || !shelfNameConfirmations(item).length" :aria-pressed="!!decisions[item.id]?.name_confirmations?.length" @click="confirmNames(item)">{{ t('shelfReview.confirmNames') }}</Button>
-              <Button v-for="action in actions(item)" :key="action" :disabled="blocked" :aria-pressed="decisions[item.id]?.action === action" @click="decide(item, action)">{{ item.operation.type === 'import_notice' && action === 'apply' ? t('shelfReview.acknowledge') : t(`shelfReview.actions.${action}`) }}</Button><Button v-if="item.operation.type !== 'import_notice'" :disabled="blocked || (Object.keys(edits).length > 0 && !edits[item.id] && (!!item.operation.certification_owner || certificationEditing))" :aria-pressed="!!edits[item.id] || decisions[item.id]?.action === 'replace'" @click="edit(item)">{{ t('shelfReview.actions.replace') }}</Button>
+              <Button v-for="action in actions(item)" :key="action" :disabled="blocked" :aria-pressed="decisions[item.id]?.action === action" @click="decide(item, action)">{{ item.operation.type === 'import_notice' && action === 'apply' ? t('shelfReview.acknowledge') : t(`shelfReview.actions.${action}`) }}</Button><Button v-if="item.operation.type !== 'import_notice'" :disabled="blocked" :aria-pressed="!!edits[item.id] || decisions[item.id]?.action === 'replace'" @click="edit(item)">{{ t('shelfReview.actions.replace') }}</Button>
             </div>
-            <ShelfCertificationConflictEditor v-if="edits[item.id]?.certification_owner && edits[item.id]?.certification" :operation="edits[item.id]!" :item="item" :library="library" :disabled="blocked" @change="edits[item.id] = $event" @resolve="resolveCertification(item, $event)" @cancel="delete edits[item.id]" />
-            <form v-else-if="edits[item.id]" class="review-edit" novalidate @submit.prevent="applyEdit(item)"><fieldset :disabled="blocked"><legend>{{ t('shelfReview.actions.replace') }}</legend><ShelfReviewValue :value="edits[item.id]" :library="library" @change="edits[item.id] = $event as ShelfReviewOperation" /><div class="review-footer-actions"><Button type="submit">{{ t('shelfReview.applyEdit') }}</Button><Button @click="delete edits[item.id]">{{ t('common.cancel') }}</Button></div></fieldset></form>
+            <form v-if="edits[item.id]" class="review-edit" novalidate @submit.prevent="applyEdit(item)"><fieldset :disabled="blocked"><legend>{{ t('shelfReview.actions.replace') }}</legend><ShelfReviewValue :value="edits[item.id]" :library="library" @change="edits[item.id] = $event as ShelfReviewOperation" /><div class="review-footer-actions"><Button type="submit">{{ t('shelfReview.applyEdit') }}</Button><Button @click="delete edits[item.id]">{{ t('common.cancel') }}</Button></div></fieldset></form>
           </article>
         </details>
-        <footer><div><p v-if="required" class="review-blocked">{{ t('shelfReview.required', { count: required }) }}</p><span>{{ t('shelfReview.processed', { count: processed, total: selected.items.length }) }}<template v-if="dirty"> · {{ t('shelfReview.unsaved') }}</template></span><p v-if="uniformPending" class="review-hint">{{ t('shelfReview.cert.finishUniform') }}</p><p v-if="certificationEditing" class="review-hint">{{ t('shelfReview.cert.finishEdit') }}</p><p v-if="!canConfirm && !required && !certificationEditing" class="review-hint">{{ t('shelfReview.resolveHint') }}</p><p v-if="notice" role="status">{{ notice }}</p></div><div class="review-footer-actions"><Button :disabled="blocked || certificationEditing || uniformPending" :loading="busy" @click="save">{{ t('shelfReview.save') }}</Button><Button variant="primary" :disabled="blocked || !canConfirm" @click="writeConfirmation">{{ t('shelfReview.confirm') }}</Button></div></footer>
+        <footer><div><p v-if="required" class="review-blocked">{{ t('shelfReview.required', { count: required }) }}</p><span>{{ t('shelfReview.processed', { count: processed, total: selected.items.length }) }}<template v-if="dirty"> · {{ t('shelfReview.unsaved') }}</template></span><p v-if="!canConfirm && !required" class="review-hint">{{ t('shelfReview.resolveHint') }}</p><p v-if="notice" role="status">{{ notice }}</p></div><div class="review-footer-actions"><Button :disabled="blocked" :loading="busy" @click="save">{{ t('shelfReview.save') }}</Button><Button variant="primary" :disabled="blocked || !canConfirm" @click="writeConfirmation">{{ t('shelfReview.confirm') }}</Button></div></footer>
       </div>
     </div>
   </section>
@@ -277,8 +227,6 @@ footer p { margin:0 0 var(--space-1); }
 .review-pages { flex-wrap:wrap; padding-top:var(--space-3); }
 [role=alert], .review-blocked { color:var(--danger); }
 .review-blocked, .review-returned { font-weight:700; }
-.review-uniform fieldset { margin:0; padding:var(--space-3); border:1px solid var(--border); display:flex; flex-wrap:wrap; align-items:end; gap:var(--space-3); }
-.review-uniform p { width:100%; margin:0; font-size:var(--text-xs); color:var(--muted); }
 .review-edit { grid-column:1 / -1; }
 .review-edit > fieldset { margin:0; padding:var(--space-3); border:1px solid var(--border); display:grid; gap:var(--space-3); min-width:0; }
 .review-diff { font-size:var(--text-xs); }

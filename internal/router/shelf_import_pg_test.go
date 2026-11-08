@@ -196,42 +196,28 @@ func confirmImport(t *testing.T, f *managedNamesFixture, libraryID string, draft
 	return draft
 }
 
-// Medium regression, task 29 / ADR 0023: conditional rules are ignored at the
-// upload boundary; cell values and ordinary fills still determine model facts.
-func TestShelfImportMapIgnoresConditionalFormatting(t *testing.T) {
+// Medium regression, task 29 (reverted): conditional rules change what a cell
+// shows, so the sheet is returned as a conflict until explicit values are given.
+func TestShelfImportMapConditionalFormattingIsConflict(t *testing.T) {
 	f, library := importSetup(t)
 	rows := importRow(3, "Map platform", "Map product", "Plain model", "GA (Demo)", "9~54")
-	rows += strings.Replace(importRow(4, "Map platform", "Map product", "Yellow model", "DEV", "12"), `r="C4" t=`, `r="C4" s="1" t=`, 1)
-	styles := `<styleSheet><fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill></fills><cellXfs><xf fillId="0"/><xf fillId="1"/></cellXfs><dxfs><dxf><fill><patternFill patternType="solid"><fgColor rgb="FFFF0000"/></patternFill></fill></dxf></dxfs></styleSheet>`
-	conditional := `<conditionalFormatting sqref="C3:D4"><cfRule type="expression" dxfId="0" priority="1"><formula>TRUE</formula></cfRule></conditionalFormatting>`
-	draft := importUpload(t, f, library.ID, "map_20261028.xlsx", "", importWorkbookWithSheetElements(t, rows, "", conditional, styles), http.StatusCreated)
+	conditional := `<conditionalFormatting sqref="C3:D3"><cfRule type="expression" priority="1"><formula>TRUE</formula></cfRule></conditionalFormatting>`
+	draft := importUpload(t, f, library.ID, "map_20261028.xlsx", "", importWorkbookWithSheetElements(t, rows, "", conditional), http.StatusCreated)
+	requireConditionalFormattingConflict(t, draft)
+}
+
+func requireConditionalFormattingConflict(t *testing.T, draft types.ShelfChangeset) {
+	t.Helper()
+	found := false
 	for _, item := range draft.Items {
+		if item.Operation.Entity != nil {
+			require.Empty(t, item.Operation.Entity.Name, "a conditionally formatted sheet must not propose entities")
+		}
 		for _, conflict := range item.Conflicts {
-			require.Contains(t, []string{"new", "modified"}, conflict.Type, conflict.Message)
+			found = found || conflict.Type == "uncertain" && conflict.Message == "conditional formatting requires explicit values and fills"
 		}
 	}
-	draft = confirmImport(t, f, library.ID, draft)
-	models := map[string]types.EntityDetail{}
-	for _, item := range draft.Items {
-		if item.Operation.Entity != nil && item.Operation.Entity.Kind == "model" {
-			var detail types.EntityDetail
-			f.request(http.MethodGet, "/entities/"+item.EntityID, nil, http.StatusOK, &detail)
-			models[detail.Entity.CanonicalName] = detail
-		}
-	}
-	require.Len(t, models, 2)
-	plain := models["Plain model"].Shelf
-	require.NotNil(t, plain)
-	require.Len(t, plain.SaleStatuses, 1)
-	require.Equal(t, "GA", plain.SaleStatuses[0].Status)
-	require.Equal(t, "Demo", plain.SaleStatuses[0].Notes)
-	require.False(t, plain.SaleStatuses[0].PlannedEOM)
-	require.Equal(t, map[string]any{"min": float64(9), "max": float64(54)}, plain.Parameters["energy"][0].Value)
-	yellow := models["Yellow model"].Shelf
-	require.NotNil(t, yellow)
-	require.Len(t, yellow.SaleStatuses, 1)
-	require.Equal(t, "DEV", yellow.SaleStatuses[0].Status)
-	require.True(t, yellow.SaleStatuses[0].PlannedEOM)
+	require.True(t, found)
 }
 
 // Medium regression, task 29: an absent configured worksheet is still a

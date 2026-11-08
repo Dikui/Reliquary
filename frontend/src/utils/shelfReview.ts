@@ -31,7 +31,6 @@ export function shelfReviewSubject(item: ShelfReviewItem): { name: string; kind:
   const feedback = shelfUnmappedColumnFeedback(item)
   if (feedback) return { name: `${feedback.worksheet} · ${feedback.column}`, kind: '' }
   const operation = item.operation
-  if (operation.certification && operation.certification_owner) return { name: operation.certification.name || `${operation.certification_owner.name} · ${operation.certification.standard}`, kind: 'certification' }
   const before = item.before as Record<string, unknown> | null
   const after = item.after as Record<string, unknown> | null
   const entity = (operation.entity || operation.patch || operation.certification || operation.document) as Record<string, unknown> | undefined
@@ -50,13 +49,10 @@ export function shelfOperationForEdit(item: ShelfReviewItem): ShelfReviewOperati
 // Known server conflict messages map to translations; a quoted value becomes {value}.
 // shortcut: covers the import conflicts seen in customer acceptance; other messages show as sent, add patterns when they surface.
 const SHELF_CONFLICT_MESSAGES: Array<[RegExp, string]> = [
-  [/^certification object and region are required$/, 'objectRegionRequired'],
   [/^entity, relationship or library not found$/, 'notFound'],
-  [/^uncertain: multiple standards need explicit split confirmation or correction$/, 'splitStandards'],
   [/^formula, error or formatted numeric cells require explicit values$/, 'formulaCells'],
   [/^(?:model appears in multiple rows|uncertain: multiple rows resolve to the same model); submitter must decide whether to merge$/, 'modelRows'],
   [/^name, code, alias or relationship already exists$/, 'exists'],
-  [/^report composition model needs an explicit identity$/, 'compositionModel'],
   [/^row has missing identity fields or is a group title; submitter must resolve$/, 'groupTitle'],
   [/^sample description requires explicit part-condition review$/, 'sampleDescription'],
   [/^uncertain: certification standard has no configured name or alias$/, 'standardUnconfigured'],

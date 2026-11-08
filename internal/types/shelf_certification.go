@@ -3,8 +3,6 @@ package types
 import (
 	"fmt"
 	"net/url"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -37,15 +35,6 @@ type ShelfCertification struct {
 type ShelfCertificationInput struct {
 	Name string `json:"name,omitempty"`
 	ShelfCertification
-}
-
-// ShelfCertificationOwner retains the imported spelling for explicit correction.
-// An explicit owner_id takes precedence; names resolve only within OwnerKind.
-type ShelfCertificationOwner struct {
-	MappedFields  []string `json:"mapped_fields,omitempty"`
-	Name          string   `json:"name"`
-	Kind          string   `json:"kind"`
-	ProductLineID string   `json:"product_line_id,omitempty"`
 }
 
 type ShelfCertificationView struct {
@@ -102,27 +91,6 @@ func (config ShelfConfig) Standard(value string) (ShelfStandard, bool) {
 	return ShelfStandard{}, false
 }
 
-var certificationStandardYear = regexp.MustCompile(`^(.+?)\s*[:：]\s*([0-9]{4})$`)
-
-// ResolveStandardYear accepts only a configured identity or an unambiguous
-// colon-separated edition. Unknown bases and multiple editions stay conflicts.
-func (config ShelfConfig) ResolveStandardYear(value string, year int) (ShelfStandard, int, error) {
-	base := strings.TrimSpace(value)
-	if match := certificationStandardYear.FindStringSubmatch(base); match != nil {
-		extracted, _ := strconv.Atoi(match[2])
-		if extracted == 0 || year != 0 && year != extracted {
-			return ShelfStandard{}, year, fmt.Errorf("uncertain: standard year conflicts with the year field")
-		}
-		base = strings.TrimSpace(match[1])
-		year = extracted
-	}
-	standard, ok := config.Standard(base)
-	if !ok {
-		return standard, year, fmt.Errorf("uncertain: certification standard has no configured name or alias")
-	}
-	return standard, year, nil
-}
-
 func validateShelfStandards(standards []ShelfStandard) error {
 	if len(standards) > 500 {
 		return fmt.Errorf("at most 500 standards are allowed")
@@ -136,9 +104,6 @@ func validateShelfStandards(standards []ShelfStandard) error {
 		keys[standard.Key] = true
 		for _, name := range append([]string{standard.Key, standard.Name}, standard.Aliases...) {
 			normalized := strings.ToLower(strings.TrimSpace(name))
-			if certificationStandardYear.MatchString(strings.TrimSpace(name)) {
-				return fmt.Errorf("standard names and aliases must not include a year; use the certification year field")
-			}
 			if normalized == "" || len([]rune(name)) > 200 || (names[normalized] != "" && names[normalized] != standard.Key) {
 				return fmt.Errorf("standard names and aliases must identify one standard")
 			}

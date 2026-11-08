@@ -9,26 +9,17 @@ export interface ShelfReviewConflict {
 export interface ShelfImportColumnFeedback {
   worksheet: string; column: string; header: string; nonempty_rows: number; examples: string[]
 }
-export interface ShelfImportCertification {
-  name?: string; owner_id: string; standard: string; year?: number
-  certification_object: string; region: string; cell_part_id?: string
-  [key: string]: unknown
-}
 export interface ShelfReviewOperation {
   id: string
   type: string
   entity_id?: string
   revision?: number
-  certification_owner?: { name: string; kind: string; product_line_id?: string; mapped_fields?: string[] }
-  certification?: ShelfImportCertification
-  parent_id?: string
   import_location?: { worksheet: string; cells: string[]; values?: Record<string, string> }
   [key: string]: unknown
 }
 export interface ShelfReviewDecision {
   item_id: string
   action: 'apply' | 'discard' | 'defer' | 'replace' | 'keep' | 'retire' | 'same_entity' | 'return_to_submitter'
-  replacements?: ShelfReviewOperation[]
   replacement?: ShelfReviewOperation
   target_entity_id?: string
   target_revision?: number
