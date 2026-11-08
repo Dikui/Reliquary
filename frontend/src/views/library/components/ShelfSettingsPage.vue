@@ -15,6 +15,7 @@ const emit = defineEmits<{ saved: [] }>(), { t } = useI18n()
 const tab = ref('modules'), library = ref<LibraryCatalogItem>(), nodes = ref<Entity[]>([]), loading = ref(true), busy = ref(false), error = ref(''), saveError = ref(''), newName = ref(''), baseline = ref('')
 const requirement = ref<Entity | null>(), field = ref<EntityField | null>(), line = ref(''), sourceList = ref('')
 const models = ref<ModelConfig[]>([]), modelError = ref('')
+const editingOptions = ref(new Set<string>())
 let generation = 0
 async function loadModels() {
  modelError.value = ''
@@ -39,7 +40,7 @@ async function load() {
     if (request !== generation) return
     library.value = JSON.parse(JSON.stringify(response.data))
     const value = library.value!; value.shelf_config ||= {}; value.shelf_config.module_types ||= []; value.shelf_config.regions ||= []; value.shelf_config.stages ||= []; value.shelf_config.parsers ||= []; value.shelf_config.parser_rules ||= []; value.entity_schema ||= { kinds: [], fields: [] }
-    nodes.value = entities; if (!line.value) line.value = lines.value[0]?.id || ''
+    nodes.value = entities; editingOptions.value.clear(); if (!line.value) line.value = lines.value[0]?.id || ''
     baseline.value = JSON.stringify({ config: config.value, schema: value.entity_schema })
   } catch { if (request === generation) error.value = t('shelfFiles.loadFailed') }
   finally { if (request === generation) loading.value = false }
@@ -80,7 +81,7 @@ onBeforeUnmount(() => { generation++ })
       <Tabs v-model="tab" :items="tabs" :label="t('shelfSettings.title')">
         <template v-for="section in ['modules', 'regions', 'stages']" :key="section" #[section]>
           <p v-if="section === 'stages'" class="rq-shelf-statuses"><b>{{ t('shelfSettings.fixedStatuses') }}</b> GA · DEV · Planning · EOM · {{ t('shelfSettings.pendingStatus') }}</p>
-          <div class="rq-shelf-table"><table><thead><tr><th>{{ t('shelfSettings.name') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.partCount') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.extraFields') }}</th><th>{{ t('shelfImport.actions') }}</th></tr></thead><tbody><tr v-for="(option, index) in options" :key="option.key"><td><Input v-model="option.name" :aria-label="t('shelfSettings.name')" :disabled="busy" /></td><td v-if="section === 'modules'">{{ nodes.filter(n => n.kind === 'part' && n.attributes?.module_type === option.key).length }}</td><td v-if="section === 'modules'">{{ library.entity_schema?.fields.filter(f => f.kinds.includes('part') && !f.archived).map(f => f.name).join(' · ') }}</td><td><Button :disabled="busy || index === 0" @click="move(options, index, -1)">{{ t('shelfSettings.up') }}</Button><Button :disabled="busy || index + 1 === options.length" @click="move(options, index, 1)">{{ t('shelfSettings.down') }}</Button></td></tr></tbody></table></div>
+          <div class="rq-shelf-table"><table><thead><tr><th>{{ t('shelfSettings.name') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.partCount') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.extraFields') }}</th><th>{{ t('shelfImport.actions') }}</th></tr></thead><tbody><tr v-for="(option, index) in options" :key="option.key"><td><Input v-if="editingOptions.has(option.key)" v-model="option.name" :aria-label="t('shelfSettings.name')" :disabled="busy" /><b v-else>{{ option.name }}</b></td><td v-if="section === 'modules'">{{ nodes.filter(n => n.kind === 'part' && n.attributes?.module_type === option.key).length }}</td><td v-if="section === 'modules'">{{ library.entity_schema?.fields.filter(f => f.kinds.includes('part') && !f.archived).map(f => f.name).join(' · ') }}</td><td><Button :disabled="busy || editingOptions.has(option.key)" @click="editingOptions.add(option.key)">{{ t('shelfSettings.edit') }}</Button><Button :disabled="busy || index === 0" @click="move(options, index, -1)">{{ t('shelfSettings.up') }}</Button><Button :disabled="busy || index + 1 === options.length" @click="move(options, index, 1)">{{ t('shelfSettings.down') }}</Button></td></tr></tbody></table></div>
           <form class="rq-shelf-row rq-shelf-add" @submit.prevent="addOption"><Input v-model="newName" :aria-label="t('shelfSettings.newName')" :placeholder="t('shelfSettings.newName')" :disabled="busy" /><Button type="submit" :disabled="busy || !newName.trim()">{{ t('shelfSettings.add') }}</Button></form>
         </template>
         <template #requirements>

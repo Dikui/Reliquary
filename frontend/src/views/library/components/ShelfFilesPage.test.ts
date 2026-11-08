@@ -14,8 +14,9 @@ async function mount(t: test.TestContext, fail = false) {
   const requests: any[] = [], navigation: any[] = []
   const component = loadComponent(new URL('./ShelfFilesPage.vue', import.meta.url), {
     ...entryPresentationTestModules, '@/components/ui': ui,
+    '@/components/ui/feedback': { toast: { success() {} } },
     'vue-router': { useRoute: () => ({ query: {} }), useRouter: () => ({ replace: (value: unknown) => navigation.push(value) }) },
-    '@/api/shelf-files': { listShelfFiles: async (_: string, input: any) => { requests.push(input); if (fail) throw new Error('offline'); return { success: true, data: { items: [{ entity, document: { id: 'version', version_label: ' 原版 A ', stage: 'draft', parse_status: 'failed', occurred_at: '2026-11-07', is_current: true } }], total: 1 } } } },
+    '@/api/shelf-files': { listShelfFiles: async (_: string, input: any) => { requests.push(input); if (fail) throw new Error('offline'); return { success: true, data: { items: [{ entity, owner: { id: 'cert', canonical_name: '合成认证', kind: 'certification', attributes: { certification: { standard: '合成标准', agency: '合成机构', issued_date: '2026-10-30' } } }, document: { id: 'version', version_label: ' 原版 A ', stage: 'draft', parse_status: 'failed', occurred_at: '2026-11-07', is_current: true } }], total: 1 } } } },
     './ShelfDocumentEditor.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
     './ShelfFilePage.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
   })
@@ -31,6 +32,7 @@ test('资料文件列表展示原名、版本和失败状态，并将历史筛�
   assert.equal(requests.at(-1).include_history, true)
   await click(descendants(root).find(n => n.tag === 'button' && visibleText(n).includes('证书报告'))!)
   assert.equal(requests.at(-1).group, 'certificates')
+  assert.match(visibleText(root), /合成机构/); assert.match(visibleText(root), /2026-10-30/)
 })
 test('资料文件读取失败保留重试入口', async t => {
   const { root } = await mount(t, true)

@@ -262,6 +262,42 @@ func (s *EntityService) validateShelfDocument(ctx context.Context, library *type
 	if input.OccurredAt != nil && input.OccurredAt.IsZero() {
 		return apperrors.NewBadRequestError("document occurred_at must be a nonzero time")
 	}
+	if input.AttachmentID != "" {
+		var attachment types.EntityAttachment
+		if err = s.db.WithContext(ctx).Where("id=? AND space_id=? AND library_id=?", input.AttachmentID, library.SpaceID, library.ID).First(&attachment).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return apperrors.NewBadRequestError("document original is missing or outside this library")
+			}
+			return err
+		}
+		if attachment.Size > library.ShelfConfig.FileSizeLimit() {
+			return apperrors.NewBadRequestError("document original exceeds the configured file size limit")
+		}
+	}
+	if input.EntryID != "" {
+		var count int64
+		if err = s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=? AND library_id=? AND vault_body<>''", input.EntryID, library.SpaceID, library.ID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count != 1 {
+			return apperrors.NewBadRequestError("document text entry is missing or outside this library")
+		}
+		if err = s.db.WithContext(ctx).Model(&types.ShelfDocumentVersion{}).Where("entry_id=?", input.EntryID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return apperrors.NewBadRequestError("each document version requires its own text entry")
+		}
+	}
+	return s.validateShelfDocumentClassification(ctx, library, input)
+}
+
+// Classification corrects existing metadata without re-uploading its originals.
+func (s *EntityService) validateShelfDocumentClassification(ctx context.Context, library *types.Library, input *types.ShelfDocumentInput) error {
+	var err error
+	if len([]rune(input.CertificateNumber)) > 20000 {
+		return apperrors.NewBadRequestError("document certificate number is too long")
+	}
 	if input.OwnerID == "" && input.CertificateNumber != "" {
 		records, err := s.shelfCertificationEntities(ctx, library, time.Now())
 		if err != nil {
@@ -291,33 +327,6 @@ func (s *EntityService) validateShelfDocument(ctx context.Context, library *type
 		}
 		if count != 1 {
 			return apperrors.NewBadRequestError("uncertain: document requirement cannot be identified")
-		}
-	}
-	if input.AttachmentID != "" {
-		var attachment types.EntityAttachment
-		if err = s.db.WithContext(ctx).Where("id=? AND space_id=? AND library_id=?", input.AttachmentID, library.SpaceID, library.ID).First(&attachment).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return apperrors.NewBadRequestError("document original is missing or outside this library")
-			}
-			return err
-		}
-		if attachment.Size > library.ShelfConfig.FileSizeLimit() {
-			return apperrors.NewBadRequestError("document original exceeds the configured file size limit")
-		}
-	}
-	if input.EntryID != "" {
-		var count int64
-		if err = s.db.WithContext(ctx).Model(&types.Entry{}).Where("id=? AND space_id=? AND library_id=? AND vault_body<>''", input.EntryID, library.SpaceID, library.ID).Count(&count).Error; err != nil {
-			return err
-		}
-		if count != 1 {
-			return apperrors.NewBadRequestError("document text entry is missing or outside this library")
-		}
-		if err = s.db.WithContext(ctx).Model(&types.ShelfDocumentVersion{}).Where("entry_id=?", input.EntryID).Count(&count).Error; err != nil {
-			return err
-		}
-		if count > 0 {
-			return apperrors.NewBadRequestError("each document version requires its own text entry")
 		}
 	}
 	if err = types.ValidateShelfConditions(input.Conditions); err != nil {

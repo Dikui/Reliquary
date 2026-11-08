@@ -26,7 +26,9 @@ async function mount(t:test.TestContext){
 }
 test('设置页改名原样保存，并携带库更新时间确认变更集',async t=>{
  const {root,writes}=await mount(t)
- assert.ok(descendants(root).some(n=>n.tag==='input'&&n.props.value==='客户模块'))
+ assert.match(visibleText(root),/客户模块/)
+ assert.equal(descendants(root).filter(n=>n.tag==='input'&&n.props['aria-label']==='名称').length,0)
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='编辑')!)
  const name=descendants(root).find(n=>n.tag==='input'&&n.props['aria-label']==='名称')!;name.props.onInput({target:{value:' 客户新模块 '}});await settle()
  await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='确认保存')!);await settle()
  assert.equal(writes[0][0],'shelf');assert.equal(writes[0][1],library.updated_at);assert.deepEqual(writes[0][2].shelf_config.module_types,[{key:'module',name:' 客户新模块 '}])

@@ -121,11 +121,9 @@ func (s *EntityService) shelfDocumentEditBefore(ctx context.Context, draft *type
 	if err != nil {
 		return nil, err
 	}
-	for _, v := range versions {
-		input := types.ShelfDocumentInput{OwnerID: op.Classification.OwnerID, RequirementID: op.Classification.RequirementID, CertificateNumber: op.Classification.CertificateNumber, Conditions: op.Classification.Conditions, AttachmentID: documentIDValue(v.AttachmentID), CloudURL: v.CloudURL, Stage: v.Stage}
-		if err = s.validateShelfDocument(ctx, library, &input); err != nil {
-			return nil, err
-		}
+	input := types.ShelfDocumentInput{OwnerID: op.Classification.OwnerID, RequirementID: op.Classification.RequirementID, CertificateNumber: op.Classification.CertificateNumber, Conditions: op.Classification.Conditions}
+	if err = s.validateShelfDocumentClassification(ctx, library, &input); err != nil {
+		return nil, err
 	}
 	return shelfJSON(versions), nil
 }

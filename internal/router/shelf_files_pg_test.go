@@ -136,3 +136,26 @@ func TestShelfFilesCertificateGroup(t *testing.T) {
 	f.request(http.MethodGet, path+"/documents?group=requirements", nil, http.StatusOK, &page)
 	require.Zero(t, page.Total)
 }
+
+// Medium regression, task 20: changing classification keeps an existing original,
+// so lowering the limit for future uploads must not block that correction.
+func TestShelfFilesReclassificationKeepsExistingOriginal(t *testing.T) {
+	f, library := newProductShelfFixture(t)
+	var first, second types.Entity
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "model", "name": "First original owner"}, http.StatusCreated, &first)
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "model", "name": "Second original owner"}, http.StatusCreated, &second)
+	original := shelfUpload(t, f, library.ID, "Synthetic original larger than one byte", http.StatusCreated)
+	path := "/libraries/" + library.ID + "/shelf/changesets"
+	var result types.ShelfChangeset
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "file", "type": "add_document_version", "document": map[string]any{"name": "Retained original", "owner_id": first.ID, "attachment_id": original.ID, "stage": "final"}}}}, http.StatusCreated, &result)
+	fileID := shelfNode(result, "file")
+	f.request(http.MethodPut, "/libraries/"+library.ID, map[string]any{"shelf_config": map[string]any{"max_file_bytes": 1}}, http.StatusOK, nil)
+	var detail types.EntityDetail
+	f.request(http.MethodGet, "/entities/"+fileID, nil, http.StatusOK, &detail)
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "move", "type": "classify_document", "entity_id": fileID, "revision": detail.Entity.Revision, "classification": map[string]any{"owner_id": second.ID}}}}, http.StatusCreated, nil)
+	var versions []types.ShelfDocumentVersion
+	f.request(http.MethodGet, "/entities/"+fileID+"/document-versions", nil, http.StatusOK, &versions)
+	require.Len(t, versions, 1)
+	require.Equal(t, original.ID, *versions[0].AttachmentID)
+	require.Equal(t, second.ID, *versions[0].OwnerID)
+}

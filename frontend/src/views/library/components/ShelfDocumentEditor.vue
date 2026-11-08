@@ -7,7 +7,7 @@ import { deleteEntityAttachment, uploadEntityAttachment, type Entity } from '@/a
 import { shelfEntities, shelfWriteError, writeShelf, type ShelfDocumentInput } from '@/api/shelf-files'
 import type { ShelfDocumentVersion } from '@/api/shelf'
 const props = defineProps<{ library: LibraryCatalogItem; file?: Entity; current?: ShelfDocumentVersion; classify?: boolean }>()
-const emit = defineEmits<{ close: []; saved: [] }>(), { t } = useI18n()
+const emit = defineEmits<{ close: []; saved: [fileId: string] }>(), { t } = useI18n()
 const nodes = ref<Entity[]>([]), loading = ref(true), busy = ref(false), error = ref(''), chosen = ref<File>(), attachmentId = ref(''), committed = ref(false)
 const owner = ref(props.current ? props.current.owner_id || 'unassigned' : ''), name = ref(props.file?.canonical_name || ''), requirement = ref(props.current?.requirement_id || ''), number = ref(props.current?.certificate_number || '')
 const label = ref(''), stage = ref<'draft' | 'final'>(props.current?.stage || 'draft'), cloud = ref(''), origin = ref(''), category = ref(props.current?.file_category || '')
@@ -51,7 +51,7 @@ async function save() {
     const document: ShelfDocumentInput = { ...classification, name: name.value, unassigned: owner.value === 'unassigned', attachment_id: attachmentId.value || undefined, cloud_url: cloud.value || undefined, stage: stage.value, version_label: label.value, origin: origin.value, file_category: category.value }
     const response = await writeShelf(props.library.id, [{ id: 'document', type: props.classify ? 'classify_document' : 'add_document_version', ...(props.file ? { entity_id: props.file.id, revision: props.file.revision } : {}), ...(props.classify ? { classification } : { document }) }])
     if (!response.success || response.data.status !== 'confirmed') throw new Error(response.message)
-    committed.value = true; emit('saved')
+    committed.value = true; emit('saved', response.data.items?.find(item => item.id === 'document')?.entity_id || props.file?.id || '')
   } catch (cause) { error.value = shelfWriteError(cause, t('shelfFiles.saveFailed')) }
   finally { busy.value = false }
 }
