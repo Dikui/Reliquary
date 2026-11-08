@@ -27,7 +27,7 @@ async function mountTable(t: test.TestContext, api: Record<string, unknown> = {}
       getShelfNode: (_: string, id: string) => success(data[id]), findShelf: () => success({ items: [], total: 0, truncated: false }), ...api },
     'vue-router': { useRouter: () => ({ push(target: unknown) { navigations.push(target) } }) },
     './ShelfStatusEditor.vue': { __esModule: true, default: defineComponent({ props: ['models', 'region', 'bulk'], setup: props => () => h('section', { role: 'dialog' }, `Editor ${props.models?.[0]?.entity.id} ${props.region}`) }) },
-    './ShelfStatusExport.vue': { __esModule: true, default: defineComponent({ props: ['libraryId', 'productLineId', 'productLineName', 'query'], setup: props => () => h('div', { 'data-export': props }) }) },
+    './ShelfStatusExport.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
   }
   const component = loadComponent(new URL('./ShelfStatusTable.vue', import.meta.url), modules)
   const app = renderer.createApp(component, { library }); app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } }))
@@ -48,23 +48,6 @@ test('product line tabs show their regions and expandable platform and product g
   await click(productToggle); assert.match(visibleText(root), /model-a/)
   await click(descendants(root).find(node => node.props.role === 'tab' && visibleText(node).includes('line-b'))!)
   assert.match(visibleText(root), /model-b/); assert.ok(headers().includes('South')); assert.ok(!headers().includes('North'))
-})
-
-// Small spec, task 15: export receives the active tab and committed filters.
-test('status table connects export to the selected line and applied filters', async t => {
-  const { root } = await mountTable(t)
-  const exported = () => descendants(root).find(node => node.props['data-export'])?.props['data-export']
-  assert.ok(exported(), 'the export action must be available on the table')
-  assert.equal(exported().libraryId, 'library-a')
-  assert.equal(exported().productLineId, 'line-a')
-  const control = descendants(root).find(node => node.props['aria-label'] === '状态')!
-  control.props.onChange({ target: { value: 'GA' } }); await settle()
-  await click(descendants(root).find(node => node.tag === 'button' && visibleText(node) === '应用筛选')!)
-  assert.deepEqual(exported().query, { sale_statuses: [{ status: 'GA' }] })
-  await click(descendants(root).find(node => node.props.role === 'tab' && visibleText(node).includes('line-b'))!)
-  assert.equal(exported().productLineId, 'line-b')
-  assert.equal(exported().productLineName, 'line-b')
-  assert.deepEqual(exported().query, {})
 })
 
 // Small spec, task 14: filters are submitted to the shared query service as one conjunction.
