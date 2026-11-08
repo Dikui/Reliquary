@@ -19,7 +19,7 @@
       <ManagedEntityEditor v-if="managed && selectedLibrary" :library="selectedLibrary" @saved="managedSaved" />
       <label v-if="managed"><input v-model="includeArchived" type="checkbox">{{ t('managed.includeArchived') }}</label>
       <a v-if="!managed" class="merge-link" :href="pendingHref">{{ t('mergeSuggestions.title') }}<span v-if="pendingCount !== null" class="mono">{{ pendingCount }}</span></a>
-      <button type="button" class="merge-link overview-link" :disabled="!selectedLibraryId || merging" :aria-pressed="overview" @click="overview = true">{{ t('entityGraph.overview') }}</button>
+      <button v-if="!shelfConfigured" type="button" class="merge-link overview-link" :disabled="!selectedLibraryId || merging" :aria-pressed="overview" @click="overview = true">{{ t('entityGraph.overview') }}</button>
       <ErrorState v-if="catalogError" :title="catalogError"><Button @click="loadCatalog">{{ t('common.retry') }}</Button></ErrorState>
       <ErrorState v-else-if="loadError" :title="loadError"><Button @click="loadEntities()">{{ t('common.retry') }}</Button></ErrorState>
       <Skeleton v-if="entitiesLoading && !entities.length" :label="t('common.loading')" />
@@ -30,7 +30,7 @@
       <Button v-if="hasMoreEntities" :loading="entitiesLoading" @click="loadEntities(true)">{{ t('workbench.loadMore') }}</Button>
     </aside>
     <div v-if="overview || selectedEntity || entityDetailLoading || entityDetailError || entityNotFound || entities.length" class="entity-detail">
-      <template v-if="overview">
+      <template v-if="overview && !shelfConfigured">
         <div class="entity-eyebrow"><LibMark v-if="selectedLibrary" :color="selectedLibrary.color" />{{ selectedLibrary?.display_name || selectedLibrary?.name || selectedLibraryId }}</div>
         <div class="entity-head"><h2>{{ t('entityGraph.overview') }}</h2></div>
         <EntityGraph :managed="managed" :library-id="selectedLibraryId" :relation-type-options="graphRelationTypes" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @relation-types-changed="loadCatalog" />
@@ -50,7 +50,7 @@
         <p v-if="selectedEntity.description" class="entity-intro">{{ selectedEntity.description }}</p>
         <dl class="entity-facts"><div><dt>{{ t('workbench.entities.aliasLabel') }}</dt><dd>{{ selectedEntity.aliases?.join(' · ') || t('workbench.entities.noAliases') }}</dd></div><div><dt>{{ t('entityPage.materials') }}</dt><dd class="mono">{{ entityEntries.length }}</dd></div><div><dt>{{ t('ikb18.relations') }}</dt><dd class="mono">{{ relationsLoading || relationError ? t('workbench.nameEmbeddings.unknown') : relationCount }}</dd></div></dl>
         <Tabs v-model="relationView" :items="detailTabs" :label="t('entityGraph.view')">
-          <template #graph><EntityGraph :managed="managed" :entity="selectedEntity" :relation-type-options="graphRelationTypes" :active="relationView === 'graph'" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @relation-types-changed="loadCatalog" /></template>
+          <template v-if="!shelfConfigured" #graph><EntityGraph :managed="managed" :entity="selectedEntity" :relation-type-options="graphRelationTypes" :active="relationView === 'graph'" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @relation-types-changed="loadCatalog" /></template>
           <template #list><EntityRelations :entity-id="selectedEntity.id" :entity-name="selectedEntity.canonical_name" :groups="relations" :as-of="relationAsOf" @query-time="queryRelationTime" :managed-library="managed ? selectedLibrary : undefined" :entity="selectedEntity" :loading="relationsLoading" :error="relationError" @open-source="(id, location) => emit('open-source', id, location)" @open-entity="selectInitialEntity" @retry="loadRelations()" @changed="loadRelations()" /></template>
           <template #entries>
             <section class="entity-articles">
@@ -211,6 +211,7 @@ const selectedLibrary = computed(() => libraries.value.find(item => item.id === 
 const shelfView = ref(false)
 const shelfConfigured = computed(() => isProductShelf(selectedLibrary.value))
 watch([selectedLibraryId, shelfConfigured], () => { shelfView.value = managed.value && shelfConfigured.value && !(props.initialEntityId === selectedEntity.value?.id && shelfLevel(selectedEntity.value?.kind || '') === null) }, { immediate: true })
+watch(shelfConfigured, enabled => { if (enabled) { relationView.value = 'list'; overview.value = false } })
 const graphRelationTypes = computed(() => (selectedLibrary.value?.relation_types || []).filter(type => type.enabled).map(type => type.name))
 const relationAsOf = ref('')
 function queryRelationTime(value: string) { relationAsOf.value = value; void loadRelations() }
@@ -218,7 +219,7 @@ const relations = ref<RelationGroup[]>([]), relationsLoading = ref(false), relat
 const relationCount = computed(() => relations.value.reduce((count, group) => count + group.relations.length, 0))
 const entityNotFound = ref(false), pendingCount = ref<number | null>(null)
 const detailTabs = computed(() => [
-  { value: 'graph', label: t('entityGraph.graph') },
+  ...(!shelfConfigured.value ? [{ value: 'graph', label: t('entityGraph.graph') }] : []),
   { value: 'list', label: t('ikb18.relations') + (relationError.value || relationsLoading.value ? '' : ` ${relationCount.value}`) },
   { value: 'entries', label: t('entityPage.materials') + (entityDetailLoading.value || entityDetailError.value ? '' : ` ${entityEntries.value.length}`) },
   { value: 'aliases', label: t('entityPage.aliasesAndMerge') },

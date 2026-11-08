@@ -2,7 +2,7 @@ import type { RouteRecordRaw } from 'vue-router'
 import { normalizeSettingsSection } from '../config/settingsRoute'
 import { removedPlatformRoutes, removedRootRoutes } from './routeFallbacks'
 
-const libraryPage = () => import('../views/library/Library.vue')
+const libraryPage = () => import('../views/library/LibraryPage.vue')
 const libraryList = () => import('../views/library/LibraryList.vue')
 const entryLocation = (path: string, to: { query: Record<string, any>; hash: string }) => ({ path, query: { ...to.query }, hash: to.hash })
 const notFound = () => import('../views/NotFound.vue')

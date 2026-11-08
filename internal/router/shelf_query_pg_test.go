@@ -437,3 +437,37 @@ func TestShelfQueryGetConditionsEvidenceAndHistory(t *testing.T) {
 	f.request(http.MethodGet, path+"?combination=null", nil, http.StatusBadRequest, nil)
 	f.request(http.MethodGet, path+"?as_of=bad", nil, http.StatusBadRequest, nil)
 }
+
+// Medium spec, task 14: the status table can filter any region, a region with
+// any state, planned retirement and genuinely absent records without inventing TBD.
+func TestShelfStatusTableRegionalFilters(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	statuses := []types.ShelfSaleStatus{{Region: "region_a", Status: "GA", PlannedEOM: true, Conditions: []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(nodes, "a")}}}}, {Region: "region_a", Status: "待定", Conditions: []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(nodes, "b")}}}}}
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{{ID: "status", Type: "set_sale_statuses", EntityID: shelfNode(nodes, "model"), Revision: 1, SaleStatuses: &statuses}}}, http.StatusCreated, nil)
+	for _, tc := range []struct {
+		name    string
+		filter  map[string]any
+		total   int
+		partial bool
+	}{
+		{"any region", map[string]any{"status": "GA"}, 1, true},
+		{"any state", map[string]any{"region": "region_a"}, 1, false},
+		{"planned retirement", map[string]any{"planned_eom": true}, 1, true},
+		{"no record", map[string]any{"region": "region_a", "no_record": true}, 1, false},
+		{"no records anywhere", map[string]any{"no_record": true}, 1, false},
+		{"explicit TBD", map[string]any{"status": "待定"}, 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var result types.ShelfQueryResult
+			f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/query", map[string]any{"sale_statuses": []any{tc.filter}}, http.StatusOK, &result)
+			require.EqualValues(t, tc.total, result.Total)
+			require.Equal(t, tc.partial, result.Items[0].PartialOptions)
+			if tc.filter["no_record"] == true {
+				require.Equal(t, shelfNode(nodes, "single"), result.Items[0].Entity.ID)
+			}
+		})
+	}
+	for _, filter := range []map[string]any{{}, {"region": "unknown"}, {"status": "unknown"}, {"no_record": true, "status": "GA"}, {"no_record": true, "planned_eom": true}} {
+		f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/query", map[string]any{"sale_statuses": []any{filter}}, http.StatusBadRequest, nil)
+	}
+}

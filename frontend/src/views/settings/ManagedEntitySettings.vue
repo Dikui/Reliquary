@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui'
-import { listLibraries, getEntityConversion, type LibraryCatalogItem, type ShelfConfig } from '@/api/library'
+import { listLibraries, getEntityConversion, type LibraryCatalogItem } from '@/api/library'
 import { SHELF_KINDS } from '@/utils/productShelf'
 import { moveType } from '@/utils/libraryCatalogForm'
 import ManagedFieldSchema from './ManagedFieldSchema.vue'
@@ -19,7 +19,7 @@ const shelfLists = [{ key: 'module_types', label: 'productShelf.moduleTypes' }, 
 const newValues = ref({ module_types: '', regions: '', stages: '' })
 const listErrors = ref({ module_types: '', regions: '', stages: '' })
 const shelfConfig = computed(() => library.value.shelf_config ||= {})
-function appendValue(key: keyof ShelfConfig) {
+function appendValue(key: typeof shelfLists[number]['key']) {
   const name = newValues.value[key]
   const rows = shelfConfig.value[key] ||= []
   if (!name.trim() || name.length > 100 || rows.some(row => row.name.trim().toLowerCase() === name.trim().toLowerCase()) || rows.length >= 100) { listErrors.value[key] = t('productShelf.invalidValue'); return }

@@ -20,12 +20,12 @@ export type LibraryColor = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export interface LibraryContentType { name: string; position: number; enabled: boolean; extract_graph: boolean }
 export interface LibraryRelationType { name: string; position: number; enabled: boolean; hierarchical?: boolean; subject_kinds?: string[]; object_kinds?: string[]; fields?: EntityField[] }
 export interface EntityKind { key: string; name: string; parent_kinds: string[] }
-export interface EntityField { key: string; name: string; type: 'text' | 'number' | 'boolean' | 'date' | 'select' | 'multiselect' | 'list' | 'entity_ref' | 'url' | 'attachment'; unit?: string; options?: string[]; kinds: string[]; archived?: boolean }
+export interface EntityField { product_line_ids?: string[]; key: string; name: string; type: 'text' | 'number' | 'boolean' | 'date' | 'select' | 'multiselect' | 'list' | 'entity_ref' | 'url' | 'attachment'; unit?: string; options?: string[]; kinds: string[]; archived?: boolean }
 export interface EntitySchema { kinds: EntityKind[]; fields: EntityField[] }
 export type LibraryPromptID = 'article_processing' | 'library_summary' | 'article_entities' | 'article_relations' | 'summary_merge' | 'topic_backfill';
 export type LibraryPromptOverrides = Partial<Record<LibraryPromptID, string>>;
 export interface ShelfOption { key: string; name: string }
-export interface ShelfConfig { module_types?: ShelfOption[]; regions?: ShelfOption[]; stages?: ShelfOption[] }
+export interface ShelfConfig { module_types?: ShelfOption[]; regions?: ShelfOption[]; stages?: ShelfOption[]; standards?: (ShelfOption & { aliases?: string[] })[] }
 export interface LibraryCatalogItem {
   shelf_enabled?: boolean; shelf_config?: ShelfConfig;
   entity_mode?: 'extracted' | 'managed'; entity_schema?: EntitySchema; product_library_ids?: string[]; document_relation_types?: string[]; entity_kind_mapping?: Record<string, string>;

@@ -45,8 +45,10 @@ type ShelfNodeDetail struct {
 }
 
 type ShelfStatusFilter struct {
-	Region string `json:"region"`
-	Status string `json:"status"`
+	Region     string `json:"region,omitempty"`
+	Status     string `json:"status,omitempty"`
+	PlannedEOM *bool  `json:"planned_eom,omitempty"`
+	NoRecord   bool   `json:"no_record,omitempty"`
 }
 
 type ShelfParameterFilter struct {

@@ -28,7 +28,14 @@ filters AS (SELECT (ordinality-1)::int step,value FROM vars,jsonb_array_elements
 facts AS (
  SELECT m.id model_id,f.step,coalesce(nullif(row->'conditions','null'::jsonb),'[]'::jsonb) conditions
  FROM candidates m CROSS JOIN filters f CROSS JOIN LATERAL jsonb_array_elements(coalesce(m.attributes->'sale_statuses','[]'::jsonb)) row
- WHERE f.value->>'type'='status' AND row->>'region'=f.value->>'region' AND row->>'status'=f.value->>'status'
+ WHERE f.value->>'type'='status' AND (f.value->>'region'='' OR row->>'region'=f.value->>'region')
+ AND (f.value->>'status'='' OR row->>'status'=f.value->>'status')
+ AND (f.value->>'planned_eom' IS NULL OR coalesce((row->>'planned_eom')::boolean,false)=(f.value->>'planned_eom')::boolean)
+ UNION ALL
+ SELECT m.id,f.step,'[]'::jsonb FROM candidates m CROSS JOIN filters f
+ WHERE f.value->>'type'='no_status' AND NOT EXISTS (
+  SELECT 1 FROM jsonb_array_elements(coalesce(m.attributes->'sale_statuses','[]'::jsonb)) row
+  WHERE f.value->>'region'='' OR row->>'region'=f.value->>'region')
  UNION ALL
  SELECT m.id,f.step,coalesce(nullif(row->'conditions','null'::jsonb),'[]'::jsonb)
  FROM candidates m CROSS JOIN filters f CROSS JOIN LATERAL jsonb_array_elements(coalesce(m.attributes->(f.value->>'field'),'[]'::jsonb)) row
@@ -103,10 +110,17 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 	}
 	filters := []map[string]any{}
 	for _, status := range input.SaleStatuses {
-		if !slices.ContainsFunc(library.ShelfConfig.Regions, func(region types.ShelfOption) bool { return region.Key == status.Region }) || !slices.Contains([]string{"GA", "DEV", "Planning", "EOM", "待定"}, status.Status) {
-			return nil, apperrors.NewBadRequestError("regional filters require a configured region and valid status")
+		if (status.Region != "" && !slices.ContainsFunc(library.ShelfConfig.Regions, func(region types.ShelfOption) bool { return region.Key == status.Region })) ||
+			(status.Status != "" && !slices.Contains([]string{"GA", "DEV", "Planning", "EOM", "待定"}, status.Status)) ||
+			(status.NoRecord && (status.Status != "" || status.PlannedEOM != nil)) ||
+			(status.Region == "" && status.Status == "" && status.PlannedEOM == nil && !status.NoRecord) {
+			return nil, apperrors.NewBadRequestError("regional filters require a configured region or valid state; no_record cannot be combined with a state")
 		}
-		filters = append(filters, map[string]any{"type": "status", "region": status.Region, "status": status.Status})
+		filterType := "status"
+		if status.NoRecord {
+			filterType = "no_status"
+		}
+		filters = append(filters, map[string]any{"type": filterType, "region": status.Region, "status": status.Status, "planned_eom": status.PlannedEOM})
 	}
 	if len(input.Parameters) > 20 {
 		return nil, apperrors.NewBadRequestError("at most 20 parameter filters are allowed")

@@ -168,3 +168,10 @@ test('a document file deep link keeps the entity profile in a configured product
   assert.equal(state.selectedEntity.value.id, 'certificate')
   assert.equal(state.shelfView.value, false)
 })
+
+// Small spec, task 14: shelf profiles expose relationship lists while ordinary libraries keep graphs.
+test('enabled shelves omit graph views from entity profiles', async () => {
+  const { state, html } = await renderWorkbench({ libraries: [{ id: 'library-a', name: 'Shelf', entity_mode: 'managed', shelf_enabled: true }], api: { getEntity: () => envelope({ entity: { ...entity, kind: 'document_file' }, entries: [] }) }, scenario: async state => { await state.loadCatalog(); await state.selectInitialEntity(entity.id) } })
+  assert.deepEqual(state.detailTabs.value.map((item: any) => item.value), ['list', 'entries', 'aliases'])
+  assert.doesNotMatch(html, /data-relation-view="\.\/EntityGraph.vue"/)
+})
