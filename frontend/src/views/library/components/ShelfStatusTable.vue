@@ -31,7 +31,7 @@ async function search(more = false) {
   try {
     const page = unwrap(await findShelf(libraryID, text, more ? matches.value.length : 0))
     if (current === searchGeneration) { matches.value = more ? [...matches.value, ...page.items] : page.items; searchTotal.value = page.total }
-  } catch (cause) { if (current === searchGeneration) searchError.value = cause instanceof Error ? cause.message : t('workbench.requestFailed') }
+  } catch (cause) { if (current === searchGeneration) searchError.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   finally { if (current === searchGeneration) searching.value = false }
 }
 function editCell(row: ShelfQueryItem, region: string) { editor.value = { models: [row], region, bulk: false } }
@@ -123,7 +123,7 @@ async function load() {
     }
     await Promise.all(items.map(item => ancestors(item)))
     if (current === generation) { rows.value = items; total.value = count; if (!Object.keys(applied.value).length) { counts.value[lineID] = count; regionKeys.value = [...new Set(items.flatMap(item => item.shelf?.sale_statuses?.map(status => status.region) || []))] } }
-  } catch (cause) { if (current === generation) error.value = cause instanceof Error ? cause.message : t('workbench.requestFailed') }
+  } catch (cause) { if (current === generation) error.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   finally { if (current === generation) loading.value = false }
 }
 async function initialize() {
@@ -139,7 +139,7 @@ async function initialize() {
       if (response.data.length < 100) break
     }
     lines.value = items; line.value = items[0]?.id || ''
-  } catch (cause) { error.value = cause instanceof Error ? cause.message : t('workbench.requestFailed') }
+  } catch (cause) { error.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   finally { if (!line.value) loading.value = false }
 }
 watch(line, value => { collapsed.value.clear(); regionKeys.value = []; applied.value = {}; filterError.value = ''; filters.value = { status: '', region: '', field: '', min: '', max: '', standard: '', gaps: false }; if (value) void load() })

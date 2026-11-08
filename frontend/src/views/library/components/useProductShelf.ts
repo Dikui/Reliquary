@@ -56,7 +56,7 @@ export function useProductShelf(library: Ref<LibraryCatalogItem>) {
         if (next) await select(next)
         else selected.value = undefined
       }
-    } catch (cause) { if (epoch === generation) error.value = cause instanceof Error ? cause.message : String(cause) }
+    } catch (cause) { if (epoch === generation) error.value = (cause as { message?: string } | undefined)?.message || String(cause) }
     finally { if (epoch === generation) loading.value = false }
   }
   async function select(node: Entity) {
@@ -102,7 +102,7 @@ export function useProductShelf(library: Ref<LibraryCatalogItem>) {
         parentQueue.push(...relations.value.filter(edge => edge.child === id).map(edge => edge.parent))
       }
       if (epoch === detailGeneration) records.value = [...found.values()]
-    } catch (cause) { if (epoch === detailGeneration) detailError.value = cause instanceof Error ? cause.message : String(cause) }
+    } catch (cause) { if (epoch === detailGeneration) detailError.value = (cause as { message?: string } | undefined)?.message || String(cause) }
     finally { if (epoch === detailGeneration) detailLoading.value = false }
   }
   async function refresh(node = selected.value) {
@@ -128,7 +128,7 @@ export function useProductShelf(library: Ref<LibraryCatalogItem>) {
       pending.value = undefined
       const owner = selected.value
       await refresh(shelfLevel(entity.kind || '') !== null ? entity : owner)
-    } catch (cause) { detailError.value = cause instanceof Error ? cause.message : String(cause) }
+    } catch (cause) { detailError.value = (cause as { message?: string } | undefined)?.message || String(cause) }
     finally { linking.value = false }
   }
   function dispose() { generation++; detailGeneration++ }

@@ -89,7 +89,7 @@ async function load() {
       node.value = result; models.value = nextModels; ancestors.value = nextAncestors; paths.value = nextPaths; identities.value = [...known.values()]
       stageDraft.value = String(result.entity.attributes?.current_stage || '')
     }
-  } catch (cause) { if (current === generation) error.value = cause instanceof Error ? cause.message : t('workbench.requestFailed') }
+  } catch (cause) { if (current === generation) error.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   finally { if (current === generation) loading.value = false }
 }
 async function changeStage(event: Event) {
@@ -103,7 +103,7 @@ async function changeStage(event: Event) {
     if (result.status !== 'confirmed') throw new Error(t('workbench.requestFailed'))
     await load()
   } catch (cause) {
-    if (current === generation) { stageDraft.value = String(entity.attributes?.current_stage || ''); saveError.value = cause instanceof Error ? cause.message : t('workbench.requestFailed') }
+    if (current === generation) { stageDraft.value = String(entity.attributes?.current_stage || ''); saveError.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   } finally { saving.value = false }
 }
 watch(() => [props.library.id, props.nodeId], () => {

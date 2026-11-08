@@ -77,7 +77,7 @@ async function load() {
         if (target.startsWith('requirement-')) document.getElementById(decodeURIComponent(target))?.scrollIntoView()
       })
     }
-  } catch (cause) { if (current === generation) error.value = cause instanceof Error ? cause.message : t('workbench.requestFailed') }
+  } catch (cause) { if (current === generation) error.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   finally { if (current === generation) loading.value = false }
 }
 function choose(module: string, id: string) { choices.value = { ...choices.value, [module]: id }; void load() }
@@ -85,7 +85,7 @@ async function loadHistory(page = 1) {
   const current = ++historyGeneration
   historyLoading.value = true; historyError.value = ''; history.value = undefined; historyPage.value = page
   try { const result = unwrap(await entityHistory(props.nodeId, page)); if (current === historyGeneration) history.value = result }
-  catch (cause) { if (current === historyGeneration) historyError.value = cause instanceof Error ? cause.message : t('workbench.requestFailed') }
+  catch (cause) { if (current === historyGeneration) historyError.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   finally { if (current === historyGeneration) historyLoading.value = false }
 }
 watch(() => [props.library.id, props.nodeId], () => { generation++; node.value = undefined; ancestors.value = []; choices.value = {}; selected.value = false; void load(); void loadHistory() }, { immediate: true })
