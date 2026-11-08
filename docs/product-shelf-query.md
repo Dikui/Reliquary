@@ -2,6 +2,8 @@
 
 界面与外部 agent 使用同一组 `EntityService.ShelfFind`、`ShelfGet`、`ShelfQuery` 读取服务。HTTP 路径位于 `/api/v1`，沿用本机访问与 API Key 规则，响应包装为 `{"success":true,"data":...}`。本组接口不写业务数据；写入使用[货架变更集](product-shelf-changesets.md)。
 
+MCP 分别提供 `shelf_find`、`shelf_get`、`shelf_query`，均为只读工具。三个工具必传 `library_id`；find 的其他参数为 `q`、`limit`、`offset`，get 为 `node_id`、可选 `combination` 对象和 `as_of`，query 的其他参数与下述 JSON 筛选相同。返回与 HTTP 的 `data` 相同，同时提供结构化结果与 JSON 文本。调用前可通过 `reliquary_guide` 的 `shelf-expert` 流程读取[货架专家说明](../skills/reliquary/workflows/shelf-expert.md)。
+
 ## 找节点
 
 `GET /libraries/:id/shelf/find?q=名称&limit=50&offset=0`

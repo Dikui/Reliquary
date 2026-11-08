@@ -16,6 +16,10 @@ MCP 端点为 `/mcp`，使用同一 Bearer 头。MCP 调用还须检查 JSON-RPC
 |---|---|---|
 | `list_libraries` | GET `/api/v1/libraries` | 无参数；HTTP `data` 是库数组，MCP 为 `libraries` 数组 |
 | `search` | POST `/api/v1/search` | JSON 参数同 MCP，必填 `query`、`libraries`；`data` 含 `results`、降级状态和缺发布时间排除数 |
+| `shelf_find` | GET `/api/v1/libraries/:id/shelf/find` | MCP 的 library_id 放路径；q、limit、offset 放查询串；返回 items、total、truncated，候选含类别 |
+| `shelf_get` | GET `/api/v1/libraries/:id/shelf/nodes/:node_id` | library_id、node_id 放路径；as_of 为 RFC3339，combination 为 URL 编码的模块到部件 JSON 对象；返回 entity、shelf、facts、as_of、recorded |
+| `shelf_query` | POST `/api/v1/libraries/:id/shelf/query` | library_id 放路径，其余 JSON 筛选同 MCP；返回 items、total、truncated、as_of |
+| `shelf_submit` | POST `/api/v1/libraries/:id/shelf/changesets`；PATCH `/api/v1/libraries/:id/shelf/changesets/:changeset_id`；POST `/api/v1/libraries/:id/shelf/changesets/:changeset_id/confirm` | 新建时 library_id 放路径，其余同 MCP；继续处理时 HTTP 保存决定用 PATCH `/api/v1/libraries/:id/shelf/changesets/:changeset_id`，确认用 POST confirm 路径，JSON 为 revision、decisions。MCP 用同一工具的 changeset_id、revision、decisions，且确认必须 confirmed=true；错误含 error.details 中的变更集 |
 | `get_entry` | GET `/api/v1/entries/:id`，GET `/api/v1/entries/:id/body` | 前者 `data` 为资料详情；后者为原始 Markdown。与 MCP 分段读取不同，详见下文 |
 | `graph_search` | POST `/api/v1/graph/search` | JSON 参数同 MCP，必填 `libraries`、`entity`；`data` 含候选、边、证据、截断及未同步状态 |
 | `list_topics` | GET `/api/v1/topics` | 查询参数 `library_id`；HTTP `data` 是数组，MCP 为 `topics` 数组 |
@@ -40,7 +44,7 @@ MCP 端点为 `/mcp`，使用同一 Bearer 头。MCP 调用还须检查 JSON-RPC
 | `read_ingest_failure_material` | GET `/api/v1/diagnostics/ingest-failures/:id/materials/:material_id` | 文本支持查询 `offset`、`length`，`data` 为 Unicode 分段结果；图片返回原始图片字节，MCP 返回需 Bearer 认证的读取地址 |
 | `list_content_checks` | GET `/api/v1/diagnostics/content-checks` | 查询 `page`，默认 1，每页固定 20；`data` 含 `items`、`total`，列出运行 |
 | `get_content_check` | GET `/api/v1/diagnostics/content-checks/:id` | ID 为运行 ID；`data` 含运行状态与 `results`，其中 `findings` 含问题及原文证据，不是单条问题接口 |
-| `reliquary_guide` | 无 HTTP 路由 | 直接读取 [SKILL.md 流程索引](../SKILL.md#流程索引) 中的 6 个文件；不要请求不存在的指南接口 |
+| `reliquary_guide` | 无 HTTP 路由 | 直接读取 [SKILL.md 流程索引](../SKILL.md#流程索引) 中的 7 个文件；不要请求不存在的指南接口 |
 
 ## 正文与写操作
 
@@ -49,3 +53,7 @@ HTTP 资料详情不等于 MCP `get_entry` 的表头与分段正文投影。用�
 所有写操作仍遵守使用规则：先向用户展示目标、内容和影响并取得明确同意。HTTP 删除和丢弃不需要 MCP 的 `confirmed` 参数，也不会返回 MCP 的 `confirmation_required` 提示，agent 仍须先问用户，不能切换 HTTP 来跳过确认。删除或丢弃会清理相关资料与来源并记录操作日志，不能恢复；正文覆盖不保留旧版本。HTTP 的 `admit_unverified` 仍需它自身的 `confirmed=true`，不要与 MCP 删除确认混淆。
 
 自检的两个诊断 GET 接口只读已有运行和证据。自检设置写入与复检只允许本机网页会话，不提供 MCP 工具；HTTP agent 不应调用它们绕过复核流程的只读范围。图片若需先上传，可用 POST `/api/v1/ingest/assets` 发送 multipart `file`，取 `data.asset_id` 再写入，上传也须在用户授权范围内。
+
+货架范围检索可给 search 传 shelf_node_ids，范围含节点、下级、组成部件及其认证附件，只接受已确认的资料文件归属。默认排除旧版本；include_history=true 时同一文件合并返回，保留各版本独立的文本引用，注明历史命中。没有明确归属的独立文本仍可普通检索。
+
+货架写入沿用货架专家流程。提交操作列表且省略 confirmed 只保存待确认变更集，不写主数据。用户明确同意差异后才确认；含义不确定不能用普通接受跳过。HTTP 继续处理时先 GET `/api/v1/libraries/:id/shelf/changesets/:changeset_id` 读取当前修订和差异，确认失败检查 error.details，不能绕过确认或并发检查。

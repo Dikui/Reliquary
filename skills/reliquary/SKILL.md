@@ -1,6 +1,6 @@
 ---
 name: reliquary
-description: 查询、阅读、引用、收录资料并将结论写回本机 Reliquary。用户需要检索 Reliquary 的库、核对资料原文与实体关系、读取关注动态或保存 AI产出时使用。
+description: 查询、阅读、引用、收录资料并将结论写回本机 Reliquary。用户需要检索 Reliquary 的库、核对资料原文与实体关系、读取关注动态、查询和维护产品货架或保存 AI产出时使用。
 metadata:
   tested_against: "0.16.0"
 ---
@@ -59,6 +59,8 @@ bearer_token_env_var = "RELIQUARY_API_KEY"
 |---|---|---|
 | 找资料 | `list_libraries` → `search` | 必须指定 `libraries`，按来源与可信度选库；每个新问题重新检索 |
 | 问实体关系 | `graph_search` | 必须指定库；返回 `needs_selection` 时核对候选，用实体 ID 重试；截断或未同步时结论不完整 |
+| 查询产品货架 | `shelf_find` → `shelf_get` 或 `shelf_query` | 先读 shelf-expert 指南，同名先澄清；注明条件、来源与时点，总数与截断 |
+| 维护产品货架 | `shelf_submit` | 先保存差异与冲突，用户明确同意后用同一变更集 ID 和修订号确认；含义不确定项先选择 |
 | 片段不足，读原文 | `get_entry` | 按位置传 Unicode `offset`、`length`，用 `next_offset` 续读，引用资料 ID、标题路径和段落 |
 | 看关注的新动态 | `list_follows` → `follow_feed` | 只读已有关注，用 `next_cursor` 翻页；进入动态时间不同于发布时间，读取不更新查看时间 |
 | 查链接是否已收录 | `check_urls` | 指定 `library`，逐条检查状态；查重不代表获准覆盖，不用它查无链接的来源标识 |
@@ -92,10 +94,11 @@ bearer_token_env_var = "RELIQUARY_API_KEY"
 | write-report | 将带引用的结论作为 AI产出写回，先确认写入或覆盖 | [写回报告](workflows/write-report.md) |
 | ingest | 核对链接与来源信息，先确认收录或覆盖 | [收录资料](workflows/ingest.md) |
 | review-check | 核对已有自检问题与原文，只报告结论 | [资料自检复核](workflows/review-check.md) |
+| shelf-expert | 查询货架事实、条件、来源与时点，经用户确认维护货架 | [货架专家](workflows/shelf-expert.md) |
 
 ## 参考文件索引
 
 | 参考 | 文件 |
 |---|---|
-| HTTP 认证、27 个工具的接口映射与错误处理 | [HTTP 参考](reference/http.md) |
+| HTTP 认证、31 个工具的接口映射与错误处理 | [HTTP 参考](reference/http.md) |
 | 位置、信任标记、检索降级、分页与相似报道折叠 | [字段参考](reference/fields.md) |

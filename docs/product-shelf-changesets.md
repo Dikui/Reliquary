@@ -16,6 +16,16 @@ HTTP 路径以 `/api/v1` 为前缀，成功结果在 `data` 中。
 
 来源有三种形式：`{"type":"web"}`、`{"type":"agent","agent_name":"提交方名称"}`、`{"type":"import","import_batch_id":"批次标识","file_date":"2026-11-01T00:00:00Z"}`。导入日期必须明确提供，不以收录时间代替。导入的属性快照采用文件日期；网页和 agent 可以在操作内指定生效时间。来源归属于提议，之后换人确认不改变来源；日志中的 actor 表示实际确认人。
 
+## MCP 提交与确认
+
+`shelf_submit` 使用同一变更集服务，必传 `library_id`。新提议传 `source:{"type":"agent","agent_name":"提交方名称"}` 与 1 到 500 项 `operations`，可附 `decisions`。省略 `confirmed` 或传 `false` 只保存待确认变更集，返回其 ID、修订号、逐项差异与冲突，网页可继续处理。操作类型及对应数据沿用下文，未知字段会被拒绝。
+
+预览后仍用 `shelf_submit`，传返回的 `changeset_id`、读取到的 `revision` 和逐项 `decisions`。省略确认只保存进度；用户明确同意展示的差异后才传 `confirmed:true`。继续处理时不重传来源或操作列表，修正项使用 `replace` 决定。也可在用户已明确同意完整操作时当场提交并确认；仍执行全部冲突和修订校验。
+
+含义不确定项不能用普通 `apply` 跳过，须修正、放弃或暂缓。确认失败保持已有草稿与主数据原状；MCP 返回 `isError:true` 和结构化 `error`，业务冲突的 `error.details` 包含重新计算的变更集。变更集修订过期时需经上述 HTTP GET 或网页重新读取，不自动重试覆盖。来源沿用原提议，日志中的 actor 记录实际确认 API Key。
+
+回答规则与工具顺序见[货架专家说明](../skills/reliquary/workflows/shelf-expert.md)。普通检索的货架范围与版本参数见[普通检索](search-api.md#货架范围与版本)。
+
 ## 操作与决定
 
 每个操作可给出本批唯一的 `id`，省略时由服务端分配。创建提议会预分配实体 ID，保存草稿不会创建该实体。后续操作用 `$操作id` 引用本批前面的实体，或直接使用已有实体 ID。操作按提交顺序验证和执行；同一条目多次修改要按顺序提供递增的修订号。

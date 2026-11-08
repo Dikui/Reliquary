@@ -235,6 +235,7 @@ func registerTools(server *mcp.Server, services Services) {
 	registerGuide(server)
 	registerIngestDiagnostics(server, services.Diagnostics)
 	registerGraphSearch(server, services.Graph)
+	registerShelfTools(server, services.Entities)
 	if services.Libraries != nil {
 		addTool(server, "list_libraries", mcp.ToolAnnotations{ReadOnlyHint: true}, "列出全部库的 ID、英文目录、名称、说明、该收与不该收的内容、去重规则、可选字段、内容类型清单、关系类型清单和关注动态配置。旧审核标准与来源规则仅保留读取，不决定新资料准入。"+externalContentNotice, map[string]any{"type": "object", "properties": map[string]any{}}, func(ctx context.Context, _ struct{}) (any, error) {
 			libraries, err := services.Libraries.ListLibraries(ctx)

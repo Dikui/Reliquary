@@ -17,7 +17,7 @@ import (
 func TestMCPGuideWorkflows(t *testing.T) {
 	f := newMCPFixture(t)
 	client := f.connect(t, "2025-11-25")
-	names := []string{"compare", "entity-profile", "ingest", "review-check", "topic-brief", "write-report"}
+	names := []string{"compare", "entity-profile", "ingest", "review-check", "shelf-expert", "topic-brief", "write-report"}
 	call := func(t *testing.T, arguments any) *mcp.CallToolResult {
 		t.Helper()
 		result, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "reliquary_guide", Arguments: arguments})
@@ -60,7 +60,7 @@ func TestMCPGuideWorkflows(t *testing.T) {
 		require.False(t, result.IsError)
 		text := result.Content[0].(*mcp.TextContent).Text
 		require.Equal(t, summaries, strings.Split(strings.TrimSpace(text), "\n"))
-		require.Len(t, strings.Split(strings.TrimSpace(text), "\n"), 6)
+		require.Len(t, strings.Split(strings.TrimSpace(text), "\n"), 7)
 	}
 	for _, name := range []string{"unknown", "../rules"} {
 		result := call(t, map[string]any{"workflow": name})
