@@ -40,7 +40,7 @@ func ProductShelfSchema() EntitySchema {
 func ProductShelfRelations() []LibraryRelationType {
 	rules := []LibraryRelationType{
 		{Name: "belongs_to", Hierarchical: true, SubjectKinds: []string{"platform", "product", "model"}, ObjectKinds: []string{"product_line", "platform", "product"}},
-		{Name: "composed_of", SubjectKinds: []string{"model"}, ObjectKinds: []string{"part"}, Fields: ShelfCompositionFields()},
+		{Name: "composed_of", SubjectKinds: []string{"model"}, ObjectKinds: []string{"part"}, Fields: []EntityFieldDefinition{{Key: "module_type", Name: "模块类型", Type: "text", Kinds: []string{}}}},
 		{Name: "applies_to", SubjectKinds: []string{"document_requirement"}, ObjectKinds: []string{"product_line", "document_requirement"}, Fields: []EntityFieldDefinition{{Key: "module_types", Name: "适用模块类型", Type: "list", Kinds: []string{}}}},
 		{Name: "has_certification", SubjectKinds: []string{"platform", "product", "model", "part"}, ObjectKinds: []string{"certification"}},
 		{Name: "has_document", SubjectKinds: []string{"platform", "product", "model", "part", "certification"}, ObjectKinds: []string{"document_file"}},
@@ -96,7 +96,7 @@ func ValidateProductShelf(l *Library) error {
 		found := false
 		for _, field := range l.EntitySchema.Fields {
 			if field.Key == required.Key {
-				found = field.Type == required.Type && slices.Equal(field.Kinds, required.Kinds) && len(field.ProductLineIDs) == 0 && field.Archived == required.Archived
+				found = field.Type == required.Type && slices.Equal(field.Kinds, required.Kinds) && len(field.ProductLineIDs) == 0 && !field.Archived
 			}
 		}
 		if !found {
@@ -119,12 +119,14 @@ func ValidateProductShelf(l *Library) error {
 					}
 				}
 				if actual.Name == "composed_of" {
-					for _, required := range ShelfCompositionFields() {
-						if !slices.ContainsFunc(actual.Fields, func(field EntityFieldDefinition) bool {
-							return field.Key == required.Key && field.Type == required.Type && !field.Archived && len(field.Kinds) == 0 && len(field.ProductLineIDs) == 0
-						}) {
-							return fmt.Errorf("composition field is fixed: %s", required.Key)
+					moduleField := false
+					for _, field := range actual.Fields {
+						if field.Key == "module_type" && field.Type == "text" && !field.Archived && len(field.Kinds) == 0 {
+							moduleField = true
 						}
+					}
+					if !moduleField {
+						return fmt.Errorf("composition module_type field is fixed")
 					}
 				}
 				found = actual.Enabled && actual.Hierarchical == rule.Hierarchical && slices.Equal(actual.SubjectKinds, rule.SubjectKinds) && slices.Equal(actual.ObjectKinds, rule.ObjectKinds)

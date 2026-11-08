@@ -232,29 +232,6 @@ const input = async (root: Element, id: string, value: string) => { control(root
 const select = async (root: Element, id: string, value: string) => { control(root, id).props.onChange({ target: { value } }); await settle() }
 const submit = async (root: Element) => { const form = descendants(root).find(node => node.tag === 'form'); assert.ok(form); form.props.onSubmit({ preventDefault() {} }); await settle() }
 
-// Small spec, task 28: model-specific identifiers come from the composition,
-// even when a legacy part snapshot carries a different identifier.
-test('型号组成表显示关系上的簇和集装箱型号', async t => {
-  const value = data()
-  value.shelf.composition[0].parts = [{ ...parts[0], attributes: { pack_model: ' Pack original ', cluster_model: '历史部件簇' } }]
-  value.shelf.composition[0].relations = [{ id: 'edge', object_id: 'alpha', attributes: { module_type: 'cell', cluster_model: ' 本型号簇 ', container_model: '本型号集装箱' } }]
-  const { root } = await mountPage(t, { value })
-  assert.match(visibleText(section(root, 'composition')), /Pack original.*本型号簇.*本型号集装箱/)
-  assert.doesNotMatch(visibleText(section(root, 'composition')), /历史部件簇/)
-})
-
-// Small spec, task 28: editing a composition preserves other attributes and
-// captures the relationship revision, including an explicit cleared value.
-test('编辑组成可修改簇型号并清空集装箱型号', async t => {
-  const { root, writes } = await mountPage(t, { relationsApi: { listEntityRelations: () => success([{ relations: [{ id: 'edge', relation_type: 'composed_of', version: 7, direction: 'outgoing', attributes: { module_type: 'cell', cluster_model: '原簇', container_model: '原箱', custom: '保留' }, peer: parts[0] }] }]) } })
-  await click(button(root, '指定部件')); await select(root, 'composition-action', 'edit')
-  await select(root, 'composition-module', 'cell'); await select(root, 'composition-part', 'edge')
-  assert.equal(control(root, 'composition-cluster').props.value, '原簇')
-  assert.equal(control(root, 'composition-container').props.value, '原箱')
-  await input(root, 'composition-cluster', ' 新簇 '); await input(root, 'composition-container', ''); await submit(root)
-  assert.deepEqual(writes[0], [{ id: 'composition', type: 'save_relation', relation_id: 'edge', revision: 7, relation: { subject_id: 'model', object_id: 'alpha', relation_type: 'composed_of', version: 7, attributes: { module_type: 'cell', cluster_model: ' 新簇 ', container_model: '', custom: '保留' } } }])
-})
-
 // Small spec, task 24: an atomic edit preserves spelling and unrelated facts.
 test('编辑型号确认一项变更并刷新名称和属性', async t => {
   let saved = false
@@ -313,21 +290,6 @@ test('新增认证保留原文、年份、电芯部件和适用条件，成功�
   assert.equal(writes[0].length, 1); assert.equal(writes[0][0].type, 'create_certification')
   assert.deepEqual({ ...writes[0][0].certification }, { name: ' 认证原名 ', owner_id: 'model', standard: 'standard', certification_object: ' 整机原文 ', region: ' 地区原文 ', year: 2026, cell_part_id: 'alpha', number: 'SYN-24', conditions: condition })
   assert.match(visibleText(section(root, 'cert')), /新增合成标准/)
-})
-
-// Small spec, task 27 / ADR 0023: name is optional; identity fields remain required.
-test('新增认证可留空名称，仍要求标准、认证对象和地区', async t => {
-  const config = { ...library, shelf_config: { ...library.shelf_config, standards: [{ key: 'standard', name: '合成标准', aliases: [] }] } }
-  const { root, writes } = await mountPage(t, { config })
-  await click(button(root, '新增认证'))
-  await select(root, 'cert-standard', 'standard')
-  await input(root, 'cert-object', ' 整机原文 ')
-  await submit(root)
-  assert.equal(writes.length, 0)
-  await input(root, 'cert-region', ' 地区原文 ')
-  await submit(root)
-  assert.equal(writes.length, 1)
-  assert.deepEqual({ ...writes[0][0].certification }, { name: '', owner_id: 'model', standard: 'standard', certification_object: ' 整机原文 ', region: ' 地区原文 ', conditions: [] })
 })
 
 // Small regression, task 24: editing a filtered read must not drop facts for other options.

@@ -61,7 +61,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 导入修改中的 `manual_before` 标出被改动字段的手工旧值，属性按字段分别追溯来源；另一个属性的导入不会抹掉它的手工来源。旧日志没有来源时保守视为需要保护的人工值。创建与保存草稿均不覆盖主数据。
 
-提交方可用 `issues:[{type,message,details}]` 标出无法解析、含义不确定、必填缺失和跨表矛盾。系统不推断含义，单纯 `apply` 不能跳过这些阻塞项，必须修正、放弃或暂缓。除认证名称及别名外，确定的同类别名称、别名和代码仍使用已有唯一性规则；同名候选和明确提供的候选可以由人确认为同一实体，系统不做模糊身份归并。
+提交方可用 `issues:[{type,message,details}]` 标出无法解析、含义不确定、必填缺失和跨表矛盾。系统不推断含义，单纯 `apply` 不能跳过这些阻塞项，必须修正、放弃或暂缓。确定的同类别名称、别名和代码仍使用已有唯一性规则；同名候选和明确提供的候选可以由人确认为同一实体，系统不做模糊身份归并。
 
 校验使用真实人工维护写入逻辑，在数据库保存点内试算并完整回滚，包括属性历史、同名确认、日志和图谱队列。保存提议仅持久化变更集。确认时重新验证全部操作、并发修订和库范围，所有写入及暂缓项转移处于同一事务，任一步失败都回滚。确认完成前不执行文件或后台工作进程的外部副作用。
 
@@ -73,7 +73,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 ## 组成、可售状态与参数
 
-组成使用 `save_relation`，`relation_type` 为 `composed_of`，主体为型号，客体为部件，关系属性 `module_type` 必须是本库配置的模块键。同一模块一个部件为固定组成，多个为选配。单独销售的部件型产品仍创建独立型号，通过组成关系引用一个部件。部件可通过 `create_entity`、`update_entity` 保存 `module_type`、`pack_model`；`cluster_model`、`container_model` 是组成关系的属性，随 `save_relation` 保存。迁移 53 保留部件上的旧簇型号与集装箱型号及其历史（字段归档，只读展示），不推断归属型号；名称和型号写法原样保留。
+组成使用 `save_relation`，`relation_type` 为 `composed_of`，主体为型号，客体为部件，关系属性 `module_type` 必须是本库配置的模块键。同一模块一个部件为固定组成，多个为选配。单独销售的部件型产品仍创建独立型号，通过组成关系引用一个部件。部件可通过 `create_entity`、`update_entity` 保存 `module_type`、`pack_model`、`cluster_model`、`container_model`；名称和型号写法原样保留。
 
 `set_sale_statuses` 接受 `entity_id`、`revision`、可选 `effective_at` 和 `sale_statuses` 数组，整体替换该型号的区域状态记录。每条记录包含 `region`（区域键）、`status`（GA、DEV、Planning、EOM 或待定）、`planned_eom`、`notes`、`raw` 和 `conditions`。空数组表示明确清空全部记录；缺少某区域表示该区域无记录。空白状态返回 `uncertain` 冲突，提交方须修正为明确状态，或明确选择不写入。系统不自动补待定。导入使用来源中的文件日期作为生效时间。
 
@@ -111,12 +111,12 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 | 操作 | 输入与行为 |
 | --- | --- |
-| `create_certification` | `certification`，可带 `effective_at`。明确新增一条独立认证，同时建立所属节点到认证记录的 `has_certification` 关系。名称可省略、留空或与已有记录重复。 |
+| `create_certification` | `certification`，可带 `effective_at`。明确新增一条独立认证，同时建立所属节点到认证记录的 `has_certification` 关系。名称由提交方给出。 |
 | `update_certification` | `certification`、`revision`，可带 `entity_id` 和 `effective_at`。按识别键更新一条已有记录。`certification` 是完整替换，省略的可选字段表示清空；省略名称表示保留原名。 |
 
-`certification` 包含 `name`（可选，可空、可重复）、`owner_id`、`standard`、`certification_object`、`cell_part_id`、`region`、`year`、`agency`、`progress`、`start_date`、`obtained_date`、`issued_date`、`validity`、`number`、`cloud_url` 和 `conditions`。`owner_id` 必须明确指向本库的型号、部件、产品名称或平台，不按行名猜测节点。`standard` 接受配置键、规范名或别名，保存为配置键，查询同时返回规范名。`year` 是可选整数；三个日期使用 `YYYY-MM-DD`；有效期保留原写法；云盘链接只接受 HTTP(S)。认证对象、地区、机构和进度均保存提交方写法，不在代码里固定客户值。未指定地区或电芯部件时用空值参与识别，不补填推测值。
+`certification` 包含 `name`（新增必填）、`owner_id`、`standard`、`certification_object`、`cell_part_id`、`region`、`year`、`agency`、`progress`、`start_date`、`obtained_date`、`issued_date`、`validity`、`number`、`cloud_url` 和 `conditions`。`owner_id` 必须明确指向本库的型号、部件、产品名称或平台，不按行名猜测节点。`standard` 接受配置键、规范名或别名，保存为配置键，查询同时返回规范名。`year` 是可选整数；三个日期使用 `YYYY-MM-DD`；有效期保留原写法；云盘链接只接受 HTTP(S)。认证对象、地区、机构和进度均保存提交方写法，不在代码里固定客户值。未指定地区或电芯部件时用空值参与识别，不补填推测值。
 
-识别键为所属节点、标准、认证对象、电芯部件和地区，不包含名称、年份、机构、进度或证书编号。认证名称和别名不参与类别内唯一性或跨类别同名确认，非空代码仍按类别唯一。名称原样保存，型号页新增认证时名称可选；更新认证省略或留空名称保留原名，需清空已有名称时使用 `update_entity` 的 `patch.name=""`。更新匹配零条或多条时返回 `uncertain` 阻塞冲突，不会自动新增、合并或拆分。显式 `entity_id` 也必须与识别键一致。多条候选须由人工在 `apply` 决定中提供 `target_entity_id` 与 `target_revision`，明确选中一条；零条时须修正操作或明确改为新增，改为新增时可直接沿用提议名称，无须另起名称。新增操作本身表示提交方明确建立独立记录，因此可保存同键的不同认证，后续自动匹配会报告多条候选。
+识别键为所属节点、标准、认证对象、电芯部件和地区，不包含年份、机构、进度或证书编号。更新匹配零条或多条时返回 `uncertain` 阻塞冲突，不会自动新增、合并或拆分。显式 `entity_id` 也必须与识别键一致。多条候选须由人工在 `apply` 决定中提供 `target_entity_id` 与 `target_revision`，明确选中一条；零条时须修正操作或明确改为新增。新增操作本身表示提交方明确建立独立记录，因此可保存同键的不同认证，后续自动匹配会报告多条候选。
 
 认证对象可以填写 BMS；无法确定所属节点的独立认证行返回 `uncertain`，即使普通接受也不能写入。提交方可以修正、放弃或暂缓。模块不根据认证对象名称自动创建。电芯部件和条件引用须属于所属节点的组成范围，不能引用其他库的部件。条件沿用模块与部件集合的合取写法，须由所属范围内同一个型号同时满足。结构调整不能使已有或未来生效认证的条件、部件或归属关系失效。
 
@@ -242,7 +242,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 ## 资料要求的所属清单与多项关联
 
-资料要求的 `attributes.requirement.list_name` 必填，最长 512 字符，原样保存。手工新建由提交方填写；导入值为 `方案键 / 工作表名`。名称、别名和代码在同一所属清单内唯一，不同清单的同名要求各自独立，“同一条目，保存别名”的决定也只能指向同一所属清单。认证名称与别名可重复，其他类别仍使用原有名称唯一规则。负责人、应交阶段、市场、来源清单原文 `source_list` 和来源版本 `source_version` 都随各项要求分别保存。设置页的“来源清单”列显示所属清单，另保留来源原文和版本。
+资料要求的 `attributes.requirement.list_name` 必填，最长 512 字符，原样保存。手工新建由提交方填写；导入值为 `方案键 / 工作表名`。名称、别名和代码在同一所属清单内唯一，不同清单的同名要求各自独立，“同一条目，保存别名”的决定也只能指向同一所属清单。其他类别仍使用原有名称唯一规则。负责人、应交阶段、市场、来源清单原文 `source_list` 和来源版本 `source_version` 都随各项要求分别保存。设置页的“来源清单”列显示所属清单，另保留来源原文和版本。
 
 `add_document_version.document.requirement_ids` 和 `classify_document.classification.requirement_ids` 接受多项明确要求。一个文件可同时满足多项要求，型号清单逐项应用各自的初稿与终稿期限。取消一项关联后只影响该项的文件判断。新增版本按同一归属与完整要求集合匹配已有文件，数组次序不影响匹配；明确提供文件 ID 时也须保持归类一致，改归类使用 `classify_document`。不同要求集合可能重叠，无法唯一判断文件时须明确文件 ID。
 
@@ -263,5 +263,3 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 多个标准的冲突在 `details.split_suggestions` 返回每个标准一条完整认证输入。提交方确认拆分后，用 `replacements` 提交各条认证操作，或修改标准写法后重新校验；普通 `apply` 不能批准未拆分的多标准单元格。创建尚无匹配记录的认证仍须显式选择 `create_certification` 并填写名称，不能由系统猜测是新增还是更新。
 
 缺认证对象或地区时，`details.missing_fields` 列出缺失字段，阻止该行写入。网页整表统一值转换为本批、同一工作表每行的 `replace` 决定；也可逐行修正。未填写的统一字段不改变现有值，填写的字段替换该工作表所有认证行的对应值，不扩展到其他工作表或批次。MCP `shelf_submit` 使用同样的决定、数组和修订检查。
-
-迁移 52 仅放宽人工维护库认证类别的名称索引，不改写已有记录；其他类别、资料要求清单和自动抽取库的名称规则保持。存在人工维护认证记录或认证变更集时拒绝降级，避免旧版名称约束迫使改名或删除数据。

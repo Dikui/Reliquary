@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -106,7 +105,6 @@ func (b *importMapBuilder) parseRecords(workbook *importWorkbookData) error {
 			}
 			for _, variant := range variants {
 				start := len(b.ops)
-				compositionRows := maps.Clone(b.compositionRows)
 				var err error
 				switch b.plan.FileKind {
 				case "atq":
@@ -119,7 +117,6 @@ func (b *importMapBuilder) parseRecords(workbook *importWorkbookData) error {
 				}
 				if err != nil {
 					b.ops = b.ops[:start]
-					b.compositionRows = compositionRows
 					kind := "unparseable"
 					if strings.HasPrefix(err.Error(), "uncertain:") {
 						kind = "uncertain"

@@ -5,7 +5,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   { file: 'views/library/components/ShelfImportPlanEditor.vue', expressions: ['`productShelf.kinds.${kind}`', '`shelfImport.fields.${field}`', '`shelfImport.meanings.${meaning}`'], reason: 'Import fields and color meanings use the supported server vocabulary; configured names remain data.' },
   { file: 'views/library/components/ShelfReviewPage.vue', expressions: ['`shelfReview.sources.${set.source.type}`', '`shelfReview.groups.${group.type}`', '`shelfReview.actions.${action}`'], reason: 'Sources, conflict groups and decisions use fixed changeset vocabularies.' },
   { file: 'views/library/components/ShelfReviewValue.vue', expressions: ['`shelfReview.fields.${props.name}`'], reason: 'Known payload labels are checked with te before translation; configured fields retain their library labels.' },
-  { file: 'views/library/components/ShelfNodePage.vue', expressions: ['`productShelf.kinds.${entity.kind}`', '`shelfModel.status.${row.status}`', '`shelfReview.fields.${key}`'], reason: 'Shelf node kinds, checklist statuses and legacy part fields (cluster_model, container_model) are fixed API vocabularies.' },
+  { file: 'views/library/components/ShelfNodePage.vue', expressions: ['`productShelf.kinds.${entity.kind}`', '`shelfModel.status.${row.status}`'], reason: 'Shelf node kinds and checklist statuses are fixed API vocabularies.' },
   {
     "file": "views/library/components/ShelfModelPage.vue",
     "expressions": [

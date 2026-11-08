@@ -118,6 +118,7 @@ func TestShelfCertificationUnmatchedKeysReturnToSubmitter(t *testing.T) {
 	blocked := submit(record, "update_certification", false)
 	require.Equal(t, "uncertain", blocked.Items[0].Conflicts[0].Type)
 	first := submit(record, "create_certification", true)
+	record["name"] = "Synthetic cert two"
 	second := submit(record, "create_certification", true)
 	record["name"] = ""
 	blocked = submit(record, "update_certification", false)
@@ -241,55 +242,20 @@ func TestShelfCertificationAncestorScopeExcludesOtherModels(t *testing.T) {
 	require.Len(t, detail["shelf"].(map[string]any)["certifications"], 1)
 }
 
-// Medium spec, task 27 / ADR 0023: certification display names do not
-// occupy the managed name namespace in either direction.
-func TestShelfCertificationNamesDoNotRequireCrossKindConfirmation(t *testing.T) {
+// Medium regression, task 05 / ADR 0023: typed certification writes obey the
+// existing explicit cross-kind name confirmation instead of making it unsolvable.
+func TestShelfCertificationCrossKindNameCanBeConfirmed(t *testing.T) {
 	f, library, nodes := shelfModelSetup(t)
 	configureCertificationStandards(f, &library)
 	path := "/libraries/" + library.ID + "/shelf/changesets"
 	var draft types.ShelfChangeset
-	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{
-		map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Synthetic model", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "Country"}},
-		map[string]any{"id": "named", "type": "create_certification", "certification": map[string]any{"name": "Certificate display name", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "Other country"}},
-		map[string]any{"id": "part", "type": "create_entity", "entity": map[string]any{"name": "Certificate display name", "kind": "part"}},
-	}}, http.StatusCreated, &draft)
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Synthetic model", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "Country"}}}}, http.StatusCreated, &draft)
+	require.Equal(t, "cross_kind_same_name", draft.Items[0].Conflicts[0].Type)
+	f.request(http.MethodPost, path+"/"+draft.ID+"/confirm", map[string]any{"revision": draft.Revision, "decisions": []any{map[string]any{"item_id": "cert", "action": "apply", "name_confirmations": []any{map[string]any{"name": "Synthetic model", "other_entity_id": shelfNode(nodes, "model"), "other_kind": "model"}}}}}, http.StatusOK, &draft)
 	var detail types.EntityDetail
-	f.request(http.MethodGet, "/entities/"+shelfNode(draft, "cert"), nil, http.StatusOK, &detail)
+	f.request(http.MethodGet, "/entities/"+draft.Items[0].EntityID, nil, http.StatusOK, &detail)
 	require.Equal(t, "Synthetic model", detail.Entity.CanonicalName)
 	require.Equal(t, "certification", detail.Entity.Kind)
-}
-
-// Medium spec, task 27 / ADR 0023: duplicate and empty display names retain
-// independent identities, and updates still select by the certification key.
-func TestShelfCertificationNamesMayRepeatOrBeEmpty(t *testing.T) {
-	f, library, nodes := shelfModelSetup(t)
-	configureCertificationStandards(f, &library)
-	path := "/libraries/" + library.ID + "/shelf/changesets"
-	ids := []string{}
-	for i, name := range []string{" Same name ", " Same name ", "", ""} {
-		var draft types.ShelfChangeset
-		f.request(http.MethodPost, path, types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{{ID: "cert", Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: name, ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, "model"), Standard: "standard_a", CertificationObject: "Container", Region: []string{"A", "B", "C", "D"}[i]}}}}}, http.StatusCreated, &draft)
-		ids = append(ids, draft.Items[0].EntityID)
-		var detail types.EntityDetail
-		f.request(http.MethodGet, "/entities/"+ids[i], nil, http.StatusOK, &detail)
-		require.Equal(t, name, detail.Entity.CanonicalName)
-	}
-	var updated types.ShelfChangeset
-	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "update", "type": "update_certification", "revision": 1, "certification": map[string]any{"name": " Same name ", "owner_id": shelfNode(nodes, "model"), "standard": "Customer spelling", "certification_object": "Container", "region": "B", "progress": "Completed"}}}}, http.StatusCreated, &updated)
-	require.Equal(t, ids[1], updated.Items[0].EntityID)
-	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "clear", "type": "update_entity", "entity_id": ids[1], "patch": map[string]any{"revision": 2, "name": ""}}}}, http.StatusCreated, nil)
-	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "rename", "type": "update_entity", "entity_id": ids[2], "patch": map[string]any{"revision": 1, "name": " Same name "}}}}, http.StatusCreated, nil)
-	var model types.EntityDetail
-	f.request(http.MethodGet, "/entities/"+shelfNode(nodes, "model"), nil, http.StatusOK, &model)
-	require.Len(t, model.Shelf.Certifications, 4)
-	for _, cert := range model.Shelf.Certifications {
-		if cert.Entity.ID == ids[1] {
-			require.Empty(t, cert.Entity.CanonicalName)
-			require.Equal(t, "Completed", cert.Certification.Progress)
-		} else {
-			require.Empty(t, cert.Certification.Progress)
-		}
-	}
 }
 
 // Medium spec, task 05: malformed metadata and contradictory applicability

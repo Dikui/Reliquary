@@ -65,12 +65,11 @@ func (s *EntityService) shelfModelDetail(ctx context.Context, entity *types.Enti
 		byID[part.ID] = part
 	}
 	for _, module := range library.ShelfConfig.ModuleTypes {
-		group := types.ShelfComposition{ModuleType: module.Key, Parts: []types.Entity{}, Relations: []types.Relation{}}
+		group := types.ShelfComposition{ModuleType: module.Key, Parts: []types.Entity{}}
 		for _, r := range relations {
 			if r.Attributes["module_type"] == module.Key {
 				if part, ok := byID[r.ObjectID]; ok {
 					group.Parts = append(group.Parts, part)
-					group.Relations = append(group.Relations, r)
 				}
 			}
 		}

@@ -25,10 +25,6 @@ export interface ShelfNodeDocument { entity: Entity; document: ShelfDocumentVers
 export interface ShelfChecklistSummary { model_count: number; models_with_gaps: number; counts: Record<string, number> }
 export interface ShelfOtherDocument { entity: Entity; document: ShelfDocumentVersion; owner: Entity; origin: string; conditions: ShelfCondition[] | null }
 export interface ShelfEvidence { source: OperationSource; snapshot_id?: string; operation_log_id?: string; changeset_id?: string; effective_at: string; recorded_at: string }
-export interface ShelfComposition {
-  module_type: string; optional: boolean; parts: Entity[]
-  relations?: { id: string; object_id: string; subject_id: string; version: number; attributes: Record<string, unknown> }[]
-}
 export interface ShelfNode {
   entity: Entity & { kind_label?: string }
   recorded: boolean
@@ -36,7 +32,7 @@ export interface ShelfNode {
   facts: { entity_id: string; field: string; value: unknown; conditions?: ShelfCondition[] | null; origin?: string; evidence?: ShelfEvidence }[]
   shelf?: {
     sale_statuses: ShelfSaleStatus[]
-    composition: ShelfComposition[]
+    composition: { module_type: string; optional: boolean; parts: Entity[] }[]
     current_stage?: string
     stage_owner_id?: string
     certifications?: ShelfCertification[]

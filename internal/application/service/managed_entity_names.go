@@ -48,10 +48,9 @@ func managedKindLabel(library *types.Library, kind string) string {
 
 // The caller holds the existing entity identity barrier and library lock. All
 // spellings share one namespace within a kind and requirement list.
-// Certification names and aliases are display labels; codes retain ownership.
 func validateManagedNames(tx *gorm.DB, library *types.Library, entity *types.Entity, aliases []string, confirmations []types.ManagedNameConfirmation) error {
 	names := map[string]string{}
-	if entity.ArchivedAt == nil && entity.Kind != "certification" {
+	if entity.ArchivedAt == nil {
 		for _, name := range append(append([]string{}, aliases...), entity.CanonicalName) {
 			names[normalizeEntityName(name)] = name
 		}
@@ -72,8 +71,8 @@ func validateManagedNames(tx *gorm.DB, library *types.Library, entity *types.Ent
 	var owners []owner
 	if err := tx.Raw(`SELECT DISTINCT e.id,e.kind,e.canonical_name,n.spelling,COALESCE(e.attributes #>> '{requirement,list_name}','') AS list_name FROM entities e
 	 JOIN LATERAL (
-	  SELECT e.normalized_name AS spelling,false AS is_code WHERE e.archived_at IS NULL AND e.kind<>'certification'
-	  UNION SELECT a.normalized_alias,false FROM entity_aliases a WHERE a.entity_id=e.id AND e.archived_at IS NULL AND e.kind<>'certification'
+	  SELECT e.normalized_name AS spelling,false AS is_code WHERE e.archived_at IS NULL
+	  UNION SELECT a.normalized_alias,false FROM entity_aliases a WHERE a.entity_id=e.id AND e.archived_at IS NULL
 	  UNION SELECT e.code,true WHERE e.code<>''
 	 ) n ON true
 	 WHERE e.space_id=? AND e.library_id=? AND e.id<>? AND e.merged_into_id='' AND (n.spelling IN ? OR n.is_code)

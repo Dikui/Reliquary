@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"slices"
 	"strings"
 
 	apperrors "reliquary/internal/errors"
@@ -21,7 +20,7 @@ func (s *EntityService) prepareShelfCertification(ctx context.Context, draft *ty
 	if err != nil {
 		return op, err
 	}
-	suggestions := shelfCertificationSplitSuggestions(library.ShelfConfig, record, op.CertificationOwner != nil && !slices.Contains(op.CertificationOwner.MappedFields, "name"))
+	suggestions := shelfCertificationSplitSuggestions(library.ShelfConfig, record)
 	details := map[string]any{}
 	if len(suggestions) > 1 {
 		details["split_suggestions"] = suggestions
@@ -80,7 +79,7 @@ func (s *EntityService) prepareShelfCertification(ctx context.Context, draft *ty
 	return op, nil
 }
 
-func shelfCertificationSplitSuggestions(config types.ShelfConfig, record types.ShelfCertificationInput, useStandardName bool) []types.ShelfCertificationInput {
+func shelfCertificationSplitSuggestions(config types.ShelfConfig, record types.ShelfCertificationInput) []types.ShelfCertificationInput {
 	names := strings.FieldsFunc(record.Standard, func(r rune) bool { return strings.ContainsRune("、，,;；\n\r", r) })
 	filtered := names[:0]
 	for _, name := range names {
@@ -95,9 +94,6 @@ func shelfCertificationSplitSuggestions(config types.ShelfConfig, record types.S
 	result := make([]types.ShelfCertificationInput, 0, len(names))
 	for _, name := range names {
 		suggestion := record
-		if useStandardName {
-			suggestion.Name = name
-		}
 		suggestion.Standard = strings.TrimSpace(name)
 		if standard, year, err := config.ResolveStandardYear(suggestion.Standard, suggestion.Year); err == nil {
 			suggestion.Standard = standard.Key

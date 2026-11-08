@@ -11,10 +11,9 @@ import (
 
 // ShelfComposition groups alternatives without expanding complete configurations.
 type ShelfComposition struct {
-	ModuleType string     `json:"module_type"`
-	Optional   bool       `json:"optional"`
-	Parts      []Entity   `json:"parts"`
-	Relations  []Relation `json:"relations"`
+	ModuleType string   `json:"module_type"`
+	Optional   bool     `json:"optional"`
+	Parts      []Entity `json:"parts"`
 }
 
 type ShelfModelDetail struct {
@@ -81,21 +80,13 @@ func ProductShelfFields() []EntityFieldDefinition {
 	return []EntityFieldDefinition{
 		{Key: "module_type", Name: "模块类型", Type: "text", Kinds: []string{"part"}},
 		{Key: "pack_model", Name: "Pack 型号", Type: "text", Kinds: []string{"part"}},
-		{Key: "cluster_model", Name: "簇型号", Type: "text", Kinds: []string{"part"}, Archived: true},
-		{Key: "container_model", Name: "集装箱型号", Type: "text", Kinds: []string{"part"}, Archived: true},
+		{Key: "cluster_model", Name: "簇型号", Type: "text", Kinds: []string{"part"}},
+		{Key: "container_model", Name: "集装箱型号", Type: "text", Kinds: []string{"part"}},
 		{Key: "sale_statuses", Name: "可售状态", Type: "shelf_statuses", Kinds: []string{"model"}},
 		{Key: "combination_rules", Name: "组合规则", Type: "shelf_rules", Kinds: []string{"model"}},
 		{Key: "certification", Name: "认证记录", Type: "shelf_certification", Kinds: []string{"certification"}},
 		{Key: "current_stage", Name: "当前阶段", Type: "text", Kinds: []string{"product", "model"}},
 		{Key: "requirement", Name: "资料要求", Type: "shelf_requirement", Kinds: []string{"document_requirement"}},
-	}
-}
-
-func ShelfCompositionFields() []EntityFieldDefinition {
-	return []EntityFieldDefinition{
-		{Key: "module_type", Name: "模块类型", Type: "text", Kinds: []string{}},
-		{Key: "cluster_model", Name: "簇型号", Type: "text", Kinds: []string{}},
-		{Key: "container_model", Name: "集装箱型号", Type: "text", Kinds: []string{}},
 	}
 }
 

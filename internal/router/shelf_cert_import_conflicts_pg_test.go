@@ -46,10 +46,10 @@ func TestShelfCertImportStandardYears(t *testing.T) {
 			draft := importUpload(t, f, l.ID, "cert_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Synthetic model", sample.raw, "Container", "Country"), ""), http.StatusCreated)
 			op := draft.Items[0].Operation
 			require.NotNil(t, op.Certification)
-			require.Equal(t, sample.raw, op.Certification.Name)
 			require.Equal(t, sample.key, op.Certification.Standard)
 			require.Equal(t, sample.year, op.Certification.Year)
 			op.Type = "create_certification"
+			op.Certification.Name = sample.key
 			f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets/"+draft.ID+"/confirm", types.ShelfChangesetReview{Revision: draft.Revision, Decisions: []types.ShelfDecision{{ItemID: op.ID, Action: "replace", Replacement: &op}}}, http.StatusOK, &draft)
 			var cert types.EntityDetail
 			f.request(http.MethodGet, "/entities/"+draft.Items[0].EntityID, nil, http.StatusOK, &cert)
@@ -84,7 +84,7 @@ func TestShelfCertImportSplitRequiresExplicitReplacement(t *testing.T) {
 			replacements := []any{}
 			for i, rawSuggestion := range suggestions {
 				record := rawSuggestion.(map[string]any)
-				require.Equal(t, []string{"Synthetic Standard:2019", "Customer spelling:2022"}[i], record["name"])
+				record["name"] = []string{"Split first", "Split second"}[i]
 				replacements = append(replacements, map[string]any{"id": []string{draft.Items[0].ID, "split_second"}[i], "type": "create_certification", "certification": record, "certification_owner": map[string]any{"name": "Synthetic model", "kind": "model"}})
 			}
 			f.request(http.MethodPatch, path, map[string]any{"revision": draft.Revision, "decisions": []any{map[string]any{"item_id": draft.Items[0].ID, "action": "replace", "replacements": replacements}}}, http.StatusOK, &draft)

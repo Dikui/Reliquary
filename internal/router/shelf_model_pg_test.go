@@ -208,17 +208,17 @@ func TestShelfModelRejectsInvalidCompositionAndConditions(t *testing.T) {
 	f.request(http.MethodGet, "/entities/"+shelfNode(draft, "model")+"?combination="+url.QueryEscape(`{"module_a":"outside"}`), nil, http.StatusBadRequest, nil)
 }
 
-// Medium spec, tasks 04 and 28: Pack remains on the cell part, while cluster
-// and container identifiers belong to composition relationships.
+// Medium spec, task 04: pack, cluster and container identifiers are fields of
+// one part, remain verbatim, and appear with that part in model detail.
 func TestShelfModelPartDetailsRemainOnPart(t *testing.T) {
 	f, _, draft := shelfModelSetup(t)
 	var part types.Entity
-	f.request(http.MethodPatch, "/entities/"+shelfNode(draft, "a"), map[string]any{"revision": 1, "attributes": map[string]any{"module_type": "module_a", "pack_model": " Pack X "}}, http.StatusOK, &part)
+	f.request(http.MethodPatch, "/entities/"+shelfNode(draft, "a"), map[string]any{"revision": 1, "attributes": map[string]any{"module_type": "module_a", "pack_model": " Pack X ", "cluster_model": "Cluster X", "container_model": "Container X"}}, http.StatusOK, &part)
 	var detail types.EntityDetail
 	f.request(http.MethodGet, "/entities/"+shelfNode(draft, "model"), nil, http.StatusOK, &detail)
 	require.Equal(t, " Pack X ", detail.Shelf.Composition[0].Parts[0].Attributes["pack_model"])
-	require.NotContains(t, detail.Shelf.Composition[0].Parts[0].Attributes, "cluster_model")
-	require.NotContains(t, detail.Shelf.Composition[0].Parts[0].Attributes, "container_model")
+	require.Equal(t, "Cluster X", detail.Shelf.Composition[0].Parts[0].Attributes["cluster_model"])
+	require.Equal(t, "Container X", detail.Shelf.Composition[0].Parts[0].Attributes["container_model"])
 	require.NotContains(t, detail.Entity.Attributes, "pack_model")
 	f.request(http.MethodPatch, "/entities/"+part.ID, map[string]any{"revision": part.Revision, "attributes": map[string]any{"module_type": "module_b"}}, http.StatusBadRequest, nil)
 }

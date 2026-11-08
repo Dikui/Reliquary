@@ -98,9 +98,6 @@ func (s *EntityService) shelfGet(ctx context.Context, libraryID, id string, opti
 		if origin == "ancestor" {
 			label = "来自上层"
 		}
-		if owner.Kind == "part" && (field == "cluster_model" || field == "container_model") {
-			label = "历史部件值，需逐型号确认"
-		}
 		if conditions == nil {
 			conditions = []types.ShelfCondition{}
 		}

@@ -48,7 +48,6 @@ func TestShelfModelMigrationAndReplicaPreserveFacts(t *testing.T) {
 	require.NoError(t, db.First(&saved, "id='library'").Error)
 	fields := []types.EntityFieldDefinition{}
 	for _, field := range types.ProductShelfFields() {
-		field.Archived = false // Migration 44 predates legacy part field archival.
 		if field.Key != "certification" && field.Key != "current_stage" && field.Key != "requirement" {
 			fields = append(fields, field)
 		}

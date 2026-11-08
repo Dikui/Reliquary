@@ -278,14 +278,14 @@ test('certification owner conflicts offer mapping correction and separate creati
 // Small spec, task 23: accepting a split only saves independently reviewable
 // proposals; refusing the source row does not invoke the split action.
 test('reviewer explicitly confirms split suggestions without writing shelf data', async t => {
-  const proposal = certItem('split'); proposal.operation.certification.standard = 'One、Two'; proposal.operation.certification.name = 'One、Two'
-  proposal.conflicts = [{ type: 'uncertain', details: { split_suggestions: [{ name: 'One:2019', standard: 'one', year: 2019 }, { name: 'Two:2022', standard: 'two', year: 2022 }] } }]
+  const proposal = certItem('split'); proposal.operation.certification.standard = 'One、Two'
+  proposal.conflicts = [{ type: 'uncertain', details: { split_suggestions: [{ standard: 'one', year: 2019 }, { standard: 'two', year: 2022 }] } }]
   const { root, saves, confirmations } = await mount(t, changeset([proposal]))
   await click(find(root, 'button', '修改'))
   assert.match(visibleText(root), /one · 2019/)
   await click(find(root, 'button', '确认拆分为 2 条提议'))
   assert.equal(saves[0].decisions[0].action, 'replace')
-  assert.deepEqual(saves[0].decisions[0].replacements.map((op: any) => [op.certification.name, op.certification.standard, op.certification.year]), [['One:2019', 'one', 2019], ['Two:2022', 'two', 2022]])
+  assert.deepEqual(saves[0].decisions[0].replacements.map((op: any) => [op.certification.standard, op.certification.year]), [['one', 2019], ['two', 2022]])
   assert.equal(saves[0].decisions[0].replacements[0].id, 'split')
   assert.deepEqual(confirmations, [])
 })
@@ -338,21 +338,4 @@ test('failed certification saves preserve owner and alias choices for retry', as
   assert.equal(descendants(root).find(node => node.tag === 'input' && node.props.type === 'checkbox')?.props.checked, true)
   descendants(root).find(node => node.tag === 'form' && node.props.class === 'certification-review')!.props.onSubmit({ preventDefault() {} }); await settle()
   assert.equal(attempts, 2)
-})
-
-// Small spec, task 27: a zero-match update can become an unnamed create.
-test('reviewer changes a certification to create without supplying a display name', async t => {
-  const proposal = certItem('unnamed')
-  proposal.operation.certification = { name: '', owner_id: 'chosen-model', standard: 'standard_a', certification_object: 'Container', region: 'Country' }
-  proposal.conflicts = [{ type: 'uncertain' }]
-  const { root, saves, confirmations } = await mount(t, changeset([proposal]))
-  await click(find(root, 'button', '修改'))
-  const form = descendants(root).find(node => node.tag === 'form' && node.props.class === 'certification-review')!
-  const recordMode = descendants(form).find(node => node.tag === 'select' && descendants(node).some(option => option.tag === 'option' && option.props.value === 'create_certification'))!
-  recordMode.props.onChange({ target: { value: 'create_certification' } }); await settle()
-  form.props.onSubmit({ preventDefault() {} }); await settle()
-  assert.equal(saves.length, 1)
-  assert.equal(saves[0].decisions[0].replacement.type, 'create_certification')
-  assert.equal(saves[0].decisions[0].replacement.certification.name, '')
-  assert.deepEqual(confirmations, [])
 })

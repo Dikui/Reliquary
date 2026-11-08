@@ -42,12 +42,12 @@ async function search(q: string, parent = false) {
 function changeRecord(value: unknown) { record.value = { ...record.value, ...value as object }; emit('change', { ...props.operation, certification: record.value }) }
 function split() {
   if (blocked.value || suggestions.value.length < 2) return
-  emit('resolve', suggestions.value.map((suggestion, index) => ({ ...props.operation, id: index === 0 ? props.item.id : crypto.randomUUID(), certification: { ...record.value, ...(suggestion.name !== undefined ? { name: suggestion.name } : {}), standard: suggestion.standard, year: suggestion.year || 0 } })))
+  emit('resolve', suggestions.value.map((suggestion, index) => ({ ...props.operation, id: index === 0 ? props.item.id : crypto.randomUUID(), certification: { ...record.value, standard: suggestion.standard, year: suggestion.year || 0 } })))
 }
 async function resolve() {
   if (blocked.value) return
   error.value = ''; submitted.value = true
-  if ((mode.value === 'existing' && !ownerID.value) || (mode.value !== 'existing' && !owner.value.name.trim()) || (mode.value === 'new' && parentKind.value && !parentID.value)) {
+  if ((mode.value === 'existing' && !ownerID.value) || (mode.value !== 'existing' && !owner.value.name.trim()) || (mode.value === 'new' && parentKind.value && !parentID.value) || (recordType.value === 'create_certification' && !record.value.name?.trim())) {
     error.value = mode.value === 'new' && parentKind.value && !parentID.value ? t('shelfReview.cert.parentRequired') : t('shelfReview.cert.required'); await nextTick(); form.value?.querySelector<HTMLElement>('[aria-invalid=true]')?.focus(); return
   }
   busy.value = true
@@ -93,7 +93,7 @@ onBeforeUnmount(() => { generation++ })
         <Field v-if="mode === 'new' && parentKind" :label="t('shelfReview.cert.parent')" :error="submitted && !parentID ? t('shelfReview.cert.parentRequired') : ''"><Combobox v-model="parentID" :options="parents" :aria-busy="searching" remote @search="search($event, true)" /></Field>
         <Field :label="t('shelfReview.cert.recordMode')"><Select v-model="recordType"><option value="update_certification">{{ t('shelfReview.cert.update') }}</option><option value="create_certification">{{ t('shelfReview.cert.create') }}</option></Select></Field>
       </div>
-      <Field :label="t('shelfReview.cert.optionalName')"><Input :model-value="record.name || ''" @update:model-value="changeRecord({ name: $event })" /></Field>
+      <Field :label="t('shelfReview.cert.name')" :error="submitted && recordType === 'create_certification' && !record.name?.trim() ? t('shelfReview.cert.required') : ''"><Input :model-value="record.name || ''" @update:model-value="changeRecord({ name: $event })" /></Field>
       <ShelfReviewValue :value="editableRecord" context="certification" :library="library" @change="changeRecord" />
       <p v-if="error" :id="`${id}-error`" role="alert">{{ error }}</p>
       <div class="certification-actions"><Button type="submit" :disabled="blocked" :loading="busy">{{ t('shelfReview.cert.revalidate') }}</Button><Button :disabled="blocked" @click="emit('cancel')">{{ t('common.cancel') }}</Button></div>

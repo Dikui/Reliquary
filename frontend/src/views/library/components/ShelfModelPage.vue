@@ -215,8 +215,8 @@ onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
                   </td>
                   <td>{{ part.code || t('shelfStatus.noRecord') }}</td>
                   <td>{{ valueText(part.attributes?.pack_model) }}</td>
-                  <td>{{ valueText(group.relations?.find(relation => relation.object_id === part.id)?.attributes.cluster_model) }}</td>
-                  <td>{{ valueText(group.relations?.find(relation => relation.object_id === part.id)?.attributes.container_model) }}</td>
+                  <td>{{ valueText(part.attributes?.cluster_model) }}</td>
+                  <td>{{ valueText(part.attributes?.container_model) }}</td>
                 </tr>
               </tbody>
             </table>

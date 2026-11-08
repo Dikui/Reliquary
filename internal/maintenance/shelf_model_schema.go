@@ -27,11 +27,6 @@ func projectShelfFieldsSnapshot(snapshot *Snapshot, targetVersion int64) {
 		_ = json.Unmarshal(data, &defaults)
 		for _, definition := range defaults {
 			candidate := definition.(map[string]any)
-			// These were active part fields in migration 44. Migration 53
-			// archives them after all older projections have been applied.
-			if candidate["key"] == "cluster_model" || candidate["key"] == "container_model" {
-				candidate["archived"] = false
-			}
 			if (candidate["key"] == "requirement" || candidate["key"] == "current_stage") && targetVersion < 47 {
 				continue
 			}
