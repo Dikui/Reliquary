@@ -162,7 +162,7 @@ func (b *importMapBuilder) reportPart(mapping types.ShelfImportSheet, cells map[
 		return fmt.Errorf("uncertain: part module differs from the report mapping")
 	}
 	attrs["module_type"] = mapping.ModuleType
-	for _, field := range []string{"pack_model", "cluster_model", "container_model"} {
+	for _, field := range []string{"pack_model"} {
 		if cell, ok := cells[field+":"]; ok {
 			attrs[field] = cell.Value
 		}
@@ -182,29 +182,41 @@ func (b *importMapBuilder) reportPart(mapping types.ShelfImportSheet, cells map[
 		modelName = cells["owner:"].Value
 	}
 	if modelName == "" {
+		if cells["cluster_model:"].Value != "" || cells["container_model:"].Value != "" {
+			return fmt.Errorf("uncertain: cluster and container models require an identified composition model")
+		}
 		return nil
 	}
+	compositionAttrs := map[string]any{"module_type": mapping.ModuleType}
+	for _, field := range []string{"cluster_model", "container_model"} {
+		if cell, ok := cells[field+":"]; ok {
+			compositionAttrs[field] = cell.Value
+		}
+	}
 	for _, modelName := range b.importModelNames(modelName) {
-		if err := b.reportComposition(mapping, part.ID, modelName); err != nil {
+		if err := b.reportComposition(mapping, part.ID, modelName, compositionAttrs); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (b *importMapBuilder) reportComposition(mapping types.ShelfImportSheet, partID, modelName string) error {
+func (b *importMapBuilder) reportComposition(mapping types.ShelfImportSheet, partID, modelName string, attrs map[string]any) error {
 	model, err := b.recordEntity("model", modelName)
 	if err != nil {
 		// Keep the declared composition as a separate, correctable proposal. An
 		// unknown model does not erase the report's certification or part fields.
-		b.append(types.ShelfOperation{Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: "", ObjectID: partID, RelationType: "composed_of", Attributes: map[string]any{"module_type": mapping.ModuleType}}, Issues: []types.ShelfConflict{{Type: "uncertain", Message: "report composition model needs an explicit identity", Details: map[string]any{"owner_name": modelName, "owner_kind": "model"}}}})
+		b.append(types.ShelfOperation{Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: "", ObjectID: partID, RelationType: "composed_of", Attributes: attrs}, Issues: []types.ShelfConflict{{Type: "uncertain", Message: "report composition model needs an explicit identity", Details: map[string]any{"owner_name": modelName, "owner_kind": "model"}}}})
 		return nil
 	}
-	for _, op := range b.ops {
-		if op.Relation != nil && op.Relation.RelationType == "composed_of" && op.Relation.SubjectID == model.ID && op.Relation.ObjectID == partID {
-			return nil
+	key := model.ID + "/" + partID
+	if previous, ok := b.compositionRows[key]; ok {
+		if !reflect.DeepEqual(previous, attrs) {
+			return fmt.Errorf("uncertain: repeated model and cell composition rows propose different attributes")
 		}
+		return nil
 	}
+	b.compositionRows[key] = attrs
 	var relations []types.Relation
 	if err := b.service.db.WithContext(b.ctx).Where("library_id=? AND space_id=? AND subject_id=? AND object_id=? AND relation_type='composed_of' AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", b.library.ID, b.library.SpaceID, model.ID, partID, b.at, b.at).Find(&relations).Error; err != nil {
 		return err
@@ -213,9 +225,19 @@ func (b *importMapBuilder) reportComposition(mapping types.ShelfImportSheet, par
 		if relation.Attributes["module_type"] != mapping.ModuleType {
 			return fmt.Errorf("uncertain: report composition module differs from the shelf")
 		}
+		next := map[string]any{}
+		for key, value := range relation.Attributes {
+			next[key] = value
+		}
+		for key, value := range attrs {
+			next[key] = value
+		}
+		if !reflect.DeepEqual(next, relation.Attributes) {
+			b.append(types.ShelfOperation{Type: "save_relation", RelationID: relation.ID, Revision: relation.Version, Relation: &types.ManagedRelationInput{SubjectID: model.ID, ObjectID: partID, RelationType: "composed_of", Version: relation.Version, Attributes: next}})
+		}
 	}
 	if len(relations) == 0 {
-		b.append(types.ShelfOperation{Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: model.ID, ObjectID: partID, RelationType: "composed_of", Attributes: map[string]any{"module_type": mapping.ModuleType}}})
+		b.append(types.ShelfOperation{Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: model.ID, ObjectID: partID, RelationType: "composed_of", Attributes: attrs}})
 	}
 	return nil
 }

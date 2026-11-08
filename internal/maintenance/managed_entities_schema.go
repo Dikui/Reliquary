@@ -35,6 +35,7 @@ var shelfParserDefaults = map[string]map[string]any{
 }
 
 func projectManagedEntitiesSnapshot(snapshot *Snapshot, targetVersion int64) {
+	defer projectShelfCompositionModelsSnapshot(snapshot, targetVersion)
 	defer projectShelfRequirementListsSnapshot(snapshot, targetVersion)
 	if snapshot.schemaVersion < 50 && targetVersion >= 50 {
 		if _, exists := snapshot.Tables["shelf_document_selections"]; !exists {
@@ -102,7 +103,8 @@ func projectManagedEntitiesManifest(expected, actual *Manifest) (*Manifest, *Man
 	expected, actual = projectShelfFieldsManifest(expected, actual)
 	expected, actual = projectShelfBindingsManifest(expected, actual)
 	expected, actual = projectManagedNamesManifest(expected, actual)
-	return projectShelfRequirementListsManifest(expected, actual)
+	expected, actual = projectShelfRequirementListsManifest(expected, actual)
+	return projectShelfCompositionModelsManifest(expected, actual)
 }
 
 // Only an empty confirmation table is implied by upgrading an older replica.

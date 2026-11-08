@@ -347,6 +347,7 @@ export default {
     resolveHint: 'Resolve each item. Save edits and identity decisions for validation before confirming changes.', returnedHint: 'Selected for return to the submitter. Save progress so they can read and correct it. Confirmation is blocked until corrected.', reload: 'Reload changeset', reloadHint: 'The revision changed. Preserve your edits before reloading. Changes will not be overwritten automatically.',
   },
   shelfNode: {
+    legacyPartValue: 'Legacy part value, confirm per model',
     title: 'Node details', partTitle: 'Part details', models: 'Descendant models', usedBy: 'Models using this part', summary: 'Document checklist summary', files: 'Files at this node',
     ownCerts: 'Certifications at this node', ancestorCerts: 'From ancestors', gaps: 'Document gaps', gapCount: '{count} missing ({models} models)',
     overridden: 'Set separately', fixed: 'Fixed component', optional: 'Optional', alternatives: 'Available parts',
@@ -355,7 +356,7 @@ export default {
   shelfModel: {
     documentSource: 'Document source', existingFile: 'Choose existing file', existingHint: 'Confirmation moves this file and all its versions to this model. Originals and draft/final markers are preserved.',
     singleValue: 'Use one value', rangeValue: 'Use range', addValue: 'Add parameter value',
-    compositionHint: 'Several parts in one module become alternatives. Each confirmation adds or removes one part.', compositionAction: 'Action', addPart: 'Add part', removePart: 'Remove part',
+    compositionHint: 'Several parts in one module become alternatives. Each confirmation adds, edits or removes one composition.', compositionAction: 'Action', addPart: 'Add part', editComposition: 'Edit composition', removePart: 'Remove part',
     edit: 'Edit model', attach: 'Attach document', setStage: 'Set separately', assignParts: 'Assign parts', addCertification: 'Add certification',
     title: 'Model details', hierarchy: 'Hierarchy', onPage: 'On this page', currentStage: 'Current stage', inheritedStage: 'Inherited from product',
     allConditions: 'All options', completeCombination: 'Choose every module to view a combination.', noRecord: 'No record in the shelf',

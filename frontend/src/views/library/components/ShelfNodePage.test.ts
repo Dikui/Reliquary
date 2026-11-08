@@ -42,6 +42,15 @@ async function mountPage(t: test.TestContext, options: { part?: boolean; locale?
 }
 const section = (root: Element, id: string) => descendants(root).find(item => item.props.id === id)!
 
+// Small spec, task 28: reverse usage shows the identifiers of each composition.
+test('部件页逐型号显示各自簇型号和集装箱型号', async t => {
+  const a = model('a'), b = model('b')
+  a.shelf.composition[0].relations = [{ object_id: 'part', attributes: { cluster_model: '簇甲', container_model: '箱甲' } }]
+  b.shelf.composition[0].relations = [{ object_id: 'part', attributes: { cluster_model: '簇乙', container_model: '箱乙' } }]
+  const { root } = await mountPage(t, { part: true, api: { queryShelf: () => success({ items: [a, b], total: 2 }) } })
+  assert.match(visibleText(section(root, 'models')), /型号 a.*簇甲.*箱甲.*型号 b.*簇乙.*箱乙/)
+})
+
 // Small spec, task 17 / stories 23 and 56: matrix cells retain different optional states.
 test('上层节点显示下属型号和选配清单矩阵，单元格链接到对应资料', async t => {
   const { root, requests } = await mountPage(t)

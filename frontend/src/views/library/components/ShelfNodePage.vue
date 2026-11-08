@@ -35,6 +35,7 @@ const certGroups = computed(() => [
   { title: t('shelfNode.ancestorCerts'), rows: node.value?.shelf?.certifications?.filter(row => row.origin === 'ancestor') || [] },
 ])
 const fields = computed(() => props.library.entity_schema?.fields.filter(field => !field.archived && field.key !== 'module_type' && (!field.kinds?.length || field.kinds.includes('part'))) || [])
+const legacyModels = computed(() => ['cluster_model', 'container_model'].filter(key => node.value?.entity.attributes?.[key] != null))
 const partRoles = (model: ShelfQueryItem) => model.shelf?.composition?.filter(group => group.parts.some(part => part.id === props.nodeId)) || []
 const documentURL = (document: ShelfDocumentVersion) => document.attachment_id ? `/api/v1/entities/${encodeURIComponent(document.file_id)}/document-versions/${encodeURIComponent(document.id)}/download` : safeExternalUrl(document.cloud_url)
 const valueText = (value: unknown): string => Array.isArray(value) ? value.map(valueText).join(' · ') : value == null || value === '' ? t('shelfStatus.noRecord') : typeof value === 'object' ? JSON.stringify(value) : String(value)
@@ -133,6 +134,7 @@ onBeforeUnmount(() => { generation++ })
           <template v-if="isPart">
             <div><dt>{{ t('managed.aliases') }}</dt><dd>{{ node.entity.aliases?.join(' · ') || t('shelfStatus.noRecord') }}</dd></div>
             <div v-for="field in fields" :key="field.key"><dt>{{ field.name }}</dt><dd>{{ valueText(node.entity.attributes?.[field.key]) }} {{ node.entity.attributes?.[field.key] != null && node.entity.attributes?.[field.key] !== '' && field.unit ? field.unit : '' }}</dd></div>
+            <div v-for="key in legacyModels" :key="key"><dt>{{ t(`shelfReview.fields.${key}`) }} · {{ t('shelfNode.legacyPartValue') }}</dt><dd>{{ valueText(node.entity.attributes?.[key]) }}</dd></div>
           </template>
           <div v-if="node.entity.kind === 'product'"><dt><label for="node-stage">{{ t('shelfModel.currentStage') }}</label></dt><dd><select id="node-stage" :value="stageDraft" :disabled="saving" @change="changeStage"><option value="">{{ t('shelfNode.noStage') }}</option><option v-for="item in library.shelf_config?.stages" :key="item.key" :value="item.key">{{ item.name }}</option></select></dd></div>
           <div><dt>{{ isPart ? t('shelfNode.usedBy') : t('shelfNode.models') }}</dt><dd>{{ t('shelfStatus.total', { count: models.length }) }}</dd></div>
@@ -143,12 +145,14 @@ onBeforeUnmount(() => { generation++ })
         <section id="models">
           <h2>{{ isPart ? t('shelfNode.usedBy') : t('shelfNode.models') }}</h2>
           <div v-if="models.length" class="table-wrap"><table>
-            <thead><tr><th>{{ t('productShelf.kinds.model') }}</th><th>{{ isPart ? t('productShelf.kinds.product_line') : t('shelfModel.sections.sale') }}</th><th>{{ isPart ? t('shelfModel.sections.composition') : t('shelfModel.currentStage') }}</th></tr></thead>
+            <thead><tr><th>{{ t('productShelf.kinds.model') }}</th><th>{{ isPart ? t('productShelf.kinds.product_line') : t('shelfModel.sections.sale') }}</th><th>{{ isPart ? t('shelfModel.sections.composition') : t('shelfModel.currentStage') }}</th><template v-if="isPart"><th>{{ t('shelfModel.cluster') }}</th><th>{{ t('shelfModel.container') }}</th></template></tr></thead>
             <tbody><tr v-for="model in models" :key="model.entity.id">
               <td><a :href="href(model.entity.id)" :title="model.entity.description">{{ model.entity.canonical_name }}</a></td>
               <template v-if="isPart">
                 <td><template v-for="line in paths[model.entity.id]?.filter(item => item.kind === 'product_line')" :key="line.id"><a :href="href(line.id)">{{ line.canonical_name }}</a></template></td>
                 <td><div v-for="group in partRoles(model)" :key="group.module_type">{{ moduleName(group.module_type) }} · {{ group.optional ? t('shelfNode.optional') : t('shelfNode.fixed') }}<small v-if="group.optional">{{ t('shelfNode.alternatives') }}: <template v-for="(part, index) in group.parts" :key="part.id"><span v-if="index"> · </span><a :href="href(part.id)">{{ part.canonical_name }}</a></template></small></div></td>
+                <td><div v-for="group in partRoles(model)" :key="group.module_type">{{ valueText(group.relations?.find(relation => relation.object_id === nodeId)?.attributes.cluster_model) }}</div></td>
+                <td><div v-for="group in partRoles(model)" :key="group.module_type">{{ valueText(group.relations?.find(relation => relation.object_id === nodeId)?.attributes.container_model) }}</div></td>
               </template>
               <template v-else>
                 <td><div v-for="(status, index) in model.shelf?.sale_statuses" :key="index" class="sale"><b>{{ library.shelf_config?.regions?.find(item => item.key === status.region)?.name || status.region }}</b> <span class="st" :class="`st-${status.status}`">{{ status.status }}</span> <b v-if="status.planned_eom">{{ t('shelfStatus.planned') }}</b><small>{{ status.notes }}</small><small>{{ condition(status.conditions) }}</small></div><span v-if="!model.shelf?.sale_statuses?.length">{{ t('shelfStatus.noRecord') }}</span></td>

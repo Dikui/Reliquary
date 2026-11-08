@@ -347,6 +347,7 @@ export default {
     resolveHint: '请逐项处理冲突；修改和身份确认须先保存进度，校验通过后再确认写入。', returnedHint: '已选择退回提交方。保存进度后，提交方可读取并修正；修正前不能确认写入。', reload: '重新读取变更集', reloadHint: '修订已变化，请保留当前修改后重新读取，不会自动覆盖。',
   },
   shelfNode: {
+    legacyPartValue: '历史部件值，需逐型号确认',
     title: '节点详情', partTitle: '部件详情', models: '下属型号', usedBy: '使用它的型号', summary: '资料清单汇总', files: '本层资料文件',
     ownCerts: '本层认证', ancestorCerts: '来自上层的认证', gaps: '资料缺口', gapCount: '缺 {count} 项（{models} 个型号）',
     overridden: '单独设置', fixed: '固定组成', optional: '选配', alternatives: '可选部件',
@@ -355,7 +356,7 @@ export default {
   shelfModel: {
     documentSource: '文件来源', existingFile: '选择已有文件', existingHint: '确认后将此文件及其全部版本挂到本型号，保留原件和各版本的初稿或终稿标记。',
     singleValue: '改为单值', rangeValue: '改为区间', addValue: '添加参数值',
-    compositionHint: '同一模块多个部件为选配。每次确认添加或移除一个部件。', compositionAction: '操作', addPart: '添加部件', removePart: '移除部件',
+    compositionHint: '同一模块多个部件为选配。每次确认添加、编辑或移除一个组成。', compositionAction: '操作', addPart: '添加部件', editComposition: '编辑组成', removePart: '移除部件',
     edit: '编辑型号', attach: '挂资料文件', setStage: '单独设置', assignParts: '指定部件', addCertification: '新增认证',
     title: '型号详情', hierarchy: '层级', onPage: '本页', currentStage: '当前阶段', inheritedStage: '沿用产品名称',
     allConditions: '全部适用', completeCombination: '选齐各模块后查看组合信息。', noRecord: '货架中没有记录',

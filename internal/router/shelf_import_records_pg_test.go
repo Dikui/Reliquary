@@ -124,7 +124,7 @@ func TestShelfImportCertificationReportProposesPartAndComposition(t *testing.T) 
 	f.request(http.MethodGet, "/entities/"+draft.Items[0].EntityID, nil, http.StatusOK, &part)
 	require.Equal(t, " New cell ", part.Entity.CanonicalName)
 	require.Equal(t, " Pack original ", part.Entity.Attributes["pack_model"])
-	require.Equal(t, "Cluster original", part.Entity.Attributes["cluster_model"])
+	require.NotContains(t, part.Entity.Attributes, "cluster_model")
 	var cert types.EntityDetail
 	f.request(http.MethodGet, "/entities/"+draft.Items[2].EntityID, nil, http.StatusOK, &cert)
 	record := cert.Entity.Attributes["certification"].(map[string]any)
@@ -137,6 +137,7 @@ func TestShelfImportCertificationReportProposesPartAndComposition(t *testing.T) 
 	var model types.EntityDetail
 	f.request(http.MethodGet, "/entities/"+shelfNode(n, "model"), nil, http.StatusOK, &model)
 	require.Len(t, model.Shelf.Composition[0].Parts, 3)
+	require.Equal(t, "Cluster original", model.Shelf.Composition[0].Relations[2].Attributes["cluster_model"])
 }
 
 // Medium spec, task 12: overseas lists only report contradictions. Accepting

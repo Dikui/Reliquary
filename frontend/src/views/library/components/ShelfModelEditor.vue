@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button, Dialog, Field, Input, Select, Textarea } from '@/components/ui'
 import type { LibraryCatalogItem } from '@/api/library'
@@ -31,6 +31,12 @@ const certLabels = computed(() => ({ agency: t('shelfModel.agency'), progress: t
 const certFields = ['agency', 'progress', 'start_date', 'obtained_date', 'issued_date', 'validity', 'number', 'cloud_url'] as const
 const parts = ref<Entity[]>([]), relations = ref<EntityRelation[]>([]), loading = ref(false)
 const action = ref('add'), module = ref(''), part = ref('')
+const cluster = ref(''), container = ref('')
+const selectedRelation = computed(() => relations.value.find(item => item.id === part.value && item.attributes?.module_type === module.value))
+watch([action, module, part], () => {
+  cluster.value = action.value === 'edit' ? String(selectedRelation.value?.attributes?.cluster_model || '') : ''
+  container.value = action.value === 'edit' ? String(selectedRelation.value?.attributes?.container_model || '') : ''
+})
 const availableParts = computed(() => action.value === 'add' ? parts.value.filter(item => (!item.attributes?.module_type || item.attributes.module_type === module.value) && !relations.value.some(relation => relation.attributes?.module_type === module.value && relation.peer.id === item.id)).map(item => ({ id: item.id, name: item.canonical_name })) : relations.value.filter(item => item.attributes?.module_type === module.value).map(item => ({ id: item.id, name: item.peer.canonical_name })))
 let active = true
 async function loadComposition() {
@@ -54,8 +60,11 @@ async function save() {
     const patch = props.mode === 'stage' ? { revision: entity.revision, attributes: stageAttributes } : { revision: entity.revision, name: name.value, description: description.value, code: code.value, aliases: aliases.value.split('\n').filter(value => value.trim()), ...(JSON.stringify(attributes.value) !== originalAttributes ? { attributes: attributes.value } : {}) }
     let operation: ShelfReviewOperation = { id: 'model', type: 'update_entity', entity_id: entity.id, revision: entity.revision, patch }
     if (props.mode === 'composition') {
-      const relation = relations.value.find(item => item.id === part.value)
-      operation = action.value === 'add' ? { id: 'composition', type: 'save_relation', relation: { subject_id: entity.id, object_id: part.value, relation_type: 'composed_of', attributes: { module_type: module.value } } } : { id: 'composition', type: 'end_relation', relation_id: relation!.id, revision: relation!.version }
+      const relation = selectedRelation.value
+      const compositionAttributes = { ...relation?.attributes, module_type: module.value, ...(cluster.value || action.value === 'edit' ? { cluster_model: cluster.value } : {}), ...(container.value || action.value === 'edit' ? { container_model: container.value } : {}) }
+      operation = action.value === 'remove'
+        ? { id: 'composition', type: 'end_relation', relation_id: relation!.id, revision: relation!.version }
+        : { id: 'composition', type: 'save_relation', ...(relation ? { relation_id: relation.id, revision: relation.version } : {}), relation: { subject_id: entity.id, object_id: relation?.peer.id || part.value, relation_type: 'composed_of', ...(relation ? { version: relation.version } : {}), attributes: compositionAttributes } }
     }
     if (props.mode === 'certification') {
       const record = Object.fromEntries(Object.entries(certification.value).filter(([, value]) => value !== ''))
@@ -93,9 +102,13 @@ async function save() {
         </template>
         <template v-if="mode === 'composition'">
           <p>{{ t('shelfModel.compositionHint') }}</p>
-          <Field id="composition-action" :label="t('shelfModel.compositionAction')"><Select id="composition-action" v-model="action" @update:model-value="part = ''"><option value="add">{{ t('shelfModel.addPart') }}</option><option value="remove">{{ t('shelfModel.removePart') }}</option></Select></Field>
+          <Field id="composition-action" :label="t('shelfModel.compositionAction')"><Select id="composition-action" v-model="action" @update:model-value="part = ''"><option value="add">{{ t('shelfModel.addPart') }}</option><option value="edit">{{ t('shelfModel.editComposition') }}</option><option value="remove">{{ t('shelfModel.removePart') }}</option></Select></Field>
           <Field id="composition-module" :label="t('shelfModel.module')"><Select id="composition-module" v-model="module" @update:model-value="part = ''"><option value="" disabled>{{ t('shelfModel.module') }}</option><option v-for="item in library.shelf_config?.module_types" :key="item.key" :value="item.key">{{ item.name }}</option></Select></Field>
           <Field id="composition-part" :label="t('shelfModel.part')"><Select id="composition-part" v-model="part"><option value="" disabled>{{ t('shelfModel.part') }}</option><option v-for="item in availableParts" :key="item.id" :value="item.id">{{ item.name }}</option></Select></Field>
+          <template v-if="action !== 'remove'">
+            <Field id="composition-cluster" :label="t('shelfModel.cluster')"><Input id="composition-cluster" v-model="cluster" /></Field>
+            <Field id="composition-container" :label="t('shelfModel.container')"><Input id="composition-container" v-model="container" /></Field>
+          </template>
           <p v-if="module && !availableParts.length">{{ t('productShelf.noRecords') }}</p>
         </template>
         <Field v-if="mode === 'stage'" id="model-stage" :label="t('shelfModel.currentStage')"><Select id="model-stage" v-model="stage"><option value="">{{ t('shelfModel.inheritedStage') }}</option><option v-for="item in library.shelf_config?.stages" :key="item.key" :value="item.key">{{ item.name }}</option></Select></Field>
