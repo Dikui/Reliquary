@@ -34,6 +34,7 @@ export function detailPresentation(modules: Record<string, unknown>) {
         '@/components/DocContent.vue': { __esModule: true, default: loadComponent(new URL('../../components/DocContent.vue', import.meta.url), { ...entryPresentationTestModules, ...modules, 'katex/dist/katex.min.css': {}, 'highlight.js/styles/github.css': {} }) },
         './useEntryDetail': { useEntryDetail: () => state },
         '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
+        './components/ManagedDocumentLinks.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
         './components/RepostSources.vue': { __esModule: true, default: loadComponent(new URL('./components/RepostSources.vue', import.meta.url), {}) },
         'vue-router': {
           useRoute: () => ({ params: { id: props.details.id }, query: {} }),

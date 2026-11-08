@@ -391,7 +391,7 @@ export default {
     incomplete: "查询结果不完整，请重新加载。"
   },
   productShelf: {
-    appliesTo: "适用对象",
+    appliesTo: "适用范围",
     addConfig: "开启货架",
     configHint: "保存后写入固定货架结构，替换未使用的旧配置。",
     configAdded: "货架已加入草稿，保存后生效。",
@@ -422,7 +422,7 @@ export default {
     scope: "来自上层",
     scopeHint: "本记录由上层节点共用。",
     retryLink: "重试挂接",
-    linkFailed: "对象已创建，但所属关系保存失败。可重试挂接，不会重复创建。",
+    linkFailed: "节点已创建，但所属关系保存失败。可重试挂接，不会重复创建。",
     details: "编辑详情",
     associated: "关联记录",
     open: "打开资料",

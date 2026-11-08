@@ -168,7 +168,7 @@ async function mountLibrary(locale = 'zh-CN', initialQuery: Record<string, any> 
     modules['@/api/entities'].listEntityMergeSuggestions = async () => ({ success: true, data: [] })
     modules['@/api/relations'] = { listEntityRelations: async () => ({ success: true, data: [] }) }
     modules['@/stores/follows'] = {useFollowStore:()=>({refreshAfterTargetChange:async()=>{}})}
-    modules['./ManagedAttributes.vue'] = modules['./ManagedEntityEditor.vue'] = modules['./ManagedRelationEditor.vue'] = modules['./ManagedReorganization.vue'] = modules['./ProductShelf.vue'] = modules['./EntityGraph.vue']=empty;modules['./MergeSuggestions.vue']=empty;modules['./EntityRelations.vue']=empty;modules['@/components/FollowToggle.vue']=empty
+    modules['./ManagedAttributes.vue'] = modules['./ManagedEntityEditor.vue'] = modules['./ManagedRelationEditor.vue'] = modules['./ManagedReorganization.vue'] = modules['./ProductShelf.vue'] = modules['./ShelfModelPage.vue'] = modules['./ShelfNodePage.vue'] = modules['./EntityGraph.vue']=empty;modules['./MergeSuggestions.vue']=empty;modules['./EntityRelations.vue']=empty;modules['@/components/FollowToggle.vue']=empty
     modules['./components/EntryWorkbench.vue']=moduleOf(loadComponent(new URL('./components/EntryWorkbench.vue',import.meta.url),modules))
   }
   modules['@/components/ui'].Dialog = defineComponent({ props: ['modelValue'], setup: (props, { slots }) => () => props.modelValue ? h('section', slots.default?.()) : null })
