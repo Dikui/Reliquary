@@ -95,7 +95,7 @@ func shelfOperationValid(op types.ShelfOperation) error {
 	if (op.Type != "set_sale_statuses" && op.SaleStatuses != nil) || (op.Type != "set_parameter_values" && op.ParameterValues != nil) {
 		valid = false
 	}
-	if op.Type != "create_certification" && op.Type != "update_certification" && op.Certification != nil {
+	if op.Type != "create_certification" && op.Type != "update_certification" && (op.Certification != nil || op.CertificationOwner != nil) {
 		valid = false
 	}
 	if op.Type != "add_document_version" && op.Document != nil {
@@ -114,6 +114,9 @@ func shelfOperationValid(op types.ShelfOperation) error {
 		valid = false
 	}
 	if op.Type != "create_entity" && op.CandidateEntityID != "" {
+		valid = false
+	}
+	if op.ParentID != "" && (op.Type != "create_entity" || op.Entity == nil || !slices.Contains([]string{"model", "product", "platform"}, op.Entity.Kind)) {
 		valid = false
 	}
 	if !valid {
@@ -215,24 +218,12 @@ func shelfDecisions(draft *types.ShelfChangeset, decisions []types.ShelfDecision
 			}
 		}
 		if decision.Action == "replace" {
-			if decision.Replacement == nil {
-				return apperrors.NewBadRequestError("replace requires a corrected operation")
-			}
-			op := *decision.Replacement
-			op.ID = item.ID
-			if err := shelfOperationValid(op); err != nil {
+			if err := replaceShelfItem(draft, index, decision); err != nil {
 				return err
 			}
-			if op.Type == "add_document_version" || ((op.Type == "create_entity" || op.Type == "create_certification") && item.Operation.Type != op.Type) {
-				item.EntityID = uuid.NewString()
-			} else if op.Type != "create_entity" && op.Type != "create_certification" && op.Type != "add_document_version" {
-				item.EntityID = op.EntityID
-			}
-			item.Operation = op
-			decision.Action = "apply"
-			decision.Replacement = nil
-		} else if decision.Replacement != nil {
-			return apperrors.NewBadRequestError("only replace accepts a corrected operation")
+			continue
+		} else if decision.Replacement != nil || decision.Replacements != nil {
+			return apperrors.NewBadRequestError("only replace accepts corrected operations")
 		}
 		if decision.Action == "same_entity" && (item.Operation.Type != "create_entity" || decision.TargetEntityID == "" || decision.TargetRevision < 1) {
 			return apperrors.NewBadRequestError("same_entity requires a create proposal and a target revision")
@@ -242,6 +233,70 @@ func shelfDecisions(draft *types.ShelfChangeset, decisions []types.ShelfDecision
 		}
 		item.Decision = &decision
 	}
+	return nil
+}
+
+// Expansion is itself a review decision. It only rewrites pending proposals;
+// the existing transaction still validates and commits every selected operation.
+func replaceShelfItem(draft *types.ShelfChangeset, index int, decision types.ShelfDecision) error {
+	original := draft.Items[index]
+	ops := decision.Replacements
+	if decision.Replacement != nil {
+		if ops != nil {
+			return apperrors.NewBadRequestError("use replacement or replacements, not both")
+		}
+		ops = []types.ShelfOperation{*decision.Replacement}
+	}
+	if len(ops) == 0 || len(draft.Items)-1+len(ops) > 500 {
+		return apperrors.NewBadRequestError("replace requires 1-500 corrected operations within the changeset limit")
+	}
+	ids := map[string]bool{}
+	for i, item := range draft.Items {
+		if i != index {
+			ids[item.ID] = true
+		}
+	}
+	replacements := make([]types.ShelfChangesetItem, 0, len(ops))
+	for i, op := range ops {
+		if i == 0 {
+			op.ID = original.ID
+		} else if op.ID == "" {
+			op.ID = uuid.NewString()
+		}
+		if ids[op.ID] {
+			return apperrors.NewBadRequestError("operation ids must be unique")
+		}
+		ids[op.ID] = true
+		if original.Operation.CertificationOwner != nil && op.Type == "create_entity" && op.Entity != nil && op.Entity.Kind == "model" && op.ParentID == "" {
+			return apperrors.NewBadRequestError("a new certification owner model requires parent_id")
+		}
+		if op.Certification != nil && op.CertificationOwner == nil {
+			op.CertificationOwner = original.Operation.CertificationOwner
+		}
+		if op.ImportLocation == nil {
+			op.ImportLocation = original.Operation.ImportLocation
+		}
+		if err := shelfOperationValid(op); err != nil {
+			return err
+		}
+		id := op.EntityID
+		if op.Type == "create_entity" || op.Type == "create_certification" || op.Type == "add_document_version" {
+			id = uuid.NewString()
+			if i == 0 && original.Operation.Type == op.Type && op.Type != "add_document_version" {
+				id = original.EntityID
+			}
+		}
+		applied := decision
+		applied.ItemID = op.ID
+		applied.Action = "apply"
+		applied.Replacement = nil
+		applied.Replacements = nil
+		replacements = append(replacements, types.ShelfChangesetItem{ID: op.ID, EntityID: id, Operation: op, Before: types.JSON("null"), After: types.JSON("null"), Conflicts: []types.ShelfConflict{}, Decision: &applied})
+	}
+	items := append([]types.ShelfChangesetItem{}, draft.Items[:index]...)
+	items = append(items, replacements...)
+	items = append(items, draft.Items[index+1:]...)
+	draft.Items = items
 	return nil
 }
 
@@ -567,7 +622,21 @@ func (s *EntityService) shelfEntity(ctx context.Context, libraryID, id string) (
 }
 
 func (s *EntityService) shelfBefore(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem) (types.JSON, error) {
-	op := item.Operation
+	op, err := s.prepareShelfCertification(ctx, draft, shelfResolvedOperation(draft, item.Operation))
+	if err != nil {
+		return types.JSON("null"), err
+	}
+	if op.Certification != nil {
+		normalized := *op.Certification
+		// Keep intra-batch references live when a preceding proposal is replaced.
+		if strings.HasPrefix(item.Operation.Certification.OwnerID, "$") {
+			normalized.OwnerID = item.Operation.Certification.OwnerID
+		}
+		if strings.HasPrefix(item.Operation.Certification.CellPartID, "$") {
+			normalized.CellPartID = item.Operation.Certification.CellPartID
+		}
+		item.Operation.Certification = &normalized
+	}
 	if op.Type == "classify_document" || op.Type == "select_document_version" {
 		return s.shelfDocumentEditBefore(ctx, draft, shelfResolvedOperation(draft, op))
 	}
@@ -610,10 +679,16 @@ func (s *EntityService) shelfBefore(ctx context.Context, draft *types.ShelfChang
 		return shelfJSON(row), managedWriteError(err)
 	}
 	if op.Type == "update_certification" {
-		resolved := shelfResolvedOperation(draft, op)
+		resolved := op
 		entity, err := s.resolveShelfCertification(ctx, draft, resolved, shelfCertificationTime(draft, resolved), item.Decision)
 		if err == nil {
 			item.EntityID = entity.ID
+			if item.Operation.CertificationOwner != nil && item.Operation.Revision == 0 {
+				if err := mergeShelfImportedCertification(item, entity); err != nil {
+					return types.JSON("null"), err
+				}
+				item.Operation.Revision = entity.Revision
+			}
 		}
 		return shelfJSON(entity), err
 	}
@@ -637,6 +712,7 @@ func shelfReference(draft *types.ShelfChangeset, id string) string {
 
 // Freeze references before a deferred item leaves its original batch.
 func shelfResolvedOperation(draft *types.ShelfChangeset, op types.ShelfOperation) types.ShelfOperation {
+	op.ParentID = shelfReference(draft, op.ParentID)
 	op.EntityID = shelfReference(draft, op.EntityID)
 	if op.Classification != nil {
 		classification := *op.Classification
@@ -713,7 +789,10 @@ func shelfResolvedConditions(draft *types.ShelfChangeset, raw []types.ShelfCondi
 }
 
 func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem) (any, error) {
-	op := shelfResolvedOperation(draft, item.Operation)
+	op, err := s.prepareShelfCertification(ctx, draft, shelfResolvedOperation(draft, item.Operation))
+	if err != nil {
+		return nil, err
+	}
 	if op.Type == "import_notice" {
 		return op.Issues, nil
 	}
@@ -790,7 +869,20 @@ func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChan
 			aliases = append(aliases, input.Name)
 			return s.UpdateManagedEntity(ctx, target.ID, types.ManagedEntityPatch{Revision: item.Decision.TargetRevision, Aliases: &aliases, NameConfirmations: input.NameConfirmations})
 		}
-		return s.createManagedEntity(ctx, draft.LibraryID, input, item.EntityID)
+		entity, err := s.createManagedEntity(ctx, draft.LibraryID, input, item.EntityID)
+		if err != nil {
+			return nil, err
+		}
+		if op.ParentID != "" {
+			relation := types.ManagedRelationInput{SubjectID: entity.ID, ObjectID: op.ParentID, RelationType: "belongs_to"}
+			if draft.Source.Type == "import" {
+				relation.ValidFrom = draft.Source.FileDate
+			}
+			if _, err := s.SaveManagedRelation(ctx, draft.LibraryID, "", relation); err != nil {
+				return nil, err
+			}
+		}
+		return entity, nil
 	}
 	if op.Type == "save_relation" || op.Type == "end_relation" {
 		relationType := ""

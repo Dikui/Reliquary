@@ -230,7 +230,7 @@ func (s *EntityService) validateRecordImportSheet(ctx context.Context, library *
 			return apperrors.NewBadRequestError("unknown field for this import file_kind")
 		}
 	}
-	required := []string{"owner:", "standard:", "certification_object:", "region:"}
+	required := []string{"owner:", "standard:"}
 	if kind == "overseas_sales" {
 		required = []string{"owner:"}
 	}

@@ -10,11 +10,11 @@ import { findShelf, SALE_STATUSES } from '@/api/shelf'
 const props = withDefaults(defineProps<{ value: unknown; name?: string; context?: string; library: LibraryCatalogItem; readonly?: boolean }>(), { name: '', context: '', readonly: false })
 const emit = defineEmits<{ change: [value: unknown] }>()
 const { t, te } = useI18n(), id = useId()
-const hidden = new Set(['id', 'type', 'revision', 'version', 'space_id', 'library_id', 'entity_type', 'created_at', 'updated_at', 'candidate_entity_id', 'import_location', 'issues', 'auto_match', 'merged_into_id', 'source', 'library_updated_at', 'relation_id'])
+const hidden = new Set(['id', 'type', 'revision', 'version', 'space_id', 'library_id', 'entity_type', 'created_at', 'updated_at', 'candidate_entity_id', 'import_location', 'certification_owner', 'issues', 'auto_match', 'merged_into_id', 'source', 'library_updated_at', 'relation_id'])
 const entries = computed(() => props.value && typeof props.value === 'object' && !Array.isArray(props.value)
   ? Object.entries(props.value).filter(([key]) => !['', 'entity', 'patch', 'relation', 'library'].includes(props.name) || !hidden.has(key)) : null)
 const field = computed(() => props.library.entity_schema?.fields?.find(field => field.key === props.name))
-const label = computed(() => field.value?.name || (te(`shelfReview.fields.${props.name}`) ? t(`shelfReview.fields.${props.name}`) : props.name))
+const label = computed(() => (props.name === 'parent_id' ? t('shelfReview.cert.parent') : '') || (props.name === 'region' && props.context === 'certification' ? t('shelfReview.cert.region') : '') || field.value?.name || (te(`shelfReview.fields.${props.name}`) ? t(`shelfReview.fields.${props.name}`) : props.name))
 const options = computed(() => {
   if (props.name === 'status') return SALE_STATUSES.map(value => ({ key: value, name: value }))
   if (props.name === 'kind') return props.library.entity_schema?.kinds || []
@@ -26,7 +26,7 @@ const options = computed(() => {
   if (field.value?.type === 'select') return field.value.options?.map(value => ({ key: value, name: value })) || []
   return []
 })
-const reference = computed(() => ['entity_id', 'owner_id', 'subject_id', 'object_id', 'requirement_id', 'cell_part_id'].includes(props.name))
+const reference = computed(() => ['entity_id', 'owner_id', 'subject_id', 'object_id', 'requirement_id', 'cell_part_id', 'parent_id'].includes(props.name))
 const candidates = ref<{ value: string; label: string }[]>([]), loading = ref(false), error = ref('')
 const choices = computed(() => [...candidates.value, ...(typeof props.value === 'string' && props.value && !candidates.value.some(item => item.value === props.value) ? [{ value: props.value, label: props.value }] : [])])
 let generation = 0

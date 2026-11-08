@@ -300,3 +300,10 @@ The current changeset uses the shared selection colors. Decisions use compact
 square buttons, payload fields use the shared native controls and Combobox, and
 the sticky footer keeps progress, blocking omissions and confirmation visible.
 It retains desktop layout and the existing token, feedback and scrolling owners.
+
+Certification conflict editing extends the pending shelf review's ruled groups
+and inline form. It uses the shared Field, Input, Checkbox, native Select and
+remote Combobox owners, with existing square controls and runtime tokens.
+Worksheet uniform values name the sheet and affected row count above the groups;
+standard split suggestions show one proposed record per line. No new visual
+tokens or independent confirmation system are introduced.

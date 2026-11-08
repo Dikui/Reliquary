@@ -19,33 +19,35 @@ type OperationSource struct {
 // ShelfOperation is a closed set of typed proposals. Later shelf capabilities
 // add operation types here and execute them through the same confirmation path.
 type ShelfOperation struct {
-	Classification    *ShelfDocumentClassification      `json:"classification,omitempty"`
-	VersionID         string                            `json:"version_id,omitempty"`
-	ImportPlan        *ShelfImportPlanInput             `json:"import_plan,omitempty"`
-	ImportLocation    *ShelfImportLocation              `json:"import_location,omitempty"`
-	Reparse           *ShelfReparseInput                `json:"reparse,omitempty"`
-	Document          *ShelfDocumentInput               `json:"document,omitempty"`
-	Certification     *ShelfCertificationInput          `json:"certification,omitempty"`
-	SaleStatuses      *[]ShelfSaleStatus                `json:"sale_statuses,omitempty"`
-	ParameterValues   *map[string][]ShelfParameterValue `json:"parameter_values,omitempty"`
-	EffectiveAt       *time.Time                        `json:"effective_at,omitempty"`
-	ID                string                            `json:"id"`
-	Type              string                            `json:"type"`
-	CandidateEntityID string                            `json:"candidate_entity_id,omitempty"`
-	EntityID          string                            `json:"entity_id,omitempty"`
-	Entity            *ManagedEntityInput               `json:"entity,omitempty"`
-	Patch             *ManagedEntityPatch               `json:"patch,omitempty"`
-	Alias             string                            `json:"alias,omitempty"`
-	Revision          int64                             `json:"revision,omitempty"`
-	RelationID        string                            `json:"relation_id,omitempty"`
-	Relation          *ManagedRelationInput             `json:"relation,omitempty"`
-	ValidTo           *time.Time                        `json:"valid_to,omitempty"`
-	EntryID           string                            `json:"entry_id,omitempty"`
-	Excluded          bool                              `json:"excluded,omitempty"`
-	RelationType      *string                           `json:"relation_type,omitempty"`
-	Library           *LibraryPatch                     `json:"library,omitempty"`
-	LibraryUpdatedAt  *time.Time                        `json:"library_updated_at,omitempty"`
-	Issues            []ShelfConflict                   `json:"issues,omitempty"`
+	ParentID           string                            `json:"parent_id,omitempty"`
+	Classification     *ShelfDocumentClassification      `json:"classification,omitempty"`
+	VersionID          string                            `json:"version_id,omitempty"`
+	ImportPlan         *ShelfImportPlanInput             `json:"import_plan,omitempty"`
+	ImportLocation     *ShelfImportLocation              `json:"import_location,omitempty"`
+	Reparse            *ShelfReparseInput                `json:"reparse,omitempty"`
+	Document           *ShelfDocumentInput               `json:"document,omitempty"`
+	CertificationOwner *ShelfCertificationOwner          `json:"certification_owner,omitempty"`
+	Certification      *ShelfCertificationInput          `json:"certification,omitempty"`
+	SaleStatuses       *[]ShelfSaleStatus                `json:"sale_statuses,omitempty"`
+	ParameterValues    *map[string][]ShelfParameterValue `json:"parameter_values,omitempty"`
+	EffectiveAt        *time.Time                        `json:"effective_at,omitempty"`
+	ID                 string                            `json:"id"`
+	Type               string                            `json:"type"`
+	CandidateEntityID  string                            `json:"candidate_entity_id,omitempty"`
+	EntityID           string                            `json:"entity_id,omitempty"`
+	Entity             *ManagedEntityInput               `json:"entity,omitempty"`
+	Patch              *ManagedEntityPatch               `json:"patch,omitempty"`
+	Alias              string                            `json:"alias,omitempty"`
+	Revision           int64                             `json:"revision,omitempty"`
+	RelationID         string                            `json:"relation_id,omitempty"`
+	Relation           *ManagedRelationInput             `json:"relation,omitempty"`
+	ValidTo            *time.Time                        `json:"valid_to,omitempty"`
+	EntryID            string                            `json:"entry_id,omitempty"`
+	Excluded           bool                              `json:"excluded,omitempty"`
+	RelationType       *string                           `json:"relation_type,omitempty"`
+	Library            *LibraryPatch                     `json:"library,omitempty"`
+	LibraryUpdatedAt   *time.Time                        `json:"library_updated_at,omitempty"`
+	Issues             []ShelfConflict                   `json:"issues,omitempty"`
 }
 
 type ShelfConflict struct {
@@ -62,6 +64,7 @@ type ShelfDecision struct {
 	TargetEntityID    string                    `json:"target_entity_id,omitempty"`
 	TargetRevision    int64                     `json:"target_revision,omitempty"`
 	NameConfirmations []ManagedNameConfirmation `json:"name_confirmations,omitempty"`
+	Replacements      []ShelfOperation          `json:"replacements,omitempty"`
 	Replacement       *ShelfOperation           `json:"replacement,omitempty"`
 }
 

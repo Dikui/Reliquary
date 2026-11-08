@@ -35,8 +35,9 @@ async function mount(t: test.TestContext, initial = changeset(), api: Record<str
     },
   }
   // Reka's DOM-backed picker is represented by a semantic input in this renderer.
-  modules['@/components/ui'] = { ...modules['@/components/ui'] as object, Combobox: defineComponent({ props: ['modelValue', 'options'], setup: (props, { attrs }) => () => h('input', { ...attrs, value: props.modelValue }) }) }
+  modules['@/components/ui'] = { ...modules['@/components/ui'] as object, Combobox: defineComponent({ props: ['modelValue', 'options'], emits: ['update:modelValue'], setup: (props, { attrs, emit }) => () => h('input', { ...attrs, 'data-combobox': true, value: props.modelValue, onInput: (event: any) => emit('update:modelValue', event.target.value) }) }) }
   modules['./ShelfReviewValue.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfReviewValue.vue', import.meta.url), modules) }
+  modules['./ShelfCertificationConflictEditor.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfCertificationConflictEditor.vue', import.meta.url), modules) }
   const component = loadComponent(new URL('./ShelfReviewPage.vue', import.meta.url), modules)
   const app = renderer.createApp(component, { library: { id: 'library-a', name: '合成货架', entity_schema: { kinds: [{ key: 'model', name: '型号' }] }, shelf_config: { regions: [{ key: 'north', name: '可售区域' }] } } })
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } }))
@@ -191,7 +192,7 @@ test('editing a certification region allows text outside configured sale regions
   const proposal = item('cert', 'modified'); proposal.operation = { id: 'cert', type: 'create_certification', certification: { name: '合成认证', owner_id: 'model', standard: 'standard', certification_object: '客户对象', region: '客户地区' } }
   const { root, saves } = await mount(t, changeset([proposal]))
   await click(find(root, 'button', '修改'))
-  const region = descendants(root).find(node => node.tag === 'input' && node.props['aria-label'] === '区域')!
+  const region = descendants(root).find(node => node.tag === 'input' && node.props['aria-label'] === '地区')!
   assert.ok(region)
   region.props.onInput({ target: { value: ' 新的客户地区 ' } }); await settle()
   await click(find(root, 'button', '保存进度'))
@@ -231,4 +232,110 @@ test('incomplete column feedback remains reviewable without a rendering error', 
   assert.ok(find(root, 'button', '知道了'))
   await click(find(root, 'button', '知道了'))
   assert.equal(find(root, 'button', '确认写入').props.disabled, false)
+})
+
+function certItem(id: string, worksheet = 'Sheet A'): any {
+  return { id, operation: { id, type: 'update_certification', certification_owner: { name: 'Unmatched', kind: 'model' }, certification: { owner_id: '', standard: 'standard_a', certification_object: '', region: '' }, import_location: { worksheet, cells: ['A3', 'B3'] } }, before: null, after: null, conflicts: [{ type: 'required_missing', details: { missing_fields: ['certification_object', 'region'] } }] }
+}
+
+// Small spec, task 23: uniform values explicitly replace every row of one sheet,
+// including already-filled rows, without confirming writes or touching another sheet.
+test('reviewer applies uniform certification fields only to the selected worksheet', async t => {
+  const rows = [certItem('a'), certItem('b'), certItem('c', 'Sheet B')]
+  rows[1].operation.certification.region = 'Earlier value'
+  const initial = { ...changeset(rows), source: { type: 'import', file_name: 'Synthetic.xlsx' } }
+  const { root, saves, confirmations } = await mount(t, initial)
+  const form = descendants(root).find(node => node.tag === 'form' && node.props['aria-label'] === '整表统一值 · Sheet A')!
+  assert.ok(form)
+  const otherForm = descendants(root).find(node => node.tag === 'form' && node.props['aria-label'] === '整表统一值 · Sheet B')!
+  const otherInput = descendants(otherForm).find(node => node.tag === 'input')!
+  otherInput.props.onInput({ target: { value: 'Other pending object' } }); await settle()
+  const inputs = descendants(form).filter(node => node.tag === 'input')
+  inputs[0]!.props.onInput({ target: { value: 'Container' } })
+  inputs[1]!.props.onInput({ target: { value: 'Country' } }); await settle()
+  await click(find(form, 'button', '应用到本批该工作表全部 2 行'))
+  assert.equal(saves.length, 1)
+  assert.deepEqual(saves[0].decisions.map((decision: any) => decision.item_id), ['a', 'b'])
+  for (const decision of saves[0].decisions) {
+    assert.equal(decision.action, 'replace')
+    assert.equal(decision.replacement.certification.certification_object, 'Container')
+    assert.equal(decision.replacement.certification.region, 'Country')
+  }
+  assert.deepEqual(confirmations, [])
+  const retained = descendants(root).find(node => node.tag === 'form' && node.props['aria-label'] === '整表统一值 · Sheet B')!
+  assert.equal(descendants(retained).find(node => node.tag === 'input')!.props.value, 'Other pending object')
+  assert.equal(find(root, 'button', '确认写入').props.disabled, true)
+})
+
+// Small spec, task 23: an unknown owner offers all three explicit choices.
+test('certification owner conflicts offer mapping correction and separate creation', async t => {
+  const proposal = certItem('owner'); proposal.conflicts = [{ type: 'uncertain' }]
+  const { root } = await mount(t, changeset([proposal]))
+  await click(find(root, 'button', '修改'))
+  for (const label of ['对应到已有节点', '改写名称后重新校验', '新建不同节点']) assert.match(visibleText(root), new RegExp(label))
+})
+
+// Small spec, task 23: accepting a split only saves independently reviewable
+// proposals; refusing the source row does not invoke the split action.
+test('reviewer explicitly confirms split suggestions without writing shelf data', async t => {
+  const proposal = certItem('split'); proposal.operation.certification.standard = 'One、Two'
+  proposal.conflicts = [{ type: 'uncertain', details: { split_suggestions: [{ standard: 'one', year: 2019 }, { standard: 'two', year: 2022 }] } }]
+  const { root, saves, confirmations } = await mount(t, changeset([proposal]))
+  await click(find(root, 'button', '修改'))
+  assert.match(visibleText(root), /one · 2019/)
+  await click(find(root, 'button', '确认拆分为 2 条提议'))
+  assert.equal(saves[0].decisions[0].action, 'replace')
+  assert.deepEqual(saves[0].decisions[0].replacements.map((op: any) => [op.certification.standard, op.certification.year]), [['one', 2019], ['two', 2022]])
+  assert.equal(saves[0].decisions[0].replacements[0].id, 'split')
+  assert.deepEqual(confirmations, [])
+})
+
+// Small spec, task 23: choosing an existing node can explicitly save the
+// original spelling as an alias using the current target revision.
+test('reviewer queues an optional alias with the corrected certification', async t => {
+  const proposal = certItem('owner'); proposal.conflicts = [{ type: 'uncertain' }]
+  const { root, saves, confirmations } = await mount(t, changeset([proposal]))
+  await click(find(root, 'button', '修改')); await click(find(root, 'button', '对应到已有节点'))
+  const picker = descendants(root).find(node => node.props['data-combobox'])!
+  picker.props.onInput({ target: { value: 'chosen-model' } })
+  const checkbox = descendants(root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!
+  checkbox.props.onChange({ target: { checked: true } }); await settle()
+  const form = descendants(root).find(node => node.tag === 'form' && node.props.class === 'certification-review')!
+  form.props.onSubmit({ preventDefault() {} }); await settle()
+  const ops = saves[0].decisions[0].replacements
+  assert.deepEqual(ops[0], { id: 'owner', type: 'add_alias', entity_id: 'chosen-model', revision: 7, alias: 'Unmatched' })
+  assert.equal(ops[1].certification.owner_id, 'chosen-model')
+  assert.deepEqual(confirmations, [])
+})
+
+// Small spec, task 23: a new model cannot be proposed without its parent.
+test('reviewer must choose a parent before proposing a separate model', async t => {
+  const proposal = certItem('owner'); proposal.conflicts = [{ type: 'uncertain' }]
+  const { root, saves } = await mount(t, changeset([proposal]))
+  await click(find(root, 'button', '修改')); await click(find(root, 'button', '新建不同节点'))
+  const form = descendants(root).find(node => node.tag === 'form' && node.props.class === 'certification-review')!
+  form.props.onSubmit({ preventDefault() {} }); await settle()
+  assert.match(visibleText(form), /新建型号必须指定/); assert.equal(saves.length, 0)
+  descendants(form).find(node => node.props['data-combobox'])!.props.onInput({ target: { value: 'parent-product' } }); await settle()
+  form.props.onSubmit({ preventDefault() {} }); await settle()
+  const ops = saves[0].decisions[0].replacements
+  assert.deepEqual(ops[0], { id: 'owner', type: 'create_entity', entity: { name: 'Unmatched', kind: 'model' }, parent_id: 'parent-product' })
+  assert.equal(ops[1].certification.owner_id, '$owner')
+})
+
+// Small regression, task 23: a failed correction save keeps the selected node
+// and alias choice visible, so retry cannot silently lose the user's decision.
+test('failed certification saves preserve owner and alias choices for retry', async t => {
+  const proposal = certItem('owner'); proposal.conflicts = [{ type: 'uncertain' }]
+  let attempts = 0
+  const { root } = await mount(t, changeset([proposal]), { saveShelfReview: async () => { attempts++; throw new Error('Synthetic save failure') } })
+  await click(find(root, 'button', '修改')); await click(find(root, 'button', '对应到已有节点'))
+  descendants(root).find(node => node.props['data-combobox'])!.props.onInput({ target: { value: 'chosen-model' } })
+  descendants(root).find(node => node.tag === 'input' && node.props.type === 'checkbox')!.props.onChange({ target: { checked: true } }); await settle()
+  descendants(root).find(node => node.tag === 'form' && node.props.class === 'certification-review')!.props.onSubmit({ preventDefault() {} }); await settle()
+  assert.match(visibleText(root), /Synthetic save failure/)
+  assert.equal(descendants(root).find(node => node.props['data-combobox'])?.props.value, 'chosen-model')
+  assert.equal(descendants(root).find(node => node.tag === 'input' && node.props.type === 'checkbox')?.props.checked, true)
+  descendants(root).find(node => node.tag === 'form' && node.props.class === 'certification-review')!.props.onSubmit({ preventDefault() {} }); await settle()
+  assert.equal(attempts, 2)
 })

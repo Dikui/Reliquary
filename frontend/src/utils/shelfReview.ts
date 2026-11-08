@@ -31,6 +31,7 @@ export function shelfReviewSubject(item: ShelfReviewItem): { name: string; kind:
   const feedback = shelfUnmappedColumnFeedback(item)
   if (feedback) return { name: `${feedback.worksheet} · ${feedback.column}`, kind: '' }
   const operation = item.operation
+  if (operation.certification && operation.certification_owner) return { name: operation.certification.name || `${operation.certification_owner.name} · ${operation.certification.standard}`, kind: 'certification' }
   const before = item.before as Record<string, unknown> | null
   const after = item.after as Record<string, unknown> | null
   const entity = (operation.entity || operation.patch || operation.certification || operation.document) as Record<string, unknown> | undefined
