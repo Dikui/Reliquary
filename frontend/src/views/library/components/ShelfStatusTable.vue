@@ -19,6 +19,7 @@ const loading = ref(false), error = ref(''), total = ref(0)
 const collapsed = ref(new Set<string>())
 const selected = ref(new Set<string>()), editor = ref<{ models: ShelfQueryItem[]; region: string; bulk: boolean }>()
 const savedDraft = ref('')
+const reviewDraftURL = computed(() => `/platform/entries?${new URLSearchParams({ libraries: props.library.id, tab: 'review', changeset: savedDraft.value })}`)
 const queryText = ref(''), composing = ref(false), searching = ref(false), searchError = ref(''), searchTotal = ref<number>(), matches = ref<(Entity & { kind_label?: string })[]>([])
 let searchGeneration = 0
 function resetSearch() { searchGeneration++; matches.value = []; searchTotal.value = undefined; searchError.value = ''; searching.value = false }
@@ -162,7 +163,7 @@ onBeforeUnmount(() => { disposed = true; generation++; searchGeneration++ })
     <div class="legend"><span v-for="status in SALE_STATUSES" :key="status" class="st" :class="`st-${status}`">{{ status }}</span><span>· {{ t('shelfStatus.noRecord') }}</span><span class="st st-GA"><b class="exit-mark">{{ t('shelfStatus.exitMark') }}</b> {{ t('shelfStatus.planned') }}</span></div>
     <ErrorState v-if="error" :title="error"><Button @click="line ? load() : initialize()">{{ t('common.retry') }}</Button></ErrorState>
     <p v-if="loading" role="status">{{ t('productShelf.loading') }}</p>
-    <p v-if="savedDraft" role="status">{{ t('shelfStatus.draftSaved', { id: savedDraft }) }}</p>
+    <p v-if="savedDraft" role="status">{{ t('shelfStatus.draftSaved', { id: savedDraft }) }} <a :href="reviewDraftURL">{{ t('shelfReview.title') }}</a></p>
     <div v-if="rows.length" class="bulk-bar"><span>{{ t('shelfStatus.selectedCount', { count: selected.size }) }}</span><Button :disabled="!selected.size || !library.shelf_config?.regions?.length" @click="editBulk">{{ t('shelfStatus.bulk') }}</Button></div>
     <ShelfStatusEditor v-if="editor" :library="library" :models="editor.models" :region="editor.region" :bulk="editor.bulk" @close="editor = undefined" @saved="saved" />
     <Tabs v-if="lines.length" :model-value="line" :items="tabs" :label="t('shelfStatus.lines')" @update:model-value="line = $event">

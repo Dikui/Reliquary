@@ -294,3 +294,9 @@ models, a requirement matrix, files owned at this node and certification origins
 Parts show configured attributes, reverse model usage, module requirements and
 owned certifications. Product stage selection uses a native labelled control.
 No new palette, font, overlay or responsive layout is introduced.
+
+Shelf review uses a 304px changeset list beside nine collapsible conflict groups.
+The current changeset uses the shared selection colors. Decisions use compact
+square buttons, payload fields use the shared native controls and Combobox, and
+the sticky footer keeps progress, blocking omissions and confirmation visible.
+It retains desktop layout and the existing token, feedback and scrolling owners.

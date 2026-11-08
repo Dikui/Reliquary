@@ -1,4 +1,18 @@
 export default {
+  shelfReview: {
+    title: '待确认', empty: '没有待确认的变更集', emptyHint: 'Excel 导入、外部 agent 提交和网页上的批量修改都会先在这里确认，确认后才写入货架。',
+    compare: '查看原值与提议', before: '原值', proposed: '提议值', manual: '手工修改过的原值', applyEdit: '应用修改',
+    candidate: '已有条目', chooseCandidate: '请选择已有条目', distinct: '不同条目', confirmNames: '确认同名，分别保存',
+    removeRecord: '移除此条记录', disappearedHint: '退市会归档条目，保留历史和关联；不会自动修改各区域状态。', unnamed: '（空）', original: '提交方原文',
+    fields: { name: '名称', canonical_name: '名称', entity: '条目', patch: '修改内容', attributes: '属性', kind: '类别', code: '代码', description: '说明', aliases: '别名', entity_id: '条目', owner_id: '所属节点', subject_id: '主体', object_id: '客体', requirement_id: '资料要求', cell_part_id: '电芯部件', sale_statuses: '可售状态', region: '区域', status: '状态', planned_eom: '计划退市', notes: '备注', raw: '原始写法', conditions: '适用条件', module_type: '模块类型', part_ids: '部件', certification: '认证', standard: '标准', year: '年份', certification_object: '认证对象', agency: '机构', progress: '进度', start_date: '开始日期', obtained_date: '取证日期', issued_date: '签发日期', validity: '有效期', number: '编号', cloud_url: '云盘链接', document: '资料文件', version_label: '版本号', stage: '初稿或终稿', effective_at: '生效时间', valid_from: '生效时间', valid_to: '结束时间', current_stage: '当前阶段', relation: '关系', relation_type: '关系类型', alias: '别名', parameter_values: '参数', value: '值', min: '最小值', max: '最大值', library: '库设置', shelf_config: '货架设置', import_plan: '导入方案', reparse: '重新解析', excluded: '排除关联', entry_id: '文本资料', attachment_id: '原件', occurred_at: '业务时间', origin: '来源', file_category: '文件类别', certificate_number: '证书编号', parse_status: '解析状态', file_id: '资料文件' },
+    loadFailed: '变更集加载失败，请重试。', saveFailed: '进度保存失败，当前决定已保留。', saved: '进度已保存', save: '保存进度', processed: '已处理 {count} / {total}',
+    actions: { apply: '接受', discard: '拒绝', defer: '暂缓', keep: '保留', retire: '标为退市', return_to_submitter: '退回提交方', same_entity: '同一，存为别名', replace: '修改' },
+    sources: { web: '网页草稿', import: '导入批次' },
+    groups: { new: '新增', suspected_same: '疑似同一', cross_kind_same_name: '跨类别同名', modified: '修改', disappeared: '消失', unparseable: '无法解析', uncertain: '含义不确定', required_missing: '必填缺失', cross_table_contradiction: '跨表矛盾' },
+    acceptGroup: '整组接受', groupCount: '{count} 项 · 未处理 {remaining}', required: '必填缺失 {count} 项未处理', confirm: '确认写入', confirmHint: '确认本变更集的 {count} 项决定？接受的变更将一起写入货架，拒绝的项不写入，暂缓项转入新的待确认变更集。', confirmed: '变更集已确认', confirmFailed: '确认失败，当前决定已保留。',
+    unsaved: '有未保存的进度', unsavedHint: '离开会丢失当前未保存的决定。可以取消并先保存进度。', leave: '放弃进度并离开', pages: '变更集分页', handle: '处理 {name}', acknowledge: '知道了',
+    resolveHint: '请逐项处理冲突；修改和身份确认须先保存进度，校验通过后再确认写入。', returnedHint: '已选择退回提交方。保存进度后，提交方可读取并修正；修正前不能确认写入。', reload: '重新读取变更集', reloadHint: '修订已变化，请保留当前修改后重新读取，不会自动覆盖。',
+  },
   shelfNode: {
     title: '节点详情', partTitle: '部件详情', models: '下属型号', usedBy: '使用它的型号', summary: '资料清单汇总', files: '本层资料文件',
     ownCerts: '本层认证', ancestorCerts: '来自上层的认证', gaps: '资料缺口', gapCount: '缺 {count} 项（{models} 个型号）',

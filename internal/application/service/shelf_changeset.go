@@ -193,10 +193,17 @@ func shelfDecisions(draft *types.ShelfChangeset, decisions []types.ShelfDecision
 		}
 		seen[decision.ItemID] = true
 		index := slices.IndexFunc(draft.Items, func(item types.ShelfChangesetItem) bool { return item.ID == decision.ItemID })
-		if index < 0 || !slices.Contains([]string{"apply", "keep", "discard", "defer", "same_entity", "retire", "replace"}, decision.Action) {
+		if index < 0 || !slices.Contains([]string{"apply", "keep", "discard", "defer", "same_entity", "retire", "replace", "return_to_submitter"}, decision.Action) {
 			return apperrors.NewBadRequestError("decision requires a known item and action")
 		}
 		item := &draft.Items[index]
+		if decision.Action == "return_to_submitter" {
+			uncertain := slices.ContainsFunc(item.Conflicts, func(conflict types.ShelfConflict) bool { return conflict.Type == "uncertain" }) ||
+				slices.ContainsFunc(item.Operation.Issues, func(conflict types.ShelfConflict) bool { return conflict.Type == "uncertain" })
+			if draft.Source.Type != "agent" || !uncertain {
+				return apperrors.NewBadRequestError("only uncertain agent items can be returned to the submitter")
+			}
+		}
 		if decision.Action == "replace" {
 			if decision.Replacement == nil {
 				return apperrors.NewBadRequestError("replace requires a corrected operation")
@@ -392,7 +399,7 @@ func (s *EntityService) previewShelf(ctx context.Context, tx *gorm.DB, draft *ty
 			previewErr = err
 			break
 		}
-		if item.Decision != nil && slices.Contains([]string{"discard", "defer", "keep"}, item.Decision.Action) {
+		if item.Decision != nil && slices.Contains([]string{"discard", "defer", "keep", "return_to_submitter"}, item.Decision.Action) {
 			if err := tx.RollbackTo("shelf_item").Error; err != nil {
 				previewErr = err
 				break
@@ -473,6 +480,9 @@ func (s *EntityService) confirmShelf(ctx context.Context, tx *gorm.DB, draft *ty
 		}
 		if item.Decision == nil {
 			return apperrors.NewConflictError("every item needs a decision").WithDetails(draft)
+		}
+		if item.Decision.Action == "return_to_submitter" {
+			return apperrors.NewConflictError("returned items require clarification from the submitter").WithDetails(draft)
 		}
 		if slices.Contains([]string{"discard", "defer", "keep"}, item.Decision.Action) {
 			continue

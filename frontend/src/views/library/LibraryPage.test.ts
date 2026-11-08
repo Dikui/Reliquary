@@ -21,6 +21,7 @@ async function mountPage(t: test.TestContext, shelf = true, query = '') {
     '@/api/library': { listLibraries: async () => ({ success: true, data: [{ id: 'library-a', name: 'Synthetic library', shelf_enabled: shelf }] }) },
     './Library.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('article', 'Original documents') }) },
     './components/ShelfStatusTable.vue': { __esModule: true, default: defineComponent({ props: ['library'], setup: props => () => h('article', `Shelf table ${props.library.id}`) }) },
+    './components/ShelfReviewPage.vue': { __esModule: true, default: defineComponent({ props: ['library'], setup: props => () => h('article', `Review changes ${props.library.id}`) }) },
   })
   const previous = globalThis.window
   globalThis.window = { addEventListener() {}, removeEventListener() {} } as any
@@ -47,4 +48,13 @@ test('ordinary libraries retain the original document page without shelf tabs', 
 test('document bookmarks in a shelf reopen documents', async t => {
   const { root } = await mountPage(t, true, '&tab=documents')
   assert.match(visibleText(root), /Original documents/)
+})
+// Small spec, task 18: shelf drafts have a stable library-scoped review destination.
+test('shelf review tab can be opened directly and switched back to status', async t => {
+  const { root, router } = await mountPage(t, true, '&tab=review&changeset=set-a')
+  assert.match(visibleText(root), /Review changes library-a/)
+  await click(descendants(root).find(node => node.tag === 'button' && visibleText(node) === 'shelfStatus.status')!)
+  await new Promise<void>(resolve => setImmediate(resolve)); await settle()
+  assert.match(visibleText(root), /Shelf table library-a/)
+  assert.equal(router.currentRoute.value.query.tab, 'status')
 })

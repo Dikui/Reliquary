@@ -11,6 +11,51 @@ import (
 	"reliquary/internal/types"
 )
 
+// Medium spec, task 18 / ADR 0023: returning ambiguous agent data persists the
+// request for clarification, without accepting it or silently deferring it.
+func TestShelfChangesetReturnUncertainItemToSubmitter(t *testing.T) {
+	f, library := newProductShelfFixture(t)
+	path := "/libraries/" + library.ID + "/shelf/changesets"
+	var draft types.ShelfChangeset
+	f.request(http.MethodPost, path, map[string]any{
+		"source":     map[string]any{"type": "agent", "agent_name": "Synthetic assistant"},
+		"operations": []any{map[string]any{"id": "unclear", "type": "create_entity", "entity": map[string]any{"name": "Unclear model", "kind": "model"}, "issues": []any{map[string]any{"type": "uncertain", "message": "Submitter must specify the category"}}}},
+	}, http.StatusCreated, &draft)
+	f.request(http.MethodPatch, path+"/"+draft.ID, map[string]any{"revision": draft.Revision, "decisions": []any{map[string]any{"item_id": "unclear", "action": "return_to_submitter"}}}, http.StatusOK, &draft)
+	f.request(http.MethodGet, path+"/"+draft.ID, nil, http.StatusOK, &draft)
+	require.Equal(t, "return_to_submitter", draft.Items[0].Decision.Action)
+	require.Equal(t, "uncertain", draft.Items[0].Conflicts[0].Type)
+	f.request(http.MethodPost, path+"/"+draft.ID+"/confirm", map[string]any{"revision": draft.Revision}, http.StatusConflict, nil)
+	f.request(http.MethodGet, "/entities/"+draft.Items[0].EntityID, nil, http.StatusNotFound, nil)
+	f.request(http.MethodPatch, path+"/"+draft.ID, map[string]any{"revision": draft.Revision, "decisions": []any{map[string]any{"item_id": "unclear", "action": "replace", "replacement": map[string]any{"type": "create_entity", "entity": map[string]any{"name": "Unclear model", "kind": "model"}}}}}, http.StatusOK, &draft)
+	f.request(http.MethodPost, path+"/"+draft.ID+"/confirm", map[string]any{"revision": draft.Revision}, http.StatusOK, &draft)
+	f.request(http.MethodGet, "/entities/"+draft.Items[0].EntityID, nil, http.StatusOK, nil)
+}
+
+// Medium spec, task 18: return is limited to uncertain agent submissions.
+func TestShelfChangesetReturnRequiresUncertainAgentItem(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source map[string]any
+		issues []any
+	}{
+		{name: "web uncertainty", source: map[string]any{"type": "web"}, issues: []any{map[string]any{"type": "uncertain"}}},
+		{name: "ordinary agent proposal", source: map[string]any{"type": "agent", "agent_name": "Synthetic assistant"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f, library := newProductShelfFixture(t)
+			path := "/libraries/" + library.ID + "/shelf/changesets"
+			var draft types.ShelfChangeset
+			f.request(http.MethodPost, path, map[string]any{"source": test.source, "operations": []any{map[string]any{
+				"id": "line", "type": "create_entity", "entity": map[string]any{"name": "Synthetic line", "kind": "product_line"}, "issues": test.issues,
+			}}}, http.StatusCreated, &draft)
+			f.request(http.MethodPatch, path+"/"+draft.ID, map[string]any{"revision": draft.Revision, "decisions": []any{map[string]any{"item_id": "line", "action": "return_to_submitter"}}}, http.StatusBadRequest, nil)
+			f.request(http.MethodGet, path+"/"+draft.ID, nil, http.StatusOK, &draft)
+			require.Nil(t, draft.Items[0].Decision)
+		})
+	}
+}
+
 // Medium spec, task 03 / ADR 0023: proposing a change only persists a draft;
 // confirmation makes it visible through the ordinary entity read API.
 func TestShelfChangesetProposalDoesNotWriteCatalog(t *testing.T) {

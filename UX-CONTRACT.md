@@ -504,3 +504,19 @@ composition roles; part details do not infer sale status or a current stage.
 Product-name stage edits confirm one changeset with revision checking and retain
 unrelated attributes. Failure restores the saved stage and displays the reason.
 A collapsed relationship list retains the existing entity relationship controls.
+
+Shelf changesets open in the owning library's Pending changes tab. The selected
+changeset and list page remain in the URL; the list loads twenty sets at a time.
+Review decisions and edits remain local until Save progress. Only the New group
+offers Accept group. Corrections and identity decisions are saved for server
+validation before confirmation. Conflicts retain current values, manual values
+and submitted source locations for comparison. Missing required values and other
+unresolved blocking findings prevent confirmation; deferred items move into the
+server's new pending changeset after confirmation.
+
+Uncertain agent items can be returned to the submitter. Saving retains the return
+decision for the agent to read, and the changeset stays pending until the item is
+corrected, rejected or deferred. Stale revisions preserve local decisions and
+require an explicit reload. Navigation warns before discarding progress, and
+pending writes block departure. Confirmation uses the shared dialog and feedback.
+Source: ADR 0023, ADR 0024 and docs/product-shelf-changesets.md.
