@@ -24,6 +24,7 @@ const counts = computed(() => statusKeys.map(status => ({ status, count: new Set
 const groups = computed(() => (['self', 'component', 'ancestor'] as const).map(origin => ({ origin, rows: (detail.value?.certifications || []).filter(row => row.origin === origin) })))
 const fields = computed(() => (props.library.entity_schema?.fields || []).filter(field => field.product_line_ids?.includes(ancestors.value.find(item => item.kind === 'product_line')?.id || '') && !field.archived))
 const href = (id: string) => `/platform/entities?${new URLSearchParams({ libraries: props.library.id, entity_id: id })}`
+const fileHref = (id: string) => `/platform/entries?${new URLSearchParams({ libraries: props.library.id, tab: 'files', file: id })}`
 const statusHref = computed(() => `/platform/entries?${new URLSearchParams({ libraries: props.library.id })}`)
 const kind = (entity: Entity) => props.library.entity_schema?.kinds.find(item => item.key === entity.kind)?.name || t(`productShelf.kinds.${entity.kind}`)
 const owner = (id?: string) => [node.value?.entity, ...ancestors.value, ...(detail.value?.composition.flatMap(group => group.parts) || [])].find(item => item?.id === id)
@@ -295,7 +296,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
                   </td>
                   <td>
                     <template v-if="row.document">
-                      <a :href="href(row.document.file_id)">{{ row.document_name || t('shelfModel.file') }}</a>
+                      <a :href="fileHref(row.document.file_id)">{{ row.document_name || t('shelfModel.file') }}</a>
                       <a v-if="documentURL(row.document)" :href="documentURL(row.document)" target="_blank" rel="noopener noreferrer">{{ t(row.document.attachment_id ? 'shelfModel.download' : 'shelfModel.cloudLink') }}</a>
                       <small>{{ t(`shelfModel.${row.document.stage}`) }} {{ row.document.version_label }}</small>
                     </template>
@@ -343,7 +344,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
               <tbody>
                 <tr v-for="file in detail.other_documents" :key="file.document.id">
                   <td>
-                    <a :href="href(file.entity.id)">{{ file.entity.canonical_name }}</a>
+                    <a :href="fileHref(file.entity.id)">{{ file.entity.canonical_name }}</a>
                     <a v-if="documentURL(file.document)" :href="documentURL(file.document)" target="_blank" rel="noopener noreferrer">{{ t(file.document.attachment_id ? 'shelfModel.download' : 'shelfModel.cloudLink') }}</a>
                   </td>
                   <td>{{ file.document.file_category }}</td>

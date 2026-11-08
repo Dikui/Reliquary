@@ -8,6 +8,8 @@ import Library from './Library.vue'
 import ShelfStatusTable from './components/ShelfStatusTable.vue'
 import ShelfReviewPage from './components/ShelfReviewPage.vue'
 import ShelfImportPage from './components/ShelfImportPage.vue'
+import ShelfFilesPage from './components/ShelfFilesPage.vue'
+import ShelfSettingsPage from './components/ShelfSettingsPage.vue'
 
 const route = useRoute(), router = useRouter(), { t } = useI18n()
 const libraries = ref<LibraryCatalogItem[]>([]), loading = ref(true), error = ref('')
@@ -16,11 +18,11 @@ const library = computed(() => {
   const ids = typeof route.query.libraries === 'string' ? route.query.libraries.split(',').filter(Boolean) : []
   return ids.length === 1 ? libraries.value.find(item => item.id === ids[0] && item.shelf_enabled) : undefined
 })
-const tab = computed(() => route.query.tab === 'review' ? 'review' : route.query.tab === 'documents' ? 'documents' : route.query.tab === 'import' ? 'import' : 'status')
-const tabs = computed(() => [{ value: 'status', label: t('shelfStatus.status') }, { value: 'review', label: t('shelfReview.title') }, { value: 'import', label: t('shelfImport.title') }, { value: 'documents', label: t('shelfStatus.documents') }])
+const tab = computed(() => route.query.tab === 'files' ? 'files' : route.query.tab === 'shelf-settings' ? 'shelf-settings' : route.query.tab === 'review' ? 'review' : route.query.tab === 'documents' ? 'documents' : route.query.tab === 'import' ? 'import' : 'status')
+const tabs = computed(() => [{ value: 'status', label: t('shelfStatus.status') }, { value: 'review', label: t('shelfReview.title') }, { value: 'import', label: t('shelfImport.title') }, { value: 'files', label: t('shelfFiles.title') }, { value: 'shelf-settings', label: t('shelfSettings.title') }, { value: 'documents', label: t('shelfStatus.documents') }])
 function selectTab(value: string) { void router.replace({ query: { ...route.query, tab: value } }) }
 async function load() {
-  const current = ++generation; loading.value = true; error.value = ''
+  const current = ++generation; if (!libraries.value.length) loading.value = true; error.value = ''
   try {
     const response = await listLibraries()
     if (!response.success) throw new Error(response.message)
@@ -34,11 +36,13 @@ onBeforeUnmount(() => { generation++; window.removeEventListener('reliquary:libr
 <template>
   <div v-if="loading" class="shelf-page-loading" role="status">{{ t('common.loading') }}</div>
   <ErrorState v-else-if="error" :title="error"><Button @click="load">{{ t('common.retry') }}</Button></ErrorState>
-  <section v-else-if="library && (!route.query.tab || ['status', 'documents', 'review', 'import'].includes(String(route.query.tab)))" class="shelf-library-page">
+  <section v-else-if="library && (!route.query.tab || ['status', 'documents', 'review', 'import', 'files', 'shelf-settings'].includes(String(route.query.tab)))" class="shelf-library-page">
     <Tabs :model-value="tab" :items="tabs" :label="library.display_name || library.name" @update:model-value="selectTab">
       <template #status><ShelfStatusTable :key="library.id" :library="library" /></template>
       <template #review><ShelfReviewPage :key="library.id" :library="library" /></template>
       <template #import><ShelfImportPage :key="library.id" :library="library" /></template>
+      <template #files><ShelfFilesPage :key="library.id" :library="library" /></template>
+      <template #shelf-settings><ShelfSettingsPage :key="library.id" :library="library" @saved="load" /></template>
       <template #documents><Library /></template>
     </Tabs>
   </section>

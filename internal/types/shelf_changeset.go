@@ -19,6 +19,8 @@ type OperationSource struct {
 // ShelfOperation is a closed set of typed proposals. Later shelf capabilities
 // add operation types here and execute them through the same confirmation path.
 type ShelfOperation struct {
+	Classification    *ShelfDocumentClassification      `json:"classification,omitempty"`
+	VersionID         string                            `json:"version_id,omitempty"`
 	ImportPlan        *ShelfImportPlanInput             `json:"import_plan,omitempty"`
 	ImportLocation    *ShelfImportLocation              `json:"import_location,omitempty"`
 	Reparse           *ShelfReparseInput                `json:"reparse,omitempty"`

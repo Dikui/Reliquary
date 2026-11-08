@@ -22,6 +22,8 @@ async function mountPage(t: test.TestContext, shelf = true, query = '') {
     './Library.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('article', 'Original documents') }) },
     './components/ShelfStatusTable.vue': { __esModule: true, default: defineComponent({ props: ['library'], setup: props => () => h('article', `Shelf table ${props.library.id}`) }) },
     './components/ShelfReviewPage.vue': { __esModule: true, default: defineComponent({ props: ['library'], setup: props => () => h('article', `Review changes ${props.library.id}`) }) },
+    './components/ShelfFilesPage.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('article', 'Shelf files') }) },
+    './components/ShelfSettingsPage.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('article', 'Shelf settings') }) },
     './components/ShelfImportPage.vue': { __esModule: true, default: defineComponent({ props: ['library'], setup: props => () => h('article', `Import workbooks ${props.library.id}`) }) },
   })
   const previous = globalThis.window
@@ -68,3 +70,11 @@ test('shelf import tab can be opened directly and returns to status', async t =>
   assert.match(visibleText(root), /Shelf table library-a/)
   assert.equal(router.currentRoute.value.query.tab, 'status')
 })
+
+// Small spec, task 20: files and shelf settings have stable library destinations.
+for (const [tab, title] of [['files', 'Shelf files'], ['shelf-settings', 'Shelf settings']]) {
+ test(`shelf ${tab} bookmarks open the corresponding page`, async t => {
+  const { root } = await mountPage(t, true, `&tab=${tab}`)
+  assert.match(visibleText(root), new RegExp(title!))
+ })
+}

@@ -84,7 +84,7 @@ func (s *EntityService) shelfDocumentBefore(ctx context.Context, draft *types.Sh
 	if err != nil {
 		return nil, err
 	}
-	if len(versions) == 0 || versions[0].OwnerID != op.Document.OwnerID || documentIDValue(versions[0].RequirementID) != op.Document.RequirementID {
+	if len(versions) == 0 || documentIDValue(versions[0].OwnerID) != op.Document.OwnerID || documentIDValue(versions[0].RequirementID) != op.Document.RequirementID {
 		return nil, apperrors.NewBadRequestError("uncertain: selected document does not match its owner and requirement")
 	}
 	return shelfJSON(versions[0]), nil
@@ -92,7 +92,7 @@ func (s *EntityService) shelfDocumentBefore(ctx context.Context, draft *types.Sh
 
 func (s *EntityService) writeShelfDocument(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem, op types.ShelfOperation) (*types.ShelfDocumentVersion, error) {
 	input := op.Document
-	if input.OwnerID == "" || input.Stage != "draft" && input.Stage != "final" || input.AttachmentID == "" && input.CloudURL == "" {
+	if input.Stage != "draft" && input.Stage != "final" || input.AttachmentID == "" && input.CloudURL == "" {
 		return nil, apperrors.NewBadRequestError("document owner, draft/final stage and an original or cloud link are required")
 	}
 	var file *types.Entity
@@ -106,8 +106,10 @@ func (s *EntityService) writeShelfDocument(ctx context.Context, draft *types.She
 		if err != nil {
 			return nil, err
 		}
-		if _, err = s.SaveManagedRelation(ctx, draft.LibraryID, "", types.ManagedRelationInput{SubjectID: input.OwnerID, ObjectID: file.ID, RelationType: "has_document"}); err != nil {
-			return nil, err
+		if input.OwnerID != "" {
+			if _, err = s.SaveManagedRelation(ctx, draft.LibraryID, "", types.ManagedRelationInput{SubjectID: input.OwnerID, ObjectID: file.ID, RelationType: "has_document"}); err != nil {
+				return nil, err
+			}
 		}
 		if input.RequirementID != "" {
 			if _, err = s.SaveManagedRelation(ctx, draft.LibraryID, "", types.ManagedRelationInput{SubjectID: file.ID, ObjectID: input.RequirementID, RelationType: "fulfills"}); err != nil {
@@ -140,7 +142,7 @@ func (s *EntityService) writeShelfDocument(ctx context.Context, draft *types.She
 	version := &types.ShelfDocumentVersion{
 		ID:      uuid.NewSHA1(uuid.NameSpaceOID, []byte(draft.ID+":"+item.ID)).String(),
 		SpaceID: draft.SpaceID, LibraryID: draft.LibraryID, FileID: file.ID,
-		OwnerID: input.OwnerID, RequirementID: optionalDocumentID(input.RequirementID),
+		OwnerID: optionalDocumentID(input.OwnerID), RequirementID: optionalDocumentID(input.RequirementID),
 		CertificateNumber: input.CertificateNumber,
 		AttachmentID:      optionalDocumentID(input.AttachmentID), CloudURL: input.CloudURL,
 		EntryID: optionalDocumentID(input.EntryID),
@@ -192,8 +194,10 @@ func (s *EntityService) writeShelfDocument(ctx context.Context, draft *types.She
 		if err = s.SetEntryEntityLink(ctx, input.EntryID, file.ID, false, nil); err != nil {
 			return nil, err
 		}
-		if err = s.SetEntryEntityLink(ctx, input.EntryID, input.OwnerID, false, nil); err != nil {
-			return nil, err
+		if input.OwnerID != "" {
+			if err = s.SetEntryEntityLink(ctx, input.EntryID, input.OwnerID, false, nil); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return version, NewOperationLogService(s.db).RecordTx(ctx, s.db, "update_entity", file.ID, nil, map[string]any{"document_version": version})
@@ -237,6 +241,7 @@ func documentIDValue(id *string) string {
 }
 
 func (s *EntityService) validateShelfDocument(ctx context.Context, library *types.Library, input *types.ShelfDocumentInput) error {
+	var err error
 	if input.Stage != "draft" && input.Stage != "final" {
 		return apperrors.NewBadRequestError("document draft/final stage is required")
 	}
@@ -279,36 +284,6 @@ func (s *EntityService) validateShelfDocument(ctx context.Context, library *type
 		}
 		input.OwnerID = matches[0]
 	}
-	owner, err := s.shelfEntity(ctx, library.ID, input.OwnerID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return apperrors.NewBadRequestError("uncertain: document owner cannot be identified")
-		}
-		var app *apperrors.AppError
-		if errors.As(err, &app) && app.HTTPCode == 404 {
-			return apperrors.NewBadRequestError("uncertain: document owner cannot be identified")
-		}
-		return err
-	}
-	if owner.ArchivedAt != nil || !slices.Contains([]string{"model", "part", "platform", "product", "certification"}, owner.Kind) {
-		return apperrors.NewBadRequestError("uncertain: invalid document owner kind or archived owner")
-	}
-	scope := owner
-	if owner.Kind == "certification" {
-		var record types.ShelfCertification
-		if err = types.DecodeShelfValue(owner.Attributes["certification"], &record); err != nil {
-			return apperrors.NewBadRequestError("uncertain: certification record cannot be identified")
-		}
-		if strings.TrimSpace(input.CertificateNumber) == "" || record.Number != input.CertificateNumber {
-			return apperrors.NewBadRequestError("uncertain: certificate number must match the certification record")
-		}
-		scope, err = shelfCertificationOwner(s.db, library, record.OwnerID)
-		if err != nil {
-			return err
-		}
-	} else if input.CertificateNumber != "" {
-		return apperrors.NewBadRequestError("uncertain: a numbered certificate must belong to its certification record")
-	}
 	if input.RequirementID != "" {
 		var count int64
 		if err = s.db.WithContext(ctx).Model(&types.Entity{}).Where("id=? AND space_id=? AND library_id=? AND kind='document_requirement' AND archived_at IS NULL AND merged_into_id=''", input.RequirementID, library.SpaceID, library.ID).Count(&count).Error; err != nil {
@@ -347,6 +322,42 @@ func (s *EntityService) validateShelfDocument(ctx context.Context, library *type
 	}
 	if err = types.ValidateShelfConditions(input.Conditions); err != nil {
 		return apperrors.NewBadRequestError(err.Error())
+	}
+	if input.Unassigned {
+		if input.OwnerID != "" || input.RequirementID != "" || input.CertificateNumber != "" || len(input.Conditions) > 0 {
+			return apperrors.NewBadRequestError("uncertain: an unassigned file cannot have classification")
+		}
+		return nil
+	}
+	owner, err := s.shelfEntity(ctx, library.ID, input.OwnerID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewBadRequestError("uncertain: document owner cannot be identified")
+		}
+		var app *apperrors.AppError
+		if errors.As(err, &app) && app.HTTPCode == 404 {
+			return apperrors.NewBadRequestError("uncertain: document owner cannot be identified")
+		}
+		return err
+	}
+	if owner.ArchivedAt != nil || !slices.Contains([]string{"model", "part", "platform", "product", "certification"}, owner.Kind) {
+		return apperrors.NewBadRequestError("uncertain: invalid document owner kind or archived owner")
+	}
+	scope := owner
+	if owner.Kind == "certification" {
+		var record types.ShelfCertification
+		if err = types.DecodeShelfValue(owner.Attributes["certification"], &record); err != nil {
+			return apperrors.NewBadRequestError("uncertain: certification record cannot be identified")
+		}
+		if strings.TrimSpace(input.CertificateNumber) == "" || record.Number != input.CertificateNumber {
+			return apperrors.NewBadRequestError("uncertain: certificate number must match the certification record")
+		}
+		scope, err = shelfCertificationOwner(s.db, library, record.OwnerID)
+		if err != nil {
+			return err
+		}
+	} else if input.CertificateNumber != "" {
+		return apperrors.NewBadRequestError("uncertain: a numbered certificate must belong to its certification record")
 	}
 	if len(input.Conditions) > 0 {
 		if scope.Kind == "part" {

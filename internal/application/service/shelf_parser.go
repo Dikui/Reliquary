@@ -246,7 +246,10 @@ func (s *EntityService) publishShelfText(ctx context.Context, version *types.She
 		bound := s.shelfBound(tx)
 		linkCtx := types.WithPrincipal(ctx, types.Principal{Type: types.PrincipalWebUser, ID: "shelf-parser"})
 		linkCtx = context.WithValue(linkCtx, shelfWriteContextKey{}, shelfWriteContext{current.Source, current.ChangesetID})
-		for _, entityID := range []string{current.FileID, current.OwnerID} {
+		for _, entityID := range []string{current.FileID, documentIDValue(current.OwnerID)} {
+			if entityID == "" {
+				continue
+			}
 			if err := bound.SetEntryEntityLink(linkCtx, id, entityID, false, nil); err != nil {
 				return err
 			}

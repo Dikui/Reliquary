@@ -34,7 +34,7 @@ func TestShelfParsersMigrationAndReplicaPreserveState(t *testing.T) {
  ('owner',1,'library','product','model','Parser owner','parser owner',now(),now()),
  ('file',1,'library','product','document_file','Parser file','parser file',now(),now());
  INSERT INTO shelf_changesets(id,space_id,library_id,revision,status,source,items,created_at,updated_at) VALUES('batch',1,'library',1,'confirmed','{"type":"web"}','[]',now(),now())`).Error)
-	version := types.ShelfDocumentVersion{ID: "version", SpaceID: 1, LibraryID: "library", FileID: "file", OwnerID: "owner", CloudURL: "https://example.org/original", Ordinal: 1, VersionLabel: " Customer revision ", Stage: "final", IsCurrent: true, OccurredAt: time.Now(), CreatedAt: time.Now(), Source: types.OperationSource{Type: "web"}, ChangesetID: "batch", ParseStatus: "not_parsed", Conditions: []types.ShelfCondition{}}
+	version := types.ShelfDocumentVersion{ID: "version", SpaceID: 1, LibraryID: "library", FileID: "file", OwnerID: func() *string { value := "owner"; return &value }(), CloudURL: "https://example.org/original", Ordinal: 1, VersionLabel: " Customer revision ", Stage: "final", IsCurrent: true, OccurredAt: time.Now(), CreatedAt: time.Now(), Source: types.OperationSource{Type: "web"}, ChangesetID: "batch", ParseStatus: "not_parsed", Conditions: []types.ShelfCondition{}}
 	require.NoError(t, db.Omit("ParserKey", "ParseAttempt", "ParseError", "FileCategory").Create(&version).Error)
 	ctx := context.WithValue(context.Background(), types.SpaceIDContextKey, uint64(1))
 	old, err := maintenance.Capture(ctx, db)

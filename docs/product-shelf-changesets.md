@@ -208,3 +208,33 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 `import_notice` 是不写货架的核对操作，`issues` 只接受 `cross_table_contradiction`，也可为空表示核对一致。其差异是提示，普通 `apply` 可以确认，确认前后均不改变货架数据。身份、日期或文本无法判断时仍使用阻塞冲突。表格方案与字段约定见[货架表格导入](product-shelf-import.md)。
 
 资料要求的可选 `due_text` 保留原表“研发最迟提供时间”的完整写法，初稿与终稿阶段仍使用配置键。
+
+## 资料文件管理
+
+资料文件页面使用 `/platform/entries?libraries=<库 ID>&tab=files`，单文件版本页增加 `file=<资料文件 ID>`。货架设置使用同一路由的 `tab=shelf-settings`；普通资料页签仍为 `tab=documents`。模块类型、区域、有序阶段、解析器和按产品线的参数定义通过 `configure_shelf` 保存，带读取到的 `library_updated_at`。资料要求与适用关系在同一变更集中确认。
+
+`GET /libraries/:id/shelf/documents` 返回 `items`、分页前的 `total` 和 `truncated`。每项包含 `entity`、`document` 及可选的 `owner`、`requirement`。筛选参数如下，均在分页前执行：
+
+| 参数 | 说明 |
+| --- | --- |
+| `q` | 文件名称或该版本已保存文本的字面子串，不解释通配符 |
+| `group` | `requirements`、`certificates`、`other`，省略时全部；认证归属优先归到证书报告 |
+| `owner_kind` | 归属类别，`unassigned` 表示未挂 |
+| `parse_status` | 解析状态 |
+| `include_history` | 默认 `false`，只返回当前版本；`true` 时每个历史版本独立列出 |
+| `limit`、`offset` | 默认 50、0，单页最多 100 |
+
+明确选择“未挂”的上传在 `document` 中提供 `unassigned:true`，同时不填写归属、资料要求、证书编号或适用条件。版本的 `owner_id` 为空，文件仍保留原件并可解析、全文检索；不会进入任何节点范围。仅省略归属不代表选择未挂，含义不确定的输入仍为冲突。
+
+新增两个变更集操作：
+
+| 操作 | 输入 |
+| --- | --- |
+| `classify_document` | `entity_id`、文件 `revision`、`classification:{owner_id,requirement_id?,certificate_number?,conditions?}` |
+| `select_document_version` | `entity_id`、文件 `revision`、该文件的 `version_id` |
+
+`classify_document` 对整份资料文件及其所有版本改归属，也用于未挂文件补挂。归属必须明确指定，认证归属还须提供匹配编号。归属关系和文本的显式关联一起更新，原件、版本号、解析器及解析状态不变。前后归类完整写入日志；不会根据内容推断归属，也不会合并已占用相同节点及资料要求的另一份文件。
+
+`select_document_version` 将所选旧版本设为当前，不复制原件或新增版本。文件修订号递增，当前标记和选择记录同事务保存；共享清单和检索读取相同当前版本。选择记录保留业务时间查询所需的选择时点；之后上传新版本会照常成为当前。
+
+迁移 50 允许明确未挂的空归属，并保存当前版本选择记录。导出恢复保留这些数据；存在未挂版本、选择记录或新的变更集操作时拒绝降级。

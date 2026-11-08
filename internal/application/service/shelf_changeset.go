@@ -62,6 +62,10 @@ func shelfOperationValid(op types.ShelfOperation) error {
 		valid = op.Entity == nil && op.Patch == nil && op.Relation == nil && op.EntityID == ""
 	case "save_import_plan":
 		valid = op.ImportPlan != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
+	case "classify_document":
+		valid = op.Classification != nil && op.EntityID != "" && op.Revision > 0 && op.Entity == nil && op.Patch == nil && op.Relation == nil
+	case "select_document_version":
+		valid = op.VersionID != "" && op.EntityID != "" && op.Revision > 0 && op.Entity == nil && op.Patch == nil && op.Relation == nil
 	case "reparse_document":
 		valid = op.Reparse != nil && op.Entity == nil && op.Patch == nil && op.Relation == nil
 	case "add_document_version":
@@ -98,6 +102,9 @@ func shelfOperationValid(op types.ShelfOperation) error {
 		valid = false
 	}
 	if op.Type != "save_import_plan" && op.ImportPlan != nil {
+		valid = false
+	}
+	if op.Type != "classify_document" && op.Classification != nil || op.Type != "select_document_version" && op.VersionID != "" {
 		valid = false
 	}
 	if op.Type != "reparse_document" && op.Reparse != nil {
@@ -558,6 +565,9 @@ func (s *EntityService) shelfEntity(ctx context.Context, libraryID, id string) (
 
 func (s *EntityService) shelfBefore(ctx context.Context, draft *types.ShelfChangeset, item *types.ShelfChangesetItem) (types.JSON, error) {
 	op := item.Operation
+	if op.Type == "classify_document" || op.Type == "select_document_version" {
+		return s.shelfDocumentEditBefore(ctx, draft, shelfResolvedOperation(draft, op))
+	}
 	if op.Type == "save_import_plan" {
 		plan, err := s.shelfImportPlan(ctx, draft.LibraryID, op.ImportPlan.Key)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -625,6 +635,13 @@ func shelfReference(draft *types.ShelfChangeset, id string) string {
 // Freeze references before a deferred item leaves its original batch.
 func shelfResolvedOperation(draft *types.ShelfChangeset, op types.ShelfOperation) types.ShelfOperation {
 	op.EntityID = shelfReference(draft, op.EntityID)
+	if op.Classification != nil {
+		classification := *op.Classification
+		classification.OwnerID = shelfReference(draft, classification.OwnerID)
+		classification.RequirementID = shelfReference(draft, classification.RequirementID)
+		classification.Conditions = shelfResolvedConditions(draft, classification.Conditions)
+		op.Classification = &classification
+	}
 	if op.Document != nil {
 		record := *op.Document
 		record.OwnerID = shelfReference(draft, record.OwnerID)
@@ -703,6 +720,9 @@ func (s *EntityService) executeShelf(ctx context.Context, draft *types.ShelfChan
 	}
 	if op.Type == "save_import_plan" {
 		return s.writeShelfImportPlan(ctx, draft, *op.ImportPlan)
+	}
+	if op.Type == "classify_document" || op.Type == "select_document_version" {
+		return s.writeShelfDocumentEdit(ctx, draft, op)
 	}
 	if op.Type == "reparse_document" {
 		return s.writeShelfReparse(ctx, draft, op)

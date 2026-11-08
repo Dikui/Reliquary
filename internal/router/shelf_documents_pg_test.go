@@ -179,7 +179,7 @@ func TestShelfDocumentsCertificateNumberIdentifiesRecord(t *testing.T) {
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "report", "type": "add_document_version", "document": record}}}, http.StatusCreated, &draft)
 	var versions []types.ShelfDocumentVersion
 	f.request(http.MethodGet, "/entities/"+draft.Items[0].EntityID+"/document-versions", nil, http.StatusOK, &versions)
-	require.Equal(t, certID, versions[0].OwnerID)
+	require.Equal(t, certID, *versions[0].OwnerID)
 	require.Equal(t, "SYN-CERT-07", versions[0].CertificateNumber)
 	var relations []service.RelationGroup
 	f.request(http.MethodGet, "/entities/"+certID+"/relations", nil, http.StatusOK, &relations)

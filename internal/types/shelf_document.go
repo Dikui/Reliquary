@@ -6,6 +6,7 @@ import "time"
 // Text is optional; file parsing is handled separately from version creation.
 type ShelfDocumentInput struct {
 	FileCategory      string           `json:"file_category,omitempty"`
+	Unassigned        bool             `json:"unassigned,omitempty"`
 	Name              string           `json:"name,omitempty"`
 	OwnerID           string           `json:"owner_id"`
 	RequirementID     string           `json:"requirement_id,omitempty"`
@@ -29,7 +30,7 @@ type ShelfDocumentVersion struct {
 	SpaceID           uint64           `json:"space_id"`
 	LibraryID         string           `json:"library_id"`
 	FileID            string           `json:"file_id"`
-	OwnerID           string           `json:"owner_id"`
+	OwnerID           *string          `json:"owner_id,omitempty"`
 	RequirementID     *string          `json:"requirement_id,omitempty"`
 	CertificateNumber string           `json:"certificate_number,omitempty"`
 	AttachmentID      *string          `json:"attachment_id,omitempty"`
@@ -49,3 +50,43 @@ type ShelfDocumentVersion struct {
 }
 
 func (ShelfDocumentVersion) TableName() string { return "shelf_document_versions" }
+
+// ShelfDocumentClassification changes the explicit classification of a whole file.
+// Version originals and labels stay unchanged; the prior classification is logged.
+type ShelfDocumentClassification struct {
+	OwnerID           string           `json:"owner_id"`
+	RequirementID     string           `json:"requirement_id,omitempty"`
+	CertificateNumber string           `json:"certificate_number,omitempty"`
+	Conditions        []ShelfCondition `json:"conditions"`
+}
+type ShelfDocumentSelection struct {
+	ID         string    `json:"id" gorm:"primaryKey"`
+	SpaceID    uint64    `json:"space_id"`
+	LibraryID  string    `json:"library_id"`
+	FileID     string    `json:"file_id"`
+	VersionID  string    `json:"version_id"`
+	SelectedAt time.Time `json:"selected_at"`
+}
+
+func (ShelfDocumentSelection) TableName() string { return "shelf_document_selections" }
+
+type ShelfDocumentListRequest struct {
+	Query          string
+	Group          string
+	OwnerKind      string
+	ParseStatus    string
+	IncludeHistory bool
+	Limit          int
+	Offset         int
+}
+type ShelfDocumentListItem struct {
+	Entity      Entity               `json:"entity"`
+	Document    ShelfDocumentVersion `json:"document"`
+	Owner       *Entity              `json:"owner,omitempty"`
+	Requirement *Entity              `json:"requirement,omitempty"`
+}
+type ShelfDocumentList struct {
+	Items     []ShelfDocumentListItem `json:"items"`
+	Total     int64                   `json:"total"`
+	Truncated bool                    `json:"truncated"`
+}

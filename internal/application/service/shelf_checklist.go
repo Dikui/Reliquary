@@ -77,11 +77,16 @@ func (s *EntityService) loadShelfChecklist(ctx context.Context, l *types.Library
 	if err := s.db.WithContext(ctx).Where("library_id=? AND space_id=? AND relation_type='applies_to' AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", l.ID, l.SpaceID, now, now).Find(&d.bindings).Error; err != nil {
 		return nil, err
 	}
-	// Ordinal determines replacement, not customer version labels or file dates.
+	// Explicit current selections take precedence until another version is added.
+	// Otherwise ordinal determines replacement, not labels or file dates.
 	// Selecting within the business time also supports historical checklist reads.
 	if err := s.db.WithContext(ctx).Raw(`SELECT DISTINCT ON (v.file_id) v.* FROM shelf_document_versions v
  JOIN entities e ON e.id=v.file_id AND e.archived_at IS NULL AND e.merged_into_id=''
- WHERE v.library_id=? AND v.space_id=? AND v.occurred_at<=? ORDER BY v.file_id,v.ordinal DESC`, l.ID, l.SpaceID, at).Scan(&d.documents).Error; err != nil {
+ WHERE v.library_id=? AND v.space_id=? AND v.occurred_at<=? ORDER BY v.file_id,
+ CASE WHEN v.id=(SELECT selection.version_id FROM shelf_document_selections selection
+ WHERE selection.file_id=v.file_id AND selection.selected_at<=?
+ AND NOT EXISTS (SELECT 1 FROM shelf_document_versions newer WHERE newer.file_id=v.file_id AND newer.created_at>selection.selected_at AND newer.occurred_at<=?)
+ ORDER BY selection.selected_at DESC,selection.id DESC LIMIT 1) THEN 0 ELSE 1 END,v.ordinal DESC`, l.ID, l.SpaceID, at, at, at).Scan(&d.documents).Error; err != nil {
 		return nil, err
 	}
 	if cache != nil {
@@ -191,7 +196,7 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 				if documentIDValue(v.RequirementID) != r.ID {
 					continue
 				}
-				level, ok := owners[v.OwnerID]
+				level, ok := owners[documentIDValue(v.OwnerID)]
 				if !ok || level != rank {
 					continue
 				}
@@ -200,9 +205,9 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 				conditions := append([]types.ShelfCondition{}, v.Conditions...)
 				if rank == 1 {
 					for _, edge := range d.edges {
-						if edge.SubjectID == id && edge.ObjectID == v.OwnerID && edge.RelationType == "composed_of" {
+						if edge.SubjectID == id && edge.ObjectID == documentIDValue(v.OwnerID) && edge.RelationType == "composed_of" {
 							module, _ := edge.Attributes["module_type"].(string)
-							conditions = append(conditions, types.ShelfCondition{ModuleType: module, PartIDs: []string{v.OwnerID}})
+							conditions = append(conditions, types.ShelfCondition{ModuleType: module, PartIDs: []string{documentIDValue(v.OwnerID)}})
 						}
 					}
 				}
@@ -283,7 +288,7 @@ func (d *shelfChecklistData) apply(entity *types.Entity, result *types.ShelfMode
 	}
 	result.Documents = []types.ShelfNodeDocument{}
 	for _, document := range d.documents {
-		if document.OwnerID != entity.ID {
+		if documentIDValue(document.OwnerID) != entity.ID {
 			continue
 		}
 		row := types.ShelfNodeDocument{Entity: d.nodes[document.FileID], Document: document}
@@ -365,7 +370,7 @@ func (d *shelfChecklistData) partChecklist(entity *types.Entity) []types.ShelfCh
 		found := false
 		for i := range d.documents {
 			document := &d.documents[i]
-			if document.OwnerID != entity.ID || documentIDValue(document.RequirementID) != requirement.ID {
+			if documentIDValue(document.OwnerID) != entity.ID || documentIDValue(document.RequirementID) != requirement.ID {
 				continue
 			}
 			row := d.row(requirement, record, "", document, 0, nil, nil, nil)
@@ -403,20 +408,20 @@ func (d *shelfChecklistData) otherDocuments(id string, composition []types.Shelf
 	}
 	rows := []types.ShelfOtherDocument{}
 	for _, document := range d.documents {
-		origin, ok := owners[document.OwnerID]
+		origin, ok := owners[documentIDValue(document.OwnerID)]
 		if !ok || documentIDValue(document.RequirementID) != "" {
 			continue
 		}
 		conditions := append([]types.ShelfCondition{}, document.Conditions...)
 		if origin == "component" {
 			for _, group := range composition {
-				if slices.ContainsFunc(group.Parts, func(part types.Entity) bool { return part.ID == document.OwnerID }) {
-					conditions = append(conditions, types.ShelfCondition{ModuleType: group.ModuleType, PartIDs: []string{document.OwnerID}})
+				if slices.ContainsFunc(group.Parts, func(part types.Entity) bool { return part.ID == documentIDValue(document.OwnerID) }) {
+					conditions = append(conditions, types.ShelfCondition{ModuleType: group.ModuleType, PartIDs: []string{documentIDValue(document.OwnerID)}})
 				}
 			}
 		}
 		if shelfConditionsMatch(conditions, combination) {
-			rows = append(rows, types.ShelfOtherDocument{Entity: d.nodes[document.FileID], Document: document, Owner: d.nodes[document.OwnerID], Origin: origin, Conditions: conditions})
+			rows = append(rows, types.ShelfOtherDocument{Entity: d.nodes[document.FileID], Document: document, Owner: d.nodes[documentIDValue(document.OwnerID)], Origin: origin, Conditions: conditions})
 		}
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -468,7 +473,7 @@ func (d *shelfChecklistData) row(r types.Entity, record types.ShelfRequirement, 
 	if v != nil {
 		row.HasFile = true
 		row.DocumentName = d.nodes[v.FileID].CanonicalName
-		row.OwnerID = v.OwnerID
+		row.OwnerID = documentIDValue(v.OwnerID)
 		row.Origin, row.OriginLabel = "self", "自身"
 		if rank == 1 {
 			row.Origin, row.OriginLabel = "component", "来自部件"
