@@ -159,19 +159,38 @@ func (b *importMapBuilder) reportPart(mapping types.ShelfImportSheet, cells map[
 	}
 	attrs["module_type"] = mapping.ModuleType
 	for _, field := range []string{"pack_model", "cluster_model", "container_model"} {
-		if cell, ok := cells[field+":"]; ok {
+		// A blank cell means "not provided": it keeps the known value instead of contradicting it.
+		if cell, ok := cells[field+":"]; ok && cell.Value != "" {
 			attrs[field] = cell.Value
 		}
 	}
 	if part.ID == "" {
 		part.ID = b.append(types.ShelfOperation{Type: "create_entity", Entity: &types.ManagedEntityInput{Kind: "part", Name: name, Attributes: attrs}})
 	} else if !reflect.DeepEqual(attrs, part.Attributes) {
-		for _, op := range b.ops {
-			if op.EntityID == part.ID && op.Type == "update_entity" || "$"+op.ID == part.ID {
-				return fmt.Errorf("uncertain: repeated cell part rows propose different attributes")
+		merged := false
+		for i := range b.ops {
+			op := &b.ops[i]
+			var pending map[string]any
+			if "$"+op.ID == part.ID {
+				pending = op.Entity.Attributes
+			} else if op.EntityID == part.ID && op.Type == "update_entity" {
+				pending = *op.Patch.Attributes
+			} else {
+				continue
 			}
+			// Rows for one part only conflict on differing values; a later row may fill a value an earlier row left blank.
+			for key, value := range attrs {
+				if old, ok := pending[key]; ok && !reflect.DeepEqual(old, value) {
+					return fmt.Errorf("uncertain: repeated cell part rows propose different attributes")
+				}
+				pending[key] = value
+			}
+			merged = true
+			break
 		}
-		b.append(types.ShelfOperation{Type: "update_entity", EntityID: part.ID, Patch: &types.ManagedEntityPatch{Revision: part.Revision, Attributes: &attrs}})
+		if !merged {
+			b.append(types.ShelfOperation{Type: "update_entity", EntityID: part.ID, Patch: &types.ManagedEntityPatch{Revision: part.Revision, Attributes: &attrs}})
+		}
 	}
 	modelName := cells["model:"].Value
 	if modelName == "" && mapping.OwnerKind == "model" {
@@ -191,6 +210,11 @@ func (b *importMapBuilder) reportPart(mapping types.ShelfImportSheet, cells map[
 func (b *importMapBuilder) reportComposition(mapping types.ShelfImportSheet, partID, modelName string) error {
 	model, err := b.recordEntity("model", modelName)
 	if err != nil {
+		for _, op := range b.ops {
+			if details, _ := firstIssueDetails(op); op.Relation != nil && op.Relation.SubjectID == "" && op.Relation.ObjectID == partID && details["owner_name"] == modelName {
+				return nil // one proposal per unidentified model and cell, not one per row
+			}
+		}
 		// Keep the declared composition as a separate, correctable proposal. An
 		// unknown model does not erase the report's certification or part fields.
 		b.append(types.ShelfOperation{Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: "", ObjectID: partID, RelationType: "composed_of", Attributes: map[string]any{"module_type": mapping.ModuleType}}, Issues: []types.ShelfConflict{{Type: "uncertain", Message: "report composition model needs an explicit identity", Details: map[string]any{"owner_name": modelName, "owner_kind": "model"}}}})
@@ -240,4 +264,12 @@ func importCertificationDate(cell importCell) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("date cannot be parsed")
+}
+
+func firstIssueDetails(op types.ShelfOperation) (map[string]any, bool) {
+	if len(op.Issues) == 0 {
+		return nil, false
+	}
+	details, ok := op.Issues[0].Details.(map[string]any)
+	return details, ok
 }

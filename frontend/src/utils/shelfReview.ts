@@ -46,3 +46,38 @@ export function shelfOperationForEdit(item: ShelfReviewItem): ShelfReviewOperati
   if (operation.document) operation.document = { owner_id: '', ...(operation.document as object) }
   return operation
 }
+
+// Known server conflict messages map to translations; a quoted value becomes {value}.
+// shortcut: covers the import conflicts seen in customer acceptance; other messages show as sent, add patterns when they surface.
+const SHELF_CONFLICT_MESSAGES: Array<[RegExp, string]> = [
+  [/^certification object and region are required$/, 'objectRegionRequired'],
+  [/^entity, relationship or library not found$/, 'notFound'],
+  [/^uncertain: multiple standards need explicit split confirmation or correction$/, 'splitStandards'],
+  [/^formula, error or formatted numeric cells require explicit values$/, 'formulaCells'],
+  [/^(?:model appears in multiple rows|uncertain: multiple rows resolve to the same model); submitter must decide whether to merge$/, 'modelRows'],
+  [/^name, code, alias or relationship already exists$/, 'exists'],
+  [/^report composition model needs an explicit identity$/, 'compositionModel'],
+  [/^row has missing identity fields or is a group title; submitter must resolve$/, 'groupTitle'],
+  [/^sample description requires explicit part-condition review$/, 'sampleDescription'],
+  [/^uncertain: certification standard has no configured name or alias$/, 'standardUnconfigured'],
+  [/^uncertain: \w+ identity "(.*)" cannot be identified$/, 'identityUnknown'],
+  [/^uncertain: R&D deadline "(.*)" needs a confirmed stage mapping$/, 'deadlineStage'],
+  [/^uncertain: (?:record cell fill requires an explicit interpretation|cell fill .* requires a confirmed meaning)$/, 'cellFill'],
+  [/^uncertain: repeated cell part rows propose different attributes$/, 'cellPartAttributes'],
+  [/^uncertain: part model attributes require an identified cell part$/, 'cellPartMissing'],
+  [/^uncertain: requirement appears in multiple rows; submitter must decide whether to merge$/, 'requirementRows'],
+  [/^uncertain: same product name belongs to different parents; choose identity explicitly$/, 'parents'],
+  [/^configured worksheet is missing$/, 'worksheetMissing'],
+  [/^uncertain: blank regional (?:status must be resolved by the submitter|cells need an explicit per-row decision)$/, 'blankRegional'],
+  [/^certification key appears in multiple rows; submitter must decide whether to merge$/, 'certificationRows'],
+  [/^certification key has multiple candidates; submit a corrected complete record$/, 'certificationCandidates'],
+  [/^uncertain: market necessity "(.*)" has no explicit meaning$/, 'marketNecessity'],
+  [/^uncertain: certification key must match exactly one record or an explicitly selected candidate$/, 'certificationKeyMatch'],
+]
+export function shelfConflictMessage(message: string): { key: string, value: string } | null {
+  for (const [pattern, key] of SHELF_CONFLICT_MESSAGES) {
+    const match = pattern.exec(message)
+    if (match) return { key, value: match[1] ?? '' }
+  }
+  return null
+}

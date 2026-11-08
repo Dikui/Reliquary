@@ -139,6 +139,39 @@ func TestShelfImportCertificationReportProposesPartAndComposition(t *testing.T) 
 	require.Len(t, model.Shelf.Composition[0].Parts, 3)
 }
 
+// Medium regression, acceptance round 3: a blank part cell means "not
+// provided" and never contradicts a filled row; rows naming the same
+// unidentified model and cell yield one composition proposal.
+func TestShelfImportReportBlankPartCellsAndUnknownModelCompositionOnce(t *testing.T) {
+	f, l, _ := shelfModelSetup(t)
+	configureCertificationStandards(f, &l)
+	importRecordPlan(f, l, "certification_report", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "cell_part"}, {Column: "F", Field: "pack_model"}, {Column: "G", Field: "cluster_model"}}, map[string]any{"module_type": "module_a", "progress": "Completed"})
+	rows := importRecordRow(3, "Unknown spelling", "standard_a", "Module", "Country", "Shared cell", "PACK-1", "CLUSTER-1") +
+		importRecordRow(4, "Unknown spelling", "standard_a", "Cluster", "Country", "Shared cell", "", "") +
+		importRecordRow(5, "Synthetic model", "standard_a", "Module", "Country", "Shared cell", "", "CLUSTER-1") +
+		importRecordRow(6, "Synthetic model", "standard_a", "Module", "Country", "Late cell", "", "") +
+		importRecordRow(7, "Unknown spelling", "standard_a", "Module", "Country", "Late cell", "PACK-2", "")
+	draft := importUpload(t, f, l.ID, "report_20261028.xlsx", "", importWorkbook(t, rows, ""), http.StatusCreated)
+	unknownCompositions := 0
+	for _, item := range draft.Items {
+		for _, conflict := range item.Conflicts {
+			require.NotContains(t, conflict.Message, "different attributes")
+		}
+		op := item.Operation
+		if op.Type == "create_entity" && op.Entity.Kind == "part" && op.Entity.Name == "Shared cell" {
+			require.Equal(t, "PACK-1", op.Entity.Attributes["pack_model"])
+			require.Equal(t, "CLUSTER-1", op.Entity.Attributes["cluster_model"])
+		}
+		if op.Type == "create_entity" && op.Entity.Kind == "part" && op.Entity.Name == "Late cell" {
+			require.Equal(t, "PACK-2", op.Entity.Attributes["pack_model"]) // filled by a later row
+		}
+		if op.Type == "save_relation" && op.Relation.SubjectID == "" {
+			unknownCompositions++
+		}
+	}
+	require.Equal(t, 2, unknownCompositions) // one per unidentified model and cell
+}
+
 // Medium spec, task 12: overseas lists only report contradictions. Accepting
 // those notices cannot change shelf status, identity, certification or revision.
 func TestShelfImportOverseasSalesOnlyReportsContradictions(t *testing.T) {

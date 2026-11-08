@@ -74,6 +74,8 @@ func TestShelfCertImportSplitRequiresExplicitReplacement(t *testing.T) {
 			draft := importUpload(t, f, l.ID, "cert_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Synthetic model", raw, "Container", "Country"), ""), http.StatusCreated)
 			require.Len(t, draft.Items, 1)
 			require.NotNil(t, draft.Items[0].Operation.Certification)
+			require.Equal(t, "uncertain", draft.Items[0].Conflicts[0].Type)
+			require.Equal(t, "uncertain: multiple standards need explicit split confirmation or correction", draft.Items[0].Conflicts[0].Message)
 			details, ok := draft.Items[0].Conflicts[0].Details.(map[string]any)
 			require.True(t, ok)
 			suggestions, ok := details["split_suggestions"].([]any)

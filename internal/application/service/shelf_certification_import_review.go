@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	apperrors "reliquary/internal/errors"
@@ -31,7 +32,7 @@ func (s *EntityService) prepareShelfCertification(ctx context.Context, draft *ty
 		record.Year = year
 	}
 	if len(suggestions) > 1 {
-		standardErr = apperrors.NewBadRequestError("uncertain: multiple standards need explicit split confirmation or correction")
+		standardErr = errors.New("uncertain: multiple standards need explicit split confirmation or correction") // plain error: callers wrap it once
 	}
 	if op.CertificationOwner == nil {
 		if standardErr != nil {

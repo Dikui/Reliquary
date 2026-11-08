@@ -5,7 +5,7 @@ import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vu
 import { Button, EmptyState, Select, Field, Input } from '@/components/ui'
 import { confirm, toast } from '@/components/ui/feedback'
 import { formatDateTime } from '@/utils/dateTime'
-import { SHELF_REVIEW_GROUPS, shelfReviewGroup, shelfReviewReady, shelfReviewSubject, shelfOperationForEdit, shelfNameConfirmations, shelfUnmappedColumnFeedback } from '@/utils/shelfReview'
+import { SHELF_REVIEW_GROUPS, shelfReviewGroup, shelfReviewReady, shelfReviewSubject, shelfOperationForEdit, shelfNameConfirmations, shelfUnmappedColumnFeedback, shelfConflictMessage } from '@/utils/shelfReview'
 import { getEntity } from '@/api/entities'
 import ShelfReviewValue from './ShelfReviewValue.vue'
 import ShelfCertificationConflictEditor from './ShelfCertificationConflictEditor.vue'
@@ -14,6 +14,10 @@ import { listShelfChangesets, getShelfChangeset, saveShelfReview, confirmShelfCh
 
 const props = defineProps<{ library: LibraryCatalogItem }>()
 const { t, locale } = useI18n(), route = useRoute(), router = useRouter()
+function conflictText(message: string) {
+  const known = shelfConflictMessage(message)
+  return known ? t(`shelfReview.conflictMessages.${known.key}`, { value: known.value }) : message
+}
 const sets = ref<ShelfReviewChangeset[]>([]), selected = ref<ShelfReviewChangeset>(), decisions = ref<Record<string, ShelfReviewDecision>>({})
 const loading = ref(false), detailLoading = ref(false), busy = ref(false), error = ref(''), notice = ref('')
 const page = ref(1), total = ref(0), baseline = ref('')
@@ -118,7 +122,7 @@ async function writeConfirmation() {
 }
 function failure(cause: unknown, fallback: string) {
   const value = (cause && typeof cause === 'object' ? cause : {}) as { message?: string; status?: number; error?: { details?: ShelfReviewChangeset } }
-  const conflicts = value.error?.details?.items?.flatMap(item => item.conflicts.map(conflict => conflict.message).filter(Boolean)) || []
+  const conflicts = value.error?.details?.items?.flatMap(item => item.conflicts.map(conflict => conflict.message && conflictText(conflict.message)).filter(Boolean)) || []
   return [fallback, value.message, ...conflicts, ...(value.status === 409 ? [t('shelfReview.reloadHint')] : [])].filter(Boolean).join(' · ')
 }
 const processed = computed(() => selected.value?.items.filter(item => decisions.value[item.id]).length || 0)
@@ -209,7 +213,7 @@ onBeforeUnmount(() => { generation++; detailGeneration++; if (typeof window !== 
                 <dt>{{ t('shelfReview.columnRows') }}</dt><dd>{{ shelfUnmappedColumnFeedback(item)?.nonempty_rows.toLocaleString(locale) }}</dd>
                 <dt>{{ t('shelfReview.columnExamples') }}</dt><dd><ul><li v-for="(example, index) in shelfUnmappedColumnFeedback(item)?.examples" :key="index">{{ example }}</li></ul></dd>
               </dl>
-              <p v-for="(conflict, index) in item.conflicts" :key="index">{{ conflict.message }}</p>
+              <p v-for="(conflict, index) in item.conflicts" :key="index">{{ conflict.message && conflictText(conflict.message) }}</p>
               <p v-if="group.type === 'disappeared'">{{ t('shelfReview.disappearedHint') }}</p>
               <p v-for="candidate in shelfNameConfirmations(item)" :key="candidate.other_entity_id">{{ candidate.name }} · {{ library.entity_schema?.kinds?.find(kind => kind.key === candidate.other_kind)?.name || candidate.other_kind }} · {{ candidate.other_entity_id }}</p>
               <details class="review-diff"><summary>{{ t('shelfReview.compare') }}</summary><div><strong>{{ t('shelfReview.before') }}</strong><ShelfReviewValue :value="item.before" :library="library" readonly /></div><div><strong>{{ t('shelfReview.proposed') }}</strong><ShelfReviewValue :value="decisions[item.id]?.replacement || item.after || item.operation" :library="library" readonly /></div><div v-for="(conflict, index) in item.conflicts.filter(conflict => conflict.manual_before)" :key="index"><strong>{{ t('shelfReview.manual') }}</strong><ShelfReviewValue :value="conflict.manual_before" :library="library" readonly /></div><div v-if="item.operation.import_location?.values"><strong>{{ t('shelfReview.original') }}</strong><ShelfReviewValue :value="item.operation.import_location.values" :library="library" readonly /></div></details>

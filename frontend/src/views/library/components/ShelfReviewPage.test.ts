@@ -339,3 +339,14 @@ test('failed certification saves preserve owner and alias choices for retry', as
   descendants(root).find(node => node.tag === 'form' && node.props.class === 'certification-review')!.props.onSubmit({ preventDefault() {} }); await settle()
   assert.equal(attempts, 2)
 })
+
+// Small regression, acceptance round 3: known server conflict messages read in
+// the reviewer's language with quoted values kept; unknown messages show as sent.
+test('known conflict messages are translated and unknown messages stay as sent', async t => {
+  const known = item('known', 'uncertain'); known.conflicts = [{ type: 'uncertain', message: 'uncertain: model identity "Aqua 原文写法" cannot be identified' }]
+  const unknown = item('unknown', 'uncertain'); unknown.conflicts = [{ type: 'uncertain', message: 'uncertain: something new' }]
+  const { root } = await mount(t, changeset([known, unknown]))
+  assert.ok(visibleText(root).includes('“Aqua 原文写法”无法对应到已有条目。'))
+  assert.ok(visibleText(root).includes('uncertain: something new'))
+  assert.ok(!visibleText(root).includes('cannot be identified'))
+})
