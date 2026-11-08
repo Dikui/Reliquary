@@ -19,6 +19,7 @@ func RegisterEntityRoutes(r *gin.RouterGroup, h *handler.EntityHandler) {
 	r.GET("/libraries/:id/shelf/find", h.ShelfFind)
 	r.GET("/libraries/:id/shelf/nodes/:node_id", h.ShelfGet)
 	r.POST("/libraries/:id/shelf/query", h.ShelfQuery)
+	r.POST("/libraries/:id/shelf/export", h.ExportShelf)
 	r.GET("/libraries/:id/shelf/certifications", h.ShelfCertifications)
 	r.POST("/libraries/:id/shelf/changesets", h.SubmitShelfChangeset)
 	r.GET("/libraries/:id/shelf/changesets", h.ShelfChangesets)

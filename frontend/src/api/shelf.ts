@@ -29,7 +29,9 @@ export interface ShelfQuery {
 export interface ShelfStatusOperation { id: string; type: 'set_sale_statuses'; entity_id: string; revision: number; sale_statuses: ShelfSaleStatus[] }
 export interface ShelfChangeset { id: string; revision: number; status: 'pending' | 'confirmed'; items: { id: string; conflicts: { type: string; message?: string }[] }[] }
 export interface ShelfResponse<T> { success: boolean; data: T; message?: string }
+export interface ShelfExportInput { product_line_id?: string; query: ShelfQuery }
 const base = (library: string) => `/api/v1/libraries/${encodeURIComponent(library)}/shelf`
+export const exportShelf = (library: string, input: ShelfExportInput, signal?: AbortSignal) => post<Blob>(`${base(library)}/export`, input, { responseType: 'blob', timeout: 120000, signal })
 export const queryShelf = (library: string, input: ShelfQuery) => post<ShelfResponse<ShelfPage<ShelfQueryItem>>>(`${base(library)}/query`, input)
 export const findShelf = (library: string, q: string, offset = 0) => get<ShelfResponse<ShelfPage<Entity & { kind_label?: string }>>>(`${base(library)}/find?${new URLSearchParams({ q, limit: '50', offset: String(offset) })}`)
 export const getShelfNode = (library: string, id: string, asOf?: string) => get<ShelfResponse<ShelfNode>>(`${base(library)}/nodes/${encodeURIComponent(id)}${asOf ? `?${new URLSearchParams({ as_of: asOf })}` : ''}`)

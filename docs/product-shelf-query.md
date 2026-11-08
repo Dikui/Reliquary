@@ -4,6 +4,27 @@
 
 MCP 分别提供 `shelf_find`、`shelf_get`、`shelf_query`，均为只读工具。三个工具必传 `library_id`；find 的其他参数为 `q`、`limit`、`offset`，get 为 `node_id`、可选 `combination` 对象和 `as_of`，query 的其他参数与下述 JSON 筛选相同。返回与 HTTP 的 `data` 相同，同时提供结构化结果与 JSON 文本。调用前可通过 `reliquary_guide` 的 `shelf-expert` 流程读取[货架专家说明](../skills/reliquary/workflows/shelf-expert.md)。
 
+## 状态表导出 Excel
+
+`POST /libraries/:id/shelf/export`
+
+```json
+{
+  "product_line_id": "product-line-id",
+  "query": {"sale_statuses": [{"region": "region_key", "status": "GA"}]}
+}
+```
+
+返回可下载的 `.xlsx` 文件，不包装 JSON。`product_line_id` 可省略，表示全部活动产品线；指定时必须是本库的活动产品线。每条产品线一个工作表，包括无型号或筛选无结果的产品线。没有活动产品线时返回 400。
+
+`query` 复用型号筛选与可选 `as_of`，省略表示不筛选。产品线范围以 `product_line_id` 为准，忽略 `query` 中的 `ancestor_id`、`limit`、`offset`，始终导出全部匹配型号。所有工作表在同一数据库快照和同一业务时点读取。筛选只选择型号，单元格保留该型号的完整区域记录及其适用条件。
+
+每个工作表首行为产品线原名，第二行为产品平台、产品名称、产品型号、描述及该产品线出现过记录的区域，区域沿用库配置顺序与原名，筛选不缩减区域列。型号按平台、产品名称、型号分组排序。无记录保持空白，明确的待定保留为待定；同一区域的多条条件记录分行显示，带模块和部件名称、备注与原始写法。计划退市同时显示文字标记和黄色填充，不从 EOM 推断计划退市。
+
+Excel 工作表名称的非法字符、长度、保留名称及重名按格式约束调整，表内产品线原名和所有节点名称保留。所有单元格按文本保存，类似公式的客户写法不会执行。单元格超过 Excel 的 32767 个 UTF-16 单元限制时返回 400，不截断原文。
+
+网页导出菜单支持当前页签、全部产品线，以及是否应用当前已生效筛选。下载不受勾选行、折叠状态或分页限制，不写入货架数据。
+
 ## 找节点
 
 `GET /libraries/:id/shelf/find?q=名称&limit=50&offset=0`

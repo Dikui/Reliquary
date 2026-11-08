@@ -1,5 +1,13 @@
 export default {
   shelfStatus: {
+    exportExcel: "导出 Excel",
+    export: "导出",
+    exportCurrent: "当前页签（{name}）",
+    exportAll: "全部产品线",
+    exportFilters: "应用当前筛选",
+    exportPreparing: "正在生成 Excel…",
+    exportStarted: "下载已开始。",
+    exportFailed: "Excel 导出失败，请重试。",
     selectAll: "选择全部型号",
     selectedCount: "已选 {count} 个型号",
     bulkHint: "所选区域的全部选配使用填写的状态和备注。",

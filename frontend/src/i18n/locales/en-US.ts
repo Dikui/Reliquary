@@ -1,5 +1,13 @@
 export default {
   shelfStatus: {
+    exportExcel: "Export Excel",
+    export: "Export",
+    exportCurrent: "Current tab ({name})",
+    exportAll: "All product lines",
+    exportFilters: "Apply current filters",
+    exportPreparing: "Preparing Excel…",
+    exportStarted: "Download started.",
+    exportFailed: "Excel export failed. Try again.",
     selectAll: "Select all models",
     selectedCount: "{count} models selected",
     bulkHint: "Apply the entered status and notes to every option in the selected region.",
