@@ -286,6 +286,10 @@ func readImportWorkbook(data []byte) (*importWorkbookData, error) {
 		}
 		for _, merge := range raw.Merges {
 			ends := strings.Split(merge.Ref, ":")
+			if len(ends) == 1 {
+				// Excel writes and opens single-cell merges such as ref="A17".
+				ends = append(ends, ends[0])
+			}
 			if len(ends) != 2 {
 				return nil, fmt.Errorf("invalid merged range")
 			}
