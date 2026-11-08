@@ -55,6 +55,8 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
   // Task 16: render the actual model page; only its HTTP boundaries are synthetic.
   modules['./ShelfModelPage.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfModelPage.vue', import.meta.url), {
     ...entryPresentationTestModules, '@/utils/productShelf': shelfText, '@/utils/dateTime': dates, '@/utils/externalUrl': externalUrl,
+    // No recorded snapshot renders these editors; their behavior is covered by model-page tests.
+    ...Object.fromEntries(['./ShelfModelEditor.vue', './ShelfDocumentEditor.vue', './ManagedAttributes.vue'].map(name => [name, { __esModule: true, default: defineComponent({ setup: () => () => null }) }])),
     'vue-i18n': { useI18n: () => i18n.global },
     '@/api/operation-logs': { OPERATION_TYPES: [] }, '@/api/entities': { entityHistory: () => envelope({ items: [], total: 0, page: 1, page_size: 20 }) },
     '@/api/shelf': { getShelfNode: () => envelope({ entity, facts: [], recorded: false }) },

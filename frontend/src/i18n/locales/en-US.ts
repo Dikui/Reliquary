@@ -352,6 +352,10 @@ export default {
     noRequirement: 'No document requirement', noStage: 'Not set', notApplicable: 'Not applicable',
   },
   shelfModel: {
+    documentSource: 'Document source', existingFile: 'Choose existing file', existingHint: 'Confirmation moves this file and all its versions to this model. Originals and draft/final markers are preserved.',
+    singleValue: 'Use one value', rangeValue: 'Use range', addValue: 'Add parameter value',
+    compositionHint: 'Several parts in one module become alternatives. Each confirmation adds or removes one part.', compositionAction: 'Action', addPart: 'Add part', removePart: 'Remove part',
+    edit: 'Edit model', attach: 'Attach document', setStage: 'Set separately', assignParts: 'Assign parts', addCertification: 'Add certification',
     title: 'Model details', hierarchy: 'Hierarchy', onPage: 'On this page', currentStage: 'Current stage', inheritedStage: 'Inherited from product',
     allConditions: 'All options', completeCombination: 'Choose every module to view a combination.', noRecord: 'No record in the shelf',
     certCount: '{count} certifications', module: 'Module type', part: 'Part', pack: 'Pack model', cluster: 'Cluster model', container: 'Container model', optional: 'Options · {count}',

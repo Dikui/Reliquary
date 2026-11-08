@@ -352,6 +352,10 @@ export default {
     noRequirement: '不对应资料要求', noStage: '未设置', notApplicable: '不适用',
   },
   shelfModel: {
+    documentSource: '文件来源', existingFile: '选择已有文件', existingHint: '确认后将此文件及其全部版本挂到本型号，保留原件和各版本的初稿或终稿标记。',
+    singleValue: '改为单值', rangeValue: '改为区间', addValue: '添加参数值',
+    compositionHint: '同一模块多个部件为选配。每次确认添加或移除一个部件。', compositionAction: '操作', addPart: '添加部件', removePart: '移除部件',
+    edit: '编辑型号', attach: '挂资料文件', setStage: '单独设置', assignParts: '指定部件', addCertification: '新增认证',
     title: '型号详情', hierarchy: '层级', onPage: '本页', currentStage: '当前阶段', inheritedStage: '沿用产品名称',
     allConditions: '全部适用', completeCombination: '选齐各模块后查看组合信息。', noRecord: '货架中没有记录',
     certCount: '{count} 条认证', module: '模块类型', part: '部件', pack: 'Pack 型号', cluster: '簇型号', container: '集装箱型号', optional: '选配 · {count}',

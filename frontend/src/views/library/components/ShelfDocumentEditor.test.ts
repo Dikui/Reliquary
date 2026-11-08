@@ -10,6 +10,7 @@ test('云盘上传由用户明确选择未挂，并通过单操作变更集确�
   const writes: any[] = []
   const component = loadComponent(new URL('./ShelfDocumentEditor.vue', import.meta.url), {
     ...entryPresentationTestModules,
+    './ShelfConditionsEditor.vue': { __esModule: true, default: loadComponent(new URL('./ShelfConditionsEditor.vue', import.meta.url), entryPresentationTestModules) },
     '@/api/shelf-files': { shelfEntities: async () => [], shelfWriteError: (_: unknown, fallback: string) => fallback, writeShelf: async (_: string, ops: any) => { writes.push(ops); return { success: true, data: { status: 'confirmed' } } } },
     '@/api/entities': { uploadEntityAttachment: async () => { throw new Error('not expected') }, deleteEntityAttachment: async () => ({ success: true }) },
   })
@@ -32,6 +33,7 @@ test('资料文件按所属清单区分同名要求并一次选择多项', async
   const writes: any[] = []
   const component = loadComponent(new URL('./ShelfDocumentEditor.vue', import.meta.url), {
     ...entryPresentationTestModules,
+    './ShelfConditionsEditor.vue': { __esModule: true, default: loadComponent(new URL('./ShelfConditionsEditor.vue', import.meta.url), entryPresentationTestModules) },
     '@/api/shelf-files': { shelfEntities: async () => [{ id: 'model', kind: 'model', canonical_name: '合成型号' }, ...['01', '02'].map(id => ({ id, kind: 'document_requirement', canonical_name: '参数表', attributes: { requirement: { list_name: id + ' 清单' } } }))], shelfWriteError: (_: unknown, fallback: string) => fallback, writeShelf: async (_: string, ops: any) => { writes.push(ops); return { success: true, data: { status: 'confirmed' } } } },
     '@/api/entities': { uploadEntityAttachment: async () => { throw new Error('not expected') }, deleteEntityAttachment: async () => ({ success: true }) },
   })

@@ -498,6 +498,19 @@ shows the original worksheet and cells when present, the changeset, business
 effective time and recorded time. Editing another region preserves that source.
 Source: ADR 0023, ADR 0024 and docs/product-shelf-query.md.
 
+Model details offer identity and attribute editing, document attachment,
+certification creation, a model stage override and composition maintenance.
+Each confirmation writes one operation through the shared web changeset path,
+then refreshes the model and its history. Edits capture a full unfiltered
+snapshot even when the reading view shows one combination. Conflicts display
+the server reason and retain input and the captured revision for explicit
+correction. Clearing a model stage restores product inheritance. Composition
+confirmation adds or ends one relationship; several parts in one module are
+alternatives. Document uploads choose requirements, draft/final and conditions.
+Selecting an existing file reclassifies all its versions, preserving originals
+and draft/final markers; the dialog explains that scope before confirmation.
+Source: ADR 0023, ADR 0024 and docs/product-shelf-changesets.md.
+
 Shelf upper-node and part links open dedicated details in the entity route.
 All model pages in an upper-node summary use the node's business time. The matrix
 retains different states and conditions for optional parts and links to the

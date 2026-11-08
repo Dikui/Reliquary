@@ -10,6 +10,13 @@ import { shelfConditionText } from '@/utils/productShelf'
 import { formatDateTime } from '@/utils/dateTime'
 import { safeExternalUrl } from '@/utils/externalUrl'
 
+import ShelfDocumentEditor from './ShelfDocumentEditor.vue'
+import ShelfModelEditor from './ShelfModelEditor.vue'
+import ManagedAttributes from './ManagedAttributes.vue'
+
+const initialRequirement = ref('')
+const editor = ref(''), editingNode = ref<ShelfNode>(), editorLoading = ref(false), editorError = ref('')
+let editorGeneration = 0
 const props = defineProps<{ library: LibraryCatalogItem; nodeId: string }>()
 const { t, te, locale } = useI18n()
 const node = ref<ShelfNode>(), ancestors = ref<Entity[]>([]), loading = ref(false), error = ref('')
@@ -22,6 +29,7 @@ const sections = ['composition', 'sale', 'cert', 'docs', 'params', 'files', 'his
 const statusKeys = ['missing', 'draft_only', 'delivered', 'not_due', 'has_file', 'no_file'] as const
 const counts = computed(() => statusKeys.map(status => ({ status, count: new Set((detail.value?.checklist || []).filter(row => row.status === status).map(row => row.requirement.id)).size })).filter(item => item.count))
 const groups = computed(() => (['self', 'component', 'ancestor'] as const).map(origin => ({ origin, rows: (detail.value?.certifications || []).filter(row => row.origin === origin) })))
+const attributeFields = computed(() => (props.library.entity_schema?.fields || []).filter(field => !field.archived && !field.product_line_ids?.length && (!field.kinds?.length || field.kinds.includes('model')) && !['current_stage', 'sale_statuses', 'combination_rules'].includes(field.key)))
 const fields = computed(() => (props.library.entity_schema?.fields || []).filter(field => field.product_line_ids?.includes(ancestors.value.find(item => item.kind === 'product_line')?.id || '') && !field.archived))
 const href = (id: string) => `/platform/entities?${new URLSearchParams({ libraries: props.library.id, entity_id: id })}`
 const fileHref = (id: string) => `/platform/entries?${new URLSearchParams({ libraries: props.library.id, tab: 'files', file: id })}`
@@ -84,6 +92,20 @@ async function load() {
   } catch (cause) { if (current === generation) error.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   finally { if (current === generation) loading.value = false }
 }
+async function openEditor(mode: string, requirementID = '') {
+  const current = ++editorGeneration
+  editorLoading.value = true; editorError.value = ''
+  try {
+    // Combination reads filter attributes. Edits always capture the full snapshot.
+    const result = unwrap(await getShelfNode(props.library.id, props.nodeId))
+    if (current === editorGeneration) { editingNode.value = result; initialRequirement.value = requirementID; editor.value = mode }
+  } catch (cause) { if (current === editorGeneration) editorError.value = (cause as Error).message || t('workbench.requestFailed') }
+  finally { if (current === editorGeneration) editorLoading.value = false }
+}
+function saved() {
+  if (editor.value === 'composition') choices.value = {}
+  editor.value = ''; editingNode.value = undefined; void load(); void loadHistory()
+}
 function choose(module: string, id: string) { choices.value = { ...choices.value, [module]: id }; void load() }
 async function loadHistory(page = 1) {
   const current = ++historyGeneration
@@ -92,8 +114,8 @@ async function loadHistory(page = 1) {
   catch (cause) { if (current === historyGeneration) historyError.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   finally { if (current === historyGeneration) historyLoading.value = false }
 }
-watch(() => [props.library.id, props.nodeId], () => { generation++; node.value = undefined; ancestors.value = []; choices.value = {}; selected.value = false; void load(); void loadHistory() }, { immediate: true })
-onBeforeUnmount(() => { generation++; historyGeneration++ })
+watch(() => [props.library.id, props.nodeId], () => { generation++; editorGeneration++; editorLoading.value = false; editorError.value = ''; editor.value = ''; editingNode.value = undefined; node.value = undefined; ancestors.value = []; choices.value = {}; selected.value = false; void load(); void loadHistory() }, { immediate: true })
+onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
 </script>
 
 <template>
@@ -111,15 +133,22 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
         </template>
         <span class="kind" aria-current="page">{{ t('productShelf.kinds.model') }}</span>
       </nav>
-      <h1>{{ node.entity.canonical_name }}</h1>
+      <div class="rq-model-title"><h1>{{ node.entity.canonical_name }}</h1><div class="rq-model-actions" v-if="node.recorded">
+        <Button :disabled="loading || !!error || editorLoading" @click="openEditor('model')">{{ t('shelfModel.edit') }}</Button>
+        <Button :disabled="loading || !!error || editorLoading" @click="openEditor('document')">{{ t('shelfModel.attach') }}</Button>
+      </div></div>
       <p v-if="node.entity.description">{{ node.entity.description }}</p>
+      <p v-if="node.entity.code || node.entity.aliases?.length" class="rq-model-identifiers"><span v-if="node.entity.code">{{ t('managed.code') }}: {{ node.entity.code }}</span><span v-if="node.entity.aliases?.length">{{ t('managed.aliases') }}: {{ node.entity.aliases.join(' · ') }}</span></p>
     </header>
+    <p v-if="editorError" role="alert">{{ editorError }}</p>
+    <p v-if="editorLoading" role="status">{{ t('common.loading') }}</p>
     <dl v-if="node?.recorded" class="facts" :aria-busy="loading">
       <template v-if="!loading && !error">
         <div>
           <dt>{{ t('shelfModel.currentStage') }}</dt>
           <dd>{{ stage(detail?.current_stage) }}
             <small v-if="detail?.stage_owner_id && detail.stage_owner_id !== node.entity.id">{{ t('shelfModel.inheritedStage') }}</small>
+            <Button variant="ghost" :disabled="editorLoading" @click="openEditor('stage')">{{ t('shelfModel.setStage') }}</Button>
           </dd>
         </div>
         <div>
@@ -163,7 +192,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
           <a v-for="section in sections" :key="section" :href="`#${section}`">{{ t(`shelfModel.sections.${section}`) }}</a>
         </nav>
         <section id="composition">
-          <h2>{{ t('shelfModel.sections.composition') }}</h2>
+          <div class="rq-model-actions"><h2>{{ t('shelfModel.sections.composition') }}</h2><Button variant="ghost" :disabled="editorLoading" @click="openEditor('composition')">{{ t('shelfModel.assignParts') }}</Button></div>
           <div v-if="detail?.composition.length" class="table-wrap">
             <table>
               <thead>
@@ -218,7 +247,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
           </div>
         </section>
         <section id="cert">
-          <h2>{{ t('shelfModel.sections.cert') }}</h2>
+          <div class="rq-model-actions"><h2>{{ t('shelfModel.sections.cert') }}</h2><Button variant="ghost" :disabled="editorLoading" @click="openEditor('certification')">{{ t('shelfModel.addCertification') }}</Button></div>
           <div v-if="detail?.certifications?.length" class="table-wrap">
             <table>
               <thead>
@@ -292,6 +321,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
                 <tr v-for="(row, index) in detail.checklist" :id="detail.checklist.findIndex(item => item.requirement.id === row.requirement.id) === index ? `requirement-${row.requirement.id}` : undefined" :key="`${row.requirement.id}-${index}`">
                   <td>
                     <span class="doc" :class="row.status">{{ t(`shelfModel.status.${row.status}`) }}</span>
+                    <Button v-if="['missing', 'no_file', 'draft_only'].includes(row.status)" variant="ghost" :disabled="editorLoading" @click="openEditor('document', row.requirement.id)">{{ t('shelfModel.attach') }}</Button>
                     <small v-if="row.ambiguous" role="status">{{ t('shelfModel.ambiguous') }}</small>
                   </td>
                   <td>{{ row.requirement.canonical_name }}
@@ -338,7 +368,8 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
               </dd>
             </div>
           </dl>
-          <p v-else>{{ t('productShelf.noRecords') }}</p>
+          <p v-else-if="!attributeFields.length">{{ t('productShelf.noRecords') }}</p>
+          <ManagedAttributes v-if="attributeFields.length" :model-value="node.entity.attributes || {}" :fields="attributeFields" :library-id="library.id" kind="model" readonly />
         </section>
         <section id="files">
           <h2>{{ t('shelfModel.sections.files') }}</h2>
@@ -403,10 +434,15 @@ onBeforeUnmount(() => { generation++; historyGeneration++ })
         <Button :disabled="historyLoading || !history || historyPage * history.page_size >= history.total" @click="loadHistory(historyPage + 1)">{{ t('follows.nextPage') }}</Button>
       </div>
     </section>
+    <ShelfDocumentEditor v-if="editingNode && editor === 'document'" :key="`${library.id}-${nodeId}-document`" :library="library" :target-node="editingNode" :initial-requirement-id="initialRequirement" @close="editor = ''" @saved="saved" />
+    <ShelfModelEditor v-if="editingNode && editor && editor !== 'document'" :key="`${library.id}-${nodeId}-${editor}`" :library="library" :node="editingNode" :mode="editor" :line-id="ancestors.find(item => item.kind === 'product_line')?.id" @close="editor = ''" @saved="saved" />
   </article>
 </template>
 
 <style scoped>
+.rq-model-identifiers { display:flex; gap:var(--space-3); flex-wrap:wrap; font-size:var(--text-sm); }
+.rq-model-title { display:flex; justify-content:space-between; align-items:end; gap:var(--space-3); }
+.rq-model-actions { display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; }
 .shelf-model { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; padding: var(--space-5) var(--space-6) var(--space-7); color: var(--text); }
 h1, h2, h3, p, dl { margin: 0; }
 h1 { margin-top: var(--space-4); font-family: var(--mono); font-size: var(--text-2xl); font-weight: 800; letter-spacing: -0.03em; overflow-wrap: anywhere; }

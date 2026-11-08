@@ -288,6 +288,12 @@ Semantic tables own their bounded overflow. Component and ancestor certification
 have separate row groups. The page uses the existing tokens, shared feedback
 states and buttons; it adds no palette or interaction primitive.
 
+Model edit actions sit beside the title and the stage, composition and
+certification headings. Checklist gaps also open the document dialog with that
+requirement selected. Editors reuse Dialog, Field and native controls; parameter
+values keep their typed controls, ranges and module conditions. No new visual
+tokens or interaction primitives are introduced.
+
 Shelf upper-node and part details reuse the model page's Swiss grid, typography,
 semantic tables and local horizontal scrolling. Upper nodes show descendant
 models, a requirement matrix, files owned at this node and certification origins.
