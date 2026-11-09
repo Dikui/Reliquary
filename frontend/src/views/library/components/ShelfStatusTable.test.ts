@@ -49,6 +49,12 @@ test('product line tabs show their regions and expandable platform and product g
   await click(descendants(root).find(node => node.props.role === 'tab' && visibleText(node).includes('line-b'))!)
   assert.match(visibleText(root), /model-b/); assert.ok(headers().includes('South')); assert.ok(!headers().includes('North'))
 })
+test('platform rows and the current product line open their node pages', async t => {
+  const { root, navigations } = await mountTable(t)
+  await click(descendants(root).find(node => node.tag === 'button' && node.props['aria-label'] === '查看 platform-a')!)
+  await click(descendants(root).find(node => node.tag === 'button' && visibleText(node) === '查看产品线')!)
+  assert.deepEqual(navigations.map(item => item.query.entity_id), ['platform-a', 'line-a'])
+})
 
 // Small spec, task 14: filters are submitted to the shared query service as one conjunction.
 test('status region parameter certification and document gap filters use the shared query', async t => {

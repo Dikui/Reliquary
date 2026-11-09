@@ -397,6 +397,7 @@ export default {
     total: "{count} 个型号",
     partial: "部分选配",
     openNode: "查看",
+    openLine: "查看产品线",
     incomplete: "查询结果不完整，请重新加载。"
   },
   productShelf: {

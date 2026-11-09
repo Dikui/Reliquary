@@ -397,6 +397,7 @@ export default {
     total: "{count} models",
     partial: "Some options",
     openNode: "View",
+    openLine: "View product line",
     incomplete: "The query result is incomplete. Reload the table."
   },
   productShelf: {
