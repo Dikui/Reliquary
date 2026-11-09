@@ -388,7 +388,7 @@ export default {
 
     title: "Product shelf",
     status: "Status table",
-    documents: "Materials",
+    documents: "Text materials",
     lines: "Product lines",
     hierarchy: "Platform / Product / Model",
     notes: "Notes",

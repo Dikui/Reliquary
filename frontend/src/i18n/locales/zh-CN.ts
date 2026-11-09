@@ -388,7 +388,7 @@ export default {
 
     title: "产品货架",
     status: "状态表",
-    documents: "资料",
+    documents: "文本资料",
     lines: "产品线",
     hierarchy: "平台 / 产品名称 / 型号",
     notes: "备注",
