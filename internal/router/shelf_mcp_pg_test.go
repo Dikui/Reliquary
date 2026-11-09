@@ -288,3 +288,31 @@ func TestShelfMCPQueryReturnsCountAndMatchingConditions(t *testing.T) {
 	require.NotEmpty(t, result.Items[0].MatchingConditions)
 	require.Equal(t, at, result.AsOf.Format(time.RFC3339Nano))
 }
+
+// Status questions over MCP: any region (region omitted), planned retirement and
+// missing records use the same filters as the status table; a display name in
+// place of a region key gets an error naming the configured keys.
+func TestShelfMCPQueryStatusFilters(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	statuses := []types.ShelfSaleStatus{{Region: "region_a", Status: "GA", PlannedEOM: true}}
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{{ID: "status", Type: "set_sale_statuses", EntityID: shelfNode(nodes, "model"), Revision: 1, SaleStatuses: &statuses}}}, http.StatusCreated, nil)
+	client := f.connect(t, "2025-11-25")
+	for name, filter := range map[string]map[string]any{
+		"any region":         {"status": "GA"},
+		"planned retirement": {"planned_eom": true},
+		"no record anywhere": {"no_record": true},
+	} {
+		var result types.ShelfQueryResult
+		mcpCall(t, client, "shelf_query", map[string]any{"library_id": library.ID, "sale_statuses": []any{filter}}, &result)
+		require.EqualValues(t, 1, result.Total, name)
+		want := shelfNode(nodes, "model")
+		if filter["no_record"] == true {
+			want = shelfNode(nodes, "single")
+		}
+		require.Equal(t, want, result.Items[0].Entity.ID, name)
+	}
+	response, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "shelf_query", Arguments: map[string]any{"library_id": library.ID, "sale_statuses": []any{map[string]any{"region": "Region A", "status": "GA"}}}})
+	require.NoError(t, err)
+	require.True(t, response.IsError)
+	require.Contains(t, response.Content[0].(*mcp.TextContent).Text, "region_a")
+}

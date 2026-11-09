@@ -64,7 +64,12 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 	addTool(server, "shelf_query", mcp.ToolAnnotations{ReadOnlyHint: true}, "结构化筛选或按部件、认证标准反查型号，所有筛选须由同一可行组合满足。返回 items（完整详情、matching_conditions、partial_options）、分页前 total、truncated、as_of；matching_conditions 外层为或，内层为且。"+shelfExpertNotice+externalContentNotice,
 		object(map[string]any{
 			"library_id": text("已开启货架的库 ID，必填"), "ancestor_id": text("产品线、平台或产品名称 ID，限定其下属型号"),
-			"sale_statuses": map[string]any{"type": "array", "description": "区域状态筛选，各项取交集", "items": object(map[string]any{"region": text("配置区域键"), "status": enum("状态", "GA", "DEV", "Planning", "EOM", "待定")}, "region", "status")},
+			"sale_statuses": map[string]any{"type": "array", "description": "区域状态筛选，各项取交集；每项至少给 region、status、planned_eom、no_record 之一", "items": object(map[string]any{
+				"region":      text("区域键，取 list_libraries 中货架配置 regions[].key（如 jp），不是显示名；省略表示任一区域"),
+				"status":      enum("状态；省略表示任一状态", "GA", "DEV", "Planning", "EOM", "待定"),
+				"planned_eom": boolean("true 只查标记计划退市的状态，false 排除计划退市"),
+				"no_record":   boolean("true 查该区域没有状态记录的型号，省略 region 时查所有区域都没有记录的型号；不能与 status、planned_eom 同用，无记录不等于待定"),
+			})},
 			"parameters":    map[string]any{"type": "array", "description": "数值参数闭区间筛选，各项取交集", "items": object(map[string]any{"field": text("本库参数字段键"), "min": map[string]any{"type": "number"}, "max": map[string]any{"type": "number"}}, "field")},
 			"composition":   shelfConditionsSchema(), "part_id": text("反查使用此部件的型号"),
 			"certification": object(map[string]any{"standard": text("标准配置键、规范名或明确别名"), "progress": text("进度原文"), "region": text("地区原文")}),

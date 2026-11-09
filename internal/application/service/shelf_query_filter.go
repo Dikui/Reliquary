@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	apperrors "reliquary/internal/errors"
@@ -110,11 +112,21 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 	}
 	filters := []map[string]any{}
 	for _, status := range input.SaleStatuses {
-		if (status.Region != "" && !slices.ContainsFunc(library.ShelfConfig.Regions, func(region types.ShelfOption) bool { return region.Key == status.Region })) ||
-			(status.Status != "" && !slices.Contains([]string{"GA", "DEV", "Planning", "EOM", "待定"}, status.Status)) ||
-			(status.NoRecord && (status.Status != "" || status.PlannedEOM != nil)) ||
-			(status.Region == "" && status.Status == "" && status.PlannedEOM == nil && !status.NoRecord) {
-			return nil, apperrors.NewBadRequestError("regional filters require a configured region or valid state; no_record cannot be combined with a state")
+		if status.Region != "" && !slices.ContainsFunc(library.ShelfConfig.Regions, func(region types.ShelfOption) bool { return region.Key == status.Region }) {
+			keys := make([]string, 0, len(library.ShelfConfig.Regions))
+			for _, region := range library.ShelfConfig.Regions {
+				keys = append(keys, region.Key+" ("+region.Name+")")
+			}
+			return nil, apperrors.NewBadRequestError(fmt.Sprintf("unknown region %q; use a configured region key, or omit region for any region: %s", status.Region, strings.Join(keys, ", ")))
+		}
+		if status.Status != "" && !slices.Contains([]string{"GA", "DEV", "Planning", "EOM", "待定"}, status.Status) {
+			return nil, apperrors.NewBadRequestError(fmt.Sprintf("unknown status %q; use GA, DEV, Planning, EOM or 待定, planned_eom for planned retirement, no_record for missing records", status.Status))
+		}
+		if status.NoRecord && (status.Status != "" || status.PlannedEOM != nil) {
+			return nil, apperrors.NewBadRequestError("no_record cannot be combined with status or planned_eom")
+		}
+		if status.Region == "" && status.Status == "" && status.PlannedEOM == nil && !status.NoRecord {
+			return nil, apperrors.NewBadRequestError("each regional filter needs region, status, planned_eom or no_record")
 		}
 		filterType := "status"
 		if status.NoRecord {
