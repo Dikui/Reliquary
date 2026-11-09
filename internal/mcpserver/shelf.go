@@ -56,7 +56,7 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 	addTool(server, "shelf_get", mcp.ToolAnnotations{ReadOnlyHint: true}, "按已澄清的节点 ID 读取详情，支持部件组合与业务时间。返回 entity、shelf、facts、as_of、recorded，事实保留条件、来源日志、快照及生效和记录时间；recorded=false 表示该时点无记录。"+shelfExpertNotice+externalContentNotice,
 		object(map[string]any{
 			"library_id": text("已开启货架的库 ID，必填"), "node_id": text("候选中明确选定的节点 ID，必填"),
-			"combination": map[string]any{"type": "object", "additionalProperties": text("本模块选择的部件 ID"), "description": "模块键到部件 ID 的映射，指定时须选择每个选配模块；省略返回所有适用条件"},
+			"combination": map[string]any{"type": "object", "additionalProperties": text("该部件类型选择的部件 ID"), "description": "部件类型键到部件 ID 的映射，指定时须选择每个选配部件类型；省略返回所有适用条件"},
 			"as_of":       text("业务时间，RFC3339，省略为当前时间"),
 		}, "library_id", "node_id"), func(ctx context.Context, in shelfGetInput) (any, error) {
 			return entities.ShelfGet(ctx, in.LibraryID, in.NodeID, types.ShelfReadOptions{AsOf: in.AsOf, Combination: in.Combination})
@@ -150,7 +150,7 @@ func shelfOperationSchema() map[string]any {
 			"version": integer("修改时的关系版本", 1, 0), "valid_from": text("RFC3339 生效时间"),
 		}, "subject_id", "object_id", "relation_type"),
 		"entry_id": text("明确关联的资料 ID"), "excluded": boolean("是否排除此关联"), "relation_type": text("资料关联类型"),
-		"library": shelfPayloadSchema("configure_shelf 的库设置 patch，与 HTTP 库设置相同；客户模块、区域、阶段等使用本库配置"), "library_updated_at": text("读取到的库更新时间，RFC3339"),
+		"library": shelfPayloadSchema("configure_shelf 的库设置 patch，与 HTTP 库设置相同；客户部件类型、区域、阶段等使用本库配置"), "library_updated_at": text("读取到的库更新时间，RFC3339"),
 		"sale_statuses": map[string]any{"type": "array", "items": object(map[string]any{
 			"region": text("配置区域键"), "status": enum("状态，空白须提交方决定", "GA", "DEV", "Planning", "EOM", "待定", ""),
 			"planned_eom": boolean("计划退市"), "notes": text("备注"), "raw": text("原始写法"), "conditions": shelfConditionsSchema(),
@@ -188,7 +188,7 @@ func shelfPayloadSchema(description string) map[string]any {
 }
 
 func shelfConditionsSchema() map[string]any {
-	return map[string]any{"type": "array", "description": "各模块条件取交集，同模块部件集合内任选其一，空数组为全部适用", "items": object(map[string]any{
-		"module_type": text("本库模块类型键"), "part_ids": map[string]any{"type": "array", "minItems": 1, "items": text("允许的本库部件 ID")},
+	return map[string]any{"type": "array", "description": "各部件类型条件取交集，同一部件类型的部件集合内任选其一，空数组为全部适用", "items": object(map[string]any{
+		"module_type": text("本库部件类型键"), "part_ids": map[string]any{"type": "array", "minItems": 1, "items": text("允许的本库部件 ID")},
 	}, "module_type", "part_ids")}
 }

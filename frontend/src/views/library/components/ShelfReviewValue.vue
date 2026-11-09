@@ -14,7 +14,8 @@ const hidden = new Set(['id', 'type', 'revision', 'version', 'space_id', 'librar
 const entries = computed(() => props.value && typeof props.value === 'object' && !Array.isArray(props.value)
   ? Object.entries(props.value).filter(([key]) => !['', 'entity', 'patch', 'relation', 'library'].includes(props.name) || !hidden.has(key)) : null)
 const field = computed(() => props.library.entity_schema?.fields?.find(field => field.key === props.name))
-const label = computed(() => field.value?.name || (te(`shelfReview.fields.${props.name}`) ? t(`shelfReview.fields.${props.name}`) : props.name))
+// module_type keeps a legacy stored name; show the current copy instead.
+const label = computed(() => (props.name !== 'module_type' && field.value?.name) || (te(`shelfReview.fields.${props.name}`) ? t(`shelfReview.fields.${props.name}`) : props.name))
 const options = computed(() => {
   if (props.name === 'status') return SALE_STATUSES.map(value => ({ key: value, name: value }))
   if (props.name === 'kind') return props.library.entity_schema?.kinds || []

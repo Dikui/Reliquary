@@ -17,7 +17,7 @@ MCP 端点为 `/mcp`，使用同一 Bearer 头。MCP 调用还须检查 JSON-RPC
 | `list_libraries` | GET `/api/v1/libraries` | 无参数；HTTP `data` 是库数组，MCP 为 `libraries` 数组 |
 | `search` | POST `/api/v1/search` | JSON 参数同 MCP，必填 `query`、`libraries`；`data` 含 `results`、降级状态和缺发布时间排除数 |
 | `shelf_find` | GET `/api/v1/libraries/:id/shelf/find` | MCP 的 library_id 放路径；q、limit、offset 放查询串；返回 items、total、truncated，候选含类别 |
-| `shelf_get` | GET `/api/v1/libraries/:id/shelf/nodes/:node_id` | library_id、node_id 放路径；as_of 为 RFC3339，combination 为 URL 编码的模块到部件 JSON 对象；返回 entity、shelf、facts、as_of、recorded |
+| `shelf_get` | GET `/api/v1/libraries/:id/shelf/nodes/:node_id` | library_id、node_id 放路径；as_of 为 RFC3339，combination 为 URL 编码的部件类型到部件 JSON 对象；返回 entity、shelf、facts、as_of、recorded |
 | `shelf_query` | POST `/api/v1/libraries/:id/shelf/query` | library_id 放路径，其余 JSON 筛选同 MCP；返回 items、total、truncated、as_of |
 | `shelf_submit` | POST `/api/v1/libraries/:id/shelf/changesets`；PATCH `/api/v1/libraries/:id/shelf/changesets/:changeset_id`；POST `/api/v1/libraries/:id/shelf/changesets/:changeset_id/confirm` | 新建时 library_id 放路径，其余同 MCP；继续处理时 HTTP 保存决定用 PATCH `/api/v1/libraries/:id/shelf/changesets/:changeset_id`，确认用 POST confirm 路径，JSON 为 revision、decisions。MCP 用同一工具的 changeset_id、revision、decisions，且确认必须 confirmed=true；错误含 error.details 中的变更集 |
 | `get_entry` | GET `/api/v1/entries/:id`，GET `/api/v1/entries/:id/body` | 前者 `data` 为资料详情；后者为原始 Markdown。与 MCP 分段读取不同，详见下文 |

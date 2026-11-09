@@ -73,11 +73,11 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 ## 组成、可售状态与参数
 
-组成使用 `save_relation`，`relation_type` 为 `composed_of`，主体为型号，客体为部件，关系属性 `module_type` 必须是本库配置的模块键。同一模块一个部件为固定组成，多个为选配。单独销售的部件型产品仍创建独立型号，通过组成关系引用一个部件。部件可通过 `create_entity`、`update_entity` 保存 `module_type`、`pack_model`、`cluster_model`、`container_model`；名称和型号写法原样保留。
+组成使用 `save_relation`，`relation_type` 为 `composed_of`，主体为型号，客体为部件，关系属性 `module_type` 必须是本库配置的部件类型键。同一部件类型一个部件为固定组成，多个为选配。单独销售的部件型产品仍创建独立型号，通过组成关系引用一个部件。部件可通过 `create_entity`、`update_entity` 保存 `module_type`、`pack_model`、`cluster_model`、`container_model`；名称和型号写法原样保留。
 
 `set_sale_statuses` 接受 `entity_id`、`revision`、可选 `effective_at` 和 `sale_statuses` 数组，整体替换该型号的区域状态记录。每条记录包含 `region`（区域键）、`status`（GA、DEV、Planning、EOM 或待定）、`planned_eom`、`notes`、`raw` 和 `conditions`。空数组表示明确清空全部记录；缺少某区域表示该区域无记录。空白状态返回 `uncertain` 冲突，提交方须修正为明确状态，或明确选择不写入。系统不自动补待定。导入使用来源中的文件日期作为生效时间。
 
-适用条件写成 `[{"module_type":"module_a","part_ids":["part-a","part-b"]}]`。数组内各模块同时成立，每个模块选择所列部件之一，空条件表示全部适用。模块不能重复，部件集合不能为空，部件必须属于该型号在生效时刻的对应模块。同一区域的多条状态、同一参数的多条值不能覆盖同一组合；重叠时作为含义不确定退回提交方。
+适用条件写成 `[{"module_type":"module_a","part_ids":["part-a","part-b"]}]`。数组内各部件类型同时成立，每个部件类型选择所列部件之一，空条件表示全部适用。部件类型不能重复，部件集合不能为空，部件必须属于该型号在生效时刻的对应部件类型。同一区域的多条状态、同一参数的多条值不能覆盖同一组合；重叠时作为含义不确定退回提交方。
 
 参数字段沿用库的 `entity_schema.fields`，通过 `configure_shelf` 定义。参数定义设置 `kinds:["model"]` 和非空 `product_line_ids`（本库产品线 ID 数组），其余类型、单位、选项规则沿用普通属性。字段定义中的产品线可追加，已有值或历史值使用的产品线不能移除。型号必须通过完整层级属于允许的产品线，参数不继承到其他型号。
 
@@ -97,7 +97,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 数值支持单个数字或含 `min`、`max` 的闭区间，要求下限不大于上限。其他类型的 `value` 使用原字段类型。仅替换请求列出的参数，空值数组明确移除该参数。参数和状态也可随通用属性快照写入，仍受同一校验约束。组合规则字段 `combination_rules` 只接受空数组，保留位置，尚不执行规则。
 
-`GET /api/v1/entities/:entity_id` 对货架型号增加 `shelf`，包含按模块分组的 `composition`、`sale_statuses`、`parameters` 和空 `combination_rules`。组成中的 `optional` 表示有多个部件。可传 `combination` 查询参数，值为 URL 编码的模块键到部件 ID 的 JSON 对象；须选择所有选配模块，固定部件可省略。未指定组合时返回全部记录及条件，指定后只返回条件满足的记录。可用 RFC 3339 `as_of` 同时读取对应时点的属性和组成，早于最早记录时不推断事实。
+`GET /api/v1/entities/:entity_id` 对货架型号增加 `shelf`，包含按部件类型分组的 `composition`、`sale_statuses`、`parameters` 和空 `combination_rules`。组成中的 `optional` 表示有多个部件。可传 `combination` 查询参数，值为 URL 编码的部件类型键到部件 ID 的 JSON 对象；须选择所有选配部件类型，固定部件可省略。未指定组合时返回全部记录及条件，指定后只返回条件满足的记录。可用 RFC 3339 `as_of` 同时读取对应时点的属性和组成，早于最早记录时不推断事实。
 
 单卖型号的状态变化在变更集条目的 `warnings` 中返回 `component_sale_status_changed` 和其他使用该部件的型号 ID。提示不阻止确认，也不修改其他型号的状态或修订号。部件自身没有可售状态。若移除组成或调整层级会使已有状态条件或参数失效，须在同一变更集中先修正相关值。
 
@@ -118,7 +118,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 识别键为所属节点、标准、认证对象、电芯部件和地区，不包含年份、机构、进度或证书编号。更新匹配零条或多条时返回 `uncertain` 阻塞冲突，不会自动新增、合并或拆分。显式 `entity_id` 也必须与识别键一致。多条候选须由人工在 `apply` 决定中提供 `target_entity_id` 与 `target_revision`，明确选中一条；零条时须修正操作或明确改为新增。新增操作本身表示提交方明确建立独立记录，因此可保存同键的不同认证，后续自动匹配会报告多条候选。
 
-认证对象可以填写 BMS；无法确定所属节点的独立认证行返回 `uncertain`，即使普通接受也不能写入。提交方可以修正、放弃或暂缓。模块不根据认证对象名称自动创建。电芯部件和条件引用须属于所属节点的组成范围，不能引用其他库的部件。条件沿用模块与部件集合的合取写法，须由所属范围内同一个型号同时满足。结构调整不能使已有或未来生效认证的条件、部件或归属关系失效。
+认证对象可以填写 BMS；无法确定所属节点的独立认证行返回 `uncertain`，即使普通接受也不能写入。提交方可以修正、放弃或暂缓。部件不根据认证对象名称自动创建。电芯部件和条件引用须属于所属节点的组成范围，不能引用其他库的部件。条件沿用部件类型与部件集合的合取写法，须由所属范围内同一个型号同时满足。结构调整不能使已有或未来生效认证的条件、部件或归属关系失效。
 
 `GET /api/v1/libraries/:id/shelf/certifications` 返回本库认证，可用 `standard`（配置键、规范名或别名）筛选，并可用 RFC 3339 `as_of` 读取历史。未知标准返回空列表。型号、部件、产品名称和平台详情增加 `shelf.certifications`，每项包含认证实体、完整字段、`standard_name` 和 `origin`。`origin` 为 `self`、`component`（来自部件）或 `ancestor`（来自上层）。仅含一个部件的型号把该部件认证显示为自身认证，底层记录仍只有一份。
 
@@ -154,7 +154,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 证书报告的 `owner_id` 指向认证记录，同时提供与认证记录一致的 `certificate_number`。仅提供编号时，必须在本库活动认证记录中唯一匹配；不匹配或重复编号返回 `uncertain`，提交方须修正或明确指定认证记录。编号只用于确定认证归属，不用于判断两份文件是否为同一文件；没有资料要求时，追加版本仍须明确指定已有文件。不根据文件名称猜归属。
 
-版本可带 `entry_id` 指向通过现有收录接口保存的本库文本资料，每个版本使用独立资料。确认后显式关联到资料文件与所属节点，不按正文名称匹配。无显式文本且有本机原件时，确认后按库配置选择解析器并在后台解析；未配置解析器或选择不解析时返回 `parse_status:"not_parsed"`。解析配置、状态与重解析操作见[货架资料解析](product-shelf-parsers.md)。有显式文本时返回 `completed`，表示已有文本，不代表完成后续模型处理。适用条件沿用模块与部件的合取写法，并校验所属节点范围。
+版本可带 `entry_id` 指向通过现有收录接口保存的本库文本资料，每个版本使用独立资料。确认后显式关联到资料文件与所属节点，不按正文名称匹配。无显式文本且有本机原件时，确认后按库配置选择解析器并在后台解析；未配置解析器或选择不解析时返回 `parse_status:"not_parsed"`。解析配置、状态与重解析操作见[货架资料解析](product-shelf-parsers.md)。有显式文本时返回 `completed`，表示已有文本，不代表完成后续模型处理。适用条件沿用部件类型与部件的合取写法，并校验所属节点范围。
 
 `GET /entities/:entity_id/document-versions` 按顺序号倒序返回全部版本，包含当前标记、来源、时间、文本引用与归类信息。`GET /entities/:entity_id/document-versions/:version_id/download` 下载指定版本的本机原件；仅有云盘链接的版本返回 404，可使用版本中的链接。版本引用的附件不能删除，包括历史版本。新增版本沿用 `update_entity` 操作日志类型，以 `document_version` 保存版本详情，并保留变更集来源。
 
@@ -197,10 +197,10 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 适用范围通过 `save_relation` 的 `applies_to` 关系保存：
 
-- 产品线要求：`subject_id` 为资料要求，`object_id` 为产品线，不填模块属性。
-- 模块要求：模块类型属于库配置，不新增模块实体；`subject_id` 与 `object_id` 均为该资料要求，关系属性为 `{"module_types":["configured_module"]}`，可包含多个不同的配置键。该自引用只用于货架资料要求的模块适用范围。
+- 产品线要求：`subject_id` 为资料要求，`object_id` 为产品线，不填部件类型属性。
+- 部件类型要求：部件类型属于库配置，不新增部件类型实体；`subject_id` 与 `object_id` 均为该资料要求，关系属性为 `{"module_types":["configured_module"]}`，可包含多个不同的配置键。该自引用只用于货架资料要求的部件类型适用范围。
 
-同一要求可以同时绑定产品线与模块，计算清单会去重。未完成资料要求字段的实体不能新建适用关系。已有资料要求的完整字段不能清空以隐藏义务，须明确归档。清单更新使用已有变更集差异流程：新增项创建，修改项带修订号更新，消失项用 `missing_entity` 提议并由人选择 `retire` 后归档；也可明确使用 `archive_entity`。消失本身不归档、不删除文件，归档后所有型号按当前活动要求计算。
+同一要求可以同时绑定产品线与部件类型，计算清单会去重。未完成资料要求字段的实体不能新建适用关系。已有资料要求的完整字段不能清空以隐藏义务，须明确归档。清单更新使用已有变更集差异流程：新增项创建，修改项带修订号更新，消失项用 `missing_entity` 提议并由人选择 `retire` 后归档；也可明确使用 `archive_entity`。消失本身不归档、不删除文件，归档后所有型号按当前活动要求计算。
 
 产品名称与型号用 `attributes.current_stage` 保存配置阶段键，仍走 `update_entity` 并检查修订号。型号没有该字段时沿用产品名称；移除型号字段恢复继承。两层都未填写时只显示文件有无。完整属性快照及 `effective_at`、导入文件日期沿用现有时间线规则。
 
@@ -212,7 +212,7 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 ## 资料文件管理
 
-资料文件页面使用 `/platform/entries?libraries=<库 ID>&tab=files`，单文件版本页增加 `file=<资料文件 ID>`。货架设置使用同一路由的 `tab=shelf-settings`；普通资料页签仍为 `tab=documents`。模块类型、区域、有序阶段、解析器和按产品线的参数定义通过 `configure_shelf` 保存，带读取到的 `library_updated_at`。资料要求与适用关系在同一变更集中确认。
+资料文件页面使用 `/platform/entries?libraries=<库 ID>&tab=files`，单文件版本页增加 `file=<资料文件 ID>`。货架设置使用同一路由的 `tab=shelf-settings`；普通资料页签仍为 `tab=documents`。部件类型、区域、有序阶段、解析器和按产品线的参数定义通过 `configure_shelf` 保存，带读取到的 `library_updated_at`。资料要求与适用关系在同一变更集中确认。
 
 `GET /libraries/:id/shelf/documents` 返回 `items`、分页前的 `total` 和 `truncated`。每项包含 `entity`、`document` 及可选的 `owner`、`requirements`。单项关联时仍返回兼容字段 `requirement`。筛选参数如下，均在分页前执行：
 
