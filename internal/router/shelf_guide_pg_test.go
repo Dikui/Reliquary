@@ -11,8 +11,14 @@ import (
 
 type guideGapResult struct {
 	Gaps struct {
-		ModelCount int64 `json:"model_count"`
-		Documents  struct {
+		ModelCount        int64 `json:"model_count"`
+		CurrentStageUnset bool  `json:"current_stage_unset"`
+		NoFileDocuments   types.ShelfGuidePage[struct {
+			ModelID           string `json:"model_id"`
+			CurrentStageUnset bool   `json:"current_stage_unset"`
+			types.ShelfChecklistItem
+		}] `json:"no_file_documents"`
+		Documents struct {
 			Items []struct {
 				ModelID string `json:"model_id"`
 				types.ShelfChecklistItem
@@ -134,7 +140,7 @@ func TestShelfGuideCountsBeyondFirstPage(t *testing.T) {
 	require.True(t, result.Gaps.PendingChangesets.Truncated)
 }
 
-// Medium spec, task 31: supplement instructions reflect this library's saved
+// Medium spec, tasks 31 and 32: supplement instructions reflect this library's saved
 // configuration and imports, and reading them never creates a proposal.
 func TestShelfGuideUsesCurrentLibraryValues(t *testing.T) {
 	f, l := importSetup(t)
@@ -159,9 +165,16 @@ func TestShelfGuideUsesCurrentLibraryValues(t *testing.T) {
 			Regions          []types.ShelfOption   `json:"regions"`
 			ModuleTypes      []types.ShelfOption   `json:"module_types"`
 			Standards        []types.ShelfStandard `json:"standards"`
-			RequirementLists []string              `json:"requirement_lists"`
-			Requirements     []types.Entity        `json:"requirements"`
-			SaleStatuses     []string              `json:"sale_statuses"`
+			RequirementLists []struct {
+				Name         string `json:"name"`
+				Total        int64  `json:"total"`
+				ProductLines []struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				} `json:"product_lines"`
+			} `json:"requirement_lists"`
+			Requirements any      `json:"requirements"`
+			SaleStatuses []string `json:"sale_statuses"`
 		} `json:"values"`
 		ImportPlans []struct {
 			Key          string                       `json:"key"`
@@ -183,8 +196,11 @@ func TestShelfGuideUsesCurrentLibraryValues(t *testing.T) {
 	require.Equal(t, l.ShelfConfig.Regions, guide.Values.Regions)
 	require.Equal(t, l.ShelfConfig.ModuleTypes, guide.Values.ModuleTypes)
 	require.Equal(t, l.ShelfConfig.Standards, guide.Values.Standards)
-	require.Equal(t, []string{" Original list "}, guide.Values.RequirementLists)
-	require.Equal(t, requirement.ID, guide.Values.Requirements[0].ID)
+	require.Len(t, guide.Values.RequirementLists, 1)
+	require.Equal(t, " Original list ", guide.Values.RequirementLists[0].Name)
+	require.EqualValues(t, 1, guide.Values.RequirementLists[0].Total)
+	require.Empty(t, guide.Values.RequirementLists[0].ProductLines)
+	require.Nil(t, guide.Values.Requirements)
 	require.Equal(t, []string{"GA", "DEV", "Planning", "EOM", "待定"}, guide.Values.SaleStatuses)
 	require.Nil(t, guide.Gaps)
 	require.Len(t, guide.ImportPlans, 1)
@@ -193,7 +209,7 @@ func TestShelfGuideUsesCurrentLibraryValues(t *testing.T) {
 	require.Equal(t, "2026-11-01T00:00:00Z", guide.ImportPlans[0].LastFileDate)
 	require.Equal(t, "Header group\nHeader", guide.ImportPlans[0].LastHeaders["Map"]["A"])
 	require.Len(t, guide.ImportPlans[0].Definition.Sheets[0].Columns, 5)
-	for _, rule := range []string{"shelf_submit", "agent_name", "confirmed=true", "含义不确定", "entity-attachments", "MCP", "二进制", "add_document_version", "owner_id", "requirement_ids", "draft", "final", "version_label", "unassigned", "重复", "冲突", "别名", "所属清单", "电芯", "classify_document", "select_document_version"} {
+	for _, rule := range []string{"shelf_submit", "agent_name", "confirmed=true", "含义不确定", "entity-attachments", "MCP", "二进制", "add_document_version", "owner_id", "requirement_ids", "draft", "final", "version_label", "unassigned", "重复", "冲突", "别名", "所属清单", "电芯", "classify_document", "select_document_version", "no_file_documents", "current_stage_unset", "truncated"} {
 		require.Contains(t, guide.Rules, rule)
 	}
 	var drafts types.ShelfChangesetPage
@@ -308,4 +324,140 @@ func TestShelfGuideTruncatesAfterCountingAllGaps(t *testing.T) {
 	require.Equal(t, pending.ID, result.Gaps.PendingChangesets.Items[0].ID)
 	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, "b")}, &result)
 	require.Zero(t, result.Gaps.PendingChangesets.Total)
+}
+
+// Medium spec, task 32: guide requirements follow each node's model checklist,
+// are deduplicated across models/options, and expose only classification fields.
+func TestShelfGuideRequirementsFollowNodeChecklists(t *testing.T) {
+	f, l, n := checklistSetup(t)
+	first := checklistRequirement(t, f, l, "First original", "draft_due", "final_due")
+	second := checklistRequirement(t, f, l, "Second original", "", "final_due")
+	unbound := checklistRequirement(t, f, l, "Unbound original", "", "final_due")
+	archived := checklistRequirement(t, f, l, "Archived original", "", "final_due")
+	for _, r := range []types.Entity{first, second, archived} {
+		checklistBind(f, l, r, shelfNode(n, "line"))
+	}
+	f.request(http.MethodPatch, "/entities/"+archived.ID, map[string]any{"revision": 1, "archived": true}, http.StatusOK, nil)
+	var otherLine types.Entity
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/entities", map[string]any{"name": " Other line ", "kind": "product_line"}, http.StatusCreated, &otherLine)
+	foreign := checklistRequirement(t, f, l, "Other line requirement", "", "final_due")
+	checklistBind(f, l, foreign, otherLine.ID)
+	checklistBind(f, l, first, otherLine.ID)
+	checklistFile(f, l, shelfNode(n, "a"), first.ID, "final")
+	client := f.connect(t, "2025-11-25")
+	var result struct {
+		Values struct {
+			RequirementLists []types.ShelfGuideRequirementList     `json:"requirement_lists"`
+			Requirements     *types.ShelfGuidePage[map[string]any] `json:"requirements"`
+		} `json:"values"`
+	}
+	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID}, &result)
+	require.Nil(t, result.Values.Requirements)
+	require.Equal(t, []types.ShelfGuideRequirementList{{Name: "Synthetic list", Total: 4, ProductLines: []types.ShelfGuideProductLine{{ID: otherLine.ID, Name: otherLine.CanonicalName}, {ID: shelfNode(n, "line"), Name: "Synthetic line"}}}}, result.Values.RequirementLists)
+	for _, key := range []string{"model", "single", "line", "platform", "product", "a"} {
+		mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, key)}, &result)
+		require.NotNil(t, result.Values.Requirements, key)
+		page := result.Values.Requirements
+		if key == "a" {
+			require.Zero(t, page.Total)
+			require.Empty(t, page.Items)
+			continue
+		}
+		require.EqualValues(t, 2, page.Total, key)
+		require.False(t, page.Truncated)
+		require.Len(t, page.Items, 2)
+		require.Equal(t, map[string]any{"id": first.ID, "name": "First original", "list_name": "Synthetic list", "name_zh": " 资料原名 ", "name_en": " Original name ", "draft_due_stage": "draft_due", "final_due_stage": "final_due"}, page.Items[0])
+		require.Equal(t, second.ID, page.Items[1]["id"])
+		for _, item := range page.Items {
+			require.NotEqual(t, unbound.ID, item["id"])
+			require.NotEqual(t, foreign.ID, item["id"])
+		}
+	}
+	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": otherLine.ID}, &result)
+	require.Zero(t, result.Values.Requirements.Total, "a line with no models has no model requirements")
+}
+
+// Medium regression, task 32: absent stages produce a separate no-file gap,
+// preserving checklist states and option conditions at every hierarchy level.
+func TestShelfGuideReportsNoFileWithoutInferringDueStatus(t *testing.T) {
+	f, l, n := checklistSetup(t)
+	missing := checklistRequirement(t, f, l, "No file", "", "final_due")
+	conditional := checklistRequirement(t, f, l, "Partial file", "", "final_due")
+	supplied := checklistRequirement(t, f, l, "Shared file", "", "final_due")
+	for _, r := range []types.Entity{missing, conditional, supplied} {
+		checklistBind(f, l, r, shelfNode(n, "line"))
+	}
+	checklistFile(f, l, shelfNode(n, "a"), conditional.ID, "final")
+	checklistFile(f, l, shelfNode(n, "platform"), supplied.ID, "draft")
+	client := f.connect(t, "2025-11-25")
+	for _, key := range []string{"model", "line", "platform", "product", "a"} {
+		var result guideGapResult
+		mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, key)}, &result)
+		require.Zero(t, result.Gaps.Documents.Total, key)
+		require.Equal(t, key == "model", result.Gaps.CurrentStageUnset, key)
+		want := int64(4)
+		if key == "model" {
+			want = 2
+		}
+		if key == "a" {
+			want = 0
+		}
+		require.Equal(t, want, result.Gaps.NoFileDocuments.Total, key)
+		require.Len(t, result.Gaps.NoFileDocuments.Items, int(want))
+		require.False(t, result.Gaps.NoFileDocuments.Truncated)
+		for _, item := range result.Gaps.NoFileDocuments.Items {
+			require.Equal(t, "no_file", item.Status)
+			require.Equal(t, "无文件", item.StatusLabel)
+			require.True(t, item.CurrentStageUnset)
+			require.False(t, item.HasFile)
+			if item.ModelID == shelfNode(n, "model") && item.Requirement.ID == conditional.ID {
+				require.Equal(t, []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(n, "b")}}}, item.Conditions)
+				require.True(t, item.PartialOptions)
+			}
+		}
+	}
+	// The model stage can supply the effective stage when its product has none.
+	f.request(http.MethodPatch, "/entities/"+shelfNode(n, "model"), map[string]any{"revision": 1, "attributes": map[string]any{"current_stage": "early"}}, http.StatusOK, nil)
+	var result guideGapResult
+	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, "model")}, &result)
+	require.False(t, result.Gaps.CurrentStageUnset)
+	require.Zero(t, result.Gaps.NoFileDocuments.Total)
+	require.EqualValues(t, 1, result.Gaps.Documents.Total, "the supplied draft remains a draft-only gap")
+	// Clear the override and inherit the product stage instead.
+	f.request(http.MethodPatch, "/entities/"+shelfNode(n, "model"), map[string]any{"revision": 2, "attributes": map[string]any{}}, http.StatusOK, nil)
+	f.request(http.MethodPatch, "/entities/"+shelfNode(n, "product"), map[string]any{"revision": 1, "attributes": map[string]any{"current_stage": "final_due"}}, http.StatusOK, nil)
+	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, "model")}, &result)
+	require.False(t, result.Gaps.CurrentStageUnset)
+	require.Zero(t, result.Gaps.NoFileDocuments.Total)
+	require.EqualValues(t, 3, result.Gaps.Documents.Total)
+}
+
+// Medium regression, task 32: no-file gaps count model/option rows while
+// requirement totals count unique checklist requirements before truncation.
+func TestShelfGuideCountsAllNoFileGapsAndRequirements(t *testing.T) {
+	f, l, n := checklistSetup(t)
+	ops := []types.ShelfOperation{}
+	for i := 0; i < 101; i++ {
+		id := fmt.Sprintf("req%d", i)
+		ops = append(ops, types.ShelfOperation{ID: id, Type: "create_entity", Entity: &types.ManagedEntityInput{Name: fmt.Sprintf("Synthetic no-file requirement %03d", i), Kind: "document_requirement", Attributes: map[string]any{"requirement": types.ShelfRequirement{ListName: "Synthetic list", FinalDueStage: "final_due"}}}}, types.ShelfOperation{ID: id + "_line", Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: "$" + id, ObjectID: shelfNode(n, "line"), RelationType: "applies_to"}})
+	}
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: ops}, http.StatusCreated, nil)
+	client := f.connect(t, "2025-11-25")
+	for _, test := range []struct {
+		node  string
+		total int64
+	}{{"model", 101}, {"line", 202}, {"platform", 202}, {"product", 202}} {
+		var result struct {
+			guideGapResult
+			Values types.ShelfGuideValues `json:"values"`
+		}
+		mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, test.node)}, &result)
+		require.Equal(t, test.total, result.Gaps.NoFileDocuments.Total, test.node)
+		require.Len(t, result.Gaps.NoFileDocuments.Items, 100)
+		require.True(t, result.Gaps.NoFileDocuments.Truncated)
+		require.Zero(t, result.Gaps.Documents.Total)
+		require.EqualValues(t, 101, result.Values.Requirements.Total)
+		require.Len(t, result.Values.Requirements.Items, 100)
+		require.True(t, result.Values.Requirements.Truncated)
+	}
 }

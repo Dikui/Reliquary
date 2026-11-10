@@ -10,19 +10,22 @@ MCP 分别提供 `shelf_find`、`shelf_get`、`shelf_query`，均为只读工具
 
 返回 `library_id`、`library_updated_at`、`as_of`、`max_file_bytes`、`rules`、`values`、`import_plans`，指定节点时另带 `gaps`。所有动态内容在同一只读数据库快照中读取，固定规则来自[嵌入的补充规范](../skills/reliquary/reference/shelf-supplement.md)。工具不保存提议或修改配置。
 
-`values` 包含当前库的类别及父类别 `kinds`、活动产品线 `product_lines`、区域 `regions`、独立市场 `markets`、按数组顺序排列的阶段 `stages`、部件类型 `module_types`、标准及明确别名 `standards`、固定可售状态 `sale_statuses`、资料要求所属清单 `requirement_lists`、活动要求完整字段 `requirements` 和库内字段定义 `fields`。名称保留原写法，键和 ID 用于提交。
+`values` 包含当前库的类别及父类别 `kinds`、活动产品线 `product_lines`、区域 `regions`、独立市场 `markets`、按数组顺序排列的阶段 `stages`、部件类型 `module_types`、标准及明确别名 `standards`、固定可售状态 `sale_statuses`、资料要求清单汇总 `requirement_lists` 和库内字段定义 `fields`。名称保留原写法，键和 ID 用于提交。
+
+`requirement_lists` 每项为 `{name,total,product_lines:[{id,name}]}`，按所属清单原名汇总当前活动要求，产品线按有效 applies_to 绑定去重，没有绑定时返回空数组。不传 node_id 时不返回逐条 `requirements`。指定节点时，`values.requirements` 为 `{items,total,truncated}`：型号取其清单要求，上层节点取全部下属型号涉及的要求并按 ID 去重，部件或没有下属型号的节点返回空列表。每项仅含 id、name（原实体名）、list_name、name_zh、name_en、draft_due_stage、final_due_stage；空的中英文名与初稿阶段可缺省，不返回完整实体属性。按原实体名及 ID 排序，完整计数后最多保留 100 项；截断后可用 shelf_get 的型号清单核对剩余要求。
 
 `rules` 说明 shelf_submit 各操作必填项、具名 agent 来源、先预览经用户同意再确认、含义不确定项的修正或放弃或暂缓。资料原件先用有效 API Key 上传至 `POST /api/v1/libraries/:id/entity-attachments`（multipart 的 file），再经 add_document_version 变更集归类。MCP 不能传二进制，上传暂存不确认货架关联。单文件上限使用实际生效的 max_file_bytes；owner_id 层级、requirement_ids、draft/final、版本、unassigned、证书编号及向下共用规则均在规范中说明。
 
 `import_plans` 复用已保存方案查询，包含 key、file_kind、definition 中各工作表、header_rows、列字母与字段映射，以及 last_file_name、last_file_date、last_headers。日期为最近批次的文件业务日期，表头为最近文件中映射列的原文，多行以换行连接；历史批次未记录时缺省，不推断。方案修订后仍须核对表头。Excel 用 API Key 上传 `POST /api/v1/libraries/:id/shelf/imports`，后续通过 shelf_submit 审核。同内容、方案修订和生效时间重复上传复用原变更集；消失的行不自动删除，与手工值不同列为冲突。
 
-`gaps` 的节点必须是本库产品线、平台、产品名称、型号或部件。型号及上层节点返回 model_count，以及三个独立的 `{items,total,truncated}` 列表：
+`gaps` 的节点必须是本库产品线、平台、产品名称、型号或部件。型号及上层节点返回 model_count，以及四个独立的 `{items,total,truncated}` 列表：
 
-- documents：现有清单中的 missing 和 draft_only 行，保留 model_id、model_name、current_stage，以及原 requirement（含 ID、所属清单、初稿及终稿应交阶段）、条件、部分选配、所选版本和状态。不把未到期或未填阶段的无文件推断为到期缺口。
+- documents：现有清单中的 missing 和 draft_only 行，保留 model_id、model_name、current_stage，以及原 requirement（含 ID、所属清单、初稿及终稿应交阶段）、条件、部分选配、所选版本和状态。未到期项不列入。
+- no_file_documents：现有清单中的 no_file（无文件）行，保留与 documents 相同的型号、要求、条件和状态字段，独立计数，不推断已经到期。每行 current_stage_unset=true 表示型号和产品名称均未设置当前阶段；型号节点的 gaps 也会返回 current_stage_unset=true，提醒先补阶段。型号设置或从产品名称沿用阶段时不提示未设置。
 - sale_statuses：本库 regions 中该型号完全没有记录的区域，包含型号和区域的键及原名；已有条件记录的区域不算整区无记录。
 - pending_changesets：涉及节点、下属型号或其共用上层、组成部件、当前要求、认证、文件的待确认变更集摘要（id、revision、source、updated_at），按变更集去重。明确的关系两端、候选、决定和适用条件引用也参与判断；库设置提议影响整个库。原操作和冲突可用变更集 HTTP GET 读取。
 
-上层节点通过现有查询服务遍历全部当前活动下属型号，按同一 as_of 汇总，再分别截取各列表前 100 项。total 是截断前条数：资料按清单条件行、区域按型号与区域、变更集按唯一 ID 计数。部件 model_count 为 0，资料与区域列表为空，只返回涉及它的待确认变更集。截断后可用 shelf_query、shelf_get 逐个型号查看，待确认列表用 HTTP 分页继续读取；不把截断列表当成全部。
+上层节点通过现有查询服务遍历全部当前活动下属型号，按同一 as_of 汇总，再分别截取各列表前 100 项。documents 与 no_file_documents 分别计数和截断。total 是截断前条数：资料按清单条件行、区域按型号与区域、变更集按唯一 ID 计数。部件 model_count 为 0，两类资料与区域列表为空，只返回涉及它的待确认变更集。截断后可用 shelf_query、shelf_get 逐个型号查看，待确认列表用 HTTP 分页继续读取；不把截断列表当成全部。
 
 ## 状态表导出 Excel
 

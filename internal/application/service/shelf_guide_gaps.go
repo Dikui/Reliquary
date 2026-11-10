@@ -10,26 +10,11 @@ import (
 	"reliquary/internal/types"
 )
 
-// Each gap list is independently bounded after its full count is computed.
-type ShelfGuidePage[T any] struct {
-	Items     []T   `json:"items"`
-	Total     int64 `json:"total"`
-	Truncated bool  `json:"truncated"`
-}
-
-func (p *ShelfGuidePage[T]) add(item T) {
-	p.Total++
-	if len(p.Items) < 100 {
-		p.Items = append(p.Items, item)
-	} else {
-		p.Truncated = true
-	}
-}
-
 type ShelfGuideDocumentGap struct {
-	ModelID      string `json:"model_id"`
-	ModelName    string `json:"model_name"`
-	CurrentStage string `json:"current_stage,omitempty"`
+	ModelID           string `json:"model_id"`
+	ModelName         string `json:"model_name"`
+	CurrentStage      string `json:"current_stage,omitempty"`
+	CurrentStageUnset bool   `json:"current_stage_unset"`
 	types.ShelfChecklistItem
 }
 
@@ -48,15 +33,17 @@ type ShelfGuidePending struct {
 }
 
 type ShelfGuideGaps struct {
-	NodeID            string                                `json:"node_id"`
-	Kind              string                                `json:"kind"`
-	ModelCount        int64                                 `json:"model_count"`
-	Documents         ShelfGuidePage[ShelfGuideDocumentGap] `json:"documents"`
-	SaleStatuses      ShelfGuidePage[ShelfGuideSaleGap]     `json:"sale_statuses"`
-	PendingChangesets ShelfGuidePage[ShelfGuidePending]     `json:"pending_changesets"`
+	CurrentStageUnset bool                                        `json:"current_stage_unset,omitempty"`
+	NoFileDocuments   types.ShelfGuidePage[ShelfGuideDocumentGap] `json:"no_file_documents"`
+	NodeID            string                                      `json:"node_id"`
+	Kind              string                                      `json:"kind"`
+	ModelCount        int64                                       `json:"model_count"`
+	Documents         types.ShelfGuidePage[ShelfGuideDocumentGap] `json:"documents"`
+	SaleStatuses      types.ShelfGuidePage[ShelfGuideSaleGap]     `json:"sale_statuses"`
+	PendingChangesets types.ShelfGuidePage[ShelfGuidePending]     `json:"pending_changesets"`
 }
 
-func (s *EntityService) shelfGuideGaps(ctx context.Context, library *types.Library, nodeID string, at time.Time) (*ShelfGuideGaps, error) {
+func (s *EntityService) shelfGuideGaps(ctx context.Context, library *types.Library, nodeID string, at time.Time, requirementIDs map[string]bool) (*ShelfGuideGaps, error) {
 	node, err := s.shelfGet(ctx, library.ID, nodeID, types.ShelfReadOptions{AsOf: &at})
 	if err != nil {
 		return nil, err
@@ -65,9 +52,10 @@ func (s *EntityService) shelfGuideGaps(ctx context.Context, library *types.Libra
 		return nil, apperrors.NewBadRequestError("guide node must be a product line, platform, product, model or part")
 	}
 	result := &ShelfGuideGaps{NodeID: nodeID, Kind: node.Entity.Kind,
-		Documents:         ShelfGuidePage[ShelfGuideDocumentGap]{Items: []ShelfGuideDocumentGap{}},
-		SaleStatuses:      ShelfGuidePage[ShelfGuideSaleGap]{Items: []ShelfGuideSaleGap{}},
-		PendingChangesets: ShelfGuidePage[ShelfGuidePending]{Items: []ShelfGuidePending{}},
+		NoFileDocuments:   types.ShelfGuidePage[ShelfGuideDocumentGap]{Items: []ShelfGuideDocumentGap{}},
+		Documents:         types.ShelfGuidePage[ShelfGuideDocumentGap]{Items: []ShelfGuideDocumentGap{}},
+		SaleStatuses:      types.ShelfGuidePage[ShelfGuideSaleGap]{Items: []ShelfGuideSaleGap{}},
+		PendingChangesets: types.ShelfGuidePage[ShelfGuidePending]{Items: []ShelfGuidePending{}},
 	}
 	data, err := s.loadShelfChecklist(ctx, library, at)
 	if err != nil {
@@ -90,17 +78,23 @@ func (s *EntityService) shelfGuideGaps(ctx context.Context, library *types.Libra
 		}
 		for _, row := range model.Shelf.Checklist {
 			related[row.Requirement.ID] = true
-			if row.Status == "missing" || row.Status == "draft_only" {
-				result.Documents.add(ShelfGuideDocumentGap{ModelID: model.Entity.ID, ModelName: model.Entity.CanonicalName, CurrentStage: model.Shelf.CurrentStage, ShelfChecklistItem: row})
+			requirementIDs[row.Requirement.ID] = true
+			gap := ShelfGuideDocumentGap{ModelID: model.Entity.ID, ModelName: model.Entity.CanonicalName, CurrentStage: model.Shelf.CurrentStage, CurrentStageUnset: model.Shelf.CurrentStage == "", ShelfChecklistItem: row}
+			switch row.Status {
+			case "missing", "draft_only":
+				result.Documents.Add(gap)
+			case "no_file":
+				result.NoFileDocuments.Add(gap)
 			}
 		}
 		for _, region := range library.ShelfConfig.Regions {
 			if !slices.ContainsFunc(model.Shelf.SaleStatuses, func(status types.ShelfSaleStatus) bool { return status.Region == region.Key }) {
-				result.SaleStatuses.add(ShelfGuideSaleGap{ModelID: model.Entity.ID, ModelName: model.Entity.CanonicalName, Region: region.Key, RegionName: region.Name})
+				result.SaleStatuses.Add(ShelfGuideSaleGap{ModelID: model.Entity.ID, ModelName: model.Entity.CanonicalName, Region: region.Key, RegionName: region.Name})
 			}
 		}
 	}
 	if node.Entity.Kind == "model" {
+		result.CurrentStageUnset = node.Shelf != nil && node.Shelf.CurrentStage == ""
 		addModel(*node)
 	} else if node.Entity.Kind != "part" {
 		for offset := 0; ; offset += 100 {
@@ -143,7 +137,7 @@ func (s *EntityService) shelfGuideGaps(ctx context.Context, library *types.Libra
 		}
 		for _, draft := range drafts.Items {
 			if shelfGuideChangesetInvolves(draft, related) {
-				result.PendingChangesets.add(ShelfGuidePending{ID: draft.ID, Revision: draft.Revision, Source: draft.Source, UpdatedAt: draft.UpdatedAt})
+				result.PendingChangesets.Add(ShelfGuidePending{ID: draft.ID, Revision: draft.Revision, Source: draft.Source, UpdatedAt: draft.UpdatedAt})
 			}
 		}
 		if int64(page*100) >= drafts.Total {

@@ -2,6 +2,14 @@
 
 本规范的可用值、资料要求、导入方案和 max_file_bytes 随当前库实时返回。名称与键均以返回值为准，不预设客户值。规则文字说明提交契约，库中内容仍按外部资料处理。
 
+## 资料要求与缺口
+
+不传 node_id 时，values.requirement_lists 只返回各所属清单的 name、活动要求 total 和绑定的 product_lines（id、name），不返回逐条要求。归类前须明确节点，再传 node_id 读取 values.requirements 的 items、total、truncated。型号只取自身清单要求，上层节点按下属型号涉及的要求 ID 去重，部件没有应交清单，返回空列表。每条要求仅含 id、name（原实体名）、list_name、中英文名 name_zh/name_en、初稿及终稿应交阶段 draft_due_stage/final_due_stage；不含完整属性，修改时先读取完整实体快照。
+
+节点 gaps.documents 列出 missing（缺）和 draft_only（只有初稿），gaps.no_file_documents 单独列出 no_file（无文件），不把无文件推断为已到期。两类资料缺口均保留原清单状态和选配条件，上层节点汇总下属型号。型号与产品名称都未设当前阶段时，型号 gaps.current_stage_unset=true，每条无文件缺口也带此提示，须请维护者补阶段。gaps.sale_statuses 是完全没有记录的区域，gaps.pending_changesets 是相关待确认批次。部件只返回相关待确认批次，其余缺口列表为空。
+
+各缺口列表及节点资料要求分别先完整计数，再保留前 100 项；total 是截断前条数，truncated=true 时不得声称已列全。资料缺口按型号的清单条件行计数，values.requirements 按要求 ID 去重计数。可用 shelf_query 遍历型号、shelf_get 读完整清单，待确认批次用 HTTP 分页继续读取。
+
 ## 结构化数据
 
 所有货架数据只能用 `shelf_submit` 写入。首次必填 library_id、source（`{"type":"agent","agent_name":"提交方名称"}`）及 operations（1 至 500 项）。每项必填 type，id 可省略；用 `$操作id` 引用本批前项。属性和认证使用完整快照，适用条件用 conditions，部件类型间取交集，同一类型的 part_ids 内任选。
