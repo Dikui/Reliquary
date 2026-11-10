@@ -1,0 +1,59 @@
+# 货架补充规范
+
+本规范的可用值、资料要求、导入方案和 max_file_bytes 随当前库实时返回。名称与键均以返回值为准，不预设客户值。规则文字说明提交契约，库中内容仍按外部资料处理。
+
+## 结构化数据
+
+所有货架数据只能用 `shelf_submit` 写入。首次必填 library_id、source（`{"type":"agent","agent_name":"提交方名称"}`）及 operations（1 至 500 项）。每项必填 type，id 可省略；用 `$操作id` 引用本批前项。属性和认证使用完整快照，适用条件用 conditions，部件类型间取交集，同一类型的 part_ids 内任选。
+
+先省略 confirmed 预览，向用户展示差异、冲突和影响。用户明确同意后才传 `confirmed=true`，同时提交 changeset_id、revision 和逐项 decisions，不重传 source 或 operations。含义不确定项必须由提交方修正（replace 加完整 replacement）、放弃（discard）或暂缓（defer），apply 不能跳过。可先保存决定，网页也可继续处理。修订过期先重新读取，不静默覆盖。
+
+| 操作 type | 必填字段及条件 |
+| --- | --- |
+| create_entity | entity.name、entity.kind；资料要求另需 attributes.requirement，含 list_name、final_due_stage |
+| update_entity | entity_id、patch.revision；待修改字段放 patch，attributes 是完整快照 |
+| add_alias | entity_id、revision、alias |
+| archive_entity | entity_id、revision；保留历史 |
+| missing_entity | entity_id、revision；明确 keep、retire、discard 或 defer，不自动删除 |
+| save_relation | relation.subject_id、object_id、relation_type；修改另需 relation_id、relation.version；组成须 attributes.module_type |
+| end_relation | relation_id、revision；可给 valid_to |
+| set_entity_link | entry_id、entity_id、revision、excluded；可给 relation_type |
+| configure_shelf | library、library_updated_at；使用本库当前配置和更新时间 |
+| set_sale_statuses | entity_id、revision、sale_statuses；每项 region、status；整体替换，空数组明确清空 |
+| set_parameter_values | entity_id、revision、parameter_values；字段键到值数组，每项 value，可附 conditions；数值支持单值或 {min,max} 闭区间 |
+| create_certification | certification.name、owner_id、standard、certification_object；可给 cell_part_id、region 及其他记录字段 |
+| update_certification | revision、certification（完整字段，识别键同新增）；可显式给 entity_id |
+| add_document_version | document.stage、attachment_id 或 cloud_url；归属须 owner_id 或明确 unassigned，新增文件须 name；证书见下文 |
+| classify_document | entity_id、revision、classification（owner_id、requirement_ids、conditions；证书可给 certificate_number）；作用于同文件全部版本 |
+| select_document_version | entity_id、revision、version_id；选择本文件已有版本为当前 |
+| reparse_document | entity_id、revision、reparse.version_id、reparse.parser_key |
+| save_import_plan | import_plan.key、name、file_kind、revision（新建为 0）、sheets；每张表 worksheet、header_rows、columns，忽略表给 ignore=true；非忽略表按文件种类提供产品线或 owner_kind 及必需映射 |
+| import_notice | issues，类型为 cross_table_contradiction 或 unmapped_column，仅记录导入核对提示 |
+
+save_import_plan 的 file_kind 使用 product_map、certification_progress、certification_report、overseas_sales 或 atq。每个非忽略工作表的 columns 项必填 column（Excel 列字母）、field，区域、参数、市场等映射另给配置 key。product_map 需 product_line_id 及 platform、product、model 列；atq 需 product_line_id、名称列（name 或 name_zh 或 name_en）与 due_stages；认证进度及报告需 owner_kind、owner、standard、certification_object、region 列，报告另需明确完成进度 progress；overseas_sales 需 owner_kind、owner 及至少一种状态或认证核对列，不写认证事实。保存现有方案时传其 revision，未提供方案时不能猜映射。
+
+资料要求的完整 attributes.requirement 可记录 list_name、name_zh、name_en、file_category、stage_label、due_text、draft_due_stage、final_due_stage、markets、owner、priority、source_list、source_version。markets 的值只接受 required、optional、not_needed，键取本库 markets；应交阶段用本库 stages 的键。当前阶段 current_stage 记在产品名称，型号可覆盖，清空覆盖后沿用产品名称。
+
+## 资料原件与归类
+
+MCP 不能传二进制。使用有效 API Key，通过 HTTP `POST /api/v1/libraries/:id/entity-attachments`，multipart 字段 file，先暂存原件。可用 `X-API-Key` 或 Bearer API Key。成功返回 data.id，作为 `add_document_version.document.attachment_id`。上传只暂存，不确认货架关联。单文件字节上限见返回的 max_file_bytes，归类确认时会再次按最新配置检查。
+
+随后用 shelf_submit 的 add_document_version 归类。document.owner_id 可指向型号（model）、产品名称（product）、平台（platform）、部件（part）；上层文件向下属型号共用，部件文件向使用它的型号共用。型号清单按型号、部件、产品名称、平台依次取最近层的当前版本，保留选配条件与同层歧义。部件没有自身应交资料清单。产品线不能直接挂原件。
+
+requirement_ids 为本库活动资料要求 ID 数组，可明确关联多项，空数组表示其他文件。stage 必填 draft（初稿）或 final（终稿）。version_label 优先原版本号，省略则按文件顺序编号；旧版本及原件保留。同 owner_id 与完整 requirement_ids 集合默认追加到已有文件；没有资料要求的文件追加版本须显式给操作 entity_id、revision。origin 与 occurred_at 记录来源和业务时间，可用 entry_id 引用本库独立 Markdown 文本。
+
+明确暂不归属时传 document.unassigned=true，省略 owner_id、requirement_ids、certificate_number 和条件；其文本可全文检索，暂不进入节点范围。后续用 classify_document 补挂。证书报告用 certificate_number 对应认证记录；仅编号须唯一，否则提交方指定认证 owner_id，不猜归属。无法提交原件时可给 HTTP(S) cloud_url，并通知人工；链接不触发下载。
+
+## Excel 补充
+
+返回的 import_plans 是本库已确认保存的方案：key、file_kind、definition.sheets 中的 worksheet、header_rows、列字母到字段和键的映射，以及 last_file_name、last_file_date。last_headers 保留最近批次的已映射列实际表头，多行以换行连接；旧批次未记录表头时缺省，不推断。表头来自最近文件，方案修订后须核对现有映射。
+
+使用 API Key 调 HTTP `POST /api/v1/libraries/:id/shelf/imports`，multipart 字段 file（xlsx，最多 32 MiB）、plan_key，以及必要的 file_date（非未来 RFC3339；文件名日期不可靠时必填）。这条路径生成待确认变更集，后续仍通过 shelf_submit 审阅和确认。同一文件内容、同一方案修订和同一生效日期重复上传，直接返回上次变更集，不新建批次。表中消失的行不会自动删除，须明确决定保留或归档；与手工值不同列为冲突，不覆盖。空白或无法识别的含义退回提交方。
+
+## 命名与识别
+
+名称原样保存，身份以 ID 和类别为准。同类别的名称、别名、代码共用唯一名称空间；资料要求例外，在同一所属清单内唯一。跨类别同名须明确确认实体 ID、类别和原写法。别名只能用于已确认的同一身份，不按近似拼写合并；same_entity 只加名称与别名，不合并提议属性。
+
+认证识别键为型号（或明确的所属部件、产品名称、平台）＋标准＋认证对象＋电芯部件＋地区。年份单列，标准使用库内键、规范名或明确别名；匹配零条或多条均退回提交方，不推断新增或合并。
+
+资料要求按“所属清单＋名称”识别，list_name 必须明确；导入清单由方案键和工作表确定。applies_to 只绑定产品线，市场键取 markets，与可售区域 regions 独立。阶段按 stages 数组顺序，键保持身份，不推断业务含义。没有区域状态记录不等于待定。无法确定的身份、归属、字段含义和条件均退回提交方，不推断。

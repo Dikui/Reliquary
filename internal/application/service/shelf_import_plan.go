@@ -18,11 +18,13 @@ var shelfImportColumn = regexp.MustCompile(`^[A-Z]{1,3}$`)
 
 type ShelfImportPlanView struct {
 	types.ShelfImportPlan
-	LastFileName string `json:"last_file_name,omitempty"`
+	LastFileName string                       `json:"last_file_name,omitempty"`
+	LastFileDate *time.Time                   `json:"last_file_date,omitempty"`
+	LastHeaders  map[string]map[string]string `json:"last_headers,omitempty"`
 }
 
 func (s *EntityService) ShelfImportPlans(ctx context.Context, libraryID string) ([]ShelfImportPlanView, error) {
-	if _, err := s.shelfLibrary(ctx, s.db, libraryID); err != nil {
+	if _, err := s.shelfLibraryForRead(ctx, libraryID); err != nil {
 		return nil, err
 	}
 	rows := []types.ShelfImportPlan{}
@@ -30,20 +32,26 @@ func (s *EntityService) ShelfImportPlans(ctx context.Context, libraryID string) 
 	if err := s.db.WithContext(ctx).Where("space_id=? AND library_id=?", spaceID, libraryID).Order("key").Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	var files []struct{ Key, FileName string }
-	if err := s.db.WithContext(ctx).Model(&types.ShelfChangeset{}).
-		Select("DISTINCT ON (source->>'import_plan_key') source->>'import_plan_key' AS key, source->>'file_name' AS file_name").
+	var files []types.ShelfChangeset
+	// A deferred piece shares its original batch. Reviewing it later must not
+	// move that upload ahead of files that actually arrived more recently.
+	batches := s.db.WithContext(ctx).Model(&types.ShelfChangeset{}).
+		Select("DISTINCT ON (source->>'import_batch_id') source,created_at,id").
 		Where("space_id=? AND library_id=? AND source->>'type'='import'", spaceID, libraryID).
-		Order("source->>'import_plan_key', created_at DESC, id DESC").Scan(&files).Error; err != nil {
+		Order("source->>'import_batch_id',created_at,id")
+	if err := s.db.WithContext(ctx).Table("(?) AS batches", batches).
+		Select("DISTINCT ON (source->>'import_plan_key') source").
+		Order("source->>'import_plan_key', created_at DESC, id DESC").Find(&files).Error; err != nil {
 		return nil, err
 	}
-	latest := make(map[string]string, len(files))
+	latest := make(map[string]types.OperationSource, len(files))
 	for _, file := range files {
-		latest[file.Key] = file.FileName
+		latest[file.Source.ImportPlanKey] = file.Source
 	}
 	result := make([]ShelfImportPlanView, 0, len(rows))
 	for _, plan := range rows {
-		result = append(result, ShelfImportPlanView{ShelfImportPlan: plan, LastFileName: latest[plan.Key]})
+		source := latest[plan.Key]
+		result = append(result, ShelfImportPlanView{ShelfImportPlan: plan, LastFileName: source.FileName, LastFileDate: source.FileDate, LastHeaders: source.ImportHeaders})
 	}
 	return result, nil
 }

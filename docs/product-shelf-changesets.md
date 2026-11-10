@@ -20,6 +20,8 @@ HTTP 路径以 `/api/v1` 为前缀，成功结果在 `data` 中。
 
 ## MCP 提交与确认
 
+补充前先调用只读 `shelf_guide`，按当前库的补充规范准备结构化操作、资料原件或 Excel，节点缺口可附 node_id。返回与计数语义见[补充规范](product-shelf-query.md#补充规范)。附件暂存接口已支持有效 API Key，MCP 不能传二进制；先暂存，再提交 add_document_version 归类。
+
 `shelf_submit` 使用同一变更集服务，必传 `library_id`。新提议传 `source:{"type":"agent","agent_name":"提交方名称"}` 与 1 到 500 项 `operations`，可附 `decisions`。省略 `confirmed` 或传 `false` 只保存待确认变更集，返回其 ID、修订号、逐项差异与冲突，网页可继续处理。操作类型及对应数据沿用下文，未知字段会被拒绝。
 
 预览后仍用 `shelf_submit`，传返回的 `changeset_id`、读取到的 `revision` 和逐项 `decisions`。省略确认只保存进度；用户明确同意展示的差异后才传 `confirmed:true`。继续处理时不重传来源或操作列表，修正项使用 `replace` 决定。也可在用户已明确同意完整操作时当场提交并确认；仍执行全部冲突和修订校验。

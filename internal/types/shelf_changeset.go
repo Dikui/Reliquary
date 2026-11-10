@@ -4,16 +4,17 @@ import "time"
 
 // OperationSource identifies the submitter independently of the confirming user.
 type OperationSource struct {
-	Type          string     `json:"type,omitempty"`
-	ImportPlanKey string     `json:"import_plan_key,omitempty"`
-	PlanRevision  int64      `json:"plan_revision,omitempty"`
-	FileName      string     `json:"file_name,omitempty"`
-	FileSHA256    string     `json:"file_sha256,omitempty"`
-	Worksheet     string     `json:"worksheet,omitempty"`
-	Cells         []string   `json:"cells,omitempty"`
-	AgentName     string     `json:"agent_name,omitempty"`
-	ImportBatchID string     `json:"import_batch_id,omitempty"`
-	FileDate      *time.Time `json:"file_date,omitempty"`
+	ImportHeaders map[string]map[string]string `json:"import_headers,omitempty"`
+	Type          string                       `json:"type,omitempty"`
+	ImportPlanKey string                       `json:"import_plan_key,omitempty"`
+	PlanRevision  int64                        `json:"plan_revision,omitempty"`
+	FileName      string                       `json:"file_name,omitempty"`
+	FileSHA256    string                       `json:"file_sha256,omitempty"`
+	Worksheet     string                       `json:"worksheet,omitempty"`
+	Cells         []string                     `json:"cells,omitempty"`
+	AgentName     string                       `json:"agent_name,omitempty"`
+	ImportBatchID string                       `json:"import_batch_id,omitempty"`
+	FileDate      *time.Time                   `json:"file_date,omitempty"`
 }
 
 // ShelfOperation is a closed set of typed proposals. Later shelf capabilities

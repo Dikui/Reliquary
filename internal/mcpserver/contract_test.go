@@ -21,6 +21,19 @@ func TestOwnershipFieldsKeepMCPContract(t *testing.T) {
 	require.JSONEq(t, `{"topics":[{"id":"topic","tenant_id":9007199254740993,"name":"","description":"","library_id":"","created_at":"0001-01-01T00:00:00Z","updated_at":"0001-01-01T00:00:00Z","entry_count":0}],"metadata":{"space_id":"user metadata","tenant_id":"original key"},"payload":{"space_id":1}}`, string(data))
 }
 
+// Small regression, task 31: worksheet names and header text are opaque data,
+// even when a worksheet happens to share the name of an internal field.
+func TestShelfImportHeadersKeepOriginalWorksheetNames(t *testing.T) {
+	output, err := contractOutput(map[string]any{
+		"source":       types.OperationSource{ImportHeaders: map[string]map[string]string{"space_id": {"A": " Original header "}}},
+		"last_headers": map[string]map[string]string{"space_id": {"A": " Original header "}},
+	})
+	require.NoError(t, err)
+	data, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"source":{"import_headers":{"space_id":{"A":" Original header "}}},"last_headers":{"space_id":{"A":" Original header "}}}`, string(data))
+}
+
 func TestSearchContractPreservesLibraryLocationsAndFlags(t *testing.T) {
 	response := types.EntrySearchResponse{VectorUnavailable: true, RerankStatus: "unavailable", Results: []*types.EntrySearchResult{{EntryID: "entry", LibraryID: "library", LibraryName: "我的资料", LibraryDirectory: "personal", SourceUnverified: true, HasUpdate: true, LatestEntryID: "new", Snippets: []types.EntrySearchSnippet{{Content: "😀", Locations: []types.SourceLocation{{Start: 3, End: 4, Paragraph: 2, HeadingPath: []string{"标题"}, BodyHash: "hash", Mapping: "exact"}}}}}}}
 	output, err := contractOutput(response)

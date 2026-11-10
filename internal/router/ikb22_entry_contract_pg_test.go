@@ -27,7 +27,7 @@ func requireEntryWireKeys(t *testing.T, value any) {
 	case map[string]any:
 		for key, child := range v {
 			switch key {
-			case "metadata", "custom_metadata", "before_value", "after_value", "payload", "headers":
+			case "metadata", "custom_metadata", "before_value", "after_value", "payload", "headers", "import_headers", "last_headers":
 				continue
 			}
 			for _, retired := range []string{"incomplete", "missing_materials", "external_completion_attempted", "completeness", "article_id", "article_ids", "latest_article_id", "related_article_id", "related_article_ids", "knowledge_id", "knowledge_ids", "knowledge", "article_count", "recent_article_count", "failed_articles"} {

@@ -222,7 +222,7 @@ func contractFields(value any) any {
 				continue
 			}
 			switch key {
-			case "metadata", "custom_metadata", "before_value", "after_value", "payload", "headers":
+			case "metadata", "custom_metadata", "before_value", "after_value", "payload", "headers", "import_headers", "last_headers":
 				continue
 			}
 			item[key] = contractFields(child)

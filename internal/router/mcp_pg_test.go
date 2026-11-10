@@ -447,7 +447,7 @@ func currentMCPTestFields(value any) any {
 		out := map[string]any{}
 		for key, child := range v {
 			switch key {
-			case "metadata", "custom_metadata", "before_value", "after_value", "payload", "headers":
+			case "metadata", "custom_metadata", "before_value", "after_value", "payload", "headers", "import_headers", "last_headers":
 				out[key] = child
 				continue
 			}
@@ -472,6 +472,7 @@ func TestMCPToolAnnotations(t *testing.T) {
 		"shelf_find":                   {readOnly: true},
 		"shelf_get":                    {readOnly: true},
 		"shelf_query":                  {readOnly: true},
+		"shelf_guide":                  {readOnly: true},
 		"shelf_submit":                 {destructive: true},
 		"get_entry":                    {readOnly: true},
 		"graph_search":                 {readOnly: true},
@@ -549,7 +550,7 @@ func TestMCPInitializeListAndCallAllTools(t *testing.T) {
 		require.NoError(t, err)
 		require.NotRegexp(t, mcpDeprecatedTerms, string(definition), tool.Name)
 	}
-	require.ElementsMatch(t, []string{"list_libraries", "search", "shelf_find", "shelf_get", "shelf_query", "shelf_submit", "get_entry", "graph_search", "list_topics", "create_topic", "update_topic", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "update_entry_content", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "check_urls", "list_ingest_failures", "get_ingest_failure", "read_ingest_failure_material", "list_content_checks", "get_content_check", "reliquary_guide"}, names)
+	require.ElementsMatch(t, []string{"list_libraries", "search", "shelf_find", "shelf_get", "shelf_query", "shelf_guide", "shelf_submit", "get_entry", "graph_search", "list_topics", "create_topic", "update_topic", "list_entities", "get_entity", "list_follows", "follow_feed", "follow", "unfollow", "ingest", "update_entry_content", "delete_document", "list_pending", "approve_pending", "discard_pending", "set_star", "check_urls", "list_ingest_failures", "get_ingest_failure", "read_ingest_failure_material", "list_content_checks", "get_content_check", "reliquary_guide"}, names)
 	_, err = client.CallTool(context.Background(), &mcp.CallToolParams{Name: "write_report", Arguments: map[string]any{"title": "Removed report entry point", "markdown": "# Report"}})
 	require.Error(t, err)
 	var search types.EntrySearchResponse

@@ -75,6 +75,7 @@ func (s *EntityService) ImportShelfWorkbook(ctx context.Context, libraryID, plan
 			result = &existing[0]
 			return nil
 		}
+		source.ImportHeaders = shelfImportHeaders(plan.Definition, workbook)
 		builder, err := bound.newImportMapBuilder(ctx, library, plan, *fileDate)
 		if err != nil {
 			return err

@@ -4,6 +4,26 @@
 
 MCP 分别提供 `shelf_find`、`shelf_get`、`shelf_query`，均为只读工具。三个工具必传 `library_id`；find 的其他参数为 `q`、`limit`、`offset`，get 为 `node_id`、可选 `combination` 对象和 `as_of`，query 的其他参数与下述 JSON 筛选相同。返回与 HTTP 的 `data` 相同，同时提供结构化结果与 JSON 文本。调用前可通过 `reliquary_guide` 的 `shelf-expert` 流程读取[货架专家说明](../skills/reliquary/workflows/shelf-expert.md)。
 
+## 补充规范
+
+维护货架前调用只读 MCP 工具 `shelf_guide`，必传 `library_id`，可选 `node_id`。本工具只通过 MCP 提供，与其他货架工具一样同时返回结构化 JSON 和 JSON 文本。
+
+返回 `library_id`、`library_updated_at`、`as_of`、`max_file_bytes`、`rules`、`values`、`import_plans`，指定节点时另带 `gaps`。所有动态内容在同一只读数据库快照中读取，固定规则来自[嵌入的补充规范](../skills/reliquary/reference/shelf-supplement.md)。工具不保存提议或修改配置。
+
+`values` 包含当前库的类别及父类别 `kinds`、活动产品线 `product_lines`、区域 `regions`、独立市场 `markets`、按数组顺序排列的阶段 `stages`、部件类型 `module_types`、标准及明确别名 `standards`、固定可售状态 `sale_statuses`、资料要求所属清单 `requirement_lists`、活动要求完整字段 `requirements` 和库内字段定义 `fields`。名称保留原写法，键和 ID 用于提交。
+
+`rules` 说明 shelf_submit 各操作必填项、具名 agent 来源、先预览经用户同意再确认、含义不确定项的修正或放弃或暂缓。资料原件先用有效 API Key 上传至 `POST /api/v1/libraries/:id/entity-attachments`（multipart 的 file），再经 add_document_version 变更集归类。MCP 不能传二进制，上传暂存不确认货架关联。单文件上限使用实际生效的 max_file_bytes；owner_id 层级、requirement_ids、draft/final、版本、unassigned、证书编号及向下共用规则均在规范中说明。
+
+`import_plans` 复用已保存方案查询，包含 key、file_kind、definition 中各工作表、header_rows、列字母与字段映射，以及 last_file_name、last_file_date、last_headers。日期为最近批次的文件业务日期，表头为最近文件中映射列的原文，多行以换行连接；历史批次未记录时缺省，不推断。方案修订后仍须核对表头。Excel 用 API Key 上传 `POST /api/v1/libraries/:id/shelf/imports`，后续通过 shelf_submit 审核。同内容、方案修订和生效时间重复上传复用原变更集；消失的行不自动删除，与手工值不同列为冲突。
+
+`gaps` 的节点必须是本库产品线、平台、产品名称、型号或部件。型号及上层节点返回 model_count，以及三个独立的 `{items,total,truncated}` 列表：
+
+- documents：现有清单中的 missing 和 draft_only 行，保留 model_id、model_name、current_stage，以及原 requirement（含 ID、所属清单、初稿及终稿应交阶段）、条件、部分选配、所选版本和状态。不把未到期或未填阶段的无文件推断为到期缺口。
+- sale_statuses：本库 regions 中该型号完全没有记录的区域，包含型号和区域的键及原名；已有条件记录的区域不算整区无记录。
+- pending_changesets：涉及节点、下属型号或其共用上层、组成部件、当前要求、认证、文件的待确认变更集摘要（id、revision、source、updated_at），按变更集去重。明确的关系两端、候选、决定和适用条件引用也参与判断；库设置提议影响整个库。原操作和冲突可用变更集 HTTP GET 读取。
+
+上层节点通过现有查询服务遍历全部当前活动下属型号，按同一 as_of 汇总，再分别截取各列表前 100 项。total 是截断前条数：资料按清单条件行、区域按型号与区域、变更集按唯一 ID 计数。部件 model_count 为 0，资料与区域列表为空，只返回涉及它的待确认变更集。截断后可用 shelf_query、shelf_get 逐个型号查看，待确认列表用 HTTP 分页继续读取；不把截断列表当成全部。
+
 ## 状态表导出 Excel
 
 `POST /libraries/:id/shelf/export`
@@ -128,6 +148,6 @@ query 可加 `{"document_gaps":true}` 筛选有 `missing` 项的型号。缺口�
 
 产品名称的认证包含自身与平台认证，分别标为 `self` 和 `ancestor`；部件仅返回归属自身的认证。认证的条件和电芯限制保留，不因查看上层节点而推断适用组合。
 
-部件的 `shelf.checklist` 列出本库当前活动清单中明确绑定其部件类型的资料要求，以及本部件拥有的有效文件。部件没有当前阶段，不推断到期或可售状态；清单只报告 `has_file` 或 `no_file`，保留应交阶段、交期原文和文件条件。同层重叠候选继续标为 `ambiguous`。
+部件没有自身应交资料清单，也不推断阶段或可售状态；它的文件仍通过 `shelf.documents` 展示，并按现有优先级与条件向使用它的型号共用。同层重叠候选继续标为 `ambiguous`。
 
 网页通过 query 的 `ancestor_id` 或 `part_id` 分页读取全部相关型号，各页携带节点详情返回的 `as_of`。上层节点的矩阵逐项保留选配状态与条件，单元格链接到型号的对应资料要求。顶部缺口项数按不同资料要求去重，受影响型号数沿用 `models_with_gaps`。阶段仅在产品名称提供编辑，修改和清空均确认单操作变更集，保留其他属性和修订检查。

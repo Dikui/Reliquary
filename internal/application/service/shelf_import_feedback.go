@@ -9,6 +9,30 @@ import (
 	"reliquary/internal/types"
 )
 
+// Retain mapped header text in batch metadata because the workbook is not kept.
+func shelfImportHeaders(definition types.ShelfImportDefinition, workbook *importWorkbookData) map[string]map[string]string {
+	result := map[string]map[string]string{}
+	for _, mapping := range definition.Sheets {
+		sheet := workbook.Sheets[mapping.Worksheet]
+		if mapping.Ignore || sheet == nil {
+			continue
+		}
+		result[mapping.Worksheet] = map[string]string{}
+		for _, column := range mapping.Columns {
+			headers, seen := []string{}, map[string]bool{}
+			for row := 1; row <= mapping.HeaderRows; row++ {
+				cell := sheet.cell(column.Column + strconv.Itoa(row))
+				if cell.Value != "" && !seen[cell.Ref] {
+					headers = append(headers, cell.Value)
+					seen[cell.Ref] = true
+				}
+			}
+			result[mapping.Worksheet][column.Column] = strings.Join(headers, "\n")
+		}
+	}
+	return result
+}
+
 // Scan physical cells so a merged value is reported once at its source column,
 // even when mapped rows cannot be parsed. Never evaluate source formulas.
 func (b *importMapBuilder) unmappedColumns(workbook *importWorkbookData) {

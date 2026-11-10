@@ -51,7 +51,7 @@ func TestShelfMCPExpertInstructionsAreDiscoverable(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, guide.IsError)
 	content := guide.Content[0].(*mcp.TextContent).Text
-	for _, rule := range []string{"shelf_find", "shelf_get", "shelf_query", "shelf_submit", "来源", "时点", "适用条件", "来自部件", "来自上层", "GA", "可销售", "认证齐全", "总数", "截断", "同名", "货架中没有记录", "confirmed=true", "含义不确定"} {
+	for _, rule := range []string{"shelf_find", "shelf_get", "shelf_query", "shelf_guide", "shelf_submit", "来源", "时点", "适用条件", "来自部件", "来自上层", "GA", "可销售", "认证齐全", "总数", "截断", "同名", "货架中没有记录", "confirmed=true", "含义不确定"} {
 		require.Contains(t, content, rule)
 	}
 	rules, err := skills.Files.ReadFile("reliquary/rules.md")
