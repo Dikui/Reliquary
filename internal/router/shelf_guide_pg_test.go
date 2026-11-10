@@ -17,11 +17,13 @@ type guideGapResult struct {
 			ModelID           string `json:"model_id"`
 			CurrentStageUnset bool   `json:"current_stage_unset"`
 			types.ShelfChecklistItem
+			Requirement types.ShelfGuideRequirement `json:"requirement"`
 		}] `json:"no_file_documents"`
 		Documents struct {
 			Items []struct {
 				ModelID string `json:"model_id"`
 				types.ShelfChecklistItem
+				Requirement types.ShelfGuideRequirement `json:"requirement"`
 			} `json:"items"`
 			Total     int64 `json:"total"`
 			Truncated bool  `json:"truncated"`
@@ -251,9 +253,7 @@ func TestShelfGuideModelGapsReuseChecklist(t *testing.T) {
 	for _, item := range result.Gaps.Documents.Items {
 		require.Equal(t, model, item.ModelID)
 		states[item.Requirement.ID] = item.Status
-		var record types.ShelfRequirement
-		require.NoError(t, types.DecodeShelfValue(item.Requirement.Attributes["requirement"], &record))
-		require.Equal(t, "final_due", record.FinalDueStage)
+		require.Equal(t, "final_due", item.Requirement.FinalDueStage)
 		if item.Requirement.ID == missing.ID {
 			require.Equal(t, []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(n, "b")}}}, item.Conditions)
 		}

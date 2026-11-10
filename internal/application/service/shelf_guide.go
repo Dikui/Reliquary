@@ -110,14 +110,22 @@ func (s *EntityService) ShelfGuide(ctx context.Context, libraryID, nodeID string
 				if !requirementIDs[entity.ID] {
 					continue
 				}
-				var requirement types.ShelfRequirement
-				if err := types.DecodeShelfValue(entity.Attributes["requirement"], &requirement); err != nil {
+				requirement, err := shelfGuideRequirement(entity)
+				if err != nil {
 					return err
 				}
-				result.Values.Requirements.Add(types.ShelfGuideRequirement{ID: entity.ID, Name: entity.CanonicalName, ListName: requirement.ListName, NameZH: requirement.NameZH, NameEN: requirement.NameEN, DraftDueStage: requirement.DraftDueStage, FinalDueStage: requirement.FinalDueStage})
+				result.Values.Requirements.Add(requirement)
 			}
 		}
 		return err
 	})
 	return result, err
+}
+
+func shelfGuideRequirement(entity types.Entity) (types.ShelfGuideRequirement, error) {
+	var requirement types.ShelfRequirement
+	if err := types.DecodeShelfValue(entity.Attributes["requirement"], &requirement); err != nil {
+		return types.ShelfGuideRequirement{}, err
+	}
+	return types.ShelfGuideRequirement{ID: entity.ID, Name: entity.CanonicalName, ListName: requirement.ListName, NameZH: requirement.NameZH, NameEN: requirement.NameEN, DraftDueStage: requirement.DraftDueStage, FinalDueStage: requirement.FinalDueStage}, nil
 }

@@ -16,6 +16,8 @@ type ShelfGuideDocumentGap struct {
 	CurrentStage      string `json:"current_stage,omitempty"`
 	CurrentStageUnset bool   `json:"current_stage_unset"`
 	types.ShelfChecklistItem
+	// Shadows the full checklist entity; details are in values.requirements.
+	Requirement types.ShelfGuideRequirement `json:"requirement"`
 }
 
 type ShelfGuideSaleGap struct {
@@ -62,14 +64,14 @@ func (s *EntityService) shelfGuideGaps(ctx context.Context, library *types.Libra
 		return nil, err
 	}
 	related := map[string]bool{nodeID: true}
-	addModel := func(model types.ShelfNodeDetail) {
+	addModel := func(model types.ShelfNodeDetail) error {
 		result.ModelCount++
 		related[model.Entity.ID] = true
 		for _, ancestor := range data.ancestors(model.Entity.ID) {
 			related[ancestor.ID] = true
 		}
 		if model.Shelf == nil {
-			return
+			return nil
 		}
 		for _, group := range model.Shelf.Composition {
 			for _, part := range group.Parts {
@@ -79,7 +81,11 @@ func (s *EntityService) shelfGuideGaps(ctx context.Context, library *types.Libra
 		for _, row := range model.Shelf.Checklist {
 			related[row.Requirement.ID] = true
 			requirementIDs[row.Requirement.ID] = true
-			gap := ShelfGuideDocumentGap{ModelID: model.Entity.ID, ModelName: model.Entity.CanonicalName, CurrentStage: model.Shelf.CurrentStage, CurrentStageUnset: model.Shelf.CurrentStage == "", ShelfChecklistItem: row}
+			requirement, err := shelfGuideRequirement(row.Requirement)
+			if err != nil {
+				return err
+			}
+			gap := ShelfGuideDocumentGap{ModelID: model.Entity.ID, ModelName: model.Entity.CanonicalName, CurrentStage: model.Shelf.CurrentStage, CurrentStageUnset: model.Shelf.CurrentStage == "", ShelfChecklistItem: row, Requirement: requirement}
 			switch row.Status {
 			case "missing", "draft_only":
 				result.Documents.Add(gap)
@@ -92,10 +98,13 @@ func (s *EntityService) shelfGuideGaps(ctx context.Context, library *types.Libra
 				result.SaleStatuses.Add(ShelfGuideSaleGap{ModelID: model.Entity.ID, ModelName: model.Entity.CanonicalName, Region: region.Key, RegionName: region.Name})
 			}
 		}
+		return nil
 	}
 	if node.Entity.Kind == "model" {
 		result.CurrentStageUnset = node.Shelf != nil && node.Shelf.CurrentStage == ""
-		addModel(*node)
+		if err := addModel(*node); err != nil {
+			return nil, err
+		}
 	} else if node.Entity.Kind != "part" {
 		for offset := 0; ; offset += 100 {
 			page, err := s.shelfQuery(ctx, library.ID, types.ShelfQueryRequest{AncestorID: nodeID, AsOf: &at, Limit: 100, Offset: offset})
@@ -103,7 +112,9 @@ func (s *EntityService) shelfGuideGaps(ctx context.Context, library *types.Libra
 				return nil, err
 			}
 			for _, item := range page.Items {
-				addModel(item.ShelfNodeDetail)
+				if err := addModel(item.ShelfNodeDetail); err != nil {
+					return nil, err
+				}
 			}
 			if int64(offset+len(page.Items)) >= page.Total {
 				break
