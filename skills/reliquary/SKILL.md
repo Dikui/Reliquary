@@ -95,6 +95,7 @@ bearer_token_env_var = "RELIQUARY_API_KEY"
 | ingest | 核对链接与来源信息，先确认收录或覆盖 | [收录资料](workflows/ingest.md) |
 | review-check | 核对已有自检问题与原文，只报告结论 | [资料自检复核](workflows/review-check.md) |
 | shelf-expert | 查询货架事实、条件、来源与时点，经用户确认维护货架 | [货架专家](workflows/shelf-expert.md) |
+| shelf-import | 用客户 Excel 初始化或补充产品货架，按类汇总冲突并经确认写入 | [货架导入](workflows/shelf-import.md) |
 
 ## 参考文件索引
 

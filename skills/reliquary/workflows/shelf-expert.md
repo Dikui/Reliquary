@@ -15,7 +15,7 @@ description: 查询产品货架的型号、选配、区域状态、认证与资�
 4. 批量筛选或按部件、标准反查型号用 `shelf_query`，区域状态、参数、认证、组成等条件直接写进筛选参数，不先读出全部型号再自行筛选。区域写 `list_libraries` 货架配置中 regions 的 key（如 `jp`），不写显示名；任一区域满足时省略 region，不必逐个区域查询。计划退市用 `planned_eom=true`；问“没有记录”用 `no_record=true`（省略 region 时指所有区域都没有记录），它不能与 status 同用，也不等于待定。筛选须由同一可行组合满足。报告分页前总数 total、已返回数量与 truncated 是否截断；继续翻页保持同一筛选和业务时间。说明 matching_conditions 的命中条件与 partial_options 标记，不把部分选配扩大到全部型号配置。
 5. 需要正文证据时，用 `search` 指定 libraries 和 shelf_node_ids。范围包括节点、下级、组成部件及其认证附件，只认明确归属的资料文件。默认只检索当前版本；用户要查旧版时才用 include_history，引用时注明版本与历史命中。用 `get_entry` 读原文并核对位置，历史版本开关不等于按业务时间查询。
 6. 引用事实时注明来源与数据时点，包括可用的文件、工作表、单元格，或变更集 ID、提交来源、来源日志与时间。区分业务生效时间和记录时间。来源缺失就说明缺失，不编造。说明适用条件，以及“来自部件”或“来自上层”，不把共用认证说成型号自己的独立认证。
-7. 用户要求维护货架时，补充前先调用 `shelf_guide`，传 library_id，需要节点缺口时附 node_id，按本库补充规范准备数据、资料原件或 Excel。只用 `shelf_submit` 提交有类型操作。首次传 library_id、source（type 为 agent，agent_name 为提交方名称）、operations；省略 confirmed 先返回差异与冲突并保存待确认变更集。向用户展示目标、差异、冲突和影响，取得明确同意后，传同一 changeset_id、读取到的 revision、逐项 decisions 与 `confirmed=true`，不重传 source、operations。未确认时可以保存决定，货架不会改变，用户也可在网页继续处理。
+7. 用户要用 Excel 初始化或补充货架时，改按 shelf-import 流程。其他维护请求时，补充前先调用 `shelf_guide`，传 library_id，需要节点缺口时附 node_id，按本库补充规范准备数据、资料原件或 Excel。只用 `shelf_submit` 提交有类型操作。首次传 library_id、source（type 为 agent，agent_name 为提交方名称）、operations；省略 confirmed 先返回差异与冲突并保存待确认变更集。向用户展示目标、差异、冲突和影响，取得明确同意后，传同一 changeset_id、读取到的 revision、逐项 decisions 与 `confirmed=true`，不重传 source、operations。未确认时可以保存决定，货架不会改变，用户也可在网页继续处理。
 8. 含义不确定项须由提交方修正、放弃或暂缓，普通 apply 不能跳过。修正使用 replace 并提供完整 replacement 操作；跨类别同名、疑似同一和消失项使用各自的明确决定。确认冲突返回 error.details，核对重新计算的差异，修订号过期时重新读取待确认变更集，不能静默重试覆盖。
 
 ## 停止条件
