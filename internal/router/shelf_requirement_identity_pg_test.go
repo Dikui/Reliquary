@@ -43,7 +43,7 @@ func TestShelfRequirementIdentityIsScopedToList(t *testing.T) {
 // cross-list overwrite without containing any customer workbook content.
 func TestShelfImportRequirementsMatchAndDisappearWithinTheirList(t *testing.T) {
 	f, l, n := checklistSetup(t)
-	columns := []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}, {Column: "C", Field: "owner"}, {Column: "D", Field: "source_version"}, {Column: "E", Field: "market", Key: "region_a"}}
+	columns := []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}, {Column: "C", Field: "owner"}, {Column: "D", Field: "source_version"}, {Column: "E", Field: "market", Key: "market_a"}}
 	sheets := []types.ShelfImportSheet{}
 	for _, sheet := range []string{"01", "02"} {
 		sheets = append(sheets, types.ShelfImportSheet{Worksheet: sheet, HeaderRows: 2, ProductLineID: shelfNode(n, "line"), Columns: columns})
@@ -71,13 +71,13 @@ func TestShelfImportRequirementsMatchAndDisappearWithinTheirList(t *testing.T) {
 			require.Equal(t, "甲", meta["owner"])
 			require.Equal(t, "draft_due", meta["final_due_stage"])
 			require.Equal(t, "V1", meta["source_version"])
-			require.Equal(t, "required", meta["markets"].(map[string]any)["region_a"])
+			require.Equal(t, "required", meta["markets"].(map[string]any)["market_a"])
 		} else {
 			require.Equal(t, "map / 02", list)
 			require.Equal(t, "乙", meta["owner"])
 			require.Equal(t, "final_due", meta["final_due_stage"])
 			require.Equal(t, "V2", meta["source_version"])
-			require.Equal(t, "optional", meta["markets"].(map[string]any)["region_a"])
+			require.Equal(t, "optional", meta["markets"].(map[string]any)["market_a"])
 		}
 	}
 	require.Len(t, ids, 2)

@@ -33,7 +33,7 @@ async function mount(t: test.TestContext, overrides: Record<string, unknown> = {
   }
   modules['./ShelfImportPlanEditor.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfImportPlanEditor.vue', import.meta.url), modules) }
   const component = loadComponent(new URL('./ShelfImportPage.vue', import.meta.url), modules)
-  const app = renderer.createApp(component, { library: { id: 'library-a', shelf_config: { regions: [{ key: 'north', name: '合成区域' }] }, entity_schema: { fields: [] } } })
+  const app = renderer.createApp(component, { library: { id: 'library-a', shelf_config: { regions: [{ key: 'north', name: '合成区域' }], markets: [{ key: 'overseas', name: '合成市场' }] }, entity_schema: { fields: [] } } })
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } }))
   const root = element('root'); app.mount(root)
   t.after(() => { app.unmount(); useFeedback().confirmations.forEach(dialog => dialog.cancel()); toast.clear() }); await settle()
@@ -44,6 +44,21 @@ async function chooseFile(root: Element, name = 'map_20261028.xlsx') {
   field(root, '选择 Excel 文件').props.onChange({ target: { files: [file], value: name } }); await settle(); return file
 }
 async function savePlan(root: Element) { descendants(root).find(node => node.tag === 'form')!.props.onSubmit({ preventDefault() {} }); await settle() }
+
+// Small spec, task 30: ATQ market keys and spelling mappings are editable plan data.
+test('ATQ 方案编辑市场键和写法映射且没有部件绑定选项', async t => {
+ const stored:any={...plan(),file_kind:'atq',definition:{sheets:[{worksheet:'合成表',product_line_id:'line',header_rows:1,columns:[{column:'A',field:'name'},{column:'B',field:'due_stages'},{column:'C',field:'market',key:'overseas'},{column:'D',field:'market',key:'overseas'}]}],market_values:{Mandatory:'required'}}}
+ const {root,writes}=await mount(t,{listShelfImportPlans:async()=>({success:true,data:[stored]})})
+ await click(find(root,'button','查看'))
+ assert.match(visibleText(field(root,`${zh.shelfImport.configuredValue} 1.3`)),/合成市场/)
+ assert.doesNotMatch(visibleText(field(root,`${zh.shelfImport.configuredValue} 1.3`)),/合成区域/)
+ assert.equal(descendants(root).some(n=>n.props['aria-label']==='部件类型 1'),false)
+ await input(root,'市场原文 1','√');await input(root,'市场含义 1','optional')
+ await savePlan(root)
+ assert.deepEqual(writes[0].market_values,{'√':'optional'})
+ assert.equal(writes[0].sheets[0].columns[2].key,'overseas')
+ assert.equal(writes[0].sheets[0].columns[3].key,'overseas')
+})
 
 // Small spec, task 19 / ADR 0023: HTTP mocks replace the import boundary, not page behavior.
 test('uploading a workbook with a confirmed plan opens its pending changeset', async t => {

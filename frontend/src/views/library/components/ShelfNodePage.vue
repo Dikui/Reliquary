@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { Button, EmptyState, ErrorState } from '@/components/ui'
 import type { Entity } from '@/api/entities'
 import type { LibraryCatalogItem } from '@/api/library'
-import { getShelfNode, queryShelf, submitShelfStage, type ShelfNode, type ShelfQueryItem, type ShelfCondition, type ShelfDocumentVersion, type ShelfRequirement } from '@/api/shelf'
+import { getShelfNode, queryShelf, submitShelfStage, type ShelfNode, type ShelfQueryItem, type ShelfCondition, type ShelfDocumentVersion } from '@/api/shelf'
 import { shelfConditionText } from '@/utils/productShelf'
 import { safeExternalUrl } from '@/utils/externalUrl'
 
@@ -16,7 +16,7 @@ const paths = ref<Record<string, Entity[]>>({}), identities = ref<Entity[]>([])
 const loading = ref(false), error = ref(''), saving = ref(false), saveError = ref(''), stageDraft = ref('')
 let generation = 0
 const isPart = computed(() => node.value?.entity.kind === 'part')
-const sections = computed(() => isPart.value ? ['certifications', 'part-checklist', 'node-files'] : ['summary', 'node-files', 'certifications'])
+const sections = computed(() => isPart.value ? ['certifications', 'node-files'] : ['summary', 'node-files', 'certifications'])
 const href = (id: string) => `/platform/entities?${new URLSearchParams({ libraries: props.library.id, entity_id: id })}`
 const fileHref = (id: string) => `/platform/entries?${new URLSearchParams({ libraries: props.library.id, tab: 'files', file: id })}`
 const statusHref = computed(() => `/platform/entries?${new URLSearchParams({ libraries: props.library.id })}`)
@@ -27,7 +27,6 @@ const knownParts = computed(() => [{ module_type: '', optional: false, parts: id
 const condition = (value?: ShelfCondition[] | null) => shelfConditionText(value, props.library.shelf_config?.module_types, knownParts.value)
 const owner = (id: string) => identities.value.find(item => item.id === id)
 const requirements = computed(() => [...new Map(models.value.flatMap(model => model.shelf?.checklist || []).map(row => [row.requirement.id, row.requirement])).values()])
-const requirementData = (entity: Entity) => (entity.attributes?.requirement || {}) as ShelfRequirement
 const gapCount = computed(() => new Set(models.value.flatMap(model => model.shelf?.checklist || []).filter(row => row.status === 'missing').map(row => row.requirement.id)).size)
 const rowsFor = (model: ShelfQueryItem, id: string) => model.shelf?.checklist?.filter(row => row.requirement.id === id) || []
 const certGroups = computed(() => [
@@ -163,13 +162,6 @@ onBeforeUnmount(() => { generation++ })
           <div v-if="requirements.length" class="table-wrap matrix"><table>
             <thead><tr><th>{{ t('shelfModel.material') }}</th><th v-for="model in models" :key="model.entity.id"><a :href="href(model.entity.id)">{{ model.entity.canonical_name }}</a></th></tr></thead>
             <tbody><tr v-for="requirement in requirements" :key="requirement.id"><th scope="row">{{ requirementLabel(requirement) }}</th><td v-for="model in models" :key="model.entity.id"><a v-for="(row, index) in rowsFor(model, requirement.id)" :key="index" :href="`${href(model.entity.id)}#requirement-${encodeURIComponent(requirement.id)}`"><span class="doc" :class="row.status">{{ t(`shelfModel.status.${row.status}`) }}</span><small>{{ condition(row.conditions) }}</small><small v-if="row.ambiguous">{{ t('shelfModel.ambiguous') }}</small></a><span v-if="!rowsFor(model, requirement.id).length">{{ t('shelfNode.notApplicable') }}</span></td></tr></tbody>
-          </table></div><p v-else>{{ t('productShelf.noRecords') }}</p>
-        </section>
-        <section v-if="section === 'part-checklist'" id="part-checklist">
-          <h2>{{ t('shelfModel.sections.docs') }}</h2>
-          <div v-if="node.shelf?.checklist?.length" class="table-wrap"><table>
-            <thead><tr><th>{{ t('shelfModel.material') }}</th><th>{{ t('shelfModel.draft') }}</th><th>{{ t('shelfModel.final') }}</th><th>{{ t('shelfModel.due') }}</th><th>{{ t('shelfModel.file') }}</th></tr></thead>
-            <tbody><tr v-for="(row, index) in node.shelf.checklist" :key="index"><th scope="row">{{ requirementLabel(row.requirement) }}<small>{{ requirementData(row.requirement).name_en }}</small></th><td>{{ requirementData(row.requirement).draft_due_stage ? stage(requirementData(row.requirement).draft_due_stage) : t('shelfStatus.noRecord') }}</td><td>{{ stage(requirementData(row.requirement).final_due_stage) }}</td><td>{{ requirementData(row.requirement).due_text }}</td><td><span>{{ row.has_file ? t('shelfModel.status.has_file') : t('shelfModel.status.no_file') }}</span><template v-if="row.document"><a :href="fileHref(row.document.file_id)">{{ row.document_name }}</a> <a v-if="documentURL(row.document)" :href="documentURL(row.document)" target="_blank" rel="noopener noreferrer">{{ row.document.attachment_id ? t('shelfModel.download') : t('shelfModel.cloudLink') }}</a><small>{{ row.document.stage === 'draft' ? t('shelfModel.draft') : t('shelfModel.final') }} {{ row.document.version_label }}</small></template><small>{{ condition(row.conditions) }}</small><small v-if="row.ambiguous">{{ t('shelfModel.ambiguous') }}</small></td></tr></tbody>
           </table></div><p v-else>{{ t('productShelf.noRecords') }}</p>
         </section>
         <section v-if="section === 'node-files'" id="node-files">

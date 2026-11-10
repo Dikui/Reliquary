@@ -65,6 +65,7 @@ func importUpload(t *testing.T, f *managedNamesFixture, libraryID, filename, dat
 	require.NoError(t, err)
 	require.NoError(t, form.Close())
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/libraries/"+libraryID+"/shelf/imports", &body)
+	request.Host = "localhost"
 	request.Header.Set("Content-Type", form.FormDataContentType())
 	request.Header.Set("X-API-Key", f.key)
 	response := httptest.NewRecorder()

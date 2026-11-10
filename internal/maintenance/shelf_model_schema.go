@@ -100,13 +100,11 @@ func projectShelfBindingsSnapshot(snapshot *Snapshot, targetVersion int64) {
 			shelves[l["id"]] = true
 		}
 	}
+	// Project the historical version 47 definition, independently of the
+	// current product-line-only requirement schema.
+	raw, _ := json.Marshal(types.EntityFieldDefinition{Key: "module_types", Name: "适用模块类型", Type: "list", Kinds: []string{}})
 	var definition any
-	for _, r := range types.ProductShelfRelations() {
-		if r.Name == "applies_to" {
-			raw, _ := json.Marshal(r.Fields[0])
-			_ = json.Unmarshal(raw, &definition)
-		}
-	}
+	_ = json.Unmarshal(raw, &definition)
 	for _, row := range snapshot.Tables["library_relation_types"] {
 		if !shelves[row["library_id"]] || row["name"] != "applies_to" {
 			continue

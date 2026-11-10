@@ -14,7 +14,7 @@ import (
 )
 
 func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types.Relation, excludeID string) error {
-	if relation.SubjectID == relation.ObjectID && !(library.ShelfEnabled && relation.RelationType == "applies_to") {
+	if relation.SubjectID == relation.ObjectID {
 		return apperrors.NewBadRequestError("an entity cannot relate to itself")
 	}
 	rule, ok := managedRelationType(library, relation.RelationType)
@@ -38,14 +38,14 @@ func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types
 		return err
 	}
 	if library.ShelfEnabled && relation.RelationType == "applies_to" {
-		if object.Kind == "document_requirement" && subject.ID != object.ID {
-			return apperrors.NewBadRequestError("module applicability must refer to the requirement itself")
+		if object.Kind != "product_line" {
+			return apperrors.NewBadRequestError("requirements may only apply to product lines")
 		}
 		if _, ok := subject.Attributes["requirement"]; !ok {
 			return apperrors.NewBadRequestError("uncertain: complete the requirement metadata before binding")
 		}
-		if err := validateShelfRequirementBinding(library, relation); err != nil {
-			return err
+		if _, has := relation.Attributes["module_types"]; has {
+			return apperrors.NewBadRequestError("requirement module bindings are not supported")
 		}
 	}
 	if library.ShelfEnabled && relation.RelationType == "has_certification" {

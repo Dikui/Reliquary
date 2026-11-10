@@ -52,7 +52,7 @@ async function mountPage(t: test.TestContext, options: { api?: Record<string, un
     '@/api/shelf-files': { writeShelf: (_: string, ops: any[]) => { writes.push(ops); return success({ status: 'confirmed' }) }, shelfEntities: () => Promise.resolve([...parts, entity('model', 'model'), ...checklist.map(row => row.requirement), entity('existing-file', 'document_file', '已有原件.pdf')]), listShelfVersions: () => success([{ ...doc, owner_id: '', file_id: 'existing-file', is_current: true, stage: 'final' }]), shelfWriteError, ...options.filesApi },
     '@/api/relations': { listEntityRelations: () => success([{ relation_type: 'composed_of', relations: [{ id: 'composition-alpha', relation_type: 'composed_of', version: 4, direction: 'outgoing', attributes: { module_type: 'cell' }, peer: parts[0] }] }]), ...options.relationsApi },
     '@/api/operation-logs': { OPERATION_TYPES: ['update_entity'] },
-    '@/api/entities': { uploadEntityAttachment: () => success({ id: 'uploaded-original' }), deleteEntityAttachment: () => success({}), ...options.entityApi, entityHistory: (_: string, page: number) => success({ items: page === 1 ? [{ id: 'log', operation_type: 'update_entity', source: { type: 'agent', agent_name: '合成助手' }, changeset_id: 'change-7', created_at: '2026-11-07T12:00:00Z', actor: 'local', before: {}, after: {} }] : [], total: 21, page, page_size: 20 }) },
+    '@/api/entities': { uploadEntityAttachment: () => success({ id: 'uploaded-original' }), deleteEntityAttachment: () => success({}), entityHistory: (_: string, page: number) => success({ items: page === 1 ? [{ id: 'log', operation_type: 'update_entity', source: { type: 'agent', agent_name: '合成助手' }, changeset_id: 'change-7', created_at: '2026-11-07T12:00:00Z', actor: 'local', before: {}, after: {} }] : [], total: 21, page, page_size: 20 }), ...options.entityApi },
     '@/api/shelf': { getShelfNode: (_: string, id: string, asOf?: string, combination?: object) => { requests.push({ id, asOf, combination }); return success(parents[id] || options.value || data(!!combination)) }, ...options.api },
   }
   modules['./ManagedAttributes.vue'] = { __esModule: true, default: loadComponent(new URL('./ManagedAttributes.vue', import.meta.url), modules) }
@@ -154,6 +154,12 @@ test('操作历史显示具名来源与变更集并可翻页', async t => {
   assert.match(visibleText(section(root, 'history')), /agent · 合成助手.*change-7/)
   await click(descendants(section(root, 'history')).find(node => node.tag === 'button' && visibleText(node) === '下一页')!)
   assert.doesNotMatch(visibleText(section(root, 'history')), /合成助手/)
+})
+
+// Small spec, task 30: import history includes the authenticated Key name.
+test('型号操作历史的导入来源显示 Key 名称', async t => {
+ const {root}=await mountPage(t,{entityApi:{entityHistory:async()=>success({items:[{id:'import-log',operation_type:'update_entity',created_at:'2026-11-07T12:00:00Z',source:{type:'import',file_name:'synthetic.xlsx',agent_name:'合成导入集成'},changeset_id:'import-set'}],total:1,page:1,page_size:20})}})
+ assert.match(visibleText(section(root,'history')),/synthetic.xlsx · 合成导入集成/)
 })
 
 // Small spec, task 16: a newer option read owns the displayed result.

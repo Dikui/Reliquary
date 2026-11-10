@@ -81,7 +81,11 @@ func (b *importMapBuilder) parseRecords(workbook *importWorkbookData) error {
 			for _, column := range mapping.Columns {
 				ref := column.Column + strconv.Itoa(row)
 				cell := sheet.cell(ref)
-				cells[column.Field+":"+column.Key] = cell
+				key := column.Field + ":" + column.Key
+				if b.plan.FileKind == "atq" && column.Field == "market" {
+					key = "market:" + column.Column
+				}
+				cells[key] = cell
 				raw[ref] = cell.Value
 				if cell.Formula != nil {
 					raw[ref+".formula"] = *cell.Formula

@@ -27,6 +27,7 @@ type ShelfImportDefinition struct {
 	Sheets          []ShelfImportSheet             `json:"sheets"`
 	ModelSeparators []string                       `json:"model_separators,omitempty"`
 	MissingValues   []string                       `json:"missing_values,omitempty"`
+	MarketValues    map[string]string              `json:"market_values,omitempty"`
 	StatusValues    map[string]ShelfImportStatus   `json:"status_values,omitempty"`
 	FillMeanings    map[string]string              `json:"fill_meanings,omitempty"`
 	Deadlines       map[string]ShelfImportDeadline `json:"deadlines,omitempty"`

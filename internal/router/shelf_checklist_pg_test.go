@@ -13,6 +13,7 @@ import (
 func checklistSetup(t *testing.T) (*managedNamesFixture, types.Library, types.ShelfChangeset) {
 	t.Helper()
 	f, l, n := shelfModelSetup(t)
+	l.ShelfConfig.Markets = []types.ShelfOption{{Key: "market_a", Name: "Market A"}}
 	l.ShelfConfig.Stages = []types.ShelfOption{{Key: "early", Name: "Early custom"}, {Key: "draft_due", Name: "Draft custom"}, {Key: "final_due", Name: "Final custom"}}
 	f.request(http.MethodPut, "/libraries/"+l.ID, map[string]any{"shelf_config": l.ShelfConfig}, http.StatusOK, &l)
 	return f, l, n
@@ -20,7 +21,7 @@ func checklistSetup(t *testing.T) (*managedNamesFixture, types.Library, types.Sh
 func checklistRequirement(t *testing.T, f *managedNamesFixture, l types.Library, name, draft, final string) types.Entity {
 	t.Helper()
 	var e types.Entity
-	f.request(http.MethodPost, "/libraries/"+l.ID+"/entities", map[string]any{"name": name, "kind": "document_requirement", "attributes": map[string]any{"requirement": map[string]any{"list_name": "Synthetic list", "name_zh": " 资料原名 ", "name_en": " Original name ", "file_category": "Drawing", "stage_label": "Source label", "draft_due_stage": draft, "final_due_stage": final, "markets": map[string]string{"region_a": "required"}, "owner": " Owner ", "priority": " P1 ", "source_list": "Synthetic list", "source_version": "Rev 1"}}}, http.StatusCreated, &e)
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/entities", map[string]any{"name": name, "kind": "document_requirement", "attributes": map[string]any{"requirement": map[string]any{"list_name": "Synthetic list", "name_zh": " 资料原名 ", "name_en": " Original name ", "file_category": "Drawing", "stage_label": "Source label", "draft_due_stage": draft, "final_due_stage": final, "markets": map[string]string{"market_a": "required"}, "owner": " Owner ", "priority": " P1 ", "source_list": "Synthetic list", "source_version": "Rev 1"}}}, http.StatusCreated, &e)
 	return e
 }
 func checklistBind(f *managedNamesFixture, l types.Library, r types.Entity, target string, modules ...string) {
@@ -67,17 +68,16 @@ func TestShelfChecklistFourStates(t *testing.T) {
 	require.Equal(t, "draft_due", detail.Entity.Attributes["current_stage"])
 }
 
-// Medium spec, task 08: line and module requirements form a union, shared
-// files use the nearest layer, and the model may override the product stage.
-func TestShelfChecklistInheritanceModulesAndArchive(t *testing.T) {
+// Medium spec, tasks 08 and 30: product-line requirements share nearest-layer
+// files, and the model may override the product stage.
+func TestShelfChecklistInheritanceAndArchive(t *testing.T) {
 	f, l, n := checklistSetup(t)
 	product, model := shelfNode(n, "product"), shelfNode(n, "model")
 	f.request(http.MethodPatch, "/entities/"+product, map[string]any{"revision": 1, "attributes": map[string]any{"current_stage": "early"}}, http.StatusOK, nil)
 	r := checklistRequirement(t, f, l, "Shared requirement", "draft_due", "final_due")
 	checklistBind(f, l, r, shelfNode(n, "line"))
-	checklistBind(f, l, r, r.ID, "module_b")
-	extra := checklistRequirement(t, f, l, "Module requirement", "", "final_due")
-	checklistBind(f, l, extra, extra.ID, "module_b")
+	extra := checklistRequirement(t, f, l, "Extra requirement", "", "final_due")
+	checklistBind(f, l, extra, shelfNode(n, "line"))
 	for _, owner := range []string{shelfNode(n, "platform"), product, shelfNode(n, "fixed"), model} {
 		stage := "final"
 		if owner == model {
@@ -94,7 +94,7 @@ func TestShelfChecklistInheritanceModulesAndArchive(t *testing.T) {
 		require.Equal(t, owner, row["owner_id"])
 	}
 	shelf := checklistRead(f, l, model)
-	require.Len(t, shelf["checklist"], 2, "line/module union must deduplicate")
+	require.Len(t, shelf["checklist"], 2)
 	f.request(http.MethodPatch, "/entities/"+model, map[string]any{"revision": 1, "attributes": map[string]any{"current_stage": "final_due"}}, http.StatusOK, nil)
 	shelf = checklistRead(f, l, model)
 	require.Equal(t, "final_due", shelf["current_stage"])
@@ -204,7 +204,7 @@ func TestShelfChecklistRejectsUncertainRequirements(t *testing.T) {
 		{"final_due_stage": ""},
 		{"draft_due_stage": "final_due", "final_due_stage": "early"},
 		{"final_due_stage": "final_due", "markets": map[string]string{"other": "required"}},
-		{"final_due_stage": "final_due", "markets": map[string]string{"region_a": "unclear"}},
+		{"final_due_stage": "final_due", "markets": map[string]string{"market_a": "unclear"}},
 	} {
 		var draft types.ShelfChangeset
 		f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "invalid", "type": "update_entity", "entity_id": r.ID, "patch": map[string]any{"revision": 1, "attributes": map[string]any{"requirement": record}}}}}, http.StatusCreated, &draft)

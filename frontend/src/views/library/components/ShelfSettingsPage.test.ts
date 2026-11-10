@@ -7,6 +7,16 @@ import en from '../../../i18n/locales/en-US'
 import { click, descendants, element, loadComponent, renderer, settle, visibleText } from '../componentTestHarness'
 import { entryPresentationTestModules } from '../entryPresentationTestModules'
 const library:any={id:'shelf',updated_at:'2026-11-07T12:00:00Z',shelf_enabled:true,shelf_config:{module_types:[{key:'module',name:'客户模块'}],regions:[{key:'region',name:'客户区域'}],stages:[{key:'first',name:'客户前期'},{key:'last',name:'客户后期'}],parsers:[]},entity_schema:{kinds:[],fields:[]}}
+// Small spec, task 30: markets are maintained independently from sale regions.
+test('市场可新增并原样保存且区域不变', async t => {
+ const {root,writes}=await mount(t)
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='市场')!)
+ descendants(root).find(n=>n.tag==='input'&&n.props['aria-label']===zh.shelfSettings.newName)!.props.onInput({target:{value:' 新市场 '}});await settle()
+ descendants(root).find(n=>n.tag==='form')!.props.onSubmit({preventDefault(){}});await settle()
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='确认保存')!)
+ assert.equal(writes[0][2].shelf_config.markets[0].name,' 新市场 ')
+ assert.deepEqual(writes[0][2].shelf_config.regions,library.shelf_config.regions)
+})
 // Small spec, task 20 / ADR 0023: saved settings use the library's revision;
 // configured names and keys survive editing without customer constants.
 async function mount(t:test.TestContext,nodes:any[]=[]){

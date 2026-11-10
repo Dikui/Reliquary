@@ -27,7 +27,7 @@ export type LibraryPromptOverrides = Partial<Record<LibraryPromptID, string>>;
 export interface ShelfOption { key: string; name: string }
 export interface ShelfParser { key: string; name: string; type: 'http' | 'vision' | 'none'; url?: string; authorization?: string; timeout_seconds?: number; concurrency?: number; model_id?: string; render_dpi?: number; prompt?: string }
 export interface ShelfParserRule { parser_key: string; extension?: string; requirement_id?: string; file_category?: string }
-export interface ShelfConfig { max_file_bytes?: number; parsers?: ShelfParser[]; default_parser?: string; parser_rules?: ShelfParserRule[]; module_types?: ShelfOption[]; regions?: ShelfOption[]; stages?: ShelfOption[]; standards?: (ShelfOption & { aliases?: string[] })[] }
+export interface ShelfConfig { max_file_bytes?: number; parsers?: ShelfParser[]; default_parser?: string; parser_rules?: ShelfParserRule[]; module_types?: ShelfOption[]; regions?: ShelfOption[]; markets?: ShelfOption[]; stages?: ShelfOption[]; standards?: (ShelfOption & { aliases?: string[] })[] }
 export interface LibraryCatalogItem {
   updated_at?: string;
   shelf_enabled?: boolean; shelf_config?: ShelfConfig;

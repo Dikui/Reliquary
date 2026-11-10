@@ -9,6 +9,9 @@ import (
 )
 
 func (b *importMapBuilder) requirementRow(mapping types.ShelfImportSheet, cells map[string]importCell) error {
+	if mapping.ProductLineID == "" || mapping.ModuleType != "" {
+		return fmt.Errorf("uncertain: ATQ worksheet requires a product line; module bindings are no longer supported")
+	}
 	if err := b.validateRecordCells(cells); err != nil {
 		return err
 	}
@@ -49,13 +52,17 @@ func (b *importMapBuilder) requirementRow(mapping types.ShelfImportSheet, cells 
 	for k, v := range requirement.Markets {
 		markets[k] = v
 	}
+	parsedMarkets := map[string]string{}
 	for _, column := range mapping.Columns {
 		if column.Field != "market" {
 			continue
 		}
-		raw := cells["market:"+column.Key].Value
+		raw := cells["market:"+column.Column].Value
 		value := raw
-		switch raw {
+		if mapped, ok := b.plan.Definition.MarketValues[raw]; ok {
+			value = mapped
+		}
+		switch value {
 		case "必需":
 			value = "required"
 		case "可选":
@@ -66,6 +73,10 @@ func (b *importMapBuilder) requirementRow(mapping types.ShelfImportSheet, cells 
 		if !slices.Contains([]string{"required", "optional", "not_needed"}, value) {
 			return fmt.Errorf("uncertain: market necessity %q has no explicit meaning", raw)
 		}
+		if previous, ok := parsedMarkets[column.Key]; ok && previous != value {
+			return fmt.Errorf("uncertain: columns mapped to market %q disagree", column.Key)
+		}
+		parsedMarkets[column.Key] = value
 		markets[column.Key] = value
 	}
 	requirement.Markets = markets
@@ -81,25 +92,12 @@ func (b *importMapBuilder) requirementRow(mapping types.ShelfImportSheet, cells 
 		b.append(types.ShelfOperation{Type: "update_entity", EntityID: id, Patch: &types.ManagedEntityPatch{Revision: existing.Revision, Attributes: &attrs}})
 	}
 	target := mapping.ProductLineID
-	bindingAttrs := map[string]any{}
-	if mapping.ModuleType != "" {
-		target = id
-		bindingAttrs["module_types"] = []string{mapping.ModuleType}
-	}
 	var bindings []types.Relation
 	if err := b.service.db.WithContext(b.ctx).Where("library_id=? AND space_id=? AND subject_id=? AND object_id=? AND relation_type='applies_to' AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", b.library.ID, b.library.SpaceID, id, target, b.at, b.at).Find(&bindings).Error; err != nil {
 		return err
 	}
 	if len(bindings) == 0 {
-		b.append(types.ShelfOperation{Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: id, ObjectID: target, RelationType: "applies_to", Attributes: bindingAttrs}})
-	} else if mapping.ModuleType != "" {
-		var modules []string
-		if err := types.DecodeShelfValue(bindings[0].Attributes["module_types"], &modules); err != nil {
-			return err
-		}
-		if !slices.Contains(modules, mapping.ModuleType) {
-			return fmt.Errorf("uncertain: requirement module binding differs from the shelf")
-		}
+		b.append(types.ShelfOperation{Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: id, ObjectID: target, RelationType: "applies_to"}})
 	}
 	b.seenRecordKeys["requirement-name:"+identity] = true
 	b.seenRecordKeys["requirement-id:"+id] = true

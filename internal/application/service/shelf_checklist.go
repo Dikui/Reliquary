@@ -156,19 +156,6 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 			if b.ObjectID == line {
 				applies = true
 			}
-			if b.ObjectID == r.ID {
-				var modules []string
-				_ = types.DecodeShelfValue(b.Attributes["module_types"], &modules)
-				for _, edge := range d.edges {
-					if edge.SubjectID == id && edge.RelationType == "composed_of" {
-						for _, module := range modules {
-							if edge.Attributes["module_type"] == module {
-								applies = true
-							}
-						}
-					}
-				}
-			}
 		}
 		if !applies {
 			continue
@@ -310,7 +297,6 @@ func (d *shelfChecklistData) apply(entity *types.Entity, result *types.ShelfMode
 		return left.CanonicalName < right.CanonicalName
 	})
 	if entity.Kind == "part" {
-		result.Checklist = d.partChecklist(entity)
 		return
 	}
 	summary := &types.ShelfChecklistSummary{Counts: map[string]int{}, Models: []types.ShelfChecklistModelSummary{}}
@@ -349,52 +335,6 @@ func (d *shelfChecklistData) apply(entity *types.Entity, result *types.ShelfMode
 		}
 	}
 	result.ChecklistSummary = summary
-}
-
-// Parts have module requirements, but no stage or sale status of their own.
-func (d *shelfChecklistData) partChecklist(entity *types.Entity) []types.ShelfChecklistItem {
-	rows := []types.ShelfChecklistItem{}
-	module, _ := entity.Attributes["module_type"].(string)
-	for _, requirement := range d.requirements {
-		applies := false
-		for _, binding := range d.bindings {
-			if binding.SubjectID != requirement.ID || binding.ObjectID != requirement.ID {
-				continue
-			}
-			var modules []string
-			_ = types.DecodeShelfValue(binding.Attributes["module_types"], &modules)
-			applies = applies || slices.Contains(modules, module)
-		}
-		if !applies {
-			continue
-		}
-		var record types.ShelfRequirement
-		if types.DecodeShelfValue(requirement.Attributes["requirement"], &record) != nil {
-			continue
-		}
-		found := false
-		for i := range d.documents {
-			document := &d.documents[i]
-			if documentIDValue(document.OwnerID) != entity.ID || !slices.Contains(document.Requirements(), requirement.ID) {
-				continue
-			}
-			row := d.row(requirement, record, "", document, 0, nil, nil, nil)
-			row.Conditions = append([]types.ShelfCondition{}, document.Conditions...)
-			rows = append(rows, row)
-			found = true
-		}
-		if !found {
-			rows = append(rows, d.row(requirement, record, "", nil, 0, nil, nil, nil))
-		}
-	}
-	for i := range rows {
-		for j := 0; j < i; j++ {
-			if rows[i].Requirement.ID == rows[j].Requirement.ID && rows[i].Document != nil && rows[j].Document != nil && shelfConditionsOverlap(rows[i].Conditions, rows[j].Conditions) {
-				rows[i].Ambiguous, rows[j].Ambiguous = true, true
-			}
-		}
-	}
-	return rows
 }
 
 // Other files use the same current-version snapshot as the checklist, but have

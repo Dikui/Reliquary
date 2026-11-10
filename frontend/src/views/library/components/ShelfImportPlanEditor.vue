@@ -22,13 +22,15 @@ const fields = computed(() => ({
 const rules = reactive({
   checks: model.value.sheets.map(sheet => Object.entries(sheet.check_values || {}).map(([raw, value]) => ({ raw, value }))),
   statuses: Object.entries(model.value.status_values || {}).map(([raw, value]) => ({ raw, ...value })),
+  markets: Object.entries(model.value.market_values || {}).map(([raw, value]) => ({ raw, value })),
   fills: Object.entries(model.value.fill_meanings || {}).map(([raw, meaning]) => ({ raw, meaning })),
   deadlines: Object.entries(model.value.deadlines || {}).map(([raw, value]) => ({ raw, draft_stage: value.draft_stage || '', final_stage: value.final_stage })),
 })
-const duplicateRules = computed(() => [rules.statuses, rules.fills, rules.deadlines, ...rules.checks].some(rows => new Set(rows.map(row => row.raw)).size !== rows.length || rows.some(row => !row.raw.trim())))
+const duplicateRules = computed(() => [rules.statuses, rules.markets, rules.fills, rules.deadlines, ...rules.checks].some(rows => new Set(rows.map(row => row.raw)).size !== rows.length || rows.some(row => !row.raw.trim())))
 watch(rules, () => {
   rules.checks.forEach((rows, index) => { if (model.value.sheets[index] && rows.length) model.value.sheets[index]!.check_values = Object.fromEntries(rows.map(row => [row.raw, row.value])); else if (model.value.sheets[index]) delete model.value.sheets[index]!.check_values })
   model.value.status_values = Object.fromEntries(rules.statuses.map(({ raw, ...value }) => [raw, value]))
+  model.value.market_values = Object.fromEntries(rules.markets.map(row => [row.raw, row.value]))
   model.value.fill_meanings = Object.fromEntries(rules.fills.map(row => [row.raw, row.meaning]))
   model.value.deadlines = Object.fromEntries(rules.deadlines.map(({ raw, ...value }) => [raw, value]))
 })
@@ -37,6 +39,7 @@ function addSheet() { model.value.sheets.push({ worksheet: '', header_rows: 1, c
 function options(sheet: ShelfImportSheet, field: string) {
   if (field === 'parameter') return (props.library.entity_schema?.fields || []).filter(value => !value.archived && value.product_line_ids?.includes(sheet.product_line_id || '') && ['text', 'number', 'boolean', 'date', 'select'].includes(value.type))
   if (field === 'certification') return props.library.shelf_config?.standards || []
+  if (field === 'market') return props.library.shelf_config?.markets || []
   return props.library.shelf_config?.regions || []
 }
 const usesKey = (field: string) => ['parameter', 'sale_status', 'market', 'certification'].includes(field)
@@ -52,7 +55,7 @@ const usesKey = (field: string) => ['parameter', 'sale_status', 'market', 'certi
           <Field :label="t('shelfImport.headerRows')" :error="submitted && (!Number.isInteger(sheet.header_rows) || sheet.header_rows < 0 || sheet.header_rows > 100) ? t('shelfImport.planError') : undefined"><Input v-model.number="sheet.header_rows" type="number" min="0" max="100" :aria-label="`${t('shelfImport.headerRows')} ${index + 1}`" /></Field>
           <Field :label="t('shelfImport.productLine')"><Select v-model="sheet.product_line_id" :aria-label="`${t('shelfImport.productLine')} ${index + 1}`"><option value="">{{ t('shelfImport.unspecified') }}</option><option v-for="line in lines" :key="line.id" :value="line.id">{{ line.canonical_name }}</option></Select></Field>
           <Field v-if="model.file_kind !== 'product_map' && model.file_kind !== 'atq'" :label="t('shelfImport.ownerKind')"><Select v-model="sheet.owner_kind" :aria-label="`${t('shelfImport.ownerKind')} ${index + 1}`"><option value="">{{ t('shelfImport.unspecified') }}</option><option v-for="kind in ['model', 'part', 'product', 'platform']" :key="kind" :value="kind">{{ t(`productShelf.kinds.${kind}`) }}</option></Select></Field>
-          <Field v-if="['atq', 'certification_report'].includes(model.file_kind)" :label="t('shelfImport.module')"><Select v-model="sheet.module_type" :aria-label="`${t('shelfImport.module')} ${index + 1}`"><option value="">{{ t('shelfImport.unspecified') }}</option><option v-for="item in library.shelf_config?.module_types || []" :key="item.key" :value="item.key">{{ item.name }}</option></Select></Field>
+          <Field v-if="model.file_kind === 'certification_report'" :label="t('shelfImport.module')"><Select v-model="sheet.module_type" :aria-label="`${t('shelfImport.module')} ${index + 1}`"><option value="">{{ t('shelfImport.unspecified') }}</option><option v-for="item in library.shelf_config?.module_types || []" :key="item.key" :value="item.key">{{ item.name }}</option></Select></Field>
           <Field v-if="['certification_report', 'overseas_sales'].includes(model.file_kind)" :label="t('shelfImport.completedSpelling')"><Input v-model="sheet.progress" :aria-label="`${t('shelfImport.completedSpelling')} ${index + 1}`" /></Field>
         </template>
       </div>
@@ -95,6 +98,10 @@ const usesKey = (field: string) => ['parameter', 'sale_status', 'market', 'certi
     <section class="import-section"><h3>{{ t('shelfImport.fillMeanings') }}</h3><p class="import-hint">{{ t('shelfImport.fillHint') }}</p>
       <div v-for="(row, index) in rules.fills" :key="index" class="import-row"><Input v-model="row.raw" :aria-label="`${t('shelfImport.fill')} ${index + 1}`" /><Select v-model="row.meaning" :aria-label="`${t('shelfImport.fillMeaning')} ${index + 1}`"><option v-for="meaning in ['uncertain', 'ignore', 'planned_eom']" :key="meaning" :value="meaning">{{ t(`shelfImport.meanings.${meaning}`) }}</option><option v-for="status in SALE_STATUSES" :key="status" :value="status">{{ status }}</option></Select><Button @click="rules.fills.splice(index, 1)">{{ t('shelfImport.remove') }}</Button></div>
       <Button @click="rules.fills.push({ raw: '', meaning: 'uncertain' })">{{ t('shelfImport.addRule') }}</Button>
+    </section>
+    <section v-if="model.file_kind === 'atq'" class="import-section"><h3>{{ t('shelfImport.marketValues') }}</h3><p class="import-hint">{{ t('shelfImport.marketHint') }}</p>
+      <div v-for="(row, index) in rules.markets" :key="index" class="import-row"><Input v-model="row.raw" :aria-label="`${t('shelfImport.marketRaw')} ${index + 1}`" /><Select v-model="row.value" :aria-label="`${t('shelfImport.marketMeaning')} ${index + 1}`"><option value="required">{{ t('shelfSettings.required') }}</option><option value="optional">{{ t('shelfSettings.optional') }}</option><option value="not_needed">{{ t('shelfSettings.not_needed') }}</option></Select><Button @click="rules.markets.splice(index, 1)">{{ t('shelfImport.remove') }}</Button></div>
+      <Button @click="rules.markets.push({ raw: '', value: 'required' })">{{ t('shelfImport.addRule') }}</Button>
     </section>
     <section v-if="model.file_kind === 'atq'" class="import-section"><h3>{{ t('shelfImport.deadlines') }}</h3>
       <div v-for="(row, index) in rules.deadlines" :key="index" class="import-row"><Input v-model="row.raw" :aria-label="`${t('shelfImport.deadlineRaw')} ${index + 1}`" /><Select v-model="row.draft_stage" :aria-label="`${t('shelfImport.draftStage')} ${index + 1}`"><option value="">{{ t('shelfImport.unspecified') }}</option><option v-for="stage in library.shelf_config?.stages || []" :key="stage.key" :value="stage.key">{{ stage.name }}</option></Select><Select v-model="row.final_stage" :aria-label="`${t('shelfImport.finalStage')} ${index + 1}`"><option value="">{{ t('shelfImport.unspecified') }}</option><option v-for="stage in library.shelf_config?.stages || []" :key="stage.key" :value="stage.key">{{ stage.name }}</option></Select><Button @click="rules.deadlines.splice(index, 1)">{{ t('shelfImport.remove') }}</Button></div>

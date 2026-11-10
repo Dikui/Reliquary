@@ -12,6 +12,7 @@ export interface ShelfImportSheet {
 export interface ShelfImportDefinition {
   sheets: ShelfImportSheet[]; model_separators?: string[]; missing_values?: string[]
   status_values?: Record<string, { status: string; notes?: string }>; fill_meanings?: Record<string, string>
+  market_values?: Record<string, 'required' | 'optional' | 'not_needed'>
   deadlines?: Record<string, { draft_stage?: string; final_stage: string }>
 }
 export interface ShelfImportPlanInput extends ShelfImportDefinition { key: string; name: string; file_kind: ShelfImportKind; revision: number }

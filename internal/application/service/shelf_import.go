@@ -63,6 +63,9 @@ func (s *EntityService) ImportShelfWorkbook(ctx context.Context, libraryID, plan
 		}
 		hash := sha256.Sum256(data)
 		source := types.OperationSource{Type: "import", FileDate: fileDate, FileName: filename, FileSHA256: hex.EncodeToString(hash[:]), ImportPlanKey: plan.Key, PlanRevision: plan.Revision}
+		if principal, ok := types.PrincipalFromContext(ctx); ok && principal.Type == types.PrincipalAPIKey {
+			source.AgentName = principal.Name
+		}
 		source.ImportBatchID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(fmt.Sprintf("%d/%s/%s/%d/%s/%s", library.SpaceID, library.ID, plan.Key, plan.Revision, source.FileSHA256, fileDate.UTC().Format(time.RFC3339Nano)))).String()
 		var existing []types.ShelfChangeset
 		if err := tx.Where("space_id=? AND library_id=? AND source->>'import_batch_id'=?", library.SpaceID, library.ID, source.ImportBatchID).Order("created_at, id").Limit(1).Find(&existing).Error; err != nil {

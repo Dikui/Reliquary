@@ -160,7 +160,7 @@ func TestShelfImportOverseasSalesOnlyReportsContradictions(t *testing.T) {
 // cell, not the display stage. New editions add rows and explicitly archive omissions.
 func TestShelfImportATQStagesAndNewEditionArchive(t *testing.T) {
 	f, l, n := checklistSetup(t)
-	importRecordPlan(f, l, "atq", []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}, {Column: "C", Field: "stage_label"}, {Column: "D", Field: "name_en"}, {Column: "E", Field: "market", Key: "region_a"}, {Column: "F", Field: "owner"}, {Column: "G", Field: "source_version"}}, map[string]any{"product_line_id": shelfNode(n, "line")})
+	importRecordPlan(f, l, "atq", []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}, {Column: "C", Field: "stage_label"}, {Column: "D", Field: "name_en"}, {Column: "E", Field: "market", Key: "market_a"}, {Column: "F", Field: "owner"}, {Column: "G", Field: "source_version"}}, map[string]any{"product_line_id": shelfNode(n, "line")})
 	first := importUpload(t, f, l.ID, "atq_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, " 原名资料 ", "初稿：Draft custom；终稿：Final custom", "Early custom", " Original English ", "required", " Owner ", "V1")+importRecordRow(4, "Removed document", "Final custom", "Draft custom", "Removed", "optional", "Team", "V1"), ""), http.StatusCreated)
 	first = confirmImport(t, f, l.ID, first)
 	var requirement types.EntityDetail
@@ -231,10 +231,10 @@ func TestShelfImportCertificationExcelDatesRetainInvalidSerial(t *testing.T) {
 }
 
 // Medium spec, task 12: unclear deadline text and missing worksheets cannot
-// silently archive an existing list. Explicit module bindings enter model checklists.
+// silently archive an existing list. Product-line bindings enter model checklists.
 func TestShelfImportATQUncertainDeadlineAndIgnoredSheetPreserveRequirements(t *testing.T) {
 	f, l, n := checklistSetup(t)
-	importRecordPlan(f, l, "atq", []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}}, map[string]any{"module_type": "module_b"})
+	importRecordPlan(f, l, "atq", []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}}, map[string]any{"product_line_id": shelfNode(n, "line")})
 	first := confirmImport(t, f, l.ID, importUpload(t, f, l.ID, "atq_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Module document", "Draft custom（初稿）；Final custom（终稿）"), ""), http.StatusCreated))
 	id := first.Items[0].EntityID
 	require.Len(t, checklistRead(f, l, shelfNode(n, "model"))["checklist"], 1)
@@ -245,7 +245,7 @@ func TestShelfImportATQUncertainDeadlineAndIgnoredSheetPreserveRequirements(t *t
 	var plans []types.ShelfImportPlan
 	f.request(http.MethodGet, "/libraries/"+l.ID+"/shelf/import-plans", nil, http.StatusOK, &plans)
 	def := plans[0].Definition
-	def.Sheets = append(def.Sheets, types.ShelfImportSheet{Worksheet: "Absent", HeaderRows: 2, ModuleType: "module_b", Columns: def.Sheets[0].Columns})
+	def.Sheets = append(def.Sheets, types.ShelfImportSheet{Worksheet: "Absent", HeaderRows: 2, ProductLineID: shelfNode(n, "line"), Columns: def.Sheets[0].Columns})
 	def.Sheets[0].Ignore = true
 	def.Deadlines = map[string]types.ShelfImportDeadline{"When ready": {FinalStage: "final_due"}}
 	plan := types.ShelfImportPlanInput{Key: "map", Name: "Synthetic records", FileKind: "atq", Revision: 1, ShelfImportDefinition: def}

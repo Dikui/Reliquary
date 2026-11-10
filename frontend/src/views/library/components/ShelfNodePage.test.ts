@@ -122,13 +122,13 @@ test('英文节点页翻译栏目并保留客户原名', async t => {
   assert.doesNotMatch(visibleText(root), /shelfNode\.|shelfModel\./)
 })
 
-// Small spec, task 17: part requirements show configured due text without inventing a current stage.
-test('部件资料清单显示模块要求与应交原文，不推断到期状态', async t => {
+// Small spec, task 30: even an old response cannot display part requirements.
+test('部件页不再显示资料清单', async t => {
   const value = node(true)
   value.shelf.checklist = [{ requirement: { ...req, attributes: { requirement: { draft_due_stage: 'early', final_due_stage: 'late', due_text: '客户交期原文' } } }, status: 'no_file', conditions: [] }]
   const { root } = await mountPage(t, { part: true, api: { getShelfNode: () => success(value) } })
-  assert.match(visibleText(section(root, 'part-checklist')), /客户图纸.*客户初期.*客户后期.*客户交期原文.*无文件/)
-  assert.doesNotMatch(visibleText(section(root, 'part-checklist')), /未到期|已交/)
+  assert.equal(section(root, 'part-checklist'), undefined)
+  assert.ok(section(root, 'node-files'))
 })
 
 // Small spec, task 17: new node selection invalidates pending reads at the page boundary.
@@ -162,10 +162,10 @@ test('资料缺口按不同要求计数并保留受影响型号数量', async t 
   assert.match(visibleText(root), /缺 1 项（2 个型号）/)
 })
 
-// Small spec, task 17 / approved part design: certifications follow usage before the long checklist.
-test('部件认证在使用型号之后、资料清单之前展示', async t => {
+// Small spec, task 30: certifications follow usage and precede attached files.
+test('部件认证在使用型号之后、资料文件之前展示', async t => {
   const { root } = await mountPage(t, { part: true })
   const sections = descendants(root).filter(item => item.tag === 'section').map(item => item.props.id)
   assert.ok(sections.indexOf('models') < sections.indexOf('node-certifications'))
-  assert.ok(sections.indexOf('node-certifications') < sections.indexOf('part-checklist'))
+  assert.ok(sections.indexOf('node-certifications') < sections.indexOf('node-files'))
 })

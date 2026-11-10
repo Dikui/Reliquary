@@ -68,28 +68,24 @@ func TestShelfNodePageCertificationOrigins(t *testing.T) {
 	require.Equal(t, "Certificate a", node.Shelf.Certifications[0].Entity.CanonicalName)
 }
 
-// Medium spec, task 17 / ADR 0024: a part's module requirements are listed
-// without inferring model stages or regional sale statuses.
-func TestShelfNodePagePartRequirements(t *testing.T) {
+// Medium spec, task 30 / ADR 0024: parts have files but no required checklist.
+func TestShelfNodePagePartFilesWithoutRequirements(t *testing.T) {
 	f, l, n := checklistSetup(t)
 	part := shelfNode(n, "a")
 	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{
 		"id": "part-module", "type": "update_entity", "entity_id": part, "revision": 1, "patch": map[string]any{"revision": 1, "attributes": map[string]any{"module_type": "module_a", "pack_model": "Original Pack"}},
 	}}}, http.StatusCreated, nil)
 	required := checklistRequirement(t, f, l, "Part requirement", "draft_due", "final_due")
-	checklistBind(f, l, required, required.ID, "module_a")
-	other := checklistRequirement(t, f, l, "Other module requirement", "", "final_due")
-	checklistBind(f, l, other, other.ID, "module_b")
+	checklistBind(f, l, required, shelfNode(n, "line"))
 	var node types.ShelfNodeDetail
 	f.request(http.MethodGet, "/libraries/"+l.ID+"/shelf/nodes/"+part, nil, http.StatusOK, &node)
-	require.Len(t, node.Shelf.Checklist, 1)
-	require.Equal(t, required.ID, node.Shelf.Checklist[0].Requirement.ID)
-	require.Equal(t, "no_file", node.Shelf.Checklist[0].Status)
+	require.Empty(t, node.Shelf.Checklist)
 	checklistFile(f, l, part, required.ID, "draft", types.ShelfCondition{ModuleType: "module_a", PartIDs: []string{part}})
 	f.request(http.MethodGet, "/libraries/"+l.ID+"/shelf/nodes/"+part, nil, http.StatusOK, &node)
-	require.Equal(t, "has_file", node.Shelf.Checklist[0].Status)
-	require.Equal(t, "draft", node.Shelf.Checklist[0].Document.Stage)
-	require.Equal(t, []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{part}}}, node.Shelf.Checklist[0].Conditions)
+	require.Empty(t, node.Shelf.Checklist)
+	require.Len(t, node.Shelf.Documents, 1)
+	require.Equal(t, "draft", node.Shelf.Documents[0].Document.Stage)
+	require.Equal(t, []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{part}}}, node.Shelf.Documents[0].Document.Conditions)
 	require.Empty(t, node.Shelf.CurrentStage)
 	require.Empty(t, node.Shelf.SaleStatuses)
 }

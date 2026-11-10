@@ -49,7 +49,7 @@ async function sameEntity(item: ShelfReviewItem) {
 }
 function distinctEntity(item: ShelfReviewItem) { const operation = shelfOperationForEdit(item); delete operation.candidate_entity_id; decisions.value[item.id] = { item_id: item.id, action: 'replace', replacement: operation }; delete edits.value[item.id] }
 function confirmNames(item: ShelfReviewItem) { decisions.value[item.id] = { item_id: item.id, action: 'apply', name_confirmations: shelfNameConfirmations(item) }; delete edits.value[item.id] }
-function title(set: ShelfReviewChangeset) { return `${set.source.type === 'agent' ? `agent · ${set.source.agent_name}` : t(`shelfReview.sources.${set.source.type}`)} · ${set.source.import_batch_id || set.id}` }
+function title(set: ShelfReviewChangeset) { return `${[set.source.type === 'agent' ? 'agent' : t(`shelfReview.sources.${set.source.type}`), set.source.agent_name].filter(Boolean).join(' · ')} · ${set.source.import_batch_id || set.id}` }
 async function allowLeave() {
   if (busy.value) return false
   if (!dirty.value) return true

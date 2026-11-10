@@ -27,7 +27,7 @@ func shelfSourceValid(source types.OperationSource) error {
 	if !slices.Contains([]string{"web", "agent", "import"}, source.Type) ||
 		(source.Type == "agent" && strings.TrimSpace(source.AgentName) == "") ||
 		(source.Type == "import" && (strings.TrimSpace(source.ImportBatchID) == "" || source.FileDate == nil || source.FileDate.IsZero())) ||
-		(source.Type != "agent" && source.AgentName != "") || (source.Type != "import" && (source.ImportBatchID != "" || source.FileDate != nil)) ||
+		(source.Type != "agent" && source.Type != "import" && source.AgentName != "") || (source.Type != "import" && (source.ImportBatchID != "" || source.FileDate != nil)) ||
 		len([]rune(source.AgentName)) > 200 || len([]rune(source.ImportBatchID)) > 200 {
 		return apperrors.NewBadRequestError("source requires web, a named agent, or an import batch with file_date")
 	}

@@ -57,7 +57,7 @@ const parseStatus = (status: string) => te(`shelfModel.parse.${status}`) ? t(`sh
 const operationName = (item: OperationLog) => OPERATION_TYPES.includes(item.operation_type) ? t(`operationLogs.types.${item.operation_type}`) : item.operation_type
 function sourceText(item: Pick<OperationLog, 'source'> & Partial<Pick<OperationLog, 'actor_name' | 'actor'>>) {
   if (item.source?.type === 'agent') return `agent · ${item.source.agent_name || item.actor_name || item.actor || t('shelfStatus.noRecord')}`
-  if (item.source?.type === 'import') return `${t('shelfModel.import')} ${item.source.file_name || item.source.import_batch_id || ''}`
+  if (item.source?.type === 'import') return `${t('shelfModel.import')} ${item.source.file_name || item.source.import_batch_id || ''}${item.source.agent_name ? ` · ${item.source.agent_name}` : ''}`
   return item.source?.type === 'web' ? t('shelfModel.web') : item.actor_name || item.actor || t('shelfStatus.noRecord')
 }
 function unwrap<T>(response: { success: boolean; data: T; message?: string; error?: string }): T {

@@ -25,8 +25,8 @@ async function loadModels() {
 }
 watch(tab, value => { if (value === 'parsers') void loadModels() })
 const config = computed(() => library.value?.shelf_config), dirty = computed(() => !!library.value && JSON.stringify({ config: config.value, schema: library.value.entity_schema }) !== baseline.value)
-const tabs = computed(() => [{ value: 'modules', label: t('shelfSettings.modules') }, { value: 'regions', label: t('shelfSettings.regions') }, { value: 'stages', label: t('shelfSettings.stages') }, { value: 'requirements', label: t('shelfSettings.requirements') }, { value: 'fields', label: t('shelfSettings.fields') }, { value: 'parsers', label: t('shelfSettings.parsers') }])
-const optionKey = computed(() => tab.value === 'modules' ? 'module_types' : tab.value === 'regions' ? 'regions' : 'stages')
+const tabs = computed(() => [{ value: 'modules', label: t('shelfSettings.modules') }, { value: 'regions', label: t('shelfSettings.regions') }, { value: 'markets', label: t('shelfSettings.markets') }, { value: 'stages', label: t('shelfSettings.stages') }, { value: 'requirements', label: t('shelfSettings.requirements') }, { value: 'fields', label: t('shelfSettings.fields') }, { value: 'parsers', label: t('shelfSettings.parsers') }])
+const optionKey = computed(() => tab.value === 'modules' ? 'module_types' : tab.value === 'regions' ? 'regions' : tab.value === 'markets' ? 'markets' : 'stages')
 const options = computed(() => config.value?.[optionKey.value] || [])
 const lines = computed(() => nodes.value.filter(n => n.kind === 'product_line'))
 const requirements = computed(() => nodes.value.filter(n => n.kind === 'document_requirement'))
@@ -40,7 +40,7 @@ async function load() {
     if (!response.success) throw new Error(response.message)
     if (request !== generation) return
     library.value = JSON.parse(JSON.stringify(response.data))
-    const value = library.value!; value.shelf_config ||= {}; value.shelf_config.module_types ||= []; value.shelf_config.regions ||= []; value.shelf_config.stages ||= []; value.shelf_config.parsers ||= []; value.shelf_config.parser_rules ||= []; value.entity_schema ||= { kinds: [], fields: [] }
+    const value = library.value!; value.shelf_config ||= {}; value.shelf_config.module_types ||= []; value.shelf_config.regions ||= []; value.shelf_config.markets ||= []; value.shelf_config.stages ||= []; value.shelf_config.parsers ||= []; value.shelf_config.parser_rules ||= []; value.entity_schema ||= { kinds: [], fields: [] }
     nodes.value = entities; editingOptions.value.clear(); if (!line.value) line.value = lines.value[0]?.id || ''
     baseline.value = JSON.stringify({ config: config.value, schema: value.entity_schema })
   } catch { if (request === generation) error.value = t('shelfFiles.loadFailed') }
@@ -53,7 +53,7 @@ function addOption() { if (!newName.value.trim()) return; options.value.push({ k
 function move(list: ShelfOption[] | unknown[], index: number, step: number) { const target = index + step; if (target < 0 || target >= list.length) return; [list[index], list[target]] = [list[target]!, list[index]!] }
 async function save() {
   if (!library.value || busy.value) return
-  if (!library.value.updated_at || [...config.value?.module_types || [], ...config.value?.regions || [], ...config.value?.stages || []].some(option => !option.name.trim())) { saveError.value = t('shelfSettings.invalid'); return }
+  if (!library.value.updated_at || [...config.value?.module_types || [], ...config.value?.regions || [], ...config.value?.markets || [], ...config.value?.stages || []].some(option => !option.name.trim())) { saveError.value = t('shelfSettings.invalid'); return }
   busy.value = true; saveError.value = ''
   try {
     const response = await configureShelf(library.value.id, library.value.updated_at, { shelf_config: config.value, entity_schema: library.value.entity_schema })
@@ -80,9 +80,9 @@ onBeforeUnmount(() => { generation++ })
     <template v-else-if="library && config">
       <p v-if="saveError" role="alert" class="rq-shelf-error">{{ saveError }} <Button :disabled="busy" @click="load">{{ t('shelfFiles.reload') }}</Button></p>
       <Tabs v-model="tab" :items="tabs" :label="t('shelfSettings.title')">
-        <template v-for="section in ['modules', 'regions', 'stages']" :key="section" #[section]>
+        <template v-for="section in ['modules', 'regions', 'markets', 'stages']" :key="section" #[section]>
           <p v-if="section === 'stages'" class="rq-shelf-statuses"><b>{{ t('shelfSettings.fixedStatuses') }}</b> GA · DEV · Planning · EOM · {{ t('shelfSettings.pendingStatus') }}</p>
-          <div class="rq-shelf-table"><table><thead><tr><th>{{ t('shelfSettings.name') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.partCount') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.extraFields') }}</th><th>{{ t('shelfImport.actions') }}</th></tr></thead><tbody><tr v-for="(option, index) in options" :key="option.key"><td><Input v-if="editingOptions.has(option.key)" v-model="option.name" :aria-label="t('shelfSettings.name')" :disabled="busy" /><b v-else>{{ option.name }}</b></td><td v-if="section === 'modules'">{{ nodes.filter(n => n.kind === 'part' && n.attributes?.module_type === option.key).length }}</td><td v-if="section === 'modules'">{{ library.entity_schema?.fields.filter(f => f.kinds.includes('part') && f.key !== 'module_type' && !f.archived).map(f => f.name).join(' · ') }}</td><td><Button :disabled="busy || editingOptions.has(option.key)" @click="editingOptions.add(option.key)">{{ t('shelfSettings.edit') }}</Button><Button :disabled="busy || index === 0" @click="move(options, index, -1)">{{ t('shelfSettings.up') }}</Button><Button :disabled="busy || index + 1 === options.length" @click="move(options, index, 1)">{{ t('shelfSettings.down') }}</Button></td></tr></tbody></table></div>
+          <div class="rq-shelf-table"><table><thead><tr><th>{{ t('shelfSettings.name') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.partCount') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.extraFields') }}</th><th>{{ t('shelfImport.actions') }}</th></tr></thead><tbody><tr v-for="(option, index) in options" :key="option.key"><td><Input v-if="editingOptions.has(option.key)" v-model="option.name" :aria-label="t('shelfSettings.name')" :disabled="busy" /><b v-else>{{ option.name }}</b></td><td v-if="section === 'modules'">{{ nodes.filter(n => n.kind === 'part' && n.attributes?.module_type === option.key).length }}</td><td v-if="section === 'modules'">{{ library.entity_schema?.fields.filter(f => f.kinds.includes('part') && f.key !== 'module_type' && !f.archived).map(f => f.name).join(' · ') }}</td><td><Button :disabled="busy || editingOptions.has(option.key)" @click="editingOptions.add(option.key)">{{ t('shelfSettings.edit') }}</Button><Button :disabled="busy || index === 0" @click="move(options, index, -1)">{{ t('shelfSettings.up') }}</Button><Button :disabled="busy || index + 1 === options.length" @click="move(options, index, 1)">{{ t('shelfSettings.down') }}</Button><Button v-if="section === 'markets'" :disabled="busy" @click="options.splice(index, 1)">{{ t('shelfFiles.remove') }}</Button></td></tr></tbody></table></div>
           <form novalidate class="rq-shelf-row rq-shelf-add" @submit.prevent="addOption"><Input v-model="newName" :aria-label="t('shelfSettings.newName')" :placeholder="t('shelfSettings.newName')" :disabled="busy" /><Button type="submit" :disabled="busy || !newName.trim()">{{ t('shelfSettings.add') }}</Button></form>
         </template>
         <template #requirements>

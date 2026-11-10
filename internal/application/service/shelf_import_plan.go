@@ -68,6 +68,11 @@ func (s *EntityService) writeShelfImportPlan(ctx context.Context, draft *types.S
 			return nil, apperrors.NewBadRequestError("deadline mappings require ATQ source text and configured stage keys")
 		}
 	}
+	for raw, value := range input.MarketValues {
+		if input.FileKind != "atq" || strings.TrimSpace(raw) == "" || !slices.Contains([]string{"required", "optional", "not_needed"}, value) {
+			return nil, apperrors.NewBadRequestError("market_values require nonblank ATQ source text and required, optional or not_needed")
+		}
+	}
 	for _, sheet := range input.Sheets {
 		if sheet.Worksheet == "" || worksheets[sheet.Worksheet] || sheet.HeaderRows < 0 || sheet.HeaderRows > 100 {
 			return nil, apperrors.NewBadRequestError("invalid worksheet or header_rows")
@@ -175,8 +180,8 @@ func (s *EntityService) validateRecordImportSheet(ctx context.Context, library *
 		return apperrors.NewBadRequestError("report worksheet requires a confirmed completed progress spelling")
 	}
 	if kind == "atq" {
-		if (sheet.ProductLineID == "") == (sheet.ModuleType == "") {
-			return apperrors.NewBadRequestError("ATQ worksheet requires exactly one product line or module binding")
+		if sheet.ProductLineID == "" || sheet.ModuleType != "" {
+			return apperrors.NewBadRequestError("ATQ worksheet requires a product_line_id and does not support module_type")
 		}
 	}
 	if sheet.ProductLineID != "" {
@@ -196,7 +201,7 @@ func (s *EntityService) validateRecordImportSheet(ctx context.Context, library *
 	}
 	fields, columns := map[string]bool{}, map[string]bool{}
 	for _, c := range sheet.Columns {
-		if !shelfImportColumn.MatchString(c.Column) || importColumnNumber(c.Column) > 16384 || columns[c.Column] || fields[c.Field+":"+c.Key] {
+		if !shelfImportColumn.MatchString(c.Column) || importColumnNumber(c.Column) > 16384 || columns[c.Column] || fields[c.Field+":"+c.Key] && !(kind == "atq" && c.Field == "market") {
 			return apperrors.NewBadRequestError("import columns and mapped fields must be distinct")
 		}
 		columns[c.Column], fields[c.Field+":"+c.Key] = true, true
@@ -207,7 +212,13 @@ func (s *EntityService) validateRecordImportSheet(ctx context.Context, library *
 			}
 			continue
 		}
-		if (kind == "overseas_sales" && c.Field == "sale_status") || (kind == "atq" && c.Field == "market") {
+		if kind == "atq" && c.Field == "market" {
+			if !shelfOptionExists(library.ShelfConfig.Markets, c.Key) {
+				return apperrors.NewBadRequestError("market column requires a configured market key")
+			}
+			continue
+		}
+		if kind == "overseas_sales" && c.Field == "sale_status" {
 			if !shelfOptionExists(library.ShelfConfig.Regions, c.Key) {
 				return apperrors.NewBadRequestError("sales check requires a configured region")
 			}

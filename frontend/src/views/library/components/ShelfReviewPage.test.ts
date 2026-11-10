@@ -243,3 +243,10 @@ test('known conflict messages are translated and unknown messages stay as sent',
   assert.ok(visibleText(root).includes('uncertain: something new'))
   assert.ok(!visibleText(root).includes('cannot be identified'))
 })
+
+// Small spec, task 30: imports show the authenticated integration name at their source.
+test('导入变更集来源显示 API Key 名称', async t => {
+ const value=changeset();value.source={type:'import',agent_name:'合成导入助手',file_name:'synthetic.xlsx'}
+ const {root}=await mount(t,value)
+ assert.match(visibleText(root),/合成导入助手/)
+})

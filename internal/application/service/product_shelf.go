@@ -7,6 +7,9 @@ import (
 )
 
 func validateProductShelfChange(tx *gorm.DB, before, after *types.Library) error {
+	if err := validateRemovedShelfMarkets(tx, before, after); err != nil {
+		return err
+	}
 	if err := validateShelfParserReferences(tx, after); err != nil {
 		return err
 	}
@@ -61,6 +64,40 @@ func validateProductShelfChange(tx *gorm.DB, before, after *types.Library) error
 			resolved, ok := after.ShelfConfig.Standard(name)
 			if !ok || resolved.Key != previous.Key {
 				return apperrors.NewBadRequestError("retain previous standard names and aliases when renaming")
+			}
+		}
+	}
+	return nil
+}
+
+// Preserve the identity of markets referenced by requirements, including their
+// historical snapshots, and by confirmed import plans. Unused keys may be removed.
+func validateRemovedShelfMarkets(tx *gorm.DB, before, after *types.Library) error {
+	for _, market := range before.ShelfConfig.Markets {
+		if shelfOptionExists(after.ShelfConfig.Markets, market.Key) {
+			continue
+		}
+		var used bool
+		if err := tx.Raw(`SELECT EXISTS (
+ SELECT 1 FROM entities e WHERE e.space_id=? AND e.library_id=? AND jsonb_exists(e.attributes->'requirement'->'markets', ?)
+ UNION ALL SELECT 1 FROM entity_attribute_versions v JOIN entities e ON e.id=v.entity_id
+ WHERE e.space_id=? AND e.library_id=? AND jsonb_exists(v.attributes->'requirement'->'markets', ?))`, before.SpaceID, before.ID, market.Key, before.SpaceID, before.ID, market.Key).Scan(&used).Error; err != nil {
+			return err
+		}
+		if used {
+			return apperrors.NewBadRequestError("market key is referenced by requirement data or history")
+		}
+		var plans []types.ShelfImportPlan
+		if err := tx.Where("space_id=? AND library_id=?", before.SpaceID, before.ID).Find(&plans).Error; err != nil {
+			return err
+		}
+		for _, plan := range plans {
+			for _, sheet := range plan.Definition.Sheets {
+				for _, column := range sheet.Columns {
+					if column.Field == "market" && column.Key == market.Key {
+						return apperrors.NewBadRequestError("market key is referenced by an import plan")
+					}
+				}
 			}
 		}
 	}

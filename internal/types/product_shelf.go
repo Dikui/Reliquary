@@ -20,6 +20,7 @@ type ShelfConfig struct {
 	MaxFileBytes  int64             `json:"max_file_bytes,omitempty"`
 	Standards     []ShelfStandard   `json:"standards,omitempty"`
 	ModuleTypes   []ShelfOption     `json:"module_types,omitempty"`
+	Markets       []ShelfOption     `json:"markets,omitempty"`
 	Regions       []ShelfOption     `json:"regions,omitempty"`
 	Stages        []ShelfOption     `json:"stages,omitempty"`
 }
@@ -41,7 +42,7 @@ func ProductShelfRelations() []LibraryRelationType {
 	rules := []LibraryRelationType{
 		{Name: "belongs_to", Hierarchical: true, SubjectKinds: []string{"platform", "product", "model"}, ObjectKinds: []string{"product_line", "platform", "product"}},
 		{Name: "composed_of", SubjectKinds: []string{"model"}, ObjectKinds: []string{"part"}, Fields: []EntityFieldDefinition{{Key: "module_type", Name: "模块类型", Type: "text", Kinds: []string{}}}},
-		{Name: "applies_to", SubjectKinds: []string{"document_requirement"}, ObjectKinds: []string{"product_line", "document_requirement"}, Fields: []EntityFieldDefinition{{Key: "module_types", Name: "适用模块类型", Type: "list", Kinds: []string{}}}},
+		{Name: "applies_to", SubjectKinds: []string{"document_requirement"}, ObjectKinds: []string{"product_line"}},
 		{Name: "has_certification", SubjectKinds: []string{"platform", "product", "model", "part"}, ObjectKinds: []string{"certification"}},
 		{Name: "has_document", SubjectKinds: []string{"platform", "product", "model", "part", "certification"}, ObjectKinds: []string{"document_file"}},
 		{Name: "fulfills", SubjectKinds: []string{"document_file"}, ObjectKinds: []string{"document_requirement"}},
@@ -74,7 +75,7 @@ func ValidateProductShelf(l *Library) error {
 	}
 
 	if !l.ShelfEnabled {
-		if len(l.ShelfConfig.ModuleTypes)+len(l.ShelfConfig.Regions)+len(l.ShelfConfig.Stages)+len(l.ShelfConfig.Standards)+len(l.ShelfConfig.Parsers) != 0 {
+		if len(l.ShelfConfig.ModuleTypes)+len(l.ShelfConfig.Markets)+len(l.ShelfConfig.Regions)+len(l.ShelfConfig.Stages)+len(l.ShelfConfig.Standards)+len(l.ShelfConfig.Parsers) != 0 {
 			return fmt.Errorf("shelf configuration requires an enabled shelf")
 		}
 		return nil
@@ -111,13 +112,6 @@ func ValidateProductShelf(l *Library) error {
 		found := false
 		for _, actual := range l.RelationTypes {
 			if actual.Name == rule.Name {
-				if actual.Name == "applies_to" {
-					if !slices.ContainsFunc(actual.Fields, func(f EntityFieldDefinition) bool {
-						return f.Key == "module_types" && f.Type == "list" && len(f.Kinds) == 0 && !f.Archived
-					}) {
-						return fmt.Errorf("requirement module_types field is fixed")
-					}
-				}
 				if actual.Name == "composed_of" {
 					moduleField := false
 					for _, field := range actual.Fields {
@@ -129,14 +123,20 @@ func ValidateProductShelf(l *Library) error {
 						return fmt.Errorf("composition module_type field is fixed")
 					}
 				}
-				found = actual.Enabled && actual.Hierarchical == rule.Hierarchical && slices.Equal(actual.SubjectKinds, rule.SubjectKinds) && slices.Equal(actual.ObjectKinds, rule.ObjectKinds)
+				objectKindsMatch := slices.Equal(actual.ObjectKinds, rule.ObjectKinds)
+				// Existing shelves may retain the old schema without converting
+				// their data. Requirement writes still enforce product lines only.
+				if rule.Name == "applies_to" && slices.Equal(actual.ObjectKinds, []string{"product_line", "document_requirement"}) {
+					objectKindsMatch = true
+				}
+				found = actual.Enabled && actual.Hierarchical == rule.Hierarchical && slices.Equal(actual.SubjectKinds, rule.SubjectKinds) && objectKindsMatch
 			}
 		}
 		if !found {
 			return fmt.Errorf("shelf relationship rule is fixed: %s", rule.Name)
 		}
 	}
-	for _, list := range [][]ShelfOption{l.ShelfConfig.ModuleTypes, l.ShelfConfig.Regions, l.ShelfConfig.Stages} {
+	for _, list := range [][]ShelfOption{l.ShelfConfig.ModuleTypes, l.ShelfConfig.Regions, l.ShelfConfig.Markets, l.ShelfConfig.Stages} {
 		if len(list) > 100 {
 			return fmt.Errorf("shelf lists allow at most 100 values")
 		}
