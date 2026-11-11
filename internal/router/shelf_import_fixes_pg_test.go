@@ -186,3 +186,27 @@ func TestShelfImportGeneratedCertificationNameConflicts(t *testing.T) {
 		})
 	}
 }
+
+// Small regression: a standard cell may carry its edition after a colon; only a
+// configured base standard is split, and the year lands in the year field.
+func TestShelfImportSplitsStandardYear(t *testing.T) {
+	for _, sample := range []struct {
+		standard string
+		year     int
+		ok       bool
+	}{{"Customer spelling：2022", 2022, true}, {" Customer spelling : 2019 ", 2019, true}, {"Unknown standard:2022", 0, false}} {
+		t.Run(sample.standard, func(t *testing.T) {
+			f, l, n := shelfModelSetup(t)
+			configureCertificationStandards(f, &l)
+			importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}}, nil)
+			draft := importUpload(t, f, l.ID, "progress_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, shelfNode(n, "model"), sample.standard, "Container", "region_a", ""), ""), http.StatusCreated)
+			require.Len(t, draft.Items, 1)
+			if !sample.ok {
+				require.Equal(t, "uncertain", draft.Items[0].Conflicts[0].Type)
+				return
+			}
+			require.Equal(t, "create_certification", draft.Items[0].Operation.Type)
+			require.Equal(t, sample.year, draft.Items[0].Operation.Certification.Year)
+		})
+	}
+}

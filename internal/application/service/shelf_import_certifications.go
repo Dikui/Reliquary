@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -24,7 +25,7 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 	if err != nil {
 		return err
 	}
-	standard, ok := b.library.ShelfConfig.Standard(cells["standard:"].Value)
+	standard, splitYear, ok := shelfImportStandard(b.library.ShelfConfig, cells["standard:"].Value)
 	if !ok {
 		return fmt.Errorf("uncertain: certification standard has no configured name or alias")
 	}
@@ -102,6 +103,12 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 			}
 			record.Year = year
 		}
+	}
+	if splitYear != 0 {
+		if record.Year != 0 && record.Year != splitYear {
+			return fmt.Errorf("uncertain: standard year conflicts with the year field")
+		}
+		record.Year = splitYear
 	}
 	b.seenRecordKeys[key] = true
 	opType, name := "update_certification", cells["name:"].Value
@@ -244,4 +251,24 @@ func importCertificationDate(cell importCell) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("date cannot be parsed")
+}
+
+var shelfImportStandardYear = regexp.MustCompile(`^(.+?)\s*[:：]\s*([0-9]{4})$`)
+
+// A standard cell may carry its edition as "<standard>:<year>"; only a
+// configured base standard is accepted, everything else stays uncertain.
+func shelfImportStandard(config types.ShelfConfig, value string) (types.ShelfStandard, int, bool) {
+	if standard, ok := config.Standard(value); ok {
+		return standard, 0, true
+	}
+	match := shelfImportStandardYear.FindStringSubmatch(strings.TrimSpace(value))
+	if match == nil {
+		return types.ShelfStandard{}, 0, false
+	}
+	standard, ok := config.Standard(match[1])
+	if !ok {
+		return types.ShelfStandard{}, 0, false
+	}
+	year, _ := strconv.Atoi(match[2])
+	return standard, year, true
 }

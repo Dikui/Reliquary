@@ -134,7 +134,7 @@ ATQ 方案编辑器另提供市场键与市场写法映射。市场在货架设�
 
 ## 认证进度与证书报告
 
-认证工作表指定 `owner_kind`（`model`、`part`、`product` 或 `platform`），用 `owner` 列按名称、代码、明确别名或 ID 确定所属节点。可选 `product_line_id` 限定所属范围，按文件日期检查层级；无法证明属于指定产品线时转人工。共同必填列为 `owner`、`standard`、`certification_object` 和 `region`。地区单元格允许明确为空，仍参与识别。标准只按本库已配置的键、规范名或别名解析，不从名称猜年份。
+认证工作表指定 `owner_kind`（`model`、`part`、`product` 或 `platform`），用 `owner` 列按名称、代码、明确别名或 ID 确定所属节点。可选 `product_line_id` 限定所属范围，按文件日期检查层级；无法证明属于指定产品线时转人工。共同必填列为 `owner`、`standard`、`certification_object` 和 `region`。地区单元格允许明确为空，仍参与识别。标准只按本库已配置的键、规范名或别名解析。单元格写成“标准:年份”（半角或全角冒号，四位年份）且冒号前是已配置标准时，拆为标准和年份；同时映射了 `year` 列且两者不同时为 `uncertain`。其他写法不拆、不猜。
 
 其他列可映射 `name`、`year`、`cell_part`、`agency`、`progress`、`start_date`、`obtained_date`、`issued_date`、`validity`、`number`、`cloud_url` 和 `sample_description`。名称与文字原样保存。已有认证只更新映射列，未映射字段和适用条件保留。识别键仍为所属节点、标准、认证对象、电芯部件和地区；零条匹配生成 `create_certification`，差异以 `new` 反馈，确认后才新增；一条匹配继续生成 `update_certification`；多条匹配仍为 `uncertain`，须提交含完整记录及目标修订号的修正操作，避免遗漏候选中的其他字段。同键重复行须逐项处理，不自动合并。`model_separators` 也用于拆分型号类别的所属节点列，不修剪拆分后的名字。
 
