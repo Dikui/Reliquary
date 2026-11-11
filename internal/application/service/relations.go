@@ -103,31 +103,70 @@ func (s *EntityService) ListRelations(ctx context.Context, id, libraryID string,
 		if err := q.Order("relation_type,library_id,subject_id,object_id").Find(&rows).Error; err != nil {
 			return err
 		}
-		for _, row := range rows {
-			item := EntityRelationView{Relation: row, Direction: "outgoing", Sources: []RelationSourceView{}}
-			peer := row.ObjectID
+		if len(rows) == 0 {
+			return nil
+		}
+		// Load peers, library name, sources and entry titles in batches; shelf pages call this for every node.
+		peerOf := func(row types.Relation) string {
 			if row.ObjectID == id {
-				peer = row.SubjectID
+				return row.SubjectID
+			}
+			return row.ObjectID
+		}
+		peerIDs, relationIDs := make([]string, 0, len(rows)), make([]string, 0, len(rows))
+		for _, row := range rows {
+			peerIDs, relationIDs = append(peerIDs, peerOf(row)), append(relationIDs, row.ID)
+		}
+		var peerRows []types.Entity
+		if err := tx.Where("id IN ? AND space_id=? AND library_id=?", peerIDs, spaceID, entity.LibraryID).Find(&peerRows).Error; err != nil {
+			return err
+		}
+		peerByID := make(map[string]types.Entity, len(peerRows))
+		for _, peer := range peerRows {
+			peerByID[peer.ID] = peer
+		}
+		var library types.Library
+		if err := tx.Select("name").Where("id=?", entity.LibraryID).Take(&library).Error; err != nil {
+			return err
+		}
+		var sourceRows []types.RelationSource
+		if err := tx.Where("relation_id IN ?", relationIDs).Order("relation_id,entry_id").Find(&sourceRows).Error; err != nil {
+			return err
+		}
+		entryIDs := make([]string, 0, len(sourceRows))
+		for _, source := range sourceRows {
+			entryIDs = append(entryIDs, source.EntryID)
+		}
+		titles := map[string]string{}
+		if len(entryIDs) > 0 {
+			var entries []types.Entry
+			if err := tx.Select("id,title").Where("id IN ? AND space_id=?", entryIDs, spaceID).Find(&entries).Error; err != nil {
+				return err
+			}
+			for _, entry := range entries {
+				titles[entry.ID] = entry.Title
+			}
+		}
+		sources := map[string][]RelationSourceView{}
+		for _, source := range sourceRows {
+			title, ok := titles[source.EntryID]
+			if !ok {
+				return gorm.ErrRecordNotFound
+			}
+			sources[source.RelationID] = append(sources[source.RelationID], RelationSourceView{RelationSource: source, Title: title})
+		}
+		for _, row := range rows {
+			item := EntityRelationView{Relation: row, Direction: "outgoing", LibraryName: library.Name, Sources: []RelationSourceView{}}
+			if row.ObjectID == id {
 				item.Direction = "incoming"
 			}
-			if err := tx.Where("id=? AND space_id=? AND library_id=?", peer, spaceID, entity.LibraryID).First(&item.Peer).Error; err != nil {
-				return err
+			peer, ok := peerByID[peerOf(row)]
+			if !ok {
+				return gorm.ErrRecordNotFound
 			}
-			var library types.Library
-			if err := tx.Select("name").Where("id=?", row.LibraryID).Take(&library).Error; err != nil {
-				return err
-			}
-			item.LibraryName = library.Name
-			var sources []types.RelationSource
-			if err := tx.Where("relation_id=?", row.ID).Order("entry_id").Find(&sources).Error; err != nil {
-				return err
-			}
-			for _, source := range sources {
-				var entry types.Entry
-				if err := tx.Select("id,title").Where("id=? AND space_id=?", source.EntryID, spaceID).First(&entry).Error; err != nil {
-					return err
-				}
-				item.Sources = append(item.Sources, RelationSourceView{RelationSource: source, Title: entry.Title})
+			item.Peer = peer
+			if list := sources[row.ID]; list != nil {
+				item.Sources = list
 			}
 			item.SourceCount = len(item.Sources)
 			if len(groups) == 0 || groups[len(groups)-1].RelationType != row.RelationType {
