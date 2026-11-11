@@ -11,7 +11,7 @@ import ManagedRelationEditor from './ManagedRelationEditor.vue'
 import ManagedAttributes from './ManagedAttributes.vue'
 
 const props = defineProps<{ library: LibraryCatalogItem; initialEntityId?: string }>()
-const emit = defineEmits<{ 'open-detail': [id: string, library: string]; 'open-source': [id: string] }>()
+const emit = defineEmits<{ 'open-detail': [entity: Entity]; 'open-source': [id: string] }>()
 const { t } = useI18n()
 const shelf = useProductShelf(toRef(props, 'library'))
 const { nodes, selected, records, entries, links, relations, loading, detailLoading, error, detailError, pending, linking } = shelf
@@ -59,9 +59,10 @@ async function choose(id: string) {
   if (!node) return
   setPath(node)
   query.value = ''
-  await shelf.select(node)
+  // The second click of a double-click must not reload the node it already shows.
+  if (selected.value?.id !== node.id) await shelf.select(node)
 }
-function openDetail(id: string) { if (!id.startsWith('missing:')) emit('open-detail', id, props.library.id) }
+function openDetail(id: string) { const node = nodes.value.find(item => item.id === id); if (node) emit('open-detail', node) }
 async function load() {
   await shelf.load()
   const node = nodes.value.find(item => item.id === props.initialEntityId) || selected.value
