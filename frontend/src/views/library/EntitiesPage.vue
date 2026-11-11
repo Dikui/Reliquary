@@ -10,7 +10,8 @@ function selectEntity(id: string, library: string) {
   const query: LocationQueryRaw = { ...route.query, libraries: library }
   delete query.entity_id
   if (id) query.entity_id = id
-  void router.replace({ path: '/platform/entities', query })
+  // Opening an entity from a page without one adds history, so Back returns to the list or shelf.
+  void (id && !route.query.entity_id ? router.push : router.replace)({ path: '/platform/entities', query })
 }
 </script>
 <template>

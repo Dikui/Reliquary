@@ -11,7 +11,7 @@ import ManagedRelationEditor from './ManagedRelationEditor.vue'
 import ManagedAttributes from './ManagedAttributes.vue'
 
 const props = defineProps<{ library: LibraryCatalogItem; initialEntityId?: string }>()
-const emit = defineEmits<{ 'open-source': [id: string] }>()
+const emit = defineEmits<{ 'open-detail': [id: string, library: string]; 'open-source': [id: string] }>()
 const { t } = useI18n()
 const shelf = useProductShelf(toRef(props, 'library'))
 const { nodes, selected, records, entries, links, relations, loading, detailLoading, error, detailError, pending, linking } = shelf
@@ -61,6 +61,7 @@ async function choose(id: string) {
   query.value = ''
   await shelf.select(node)
 }
+function openDetail(id: string) { if (!id.startsWith('missing:')) emit('open-detail', id, props.library.id) }
 async function load() {
   await shelf.load()
   const node = nodes.value.find(item => item.id === props.initialEntityId) || selected.value
@@ -94,13 +95,13 @@ onBeforeUnmount(() => shelf.dispose())
     <div class="shelf-layout">
       <section class="shelf-main">
         <div class="shelf-levels"><strong v-for="kind in SHELF_LEVEL_KINDS" :key="kind">{{ kindName(kind) }}</strong></div>
-        <div class="shelf-accessible"><div v-for="(column, index) in columns" :key="index"><Button v-for="node in column" :key="node.id" :aria-pressed="path.includes(node.id)" @click="choose(node.id)">{{ node.name }}</Button></div></div>
+        <div class="shelf-accessible"><div v-for="(column, index) in columns" :key="index"><Button v-for="node in column" :key="node.id" :aria-pressed="path.includes(node.id)" @click="choose(node.id)" @dblclick="openDetail(node.id)">{{ node.name }}</Button></div></div>
         <EmptyState v-if="!loading && !nodes.length" :title="t('productShelf.noRecords')" />
       </section>
       <aside class="shelf-detail">
         <template v-if="selected">
           <small>{{ kindName(selected.kind || '') }} · {{ selected.code }}</small><h2>{{ selected.canonical_name }}</h2>
-          <div class="shelf-actions"><ManagedEntityEditor :key="selected.id" :library="library" :entity="selected" compact :trigger-label="t('productShelf.details')" @saved="changed" @deleted="load" /><ManagedEntityEditor v-if="nextKind" :key="`${selected.id}-child`" :library="library" :initial-kind="nextKind" :allowed-kinds="[nextKind]" :trigger-label="t('productShelf.addChild')" @saved="addChild" /></div>
+          <div class="shelf-actions"><Button @click="openDetail(selected.id)">{{ t('productShelf.viewDetail') }}</Button><ManagedEntityEditor :key="selected.id" :library="library" :entity="selected" compact :trigger-label="t('productShelf.details')" @saved="changed" @deleted="load" /><ManagedEntityEditor v-if="nextKind" :key="`${selected.id}-child`" :library="library" :initial-kind="nextKind" :allowed-kinds="[nextKind]" :trigger-label="t('productShelf.addChild')" @saved="addChild" /></div>
           <p v-if="selected.description">{{ selected.description }}</p>
           <details v-if="parentRelations.length"><summary>{{ t('productShelf.adjustParent') }}</summary><div v-for="relation in parentRelations" :key="relation.id" class="shelf-parent"><span>{{ relation.peer.canonical_name }}</span><ManagedRelationEditor :library="library" :entity="selected" :relation="relation" @saved="changed()" /></div></details>
           <Tabs v-model="tab" :items="tabs" :label="t('productShelf.details')">

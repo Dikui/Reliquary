@@ -6,7 +6,7 @@
   </section>
   <section v-else-if="managed && shelfView && selectedLibrary" class="shelf-workbench">
     <div class="shelf-library-bar"><Select :model-value="selectedLibraryId" :aria-label="t('entityPage.library')" @update:model-value="changeLibrary"><option v-for="library in libraries" :key="library.id" :value="library.id">{{ library.display_name || library.name }}</option></Select><Button @click="shelfView = false">{{ t('workbench.entities.title') }}</Button></div>
-    <ProductShelf v-if="shelfConfigured" :key="selectedLibrary.id" :library="selectedLibrary" :initial-entity-id="initialEntityId" @open-source="id => emit('open-source', id)" />
+    <ProductShelf v-if="shelfConfigured" :key="selectedLibrary.id" :library="selectedLibrary" :initial-entity-id="initialEntityId" @open-detail="(id, library) => emit('select-entity', id, library)" @open-source="id => emit('open-source', id)" />
     <EmptyState v-else :title="t('productShelf.setupTitle')" :description="t('productShelf.setupHint')"><a href="/platform/settings?section=library">{{ t('productShelf.openSettings') }}</a></EmptyState>
   </section>
   <section v-else class="entry-workbench" :class="{ 'is-empty': !entities.length && !entitiesLoading && !selectedEntity && !entityDetailLoading && !initialEntityId }">
@@ -275,7 +275,10 @@ watch(entityFilter, scheduleEntitySearch)
 watch(entityTypeFilter, resetEntityList)
 watch(includeArchived, resetEntityList)
 watch(kindFilter, resetEntityList)
-watch(() => props.initialEntityId, id => { if (id && id !== selectedEntity.value?.id) void selectInitialEntity(id) }, { immediate: true })
+watch(() => props.initialEntityId, id => {
+  if (id && id !== selectedEntity.value?.id) void selectInitialEntity(id)
+  else if (!id && managed.value && shelfConfigured.value && selectedEntity.value) { detailRequest++; selectedEntity.value = null; shelfView.value = true }
+}, { immediate: true })
 onMounted(() => { void loadCatalog(); void refreshAll(); void loadPendingCount() })
 onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; nameEmbeddingRequest++; catalogRequest++; pendingRequest++; relationRequest++; clearNameEmbeddingPoll(); if (entitySearchTimer) clearTimeout(entitySearchTimer) })
 </script>

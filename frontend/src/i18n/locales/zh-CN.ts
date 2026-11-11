@@ -429,6 +429,7 @@ export default {
     unassigned: "未归属",
     addRoot: "新增产品线",
     addChild: "新增下级",
+    viewDetail: "查看详情",
     addRecord: "新增记录",
     adjustParent: "调整归属",
     choose: "选择节点查看详情",

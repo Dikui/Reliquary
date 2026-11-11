@@ -429,6 +429,7 @@ export default {
     unassigned: "Unassigned",
     addRoot: "Add product line",
     addChild: "Add child",
+    viewDetail: "View details",
     addRecord: "Add record",
     adjustParent: "Change parent",
     choose: "Select a node to view details",
