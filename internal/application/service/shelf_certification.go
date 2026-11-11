@@ -52,6 +52,9 @@ func validateShelfCertificationRecord(tx *gorm.DB, library *types.Library, recor
 	if !ok || standard.Key != record.Standard {
 		return apperrors.NewBadRequestError("uncertain: certification standard must resolve to a configured canonical standard")
 	}
+	if record.Region != "" && !shelfOptionExists(library.ShelfConfig.Regions, record.Region) {
+		return apperrors.NewBadRequestError("uncertain: certification region must be a configured region key or empty").WithDetails(map[string]any{"region": record.Region})
+	}
 	owner, err := shelfCertificationOwner(tx, library, record.OwnerID)
 	if err != nil {
 		return err
@@ -182,6 +185,26 @@ func (s *EntityService) resolveShelfCertification(ctx context.Context, draft *ty
 			if err := types.DecodeShelfValue(raw, &existing); err != nil {
 				return nil, err
 			}
+			if shelfCertificationKeyEqual(existing, record) {
+				matches = append(matches, entity)
+			}
+		}
+	}
+	// An explicit legacy record may replace its unconfigured region. Retain all
+	// other identity fields and the usual revision check; never infer this match.
+	if len(matches) == 0 && op.EntityID != "" {
+		for _, entity := range rows {
+			if entity.ID != op.EntityID {
+				continue
+			}
+			var existing types.ShelfCertification
+			if err := types.DecodeShelfValue(entity.Attributes["certification"], &existing); err != nil {
+				return nil, err
+			}
+			if existing.Region == "" || shelfOptionExists(library.ShelfConfig.Regions, existing.Region) {
+				continue
+			}
+			existing.Region = record.Region
 			if shelfCertificationKeyEqual(existing, record) {
 				matches = append(matches, entity)
 			}
@@ -322,7 +345,7 @@ func (s *EntityService) shelfCertificationViews(ctx context.Context, library *ty
 			return nil, apperrors.NewBadRequestError("certification standard is no longer configured")
 		}
 		entity.KindLabel = managedKindLabel(library, entity.Kind)
-		result = append(result, types.ShelfCertificationView{Entity: entity, Certification: record, StandardName: standard.Name, Origin: "self"})
+		result = append(result, types.ShelfCertificationView{Entity: entity, Certification: record, StandardName: standard.Name, RegionName: library.ShelfConfig.RegionName(record.Region), Origin: "self"})
 	}
 	return result, nil
 }
@@ -399,6 +422,9 @@ func validateShelfCertificationStructure(tx *gorm.DB, library *types.Library, en
 	if err := types.DecodeShelfValue(entity.Attributes["certification"], &record); err != nil {
 		return apperrors.NewBadRequestError(err.Error())
 	}
+	// Region has no structural scope. Legacy text must not block unrelated
+	// hierarchy or composition edits; certification writes validate it separately.
+	record.Region = ""
 	if err := validateShelfCertificationRecord(tx, library, record, at); err != nil {
 		return err
 	}

@@ -33,6 +33,7 @@ type ShelfFact struct {
 	PartialOptions bool             `json:"partial_options"`
 	Origin         string           `json:"origin"`
 	OriginLabel    string           `json:"origin_label"`
+	RegionName     string           `json:"region_name,omitempty"`
 	Evidence       ShelfEvidence    `json:"evidence"`
 }
 

@@ -109,6 +109,8 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 标准由 `shelf_config.standards` 配置，每项为 `{key,name,aliases}`。键表示稳定身份，`name` 是规范名，客户写法由提交方明确列入 `aliases`。不按相似拼写或年份推断标准。改名时须把旧规范名保留为别名，已有键和别名继续有效。不同标准不能共享规范名、键或别名。年份单独记在认证记录上。
 
+区域由 `shelf_config.regions` 配置，每项为 `{key,name,aliases?}`。可选别名去首尾空白、不区分大小写，键、名称和别名在区域列表内须唯一识别一个区域；名称原样保存。最多 100 个区域，每区域最多 200 个别名，每个别名最多 200 字符。货架设置的区域标签可编辑别名，仍经 `configure_shelf` 存库，无需重新部署，不预置客户写法。
+
 认证写入使用以下变更集操作，不提供直接写入接口：
 
 | 操作 | 输入与行为 |
@@ -116,17 +118,19 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 | `create_certification` | `certification`，可带 `effective_at`。明确新增一条独立认证，同时建立所属节点到认证记录的 `has_certification` 关系。名称由提交方给出；认证导入的名称规则见下文。 |
 | `update_certification` | `certification`、`revision`，可带 `entity_id` 和 `effective_at`。按识别键更新一条已有记录。`certification` 是完整替换，省略的可选字段表示清空；省略名称表示保留原名。 |
 
-`certification` 包含 `name`（新增必填）、`owner_id`、`standard`、`certification_object`、`cell_part_id`、`region`、`year`、`agency`、`progress`、`start_date`、`obtained_date`、`issued_date`、`validity`、`number`、`cloud_url` 和 `conditions`。`owner_id` 必须明确指向本库的型号、部件、产品名称或平台，不按行名猜测节点。`standard` 接受配置键、规范名或别名，保存为配置键，查询同时返回规范名。`year` 是可选整数；三个日期使用 `YYYY-MM-DD`；有效期保留原写法；云盘链接只接受 HTTP(S)。认证对象、地区、机构和进度均保存提交方写法，不在代码里固定客户值。未指定地区或电芯部件时用空值参与识别，不补填推测值。
+`certification` 包含 `name`（新增必填）、`owner_id`、`standard`、`certification_object`、`cell_part_id`、`region`、`year`、`agency`、`progress`、`start_date`、`obtained_date`、`issued_date`、`validity`、`number`、`cloud_url` 和 `conditions`。`owner_id` 必须明确指向本库的型号、部件、产品名称或平台，不按行名猜测节点。`standard` 接受配置键、规范名或别名，保存为配置键，查询同时返回规范名。`year` 是可选整数；三个日期使用 `YYYY-MM-DD`；有效期保留原写法；云盘链接只接受 HTTP(S)。`region` 只接受本库 `shelf_config.regions[].key` 或空字符串，地区名称、别名及其他非空原文不能直接写入认证。空地区表示不分地区，仍参与识别。认证对象、机构和进度保存提交方写法，不在代码里固定客户值；未指定电芯部件时用空值参与识别，不补填推测值。
 
-识别键为所属节点、标准、认证对象、电芯部件和地区，不包含年份、机构、进度或证书编号。更新匹配零条或多条时返回 `uncertain` 阻塞冲突，不会自动新增、合并或拆分。显式 `entity_id` 也必须与识别键一致。多条候选须由人工在 `apply` 决定中提供 `target_entity_id` 与 `target_revision`，明确选中一条；零条时须修正操作或明确改为新增。新增操作本身表示提交方明确建立独立记录，因此可保存同键的不同认证，后续自动匹配会报告多条候选。
+识别键为所属节点、标准、认证对象、电芯部件和地区，不包含年份、机构、进度或证书编号。更新匹配零条或多条时返回 `uncertain` 阻塞冲突，不会自动新增、合并或拆分。显式 `entity_id` 也必须与识别键一致；旧地区原文的显式更正见下文。多条候选须由人工在 `apply` 决定中提供 `target_entity_id` 与 `target_revision`，明确选中一条；零条时须修正操作或明确改为新增。新增操作本身表示提交方明确建立独立记录，因此可保存同键的不同认证，后续自动匹配会报告多条候选。
 
-认证进度及证书报告导入先按同一识别键分类：零条生成 `create_certification` 并以 `new` 反馈，一条生成 `update_certification`，多条仍为 `uncertain`。新增未映射 `name` 或单元格为空时，名称为 `所属节点原名 / 标准规范名 / 认证对象原文`，有电芯部件追加 ` / 电芯部件原名`，有地区追加 ` / 地区名`（配置项用显示名，配置外明确地区保留原文）；映射名称且非空时用原文。生成名称与已有或本批认证重名仍报冲突，不加后缀。导入只生成待确认提议，不改变通用 `update_certification` 的零匹配阻塞规则，也不让海外核对写入认证。
+认证进度及证书报告导入先按同一识别键分类：零条生成 `create_certification` 并以 `new` 反馈，一条生成 `update_certification`，多条仍为 `uncertain`。新增未映射 `name` 或单元格为空时，名称为 `所属节点原名 / 标准规范名 / 认证对象原文`，有电芯部件追加 ` / 电芯部件原名`，有地区追加 ` / 地区名`（使用配置区域显示名）；映射名称且非空时用原文。生成名称与已有或本批认证重名仍报冲突，不加后缀。导入只生成待确认提议，不改变通用 `update_certification` 的零匹配阻塞规则，也不让海外核对写入认证。
 
 认证对象可以填写 BMS；无法确定所属节点的独立认证行返回 `uncertain`，即使普通接受也不能写入。提交方可以修正、放弃或暂缓。部件不根据认证对象名称自动创建。电芯部件和条件引用须属于所属节点的组成范围，不能引用其他库的部件。条件沿用部件类型与部件集合的合取写法，须由所属范围内同一个型号同时满足。结构调整不能使已有或未来生效认证的条件、部件或归属关系失效。
 
-`GET /api/v1/libraries/:id/shelf/certifications` 返回本库认证，可用 `standard`（配置键、规范名或别名）筛选，并可用 RFC 3339 `as_of` 读取历史。未知标准返回空列表。型号、部件、产品名称和平台详情增加 `shelf.certifications`，每项包含认证实体、完整字段、`standard_name` 和 `origin`。`origin` 为 `self`、`component`（来自部件）或 `ancestor`（来自上层）。仅含一个部件的型号把该部件认证显示为自身认证，底层记录仍只有一份。
+`GET /api/v1/libraries/:id/shelf/certifications` 返回本库认证，可用 `standard`（配置键、规范名或别名）筛选，并可用 RFC 3339 `as_of` 读取历史。未知标准返回空列表。型号、部件、产品名称和平台详情增加 `shelf.certifications`，每项包含认证实体、完整字段、`standard_name`、`region_name` 和 `origin`。`origin` 为 `self`、`component`（来自部件）或 `ancestor`（来自上层）。仅含一个部件的型号把该部件认证显示为自身认证，底层记录仍只有一份。
 
 型号详情沿用 `combination` 与 `as_of`。指定组合时同时检查条件和电芯部件，未指定时保留可满足的认证及原条件；上层认证不出现在无法满足其部件范围的型号上。记录的历史、修订号、导入文件日期、人工值保护和日志来源均沿用变更集与属性快照规则。
+
+本次地区规则没有客户生产数据，不增加迁移，也不转换旧认证地区。读取非配置键时 `region_name` 按原文返回；修改旧记录须改为配置区域键或空。更正时显式提供 `update_certification.entity_id` 和 `revision`，其他四个身份字段须与原记录一致；当新识别键已命中其他记录时仍阻塞，不猜测合并。旧地区原文不阻止无关的层级或组成编辑，原快照保留。
 
 迁移 45 只给旧货架增加空认证字段定义，不生成认证或标准。字段冲突时拒绝升级。旧副本导入与核对使用相同默认字段补充规则。存在标准配置、认证属性或历史、相关变更集时拒绝降级。
 

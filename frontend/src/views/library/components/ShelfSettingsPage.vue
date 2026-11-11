@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { requirementLabel } from '@/utils/shelfRequirement'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button, EmptyState, ErrorState, Field, Input, Select, Tabs, Textarea } from '@/components/ui'
@@ -28,6 +28,18 @@ const config = computed(() => library.value?.shelf_config), dirty = computed(() 
 const tabs = computed(() => [{ value: 'modules', label: t('shelfSettings.modules') }, { value: 'regions', label: t('shelfSettings.regions') }, { value: 'markets', label: t('shelfSettings.markets') }, { value: 'stages', label: t('shelfSettings.stages') }, { value: 'requirements', label: t('shelfSettings.requirements') }, { value: 'fields', label: t('shelfSettings.fields') }, { value: 'parsers', label: t('shelfSettings.parsers') }])
 const optionKey = computed(() => tab.value === 'modules' ? 'module_types' : tab.value === 'regions' ? 'regions' : tab.value === 'markets' ? 'markets' : 'stages')
 const options = computed(() => config.value?.[optionKey.value] || [])
+const regionConflict = computed(() => {
+ const spellings = new Map<string, string>()
+ for (const region of config.value?.regions || []) {
+  for (const value of [region.key, region.name, ...(region.aliases || [])]) {
+   const normalized = value.trim().toLowerCase()
+   if (!normalized) continue
+   if (spellings.has(normalized) && spellings.get(normalized) !== region.key) return region.key
+   spellings.set(normalized, region.key)
+  }
+ }
+ return ''
+})
 const lines = computed(() => nodes.value.filter(n => n.kind === 'product_line'))
 const requirements = computed(() => nodes.value.filter(n => n.kind === 'document_requirement'))
 const sources = computed(() => [...new Set(requirements.value.map(n => (n.attributes?.requirement as { list_name?: string })?.list_name || ''))].filter(Boolean))
@@ -53,8 +65,14 @@ function addOption() { if (!newName.value.trim()) return; options.value.push({ k
 function move(list: ShelfOption[] | unknown[], index: number, step: number) { const target = index + step; if (target < 0 || target >= list.length) return; [list[index], list[target]] = [list[target]!, list[index]!] }
 async function save() {
   if (!library.value || busy.value) return
+  if (regionConflict.value) {
+    saveError.value = t('shelfSettings.regionAliasConflict'); tab.value = 'regions'; editingOptions.value.add(regionConflict.value)
+    await nextTick(); globalThis.document?.getElementById(`region-aliases-${regionConflict.value}`)?.focus()
+    return
+  }
   if (!library.value.updated_at || [...config.value?.module_types || [], ...config.value?.regions || [], ...config.value?.markets || [], ...config.value?.stages || []].some(option => !option.name.trim())) { saveError.value = t('shelfSettings.invalid'); return }
   busy.value = true; saveError.value = ''
+  for (const region of config.value?.regions || []) if (region.aliases) region.aliases = region.aliases.map(value => value.trim()).filter(Boolean)
   try {
     const response = await configureShelf(library.value.id, library.value.updated_at, { shelf_config: config.value, entity_schema: library.value.entity_schema })
     if (!response.success || response.data.status !== 'confirmed') throw new Error(response.message)
@@ -82,7 +100,7 @@ onBeforeUnmount(() => { generation++ })
       <Tabs v-model="tab" :items="tabs" :label="t('shelfSettings.title')">
         <template v-for="section in ['modules', 'regions', 'markets', 'stages']" :key="section" #[section]>
           <p v-if="section === 'stages'" class="rq-shelf-statuses"><b>{{ t('shelfSettings.fixedStatuses') }}</b> GA · DEV · Planning · EOM · {{ t('shelfSettings.pendingStatus') }}</p>
-          <div class="rq-shelf-table"><table><thead><tr><th>{{ t('shelfSettings.name') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.partCount') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.extraFields') }}</th><th>{{ t('shelfImport.actions') }}</th></tr></thead><tbody><tr v-for="(option, index) in options" :key="option.key"><td><Input v-if="editingOptions.has(option.key)" v-model="option.name" :aria-label="t('shelfSettings.name')" :disabled="busy" /><b v-else>{{ option.name }}</b></td><td v-if="section === 'modules'">{{ nodes.filter(n => n.kind === 'part' && n.attributes?.module_type === option.key).length }}</td><td v-if="section === 'modules'">{{ library.entity_schema?.fields.filter(f => f.kinds.includes('part') && f.key !== 'module_type' && !f.archived).map(f => f.name).join(' · ') }}</td><td><Button :disabled="busy || editingOptions.has(option.key)" @click="editingOptions.add(option.key)">{{ t('shelfSettings.edit') }}</Button><Button :disabled="busy || index === 0" @click="move(options, index, -1)">{{ t('shelfSettings.up') }}</Button><Button :disabled="busy || index + 1 === options.length" @click="move(options, index, 1)">{{ t('shelfSettings.down') }}</Button><Button v-if="section === 'markets'" :disabled="busy" @click="options.splice(index, 1)">{{ t('shelfFiles.remove') }}</Button></td></tr></tbody></table></div>
+          <div class="rq-shelf-table"><table><thead><tr><th>{{ t('shelfSettings.name') }}</th><th v-if="section === 'regions'">{{ t('shelfSettings.regionAliases') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.partCount') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.extraFields') }}</th><th>{{ t('shelfImport.actions') }}</th></tr></thead><tbody><tr v-for="(option, index) in options" :key="option.key"><td><Input v-if="editingOptions.has(option.key)" v-model="option.name" :aria-label="t('shelfSettings.name')" :disabled="busy" /><b v-else>{{ option.name }}</b></td><td v-if="section === 'regions'"><Field v-if="editingOptions.has(option.key)" :id="`region-aliases-${option.key}`" :label="t('shelfSettings.regionAliases')" :error="saveError && regionConflict === option.key ? t('shelfSettings.regionAliasConflict') : ''"><Textarea :id="`region-aliases-${option.key}`" :model-value="(option.aliases || []).join('\n')" :rows="3" :disabled="busy" @update:model-value="option.aliases = $event.split('\n')" /></Field><span v-else>{{ option.aliases?.join(' · ') || t('shelfFiles.none') }}</span></td><td v-if="section === 'modules'">{{ nodes.filter(n => n.kind === 'part' && n.attributes?.module_type === option.key).length }}</td><td v-if="section === 'modules'">{{ library.entity_schema?.fields.filter(f => f.kinds.includes('part') && f.key !== 'module_type' && !f.archived).map(f => f.name).join(' · ') }}</td><td><Button :disabled="busy || editingOptions.has(option.key)" @click="editingOptions.add(option.key)">{{ t('shelfSettings.edit') }}</Button><Button :disabled="busy || index === 0" @click="move(options, index, -1)">{{ t('shelfSettings.up') }}</Button><Button :disabled="busy || index + 1 === options.length" @click="move(options, index, 1)">{{ t('shelfSettings.down') }}</Button><Button v-if="section === 'markets'" :disabled="busy" @click="options.splice(index, 1)">{{ t('shelfFiles.remove') }}</Button></td></tr></tbody></table></div>
           <form novalidate class="rq-shelf-row rq-shelf-add" @submit.prevent="addOption"><Input v-model="newName" :aria-label="t('shelfSettings.newName')" :placeholder="t('shelfSettings.newName')" :disabled="busy" /><Button type="submit" :disabled="busy || !newName.trim()">{{ t('shelfSettings.add') }}</Button></form>
         </template>
         <template #requirements>

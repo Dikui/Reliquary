@@ -13,7 +13,7 @@ type ShelfStandard struct {
 	Aliases []string `json:"aliases,omitempty"`
 }
 
-// Standard is a library-configured key; all customer spellings are explicit aliases.
+// Standard and nonempty Region use library-configured keys.
 type ShelfCertification struct {
 	OwnerID             string           `json:"owner_id"`
 	Standard            string           `json:"standard"`
@@ -41,6 +41,7 @@ type ShelfCertificationView struct {
 	Entity        Entity             `json:"entity"`
 	Certification ShelfCertification `json:"certification"`
 	StandardName  string             `json:"standard_name"`
+	RegionName    string             `json:"region_name"`
 	Origin        string             `json:"origin"`
 }
 

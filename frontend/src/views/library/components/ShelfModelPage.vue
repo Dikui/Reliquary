@@ -275,7 +275,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
                     <td>{{ cert.certification.certification_object }}</td>
                     <td>
                       <span v-if="group.origin !== 'self'">{{ ownerText(cert.certification.owner_id) }}</span>
-                      <small>{{ cert.certification.region }}</small>
+                      <small>{{ cert.region_name ?? library.shelf_config?.regions?.find(region => region.key === cert.certification.region)?.name ?? cert.certification.region }}</small>
                       <small v-if="!selected" class="condition">{{ conditionText(certConditions(cert)) }}</small>
                     </td>
                     <td>{{ cert.certification.progress || t('shelfStatus.noRecord') }}</td>

@@ -143,7 +143,7 @@ func TestShelfQueryCertificationsReverseLookupAndOrigins(t *testing.T) {
 	configureCertificationStandards(f, &library)
 	operations := []types.ShelfOperation{}
 	for _, owner := range []string{"a", "fixed", "platform"} {
-		operations = append(operations, types.ShelfOperation{ID: owner, Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Query certificate " + owner, ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, owner), Standard: "Customer spelling", CertificationObject: "Synthetic object", Region: "Country", Progress: owner}}})
+		operations = append(operations, types.ShelfOperation{ID: owner, Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Query certificate " + owner, ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, owner), Standard: "Customer spelling", CertificationObject: "Synthetic object", Region: "region_a", Progress: owner}}})
 	}
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: operations}, http.StatusCreated, nil)
 	path := "/libraries/" + library.ID + "/shelf/query"
@@ -153,7 +153,7 @@ func TestShelfQueryCertificationsReverseLookupAndOrigins(t *testing.T) {
 	for _, item := range result.Items {
 		require.False(t, item.PartialOptions, "the fixed component certificate covers every option")
 	}
-	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"standard": "Customer spelling", "progress": "a", "region": "Country"}}, http.StatusOK, &result)
+	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"standard": "Customer spelling", "progress": "a", "region": "region_a"}}, http.StatusOK, &result)
 	require.EqualValues(t, 1, result.Total)
 	require.True(t, result.Items[0].PartialOptions)
 	labels := map[string]string{}
@@ -176,8 +176,7 @@ func TestShelfQueryCertificationsReverseLookupAndOrigins(t *testing.T) {
 		origins[cert.Origin]++
 	}
 	require.Equal(t, map[string]int{"self": 1, "ancestor": 1}, origins)
-	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"progress": "a", "region": "Wrong country"}}, http.StatusOK, &result)
-	require.Zero(t, result.Total)
+	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"progress": "a", "region": "Wrong country"}}, http.StatusBadRequest, nil)
 	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"progress": "a"}, "composition": []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(nodes, "b")}}}}, http.StatusOK, &result)
 	require.Zero(t, result.Total, "a component certificate cannot apply to another optional component")
 	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"standard": "Unknown standard"}}, http.StatusOK, &result)
@@ -191,7 +190,7 @@ func TestShelfQueryCertificationCoverageIncludesAllOptions(t *testing.T) {
 	configureCertificationStandards(f, &library)
 	operations := []types.ShelfOperation{}
 	for _, part := range []string{"a", "b"} {
-		operations = append(operations, types.ShelfOperation{ID: part, Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Coverage " + part, ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, "model"), Standard: "standard_a", CertificationObject: "Object", CellPartID: shelfNode(nodes, part), Region: "Country", Progress: "Complete"}}})
+		operations = append(operations, types.ShelfOperation{ID: part, Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Coverage " + part, ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, "model"), Standard: "standard_a", CertificationObject: "Object", CellPartID: shelfNode(nodes, part), Region: "region_a", Progress: "Complete"}}})
 	}
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: operations}, http.StatusCreated, nil)
 	var result types.ShelfQueryResult
@@ -279,7 +278,7 @@ func TestShelfQueryCoverageAcrossOptionalModules(t *testing.T) {
 	}}, http.StatusCreated, &saved)
 	alternative := shelfNode(saved, "alternative")
 	create := func(name string, conditions []types.ShelfCondition) types.ShelfOperation {
-		return types.ShelfOperation{ID: name, Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: name, ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, "model"), Standard: "standard_a", CertificationObject: "Object", Region: "Country", Conditions: conditions}}}
+		return types.ShelfOperation{ID: name, Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: name, ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, "model"), Standard: "standard_a", CertificationObject: "Object", Region: "region_a", Conditions: conditions}}}
 	}
 	f.request(http.MethodPost, path, types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{
 		create("First coverage", []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(nodes, "a")}}}),

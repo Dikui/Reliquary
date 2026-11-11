@@ -16,6 +16,10 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 	if err := b.validateRecordCells(cells); err != nil {
 		return err
 	}
+	region, err := b.recordRegion(cells["region:"].Value)
+	if err != nil {
+		return err
+	}
 	if b.plan.FileKind == "certification_report" {
 		if err := b.reportPart(mapping, cells); err != nil {
 			return err
@@ -30,7 +34,7 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 		return fmt.Errorf("uncertain: certification standard has no configured name or alias")
 	}
 	cellPartName := ""
-	record := types.ShelfCertification{OwnerID: owner.ID, Standard: standard.Key, CertificationObject: cells["certification_object:"].Value, Region: cells["region:"].Value}
+	record := types.ShelfCertification{OwnerID: owner.ID, Standard: standard.Key, CertificationObject: cells["certification_object:"].Value, Region: region}
 	if cell, ok := cells["cell_part:"]; ok && cell.Value != "" {
 		part, err := b.recordEntity("part", cell.Value)
 		if err != nil {
@@ -120,14 +124,7 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 				names = append(names, cellPartName)
 			}
 			if record.Region != "" {
-				regionName := record.Region
-				for _, region := range b.library.ShelfConfig.Regions {
-					if region.Key == record.Region {
-						regionName = region.Name
-						break
-					}
-				}
-				names = append(names, regionName)
+				names = append(names, b.library.ShelfConfig.RegionName(record.Region))
 			}
 			name = strings.Join(names, " / ")
 		}
@@ -141,6 +138,17 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 	}
 	b.append(op)
 	return nil
+}
+
+func (b *importMapBuilder) recordRegion(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	region, ok := b.library.ShelfConfig.Region(value)
+	if !ok {
+		return "", fmt.Errorf("uncertain: certification region %q has no configured key, name or alias; correct the cell or configure an alias", value)
+	}
+	return region.Key, nil
 }
 
 func (b *importMapBuilder) reportPart(mapping types.ShelfImportSheet, cells map[string]importCell) error {

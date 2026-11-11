@@ -52,7 +52,7 @@ func TestShelfNodePageCertificationOrigins(t *testing.T) {
 	operations := []any{}
 	for _, key := range []string{"product", "platform", "a", "b"} {
 		operations = append(operations, map[string]any{"id": key, "type": "create_certification", "certification": map[string]any{
-			"name": "Certificate " + key, "owner_id": shelfNode(n, key), "standard": "standard_a", "certification_object": "Synthetic object", "region": "Original region",
+			"name": "Certificate " + key, "owner_id": shelfNode(n, key), "standard": "standard_a", "certification_object": "Synthetic object", "region": "region_a",
 		}})
 	}
 	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": operations}, http.StatusCreated, nil)

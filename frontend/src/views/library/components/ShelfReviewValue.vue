@@ -20,7 +20,7 @@ const options = computed(() => {
   if (props.name === 'status') return SALE_STATUSES.map(value => ({ key: value, name: value }))
   if (props.name === 'kind') return props.library.entity_schema?.kinds || []
   if (props.name === 'module_type') return props.library.shelf_config?.module_types || []
-  if (props.name === 'region' && props.context === 'sale_statuses') return props.library.shelf_config?.regions || []
+  if (props.name === 'region' && ['sale_statuses', 'certification'].includes(props.context)) return props.library.shelf_config?.regions || []
   if (props.name === 'standard') return props.library.shelf_config?.standards || []
   if (props.name === 'current_stage') return props.library.shelf_config?.stages || []
   if (props.name === 'stage') return [{ key: 'draft', name: t('shelfModel.draft') }, { key: 'final', name: t('shelfModel.final') }]
@@ -61,7 +61,7 @@ onBeforeUnmount(() => { generation++ })
     <label v-if="name" :for="readonly ? undefined : id">{{ label }}</label>
     <span v-if="readonly">{{ typeof value === 'boolean' ? t(value ? 'managed.yes' : 'managed.no') : options.find(option => option.key === value)?.name ?? value ?? t('shelfStatus.noRecord') }}</span>
     <Combobox v-else-if="reference" :id="id" :aria-label="label" :model-value="String(value || '')" :options="choices" :aria-busy="loading" remote @search="search" @update:model-value="emit('change', $event)" />
-    <Select v-else-if="options.length" :id="id" :aria-label="label" :model-value="String(value ?? '')" @update:model-value="emit('change', $event)"><option value="">{{ t('shelfStatus.noRecord') }}</option><option v-if="value && !options.some(option => option.key === value)" :value="String(value)">{{ value }}</option><option v-for="option in options" :key="option.key" :value="option.key">{{ option.name }}</option></Select>
+    <Select v-else-if="options.length || name === 'region' && context === 'certification'" :id="id" :aria-label="label" :model-value="String(value ?? '')" @update:model-value="emit('change', $event)"><option value="">{{ t(name === 'region' && context === 'certification' ? 'shelfSettings.allRegions' : 'shelfStatus.noRecord') }}</option><option v-if="value && !options.some(option => option.key === value)" :value="String(value)" :disabled="name === 'region' && context === 'certification'">{{ value }}</option><option v-for="option in options" :key="option.key" :value="option.key">{{ option.name }}</option></Select>
     <input v-else-if="typeof value === 'boolean'" :id="id" type="checkbox" :aria-label="label" :checked="value" @change="emit('change', ($event.target as HTMLInputElement).checked)">
     <input v-else :id="id" class="rq-control" :aria-label="label" :type="typeof value === 'number' ? 'number' : 'text'" step="any" :value="value ?? ''" @input="emit('change', typeof value === 'number' ? Number(($event.target as HTMLInputElement).value) : ($event.target as HTMLInputElement).value)">
     <p v-if="error" role="alert">{{ error }}</p>

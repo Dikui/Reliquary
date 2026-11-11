@@ -39,7 +39,7 @@ func TestShelfImportFillConflictExposesServerKeyAndCell(t *testing.T) {
 						row = importRecordRow(3, "Synthetic model", "GA")
 					} else {
 						importRecordPlan(f, l, sample.kind, []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}}, nil)
-						row = importRecordRow(3, "Synthetic model", "standard_a", "Container", "Country")
+						row = importRecordRow(3, "Synthetic model", "standard_a", "Container", "region_a")
 					}
 				}
 				ref = "A3"
@@ -78,8 +78,8 @@ func TestShelfImportNewCertificationNames(t *testing.T) {
 	}{
 		{false, "", "region_a", "Synthetic model / Synthetic Standard /  Container original  / Region A"},
 		{false, "", "", "Synthetic model / Synthetic Standard /  Container original "},
-		{true, " Raw certificate name ", "Country", " Raw certificate name "},
-		{true, "", "Country", "Synthetic model / Synthetic Standard /  Container original  / Country"},
+		{true, " Raw certificate name ", "region_a", " Raw certificate name "},
+		{true, "", "region_a", "Synthetic model / Synthetic Standard /  Container original  / Region A"},
 	} {
 		t.Run(sample.want, func(t *testing.T) {
 			f, l, n := shelfModelSetup(t)
@@ -166,11 +166,17 @@ func TestShelfImportGeneratedCertificationNameConflicts(t *testing.T) {
 			}
 			draft := importUpload(t, f, l.ID, "progress_20261028.xlsx", "", importWorkbook(t, rows, ""), http.StatusCreated)
 			item := draft.Items[len(draft.Items)-1]
-			require.Equal(t, "create_certification", item.Operation.Type)
-			require.Equal(t, name, item.Operation.Certification.Name)
 			require.NotEmpty(t, item.Conflicts)
 			require.NotEqual(t, "new", item.Conflicts[0].Type)
-			require.Contains(t, strings.ToLower(item.Conflicts[0].Message), "name")
+			if existing {
+				require.Equal(t, "create_certification", item.Operation.Type)
+				require.Equal(t, name, item.Operation.Certification.Name)
+				require.Contains(t, strings.ToLower(item.Conflicts[0].Message), "name")
+			} else {
+				// Task 34: key and display name resolve to the same identity.
+				require.Equal(t, "uncertain", item.Conflicts[0].Type)
+				require.Contains(t, item.Conflicts[0].Message, "key appears in multiple rows")
+			}
 			decisions := []types.ShelfDecision{}
 			for _, item := range draft.Items {
 				decisions = append(decisions, types.ShelfDecision{ItemID: item.ID, Action: "apply"})

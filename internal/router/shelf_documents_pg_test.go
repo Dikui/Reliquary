@@ -172,7 +172,7 @@ func TestShelfDocumentsCertificateNumberIdentifiesRecord(t *testing.T) {
 	configureCertificationStandards(f, &library)
 	path := "/libraries/" + library.ID + "/shelf/changesets"
 	var cert types.ShelfChangeset
-	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Numbered certificate", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "Country", "number": "SYN-CERT-07"}}}}, http.StatusCreated, &cert)
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Numbered certificate", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "region_a", "number": "SYN-CERT-07"}}}}, http.StatusCreated, &cert)
 	certID := cert.Items[0].EntityID
 	record := map[string]any{"name": "Numbered report file", "certificate_number": "SYN-CERT-07", "cloud_url": "https://example.org/cert", "stage": "final"}
 	var draft types.ShelfChangeset
@@ -201,7 +201,7 @@ func TestShelfDocumentsCertificateNumberIdentifiesRecord(t *testing.T) {
 	record["certificate_number"] = "Wrong number"
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "wrong", "type": "add_document_version", "document": record}}}, http.StatusCreated, &draft)
 	require.Equal(t, "uncertain", draft.Items[0].Conflicts[0].Type)
-	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Other numbered certificate", "owner_id": shelfNode(nodes, "single"), "standard": "standard_a", "certification_object": "Container", "region": "Country", "number": "SYN-CERT-07"}}}}, http.StatusCreated, nil)
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Other numbered certificate", "owner_id": shelfNode(nodes, "single"), "standard": "standard_a", "certification_object": "Container", "region": "region_a", "number": "SYN-CERT-07"}}}}, http.StatusCreated, nil)
 	delete(record, "owner_id")
 	record["certificate_number"] = "SYN-CERT-07"
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "ambiguous", "type": "add_document_version", "document": record}}}, http.StatusCreated, &draft)

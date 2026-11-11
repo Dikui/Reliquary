@@ -8,6 +8,7 @@ export interface ShelfSaleStatus { region: string; status: string; planned_eom: 
 export interface ShelfCertification {
   entity: Entity
   standard_name: string
+  region_name?: string
   origin: 'self' | 'component' | 'ancestor'
   certification: { owner_id: string; standard: string; year?: number; certification_object: string; cell_part_id?: string; region: string; agency?: string; progress?: string; start_date?: string; obtained_date?: string; issued_date?: string; validity?: string; number?: string; cloud_url?: string; conditions: ShelfCondition[] | null }
 }
@@ -29,7 +30,7 @@ export interface ShelfNode {
   entity: Entity & { kind_label?: string }
   recorded: boolean
   as_of: string
-  facts: { entity_id: string; field: string; value: unknown; conditions?: ShelfCondition[] | null; origin?: string; evidence?: ShelfEvidence }[]
+  facts: { entity_id: string; field: string; value: unknown; region_name?: string; conditions?: ShelfCondition[] | null; origin?: string; evidence?: ShelfEvidence }[]
   shelf?: {
     sale_statuses: ShelfSaleStatus[]
     composition: { module_type: string; optional: boolean; parts: Entity[] }[]
@@ -50,7 +51,7 @@ export interface ShelfQuery {
   part_id?: string
   sale_statuses?: { region?: string; status?: string; planned_eom?: boolean; no_record?: boolean }[]
   parameters?: { field: string; min?: number; max?: number }[]
-  certification?: { standard: string }
+  certification?: { standard?: string; progress?: string; region?: string }
   document_gaps?: boolean
   limit?: number
   offset?: number

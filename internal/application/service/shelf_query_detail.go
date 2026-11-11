@@ -102,10 +102,14 @@ func (s *EntityService) shelfGet(ctx context.Context, libraryID, id string, opti
 			conditions = []types.ShelfCondition{}
 		}
 		region := ""
+		regionName := ""
+		if record, ok := value.(types.ShelfCertification); ok && field == "certification" {
+			regionName = library.ShelfConfig.RegionName(record.Region)
+		}
 		if status, ok := value.(types.ShelfSaleStatus); ok && field == "sale_statuses" {
 			region = status.Region
 		}
-		result.Facts = append(result.Facts, types.ShelfFact{EntityID: owner.ID, Field: field, Value: value, Conditions: conditions,
+		result.Facts = append(result.Facts, types.ShelfFact{EntityID: owner.ID, Field: field, Value: value, Conditions: conditions, RegionName: regionName,
 			PartialOptions: options.Combination == nil && shelfConditionsPartial(conditions, composition), Origin: origin, OriginLabel: label,
 			Evidence: shelfAttributeEvidence(owner.ID, field, region, versions, logs)})
 	}

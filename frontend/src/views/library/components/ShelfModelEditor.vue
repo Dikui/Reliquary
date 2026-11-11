@@ -47,7 +47,7 @@ onBeforeUnmount(() => { active = false })
 async function save() {
   if (busy.value || loading.value) return
   if (!name.value.trim() || (props.mode === 'composition' && (!module.value || !availableParts.value.some(item => item.id === part.value)))) { error.value = t('managed.required'); return }
-  if (props.mode === 'certification' && (['name', 'standard', 'certification_object', 'region'].some(key => !certification.value[key]?.trim()) || conditions.value.some(condition => !condition.module_type || !condition.part_ids.length) || (certification.value.year && (!Number.isInteger(Number(certification.value.year)) || Number(certification.value.year) <= 0)))) { error.value = t('managed.required'); return }
+  if (props.mode === 'certification' && (['name', 'standard', 'certification_object'].some(key => !certification.value[key]?.trim()) || (certification.value.region && !props.library.shelf_config?.regions?.some(region => region.key === certification.value.region)) || conditions.value.some(condition => !condition.module_type || !condition.part_ids.length) || (certification.value.year && (!Number.isInteger(Number(certification.value.year)) || Number(certification.value.year) <= 0)))) { error.value = t('managed.required'); return }
   busy.value = true; error.value = ''
   try {
     const stageAttributes = { ...attributes.value }; if (stage.value) stageAttributes.current_stage = stage.value; else delete stageAttributes.current_stage
@@ -85,7 +85,7 @@ async function save() {
           <Field id="cert-name" :label="t('shelfReview.cert.name')"><Input id="cert-name" v-model="certification.name" required /></Field>
           <Field id="cert-standard" :label="t('shelfModel.standard')"><Select id="cert-standard" v-model="certification.standard" required><option value="" disabled>{{ t('shelfModel.standard') }}</option><option v-for="item in library.shelf_config?.standards" :key="item.key" :value="item.key">{{ item.name }}</option></Select></Field>
           <Field id="cert-object" :label="t('shelfModel.certObject')"><Input id="cert-object" v-model="certification.certification_object" required /></Field>
-          <Field id="cert-region" :label="t('shelfReview.cert.region')"><Input id="cert-region" v-model="certification.region" required /></Field>
+          <Field id="cert-region" :label="t('shelfReview.cert.region')"><Select id="cert-region" v-model="certification.region"><option value="">{{ t('shelfSettings.allRegions') }}</option><option v-for="region in library.shelf_config?.regions" :key="region.key" :value="region.key">{{ region.name }}</option></Select></Field>
           <Field id="cert-year" :label="t('shelfReview.fields.year')"><Input id="cert-year" v-model="certification.year" type="number" min="1" step="1" /></Field>
           <Field id="cert-cell" :label="t('shelfReview.fields.cell_part_id')"><Select id="cert-cell" v-model="certification.cell_part_id"><option value="">{{ t('shelfFiles.none') }}</option><option v-for="item in composition.flatMap(group => group.parts)" :key="item.id" :value="item.id">{{ item.canonical_name }}</option></Select></Field>
           <Field v-for="key in certFields" :key="key" :id="`cert-${key === 'cloud_url' ? 'cloud' : key}`" :label="certLabels[key]"><Input :id="`cert-${key === 'cloud_url' ? 'cloud' : key}`" v-model="certification[key]" :type="key.endsWith('_date') ? 'date' : key === 'cloud_url' ? 'url' : 'text'" /></Field>

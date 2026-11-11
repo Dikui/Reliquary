@@ -158,7 +158,7 @@ func TestShelfImportSuggestSampleConditionsRequireReview(t *testing.T) {
 	var draft types.ShelfChangeset
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/imports/suggest-text", map[string]any{
 		"kind": "conditions", "text": "Sample uses Synthetic a",
-		"operation": map[string]any{"type": "create_certification", "certification": map[string]any{"name": " Original certificate ", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Synthetic object", "region": "Original region", "progress": "Original progress"}},
+		"operation": map[string]any{"type": "create_certification", "certification": map[string]any{"name": " Original certificate ", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Synthetic object", "region": "region_a", "progress": "Original progress"}},
 	}, http.StatusCreated, &draft)
 	require.Len(t, draft.Items, 1)
 	op := draft.Items[0].Operation
@@ -283,9 +283,9 @@ func TestShelfImportSampleDescriptionBlocksUnreviewedCertification(t *testing.T)
 	f, library, nodes := shelfModelSetup(t, mcpProcessingFixture{chat: model})
 	configureCertificationStandards(f, &library)
 	var seed types.ShelfChangeset
-	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{{ID: "cert", Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Sample certificate", ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, "model"), Standard: "standard_a", CertificationObject: "Container", Region: "Country", Progress: "Original"}}}}}, http.StatusCreated, &seed)
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{{ID: "cert", Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Sample certificate", ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, "model"), Standard: "standard_a", CertificationObject: "Container", Region: "region_a", Progress: "Original"}}}}}, http.StatusCreated, &seed)
 	importRecordPlan(f, library, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "progress"}, {Column: "F", Field: "sample_description"}}, nil)
-	draft := importUpload(t, f, library.ID, "sample.xlsx", time.Now().UTC().Format(time.RFC3339Nano), importWorkbook(t, importRecordRow(3, "Synthetic model", "Standard A", "Container", "Country", "Proposed", "Uses Synthetic a"), ""), http.StatusCreated)
+	draft := importUpload(t, f, library.ID, "sample.xlsx", time.Now().UTC().Format(time.RFC3339Nano), importWorkbook(t, importRecordRow(3, "Synthetic model", "Standard A", "Container", "region_a", "Proposed", "Uses Synthetic a"), ""), http.StatusCreated)
 	require.Len(t, draft.Items, 1)
 	require.Equal(t, "uncertain", draft.Items[0].Conflicts[0].Type)
 	require.Equal(t, "Uses Synthetic a", draft.Items[0].Operation.ImportLocation.Values["F3"])

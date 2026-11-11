@@ -261,7 +261,7 @@ func TestShelfSearchScopeIncludesCertificationFiles(t *testing.T) {
 	for _, owner := range []string{"model", "single"} {
 		var saved types.ShelfChangeset
 		f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{
-			"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Search certification " + owner, "owner_id": shelfNode(nodes, owner), "standard": "standard_a", "certification_object": "Synthetic assembly", "region": "Country", "number": "SYN-SEARCH-" + owner},
+			"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Search certification " + owner, "owner_id": shelfNode(nodes, owner), "standard": "standard_a", "certification_object": "Synthetic assembly", "region": "region_a", "number": "SYN-SEARCH-" + owner},
 		}}}, http.StatusCreated, &saved)
 		entry := shelfSearchText(t, f, library.ID, "Certificate "+owner, "certificateneedle records the synthetic test result.")
 		f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{

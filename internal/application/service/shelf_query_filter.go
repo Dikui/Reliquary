@@ -162,6 +162,9 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 	}
 	if input.Certification != nil {
 		cert := input.Certification
+		if cert.Region != nil && *cert.Region != "" && !shelfOptionExists(library.ShelfConfig.Regions, *cert.Region) {
+			return nil, apperrors.NewBadRequestError("certification region filter requires a configured region key or an explicit empty string")
+		}
 		if cert.Standard == "" && cert.Progress == nil && cert.Region == nil {
 			return nil, apperrors.NewBadRequestError("certification filter requires a standard, progress or region")
 		}

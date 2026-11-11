@@ -53,11 +53,11 @@ func TestShelfImportCertificationProgressUsesIdentityAndFileDate(t *testing.T) {
 	f, l, n := shelfModelSetup(t)
 	configureCertificationStandards(f, &l)
 	var seed types.ShelfChangeset
-	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": "Original certificate", "owner_id": shelfNode(n, "model"), "standard": "standard_a", "certification_object": "Container", "region": "Country", "progress": "Planning", "number": "KEEP-1"}}}}, http.StatusCreated, &seed)
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": "Original certificate", "owner_id": shelfNode(n, "model"), "standard": "standard_a", "certification_object": "Container", "region": "region_a", "progress": "Planning", "number": "KEEP-1"}}}}, http.StatusCreated, &seed)
 	var model types.EntityDetail
 	f.request(http.MethodGet, "/entities/"+shelfNode(n, "model"), nil, http.StatusOK, &model)
 	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "progress"}, {Column: "F", Field: "start_date"}}, nil)
-	data := importWorkbook(t, importRecordRow(3, model.Entity.CanonicalName, "Customer spelling", "Container", "Country", " In progress ", "2026/10/02"), "")
+	data := importWorkbook(t, importRecordRow(3, model.Entity.CanonicalName, "Customer spelling", "Container", "region_a", " In progress ", "2026/10/02"), "")
 	draft := importUpload(t, f, l.ID, "progress_20261028.xlsx", "", data, http.StatusCreated)
 	require.Equal(t, "update_certification", draft.Items[0].Operation.Type)
 	require.Equal(t, seed.Items[0].EntityID, draft.Items[0].EntityID)
@@ -87,7 +87,7 @@ func TestShelfImportCertificationInvalidDatesAndKeysNeedReview(t *testing.T) {
 	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "obtained_date"}}, nil)
 	for _, sample := range []struct{ owner, date, kind string }{{"Synthetic model", "2026.02.30", "unparseable"}, {"BMS unknown", "", "uncertain"}} {
 		t.Run(sample.owner+sample.date, func(t *testing.T) {
-			draft := importUpload(t, f, l.ID, "progress_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, sample.owner, "standard_a", "BMS", "Country", sample.date), ""), http.StatusCreated)
+			draft := importUpload(t, f, l.ID, "progress_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, sample.owner, "standard_a", "BMS", "region_a", sample.date), ""), http.StatusCreated)
 			require.Len(t, draft.Items, 1)
 			require.Equal(t, sample.kind, draft.Items[0].Conflicts[0].Type)
 			if sample.date != "" {
@@ -104,12 +104,12 @@ func TestShelfImportCertificationReportProposesPartAndComposition(t *testing.T) 
 	f, l, n := shelfModelSetup(t)
 	configureCertificationStandards(f, &l)
 	importRecordPlan(f, l, "certification_report", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "cell_part"}, {Column: "F", Field: "pack_model"}, {Column: "G", Field: "cluster_model"}, {Column: "H", Field: "number"}, {Column: "I", Field: "issued_date"}, {Column: "J", Field: "validity"}, {Column: "K", Field: "cloud_url"}}, map[string]any{"module_type": "module_a", "progress": "已完成"})
-	data := importWorkbook(t, importRecordRow(3, "Synthetic model", "Customer spelling", "Container", "Country", " New cell ", " Pack original ", "Cluster original", "SYN-REPORT-1", "2026年10月20日", " Five years ", "https://example.com/report"), "")
+	data := importWorkbook(t, importRecordRow(3, "Synthetic model", "Customer spelling", "Container", "region_a", " New cell ", " Pack original ", "Cluster original", "SYN-REPORT-1", "2026年10月20日", " Five years ", "https://example.com/report"), "")
 	draft := importUpload(t, f, l.ID, "report_20261028.xlsx", "", data, http.StatusCreated)
 	require.Len(t, draft.Items, 3)
 	require.Equal(t, "new", draft.Items[2].Conflicts[0].Type)
 	require.Equal(t, "create_certification", draft.Items[2].Operation.Type)
-	require.Equal(t, "Synthetic model / Synthetic Standard / Container /  New cell  / Country", draft.Items[2].Operation.Certification.Name)
+	require.Equal(t, "Synthetic model / Synthetic Standard / Container /  New cell  / Region A", draft.Items[2].Operation.Certification.Name)
 	decisions := []types.ShelfDecision{{ItemID: draft.Items[0].ID, Action: "apply"}, {ItemID: draft.Items[1].ID, Action: "apply"}, {ItemID: draft.Items[2].ID, Action: "apply"}}
 	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets/"+draft.ID+"/confirm", types.ShelfChangesetReview{Revision: draft.Revision, Decisions: decisions}, http.StatusOK, &draft)
 	var part types.EntityDetail
@@ -214,7 +214,7 @@ func TestShelfImportCertificationExcelDatesRetainInvalidSerial(t *testing.T) {
 	style := `<styleSheet><fills><fill><patternFill patternType="none"/></fill></fills><cellXfs><xf fillId="0"/><xf fillId="0" numFmtId="14"/></cellXfs></styleSheet>`
 	for _, sample := range []struct{ raw, want, conflict string }{{"46320", "2026-10-25", "new"}, {"60", "", "unparseable"}, {"invalid-date", "", "unparseable"}} {
 		t.Run(sample.raw, func(t *testing.T) {
-			row := importRecordRow(3, "Synthetic model", "standard_a", "Container", "Country", sample.raw)
+			row := importRecordRow(3, "Synthetic model", "standard_a", "Container", "region_a", sample.raw)
 			if sample.raw != "invalid-date" {
 				row = strings.Replace(row, `<c r="E3" t="inlineStr"><is><t>`+sample.raw+`</t></is></c>`, `<c r="E3" s="1"><v>`+sample.raw+`</v></c>`, 1)
 			}
@@ -270,7 +270,7 @@ func TestShelfImportCertificationSplitsModelsAndFlagsRepeatedKeys(t *testing.T) 
 	def.ModelSeparators = []string{";"}
 	plan := types.ShelfImportPlanInput{Key: "map", Name: "Synthetic records", FileKind: "certification_progress", Revision: 1, ShelfImportDefinition: def}
 	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{{ID: "plan", Type: "save_import_plan", ImportPlan: &plan}}}, http.StatusCreated, nil)
-	data := importWorkbook(t, importRecordRow(3, "Synthetic model;Synthetic single", "standard_a", "Container", "Country", "Planning")+importRecordRow(4, "Synthetic model", "Customer spelling", "Container", "Country", "Completed"), "")
+	data := importWorkbook(t, importRecordRow(3, "Synthetic model;Synthetic single", "standard_a", "Container", "region_a", "Planning")+importRecordRow(4, "Synthetic model", "Customer spelling", "Container", "region_a", "Completed"), "")
 	draft := importUpload(t, f, l.ID, "cert_20261028.xlsx", "", data, http.StatusCreated)
 	require.Len(t, draft.Items, 3)
 	require.NotNil(t, draft.Items[0].Operation.Certification)
@@ -285,7 +285,7 @@ func TestShelfImportCertificationSplitsModelsAndFlagsRepeatedKeys(t *testing.T) 
 func TestShelfImportOverseasCertificationFlagsOnlyCompare(t *testing.T) {
 	f, l, n := shelfModelSetup(t)
 	configureCertificationStandards(f, &l)
-	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": "Completed original", "owner_id": shelfNode(n, "model"), "standard": "standard_a", "certification_object": "Container", "region": "Country", "progress": "完成原文"}}}}, http.StatusCreated, nil)
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": "Completed original", "owner_id": shelfNode(n, "model"), "standard": "standard_a", "certification_object": "Container", "region": "region_a", "progress": "完成原文"}}}}, http.StatusCreated, nil)
 	importRecordPlan(f, l, "overseas_sales", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "certification", Key: "standard_a"}}, map[string]any{"progress": "完成原文", "check_values": map[string]bool{"√": true, "×": false}})
 	for _, sample := range []struct {
 		owner, flag   string
@@ -326,10 +326,10 @@ func TestShelfImportCertificationAmbiguousKeyPreservesCandidates(t *testing.T) {
 	f, l, n := shelfModelSetup(t)
 	configureCertificationStandards(f, &l)
 	for _, name := range []string{"First certificate", "Second certificate"} {
-		f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": name, "owner_id": shelfNode(n, "model"), "standard": "standard_a", "certification_object": "Container", "region": "Country", "number": name}}}}, http.StatusCreated, nil)
+		f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": name, "owner_id": shelfNode(n, "model"), "standard": "standard_a", "certification_object": "Container", "region": "region_a", "number": name}}}}, http.StatusCreated, nil)
 	}
 	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "progress"}}, nil)
-	draft := importUpload(t, f, l.ID, "cert_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Synthetic model", "standard_a", "Container", "Country", "Planning"), ""), http.StatusCreated)
+	draft := importUpload(t, f, l.ID, "cert_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Synthetic model", "standard_a", "Container", "region_a", "Planning"), ""), http.StatusCreated)
 	require.Equal(t, "uncertain", draft.Items[0].Conflicts[0].Type)
 	details := draft.Items[0].Conflicts[0].Details.(map[string]any)
 	require.EqualValues(t, 2, details["match_count"])
@@ -352,7 +352,7 @@ func TestShelfImportCertificationOwnerMustMatchWorksheetLine(t *testing.T) {
 	var line types.Entity
 	f.request(http.MethodPost, "/libraries/"+l.ID+"/entities", map[string]any{"name": "Other line", "kind": "product_line"}, http.StatusCreated, &line)
 	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}}, map[string]any{"product_line_id": line.ID})
-	draft := importUpload(t, f, l.ID, "cert_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Synthetic model", "standard_a", "Container", "Country"), ""), http.StatusCreated)
+	draft := importUpload(t, f, l.ID, "cert_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Synthetic model", "standard_a", "Container", "region_a"), ""), http.StatusCreated)
 	require.Equal(t, "uncertain", draft.Items[0].Conflicts[0].Type)
 	require.Contains(t, draft.Items[0].Conflicts[0].Message, "product line")
 }
@@ -405,11 +405,11 @@ func TestShelfImportReportProjectModelsShareOnePart(t *testing.T) {
 	def.ModelSeparators = []string{";"}
 	plan := types.ShelfImportPlanInput{Key: "map", Name: "Synthetic records", FileKind: "certification_report", Revision: 1, ShelfImportDefinition: def}
 	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{{ID: "plan", Type: "save_import_plan", ImportPlan: &plan}}}, http.StatusCreated, nil)
-	draft := importUpload(t, f, l.ID, "report_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Shared cell", "standard_a", "Cell", "Country", "Shared cell", "Synthetic model;Synthetic single"), ""), http.StatusCreated)
+	draft := importUpload(t, f, l.ID, "report_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Shared cell", "standard_a", "Cell", "region_a", "Shared cell", "Synthetic model;Synthetic single"), ""), http.StatusCreated)
 	require.Len(t, draft.Items, 4)
 	require.Equal(t, "part", draft.Items[0].Operation.Entity.Kind)
 	require.Equal(t, "create_certification", draft.Items[3].Operation.Type)
-	require.Equal(t, "Shared cell / Synthetic Standard / Cell / Shared cell / Country", draft.Items[3].Operation.Certification.Name)
+	require.Equal(t, "Shared cell / Synthetic Standard / Cell / Shared cell / Region A", draft.Items[3].Operation.Certification.Name)
 	decisions := []types.ShelfDecision{}
 	for _, item := range draft.Items {
 		decisions = append(decisions, types.ShelfDecision{ItemID: item.ID, Action: "apply"})
@@ -437,7 +437,7 @@ func TestShelfImportOverseasChecksCombinedCertificationCoverage(t *testing.T) {
 	importRecordPlan(f, l, "overseas_sales", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "certification", Key: "standard_a"}}, map[string]any{"progress": "Completed", "check_values": map[string]bool{"√": true, "×": false}})
 	data := importWorkbook(t, importRecordRow(3, "Synthetic model", "√"), "")
 	for _, part := range []string{"a", "b"} {
-		f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Certificate for " + part, "owner_id": shelfNode(n, part), "standard": "standard_a", "certification_object": "Cell", "region": "Country", "progress": "Completed"}}}}, http.StatusCreated, nil)
+		f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Certificate for " + part, "owner_id": shelfNode(n, part), "standard": "standard_a", "certification_object": "Cell", "region": "region_a", "progress": "Completed"}}}}, http.StatusCreated, nil)
 		draft := importUpload(t, f, l.ID, "overseas.xlsx", time.Now().UTC().Format(time.RFC3339Nano), data, http.StatusCreated)
 		if part == "a" {
 			require.Len(t, draft.Items[0].Conflicts, 1)

@@ -288,13 +288,13 @@ test('新增认证保留原文、年份、电芯部件和适用条件，成功�
   const config = { ...library, shelf_config: { ...library.shelf_config, standards: [{ key: 'standard', name: '合成标准', aliases: [] }] } }
   const { root, writes } = await mountPage(t, { config, filesApi: { writeShelf: (_: string, ops: any[]) => { writes.push(ops); saved = true; return success({ status: 'confirmed' }) } }, api: { getShelfNode: () => { const result = data(); result.facts = []; if (saved) result.shelf.certifications.push({ ...certs[0], entity: entity('new-cert', 'certification'), standard_name: '新增合成标准' }); return success(result) } } })
   await click(button(root, '新增认证'))
-  for (const [id, value] of [['cert-name', ' 认证原名 '], ['cert-object', ' 整机原文 '], ['cert-region', ' 地区原文 '], ['cert-year', '2026'], ['cert-number', 'SYN-24']]) await input(root, id, value)
-  await select(root, 'cert-standard', 'standard'); await select(root, 'cert-cell', 'alpha')
+  for (const [id, value] of [['cert-name', ' 认证原名 '], ['cert-object', ' 整机原文 '], ['cert-year', '2026'], ['cert-number', 'SYN-24']]) await input(root, id, value)
+  await select(root, 'cert-standard', 'standard'); await select(root, 'cert-region', 'north'); await select(root, 'cert-cell', 'alpha')
   await click(button(root, '添加条件')); await select(root, 'condition-module-0', 'cell')
   const checkbox = descendants(root).find(n => n.tag === 'input' && n.props.type === 'checkbox' && n.props['aria-label'] === 'Alpha cell')!
   assert.ok(checkbox); checkbox.props.onChange({ target: { checked: true } }); await settle(); await submit(root)
   assert.equal(writes[0].length, 1); assert.equal(writes[0][0].type, 'create_certification')
-  assert.deepEqual({ ...writes[0][0].certification }, { name: ' 认证原名 ', owner_id: 'model', standard: 'standard', certification_object: ' 整机原文 ', region: ' 地区原文 ', year: 2026, cell_part_id: 'alpha', number: 'SYN-24', conditions: condition })
+  assert.deepEqual({ ...writes[0][0].certification }, { name: ' 认证原名 ', owner_id: 'model', standard: 'standard', certification_object: ' 整机原文 ', region: 'north', year: 2026, cell_part_id: 'alpha', number: 'SYN-24', conditions: condition })
   assert.match(visibleText(section(root, 'cert')), /新增合成标准/)
 })
 
@@ -358,7 +358,7 @@ for (const reason of ['名称已被占用', '实体修订过期，请重新读�
       if (mode === 'stage') { id = 'model-stage'; value = 'review'; await select(root, id, value) }
       if (mode === 'composition') { await select(root, 'composition-module', 'cell'); id = 'composition-part'; value = 'beta'; await select(root, id, value) }
       if (mode === 'certification') {
-        for (const [field, text] of [['cert-name', ' 独立认证 '], ['cert-object', '整机'], ['cert-region', '自定地区']]) await input(root, field, text)
+        for (const [field, text] of [['cert-name', ' 独立认证 '], ['cert-object', '整机']]) await input(root, field, text)
         await select(root, 'cert-standard', 'configured-standard'); id = 'cert-name'; value = ' 独立认证 '
       }
       if (mode === 'document') { id = 'shelf-file-name'; value = ' 保留的文件 '; await input(root, id, value); await input(root, 'shelf-file-cloud', 'https://example.invalid/synthetic') }
@@ -391,4 +391,25 @@ test('上传确认失败后改挂已有文件会清理未被引用的暂存附�
   assert.match(visibleText(root), /合成冲突/)
   await select(root, 'shelf-file-source', 'existing'); await select(root, 'shelf-existing-file', 'existing-file'); await submit(root)
   assert.deepEqual(removed, ['uploaded-original'])
+})
+
+// Small spec, task 34: region is a configured key or an explicit empty value.
+test('新增认证地区使用配置选择器并允许不分地区', async t => {
+ const {root,writes}=await mountPage(t)
+ await click(button(root,'新增认证'))
+ assert.equal(control(root,'cert-region').tag,'select')
+ await input(root,'cert-name','空地区认证');await input(root,'cert-object','整机')
+ await select(root,'cert-standard','configured-standard');await submit(root)
+ assert.equal(writes[0][0].certification.region,'')
+})
+// Small spec, task 34: display names accompany keys; old text remains readable.
+test('型号认证地区显示配置名称且旧地区原文仍可读', async t => {
+ const value=data();value.shelf.certifications=structuredClone(certs)
+ value.shelf.certifications[0].certification.region='south'
+ value.shelf.certifications[0].region_name='南区'
+ value.shelf.certifications[1].certification.region=' Legacy original '
+ const {root}=await mountPage(t,{value})
+ const text=visibleText(section(root,'cert'))
+ assert.match(text,/南区/);assert.match(text,/ Legacy original /)
+ assert.doesNotMatch(text,/south/)
 })

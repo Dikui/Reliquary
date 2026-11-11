@@ -75,6 +75,9 @@ export default {
     "not_parsed": "No text conversion"
 },
   shelfSettings: {
+    regionAliases: 'Aliases (one per line)',
+    regionAliasConflict: 'Region keys, names and aliases must identify one region. Change the duplicate spelling.',
+    allRegions: 'All regions',
     markets: 'Markets',
     pendingStatus: 'Pending',
     "title": "Shelf settings",

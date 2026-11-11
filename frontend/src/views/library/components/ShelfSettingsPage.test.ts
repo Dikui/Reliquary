@@ -7,6 +7,29 @@ import en from '../../../i18n/locales/en-US'
 import { click, descendants, element, loadComponent, renderer, settle, visibleText } from '../componentTestHarness'
 import { entryPresentationTestModules } from '../entryPresentationTestModules'
 const library:any={id:'shelf',updated_at:'2026-11-07T12:00:00Z',shelf_enabled:true,shelf_config:{module_types:[{key:'module',name:'客户模块'}],regions:[{key:'region',name:'客户区域'}],stages:[{key:'first',name:'客户前期'},{key:'last',name:'客户后期'}],parsers:[]},entity_schema:{kinds:[],fields:[]}}
+// Small spec, task 34: aliases remain editable configuration and share the
+// region key/name namespace. API mocks replace the HTTP boundary only.
+test('区域别名可编辑保存并阻止与其他区域键名重复', async t => {
+ const {root,writes}=await mount(t)
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='区域')!)
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='编辑')!)
+ let aliases=descendants(root).find(n=>n.tag==='textarea')!
+ assert.ok(aliases, '区域编辑应提供别名列表')
+ aliases.props.onInput({target:{value:'  客户别称  \nAlternative region'}});await settle()
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='确认保存')!)
+ assert.deepEqual(writes[0][2].shelf_config.regions[0],{key:'region',name:'客户区域',aliases:['客户别称','Alternative region']})
+ descendants(root).find(n=>n.tag==='input'&&n.props['aria-label']===zh.shelfSettings.newName)!.props.onInput({target:{value:'另一区域'}});await settle()
+ descendants(root).find(n=>n.tag==='form')!.props.onSubmit({preventDefault(){}});await settle()
+ await click(descendants(root).filter(n=>n.tag==='button'&&visibleText(n)==='编辑')[1]!)
+ aliases=descendants(root).find(n=>n.tag==='textarea')!
+ aliases.props.onInput({target:{value:' REGION '}});await settle()
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='确认保存')!)
+ assert.equal(writes.length,1)
+ assert.ok(descendants(root).some(n=>n.props.role==='alert'))
+ aliases.props.onInput({target:{value:'不同别称'}});await settle()
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='确认保存')!)
+ assert.deepEqual(writes[1][2].shelf_config.regions[1].aliases,['不同别称'])
+})
 // Small spec, task 30: markets are maintained independently from sale regions.
 test('市场可新增并原样保存且区域不变', async t => {
  const {root,writes}=await mount(t)

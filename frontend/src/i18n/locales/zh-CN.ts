@@ -75,6 +75,9 @@ export default {
     "not_parsed": "未转文本"
 },
   shelfSettings: {
+    regionAliases: '别名（每行一个）',
+    regionAliasConflict: '区域键、名称和别名须唯一，请修改重复的写法。',
+    allRegions: '不分地区',
     markets: '市场',
     pendingStatus: '待定',
     "title": "货架设置",

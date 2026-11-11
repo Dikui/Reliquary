@@ -29,7 +29,7 @@
 | configure_shelf | library、library_updated_at；使用本库当前配置和更新时间 |
 | set_sale_statuses | entity_id、revision、sale_statuses；每项 region、status；整体替换，空数组明确清空 |
 | set_parameter_values | entity_id、revision、parameter_values；字段键到值数组，每项 value，可附 conditions；数值支持单值或 {min,max} 闭区间 |
-| create_certification | certification.name、owner_id、standard、certification_object；可给 cell_part_id、region 及其他记录字段 |
+| create_certification | certification.name、owner_id、standard、certification_object；region 为配置区域键或空；可给 cell_part_id 及其他记录字段 |
 | update_certification | revision、certification（完整字段，识别键同新增）；可显式给 entity_id |
 | add_document_version | document.stage、attachment_id 或 cloud_url；归属须 owner_id 或明确 unassigned，新增文件须 name；证书见下文 |
 | classify_document | entity_id、revision、classification（owner_id、requirement_ids、conditions；证书可给 certificate_number）；作用于同文件全部版本 |
@@ -66,6 +66,8 @@ requirement_ids 为本库活动资料要求 ID 数组，可明确关联多项，
 
 名称原样保存，身份以 ID 和类别为准。同类别的名称、别名、代码共用唯一名称空间；资料要求例外，在同一所属清单内唯一。跨类别同名须明确确认实体 ID、类别和原写法。别名只能用于已确认的同一身份，不按近似拼写合并；same_entity 只加名称与别名，不合并提议属性。
 
-认证识别键为型号（或明确的所属部件、产品名称、平台）＋标准＋认证对象＋电芯部件＋地区。年份单列，标准使用库内键、规范名或明确别名；通用 update_certification 的零条或多条匹配仍须提交方处理。认证进度和报告导入在零条匹配时生成 create_certification，以 new 反馈；一条匹配更新，多条仍为 uncertain，不合并。新增未映射 name 或名称单元格为空时，名称为“所属节点原名 / 标准规范名 / 认证对象原文”，有电芯部件再加“ / 电芯部件原名”，有地区再加“ / 地区名”（配置项用显示名，配置外明确原文保留）；映射 name 且非空时用原文。同名仍报冲突，不加后缀。
+认证识别键为型号（或明确的所属部件、产品名称、平台）＋标准＋认证对象＋电芯部件＋地区。年份单列，标准使用库内键、规范名或明确别名；通用 update_certification 的零条或多条匹配仍须提交方处理。认证进度和报告导入在零条匹配时生成 create_certification，以 new 反馈；一条匹配更新，多条仍为 uncertain，不合并。新增未映射 name 或名称单元格为空时，名称为“所属节点原名 / 标准规范名 / 认证对象原文”，有电芯部件再加“ / 电芯部件原名”，有地区再加“ / 地区名”（使用配置区域显示名）；映射 name 且非空时用原文。同名仍报冲突，不加后缀。
 
 资料要求按“所属清单＋名称”识别，list_name 必须明确；导入清单由方案键和工作表确定。applies_to 只绑定产品线，市场键取 markets，与可售区域 regions 独立。阶段按 stages 数组顺序，键保持身份，不推断业务含义。没有区域状态记录不等于待定。无法确定的身份、归属、字段含义和条件均退回提交方，不推断。
+
+认证地区与可售状态共用 values.regions。每个区域返回 key、name 和可选 aliases，别名去首尾空白、不区分大小写，键、名称、别名唯一识别一个区域；用户可在货架设置的区域标签编辑并存库，不预置客户写法。create_certification、update_certification 的 region 只接受配置区域键或空，空表示不分地区且参与识别。认证进度、报告及海外核对的地区单元格按键、名称、别名解析为键，未知非空原文为 uncertain，details 保留原文，请提交方修正或加别名，不猜地理归属。shelf_query 的认证地区只用区域键筛选，显式空字符串查空地区，省略则不限；shelf_get 返回 region_name 供显示。没有客户生产数据，本次不迁移旧认证地区；旧的非配置键按原文显示，修改须改为配置键或空。更正时显式给 update_certification.entity_id 和 revision，并保持其他四个身份字段一致；新键已命中其他记录时仍阻塞。

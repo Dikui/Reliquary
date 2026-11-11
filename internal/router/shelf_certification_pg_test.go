@@ -16,7 +16,7 @@ func TestShelfCertificationConfirmedCreateAndProgressUpdate(t *testing.T) {
 	f, library, nodes := shelfModelSetup(t)
 	configureCertificationStandards(f, &library)
 	path := "/libraries/" + library.ID + "/shelf/changesets"
-	record := map[string]any{"name": " Original certification ", "owner_id": shelfNode(nodes, "model"), "standard": "Customer spelling", "year": 2026, "certification_object": "Container", "cell_part_id": shelfNode(nodes, "a"), "region": "Synthetic country", "agency": " Original agency ", "progress": "In progress", "start_date": "2026-01-02", "obtained_date": "2026-02-03", "issued_date": "2026-02-04", "validity": "Five years", "number": "SYN-001", "cloud_url": "https://example.com/synthetic", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "a")}}}}
+	record := map[string]any{"name": " Original certification ", "owner_id": shelfNode(nodes, "model"), "standard": "Customer spelling", "year": 2026, "certification_object": "Container", "cell_part_id": shelfNode(nodes, "a"), "region": "region_a", "agency": " Original agency ", "progress": "In progress", "start_date": "2026-01-02", "obtained_date": "2026-02-03", "issued_date": "2026-02-04", "validity": "Five years", "number": "SYN-001", "cloud_url": "https://example.com/synthetic", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "a")}}}}
 	var draft types.ShelfChangeset
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "agent", "agent_name": "Synthetic assistant"}, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": record}}}, http.StatusCreated, &draft)
 	require.Equal(t, "new", draft.Items[0].Conflicts[0].Type)
@@ -32,7 +32,7 @@ func TestShelfCertificationConfirmedCreateAndProgressUpdate(t *testing.T) {
 	require.Equal(t, "SYN-001", stored["number"])
 	require.EqualValues(t, 2026, stored["year"])
 	require.Equal(t, "Container", stored["certification_object"])
-	require.Equal(t, "Synthetic country", stored["region"])
+	require.Equal(t, "region_a", stored["region"])
 	require.Equal(t, "2026-01-02", stored["start_date"])
 	require.Equal(t, "2026-02-03", stored["obtained_date"])
 	require.Equal(t, "2026-02-04", stored["issued_date"])
@@ -63,7 +63,7 @@ func TestShelfCertificationStandardAliasesAndInheritance(t *testing.T) {
 	path := "/libraries/" + library.ID + "/shelf/changesets"
 	operations := []any{}
 	for _, owner := range []string{"model", "fixed", "product", "platform"} {
-		operations = append(operations, map[string]any{"id": owner, "type": "create_certification", "certification": map[string]any{"name": "Certificate " + owner, "owner_id": shelfNode(nodes, owner), "standard": "Synthetic Standard", "certification_object": "Synthetic object", "region": "Country", "progress": "Completed"}})
+		operations = append(operations, map[string]any{"id": owner, "type": "create_certification", "certification": map[string]any{"name": "Certificate " + owner, "owner_id": shelfNode(nodes, owner), "standard": "Synthetic Standard", "certification_object": "Synthetic object", "region": "region_a", "progress": "Completed"}})
 	}
 	var draft types.ShelfChangeset
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": operations}, http.StatusCreated, &draft)
@@ -107,7 +107,7 @@ func TestShelfCertificationUnmatchedKeysReturnToSubmitter(t *testing.T) {
 		f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": confirmed, "operations": []any{map[string]any{"id": "cert", "type": kind, "revision": 1, "certification": record}}}, http.StatusCreated, &draft)
 		return draft
 	}
-	record := map[string]any{"name": "Synthetic cert one", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "BMS", "region": "Country"}
+	record := map[string]any{"name": "Synthetic cert one", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "BMS", "region": "region_a"}
 	for _, owner := range []string{"BMS 7.0", "", shelfNode(nodes, "line")} {
 		record["owner_id"] = owner
 		blocked := submit(record, "create_certification", false)
@@ -163,7 +163,7 @@ func TestShelfCertificationConditionsSurviveCompositionEdits(t *testing.T) {
 	configureCertificationStandards(f, &library)
 	path := "/libraries/" + library.ID + "/shelf/changesets"
 	var draft types.ShelfChangeset
-	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Conditional cert", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "cell_part_id": shelfNode(nodes, "a"), "region": "Country", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "a")}}}}}}}, http.StatusCreated, &draft)
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Conditional cert", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "cell_part_id": shelfNode(nodes, "a"), "region": "region_a", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "a")}}}}}}}, http.StatusCreated, &draft)
 	for _, choice := range []struct {
 		part  string
 		count int
@@ -189,7 +189,7 @@ func TestShelfCertificationHistoryAndManualProgressProtection(t *testing.T) {
 	f, library, nodes := shelfModelSetup(t)
 	configureCertificationStandards(f, &library)
 	path := "/libraries/" + library.ID + "/shelf/changesets"
-	record := map[string]any{"name": "Historical cert", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "BMS", "region": "Country", "progress": "Started"}
+	record := map[string]any{"name": "Historical cert", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "BMS", "region": "region_a", "progress": "Started"}
 	source := map[string]any{"type": "import", "import_batch_id": "synthetic-certificates", "file_date": "2025-01-01T00:00:00Z"}
 	var created types.ShelfChangeset
 	f.request(http.MethodPost, path, map[string]any{"source": source, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": record}}}, http.StatusCreated, &created)
@@ -234,7 +234,7 @@ func TestShelfCertificationAncestorScopeExcludesOtherModels(t *testing.T) {
 	configureCertificationStandards(f, &library)
 	path := "/libraries/" + library.ID + "/shelf/changesets"
 	var draft types.ShelfChangeset
-	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Scoped parent certificate", "owner_id": shelfNode(nodes, "product"), "standard": "standard_a", "certification_object": "Container", "cell_part_id": shelfNode(nodes, "a"), "region": "Country", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "a")}}}}}}}, http.StatusCreated, &draft)
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Scoped parent certificate", "owner_id": shelfNode(nodes, "product"), "standard": "standard_a", "certification_object": "Container", "cell_part_id": shelfNode(nodes, "a"), "region": "region_a", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "a")}}}}}}}, http.StatusCreated, &draft)
 	var detail map[string]any
 	f.request(http.MethodGet, "/entities/"+shelfNode(nodes, "single"), nil, http.StatusOK, &detail)
 	require.Empty(t, detail["shelf"].(map[string]any)["certifications"])
@@ -249,7 +249,7 @@ func TestShelfCertificationCrossKindNameCanBeConfirmed(t *testing.T) {
 	configureCertificationStandards(f, &library)
 	path := "/libraries/" + library.ID + "/shelf/changesets"
 	var draft types.ShelfChangeset
-	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Synthetic model", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "Country"}}}}, http.StatusCreated, &draft)
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Synthetic model", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "region_a"}}}}, http.StatusCreated, &draft)
 	require.Equal(t, "cross_kind_same_name", draft.Items[0].Conflicts[0].Type)
 	f.request(http.MethodPost, path+"/"+draft.ID+"/confirm", map[string]any{"revision": draft.Revision, "decisions": []any{map[string]any{"item_id": "cert", "action": "apply", "name_confirmations": []any{map[string]any{"name": "Synthetic model", "other_entity_id": shelfNode(nodes, "model"), "other_kind": "model"}}}}}, http.StatusOK, &draft)
 	var detail types.EntityDetail
@@ -276,7 +276,7 @@ func TestShelfCertificationRejectsInvalidRecords(t *testing.T) {
 		{"contradictory cell condition", "conditions", []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "b")}}}, "uncertain"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			record := map[string]any{"name": "Invalid certificate", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "cell_part_id": shelfNode(nodes, "a"), "region": "Country"}
+			record := map[string]any{"name": "Invalid certificate", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "cell_part_id": shelfNode(nodes, "a"), "region": "region_a"}
 			record[tc.key] = tc.value
 			var draft types.ShelfChangeset
 			f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": record}}}, http.StatusCreated, &draft)
@@ -298,7 +298,7 @@ func TestShelfCertificationDeferredReferencesCanBeConfirmed(t *testing.T) {
 		map[string]any{"id": "new_model", "type": "create_entity", "entity": map[string]any{"name": "New synthetic model", "kind": "model"}},
 		map[string]any{"id": "new_part", "type": "create_entity", "entity": map[string]any{"name": "New synthetic part", "kind": "part"}},
 		map[string]any{"id": "composition", "type": "save_relation", "relation": map[string]any{"subject_id": "$new_model", "object_id": "$new_part", "relation_type": "composed_of", "attributes": map[string]any{"module_type": "module_a"}}},
-		map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Deferred synthetic cert", "owner_id": "$new_model", "standard": "Customer spelling", "certification_object": "Container", "cell_part_id": "$new_part", "region": "Country", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{"$new_part"}}}}},
+		map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Deferred synthetic cert", "owner_id": "$new_model", "standard": "Customer spelling", "certification_object": "Container", "cell_part_id": "$new_part", "region": "region_a", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{"$new_part"}}}}},
 	}}, http.StatusCreated, &draft)
 	modelID, partID := shelfNode(draft, "new_model"), shelfNode(draft, "new_part")
 	f.request(http.MethodPost, path+"/"+draft.ID+"/confirm", map[string]any{"revision": draft.Revision, "decisions": []any{map[string]any{"item_id": "new_model", "action": "apply"}, map[string]any{"item_id": "new_part", "action": "apply"}, map[string]any{"item_id": "composition", "action": "apply"}, map[string]any{"item_id": "cert", "action": "defer"}}}, http.StatusOK, &draft)
@@ -322,7 +322,7 @@ func TestShelfCertificationFutureOwnerCannotBeChangedByRelation(t *testing.T) {
 	path := "/libraries/" + library.ID + "/shelf/changesets"
 	future := time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
 	var created types.ShelfChangeset
-	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": future, "certification": map[string]any{"name": "Future certificate", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "Country"}}}}, http.StatusCreated, &created)
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": future, "certification": map[string]any{"name": "Future certificate", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "region_a"}}}}, http.StatusCreated, &created)
 	var proposed types.Entity
 	require.NoError(t, types.DecodeShelfValue(created.Items[0].After, &proposed))
 	require.Contains(t, proposed.Attributes, "certification")
@@ -347,7 +347,7 @@ func TestShelfCertificationAncestorConditionsNeedOnePossibleModel(t *testing.T) 
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/entities", map[string]any{"kind": "part", "name": "Single-only part"}, http.StatusCreated, &part)
 	var saved types.ShelfChangeset
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "composition", "type": "save_relation", "relation": map[string]any{"subject_id": shelfNode(nodes, "single"), "object_id": part.ID, "relation_type": "composed_of", "attributes": map[string]any{"module_type": "module_b"}}}}}, http.StatusCreated, &saved)
-	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Impossible parent certificate", "owner_id": shelfNode(nodes, "product"), "standard": "standard_a", "certification_object": "Container", "region": "Country", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "a")}}, map[string]any{"module_type": "module_b", "part_ids": []string{part.ID}}}}}}}, http.StatusCreated, &saved)
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Impossible parent certificate", "owner_id": shelfNode(nodes, "product"), "standard": "standard_a", "certification_object": "Container", "region": "region_a", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "a")}}, map[string]any{"module_type": "module_b", "part_ids": []string{part.ID}}}}}}}, http.StatusCreated, &saved)
 	require.Equal(t, "uncertain", saved.Items[0].Conflicts[0].Type)
 	f.request(http.MethodPost, path+"/"+saved.ID+"/confirm", map[string]any{"revision": saved.Revision, "decisions": []any{map[string]any{"item_id": "cert", "action": "apply"}}}, http.StatusConflict, nil)
 }

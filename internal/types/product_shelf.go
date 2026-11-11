@@ -9,8 +9,32 @@ import (
 // ShelfOption keys identify configured values across renames and reordering.
 // Array order is authoritative, including the stage progression.
 type ShelfOption struct {
-	Key  string `json:"key"`
-	Name string `json:"name"`
+	Key     string   `json:"key"`
+	Name    string   `json:"name"`
+	Aliases []string `json:"aliases,omitempty"`
+}
+
+// Region resolves only configured keys, names and explicit aliases.
+func (c ShelfConfig) Region(value string) (ShelfOption, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	for _, region := range c.Regions {
+		for _, name := range append([]string{region.Key, region.Name}, region.Aliases...) {
+			if strings.ToLower(strings.TrimSpace(name)) == normalized {
+				return region, true
+			}
+		}
+	}
+	return ShelfOption{}, false
+}
+
+// RegionName preserves legacy non-key values on reads without guessing a region.
+func (c ShelfConfig) RegionName(key string) string {
+	for _, region := range c.Regions {
+		if region.Key == key {
+			return region.Name
+		}
+	}
+	return key
 }
 
 type ShelfConfig struct {
@@ -147,6 +171,23 @@ func ValidateProductShelf(l *Library) error {
 				return fmt.Errorf("shelf list values require unique keys and nonblank unique names of at most 100 characters")
 			}
 			keys[item.Key], names[name] = true, true
+		}
+	}
+	spellings := map[string]string{}
+	for i := range l.ShelfConfig.Regions {
+		region := &l.ShelfConfig.Regions[i]
+		if len(region.Aliases) > 200 {
+			return fmt.Errorf("regions allow at most 200 aliases")
+		}
+		for j := range region.Aliases {
+			region.Aliases[j] = strings.TrimSpace(region.Aliases[j])
+		}
+		for _, name := range append([]string{region.Key, region.Name}, region.Aliases...) {
+			normalized := strings.ToLower(strings.TrimSpace(name))
+			if normalized == "" || len([]rune(name)) > 200 || (spellings[normalized] != "" && spellings[normalized] != region.Key) {
+				return fmt.Errorf("region keys, names and aliases must identify one region")
+			}
+			spellings[normalized] = region.Key
 		}
 	}
 	return validateShelfStandards(l.ShelfConfig.Standards)

@@ -12,6 +12,10 @@ func (b *importMapBuilder) overseasRow(mapping types.ShelfImportSheet, cells map
 	if err := b.validateRecordCells(cells); err != nil {
 		return err
 	}
+	region, err := b.recordRegion(cells["region:"].Value)
+	if err != nil {
+		return err
+	}
 	owner, err := b.recordOwner(mapping, cells["owner:"].Value)
 	if err != nil {
 		return err
@@ -77,7 +81,7 @@ func (b *importMapBuilder) overseasRow(mapping types.ShelfImportSheet, cells map
 				if cell, ok := cells["certification_object:"]; ok && record.CertificationObject != cell.Value {
 					continue
 				}
-				if cell, ok := cells["region:"]; ok && record.Region != cell.Value {
+				if _, ok := cells["region:"]; ok && record.Region != region {
 					continue
 				}
 				actual = true
@@ -124,7 +128,7 @@ func (b *importMapBuilder) overseasRow(mapping types.ShelfImportSheet, cells map
 			if cell, ok := cells["certification_object:"]; ok && record.CertificationObject != cell.Value {
 				continue
 			}
-			if cell, ok := cells["region:"]; ok && record.Region != cell.Value {
+			if _, ok := cells["region:"]; ok && record.Region != region {
 				continue
 			}
 			records = append(records, record)

@@ -186,16 +186,17 @@ test('disappeared proposals offer keep and retire decisions', async t => {
   assert.deepEqual(saves[1].decisions, [{ item_id: 'missing', action: 'retire' }])
 })
 
-// Small regression, task 18 / ADR 0023: certification regions retain customer text.
-test('editing a certification region allows text outside configured sale regions', async t => {
+// Small spec, task 34 / ADR 0023: legacy text is readable and corrected to a region key.
+test('editing a certification region selects a configured key and retains legacy text for review', async t => {
   const proposal = item('cert', 'modified'); proposal.operation = { id: 'cert', type: 'create_certification', certification: { name: '合成认证', owner_id: 'model', standard: 'standard', certification_object: '客户对象', region: '客户地区' } }
   const { root, saves } = await mount(t, changeset([proposal]))
   await click(find(root, 'button', '修改'))
-  const region = descendants(root).find(node => node.tag === 'input' && node.props['aria-label'] === '区域')!
+  const region = descendants(root).find(node => node.tag === 'select' && node.props['aria-label'] === '区域')!
   assert.ok(region)
-  region.props.onInput({ target: { value: ' 新的客户地区 ' } }); await settle()
+  assert.match(visibleText(region), /客户地区/); assert.match(visibleText(region), /可售区域/)
+  region.props.onChange({ target: { value: 'north' } }); await settle()
   await click(find(root, 'button', '保存进度'))
-  assert.equal(saves[0].decisions[0].replacement.certification.region, ' 新的客户地区 ')
+  assert.equal(saves[0].decisions[0].replacement.certification.region, 'north')
 })
 
 // Small spec, task 25 / ADR 0023: HTTP fixtures replace the batch API. Feedback

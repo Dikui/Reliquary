@@ -12,7 +12,7 @@ MCP 分别提供 `shelf_find`、`shelf_get`、`shelf_query`，均为只读工具
 
 返回 `library_id`、`library_updated_at`、`as_of`、`max_file_bytes`、`rules`、`values`、`import_plans`，指定节点时另带 `gaps`。所有动态内容在同一只读数据库快照中读取，固定规则来自[嵌入的补充规范](../skills/reliquary/reference/shelf-supplement.md)。工具不保存提议或修改配置。
 
-`values` 包含当前库的类别及父类别 `kinds`、活动产品线 `product_lines`、区域 `regions`、独立市场 `markets`、按数组顺序排列的阶段 `stages`、部件类型 `module_types`、标准及明确别名 `standards`、固定可售状态 `sale_statuses`、资料要求清单汇总 `requirement_lists` 和库内字段定义 `fields`。名称保留原写法，键和 ID 用于提交。
+`values` 包含当前库的类别及父类别 `kinds`、活动产品线 `product_lines`、区域 `regions`（键、原显示名及可选 `aliases`）、独立市场 `markets`、按数组顺序排列的阶段 `stages`、部件类型 `module_types`、标准及明确别名 `standards`、固定可售状态 `sale_statuses`、资料要求清单汇总 `requirement_lists` 和库内字段定义 `fields`。名称保留原写法，键和 ID 用于提交。
 
 `requirement_lists` 每项为 `{name,total,product_lines:[{id,name}]}`，按所属清单原名汇总当前活动要求，产品线按有效 applies_to 绑定去重，没有绑定时返回空数组。不传 node_id 时不返回逐条 `requirements`。指定节点时，`values.requirements` 为 `{items,total,truncated}`：型号取其清单要求，上层节点取全部下属型号涉及的要求并按 ID 去重，部件或没有下属型号的节点返回空列表。每项仅含 id、name（原实体名）、list_name、name_zh、name_en、draft_due_stage、final_due_stage；空的中英文名与初稿阶段可缺省，不返回完整实体属性。按原实体名及 ID 排序，完整计数后最多保留 100 项；截断后可用 shelf_get 的型号清单核对剩余要求。
 
@@ -94,7 +94,7 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
   "certification": {
     "standard": "已配置的标准键、规范名或明确别名",
     "progress": "提交方填写的进度",
-    "region": "提交方填写的地区"
+    "region": "region_key"
   },
   "composition": [{"module_type": "module_key", "part_ids": ["part-id"]}],
   "as_of": "2026-11-07T00:00:00Z",
@@ -107,7 +107,7 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
 
 数值筛选至少提供 `min` 或 `max`，采用闭区间相交语义。单值等同于上下界相同的区间。例如参数为 `[9,54]` 时会命中 `min=50`，响应保留原范围，调用方不能把它说成保证达到 50。参数必须是已配置的产品线数值字段。
 
-标准按规范名、明确别名或键匹配；未知标准返回零条。进度与认证地区按原写法精确匹配，显式空字符串用于查找未填写值。区域状态的区域键来自货架配置，认证地区不映射为区域状态。
+标准按规范名、明确别名或键匹配；未知标准返回零条。进度按原写法精确匹配。认证地区 `certification.region` 按本库配置区域键精确筛选，非空名称、别名或未知键会被拒绝；显式空字符串只匹配不分地区的认证，省略地区则不限。认证地区与可售状态使用同一套区域键，认证不推导可售状态。
 
 状态表也可省略状态筛选项的 `region` 表示任一区域，或只给 `region` 表示该区域的任意已记录状态。`planned_eom:true/false` 筛选计划退市标记，仍与其他条件在同一选配组合上求交。`no_record:true` 表示指定区域完全没有记录；省略区域时表示没有任何区域记录，不表示任意一格为空，也不把部分选配无记录推断为整格无记录。`no_record` 不能与 `status` 或 `planned_eom` 同时指定，空筛选项会被拒绝。
 
@@ -156,3 +156,5 @@ query 可加 `{"document_gaps":true}` 筛选有 `missing` 项的型号。缺口�
 部件没有自身应交资料清单，也不推断阶段或可售状态；它的文件仍通过 `shelf.documents` 展示，并按现有优先级与条件向使用它的型号共用。同层重叠候选继续标为 `ambiguous`。
 
 网页通过 query 的 `ancestor_id` 或 `part_id` 分页读取全部相关型号，各页携带节点详情返回的 `as_of`。上层节点的矩阵逐项保留选配状态与条件，单元格链接到型号的对应资料要求。顶部缺口项数按不同资料要求去重，受影响型号数沿用 `models_with_gaps`。阶段仅在产品名称提供编辑，修改和清空均确认单操作变更集，保留其他属性和修订检查。
+
+认证列表与节点的 `shelf.certifications` 同时返回 `certification.region`（区域键）及 `region_name`（当前配置显示名）；`shelf_get` 的认证事实也带 `region_name`。型号、部件和上层节点页面显示名称。没有客户生产数据，本次不迁移旧地区；非配置键的旧认证地区仍按原文显示，不报错。修改旧记录的地区更正规则见[认证变更集](product-shelf-changesets.md#认证记录)。

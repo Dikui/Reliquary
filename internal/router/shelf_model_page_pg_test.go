@@ -92,7 +92,7 @@ func TestShelfModelPageHistoryIncludesOwnedRecords(t *testing.T) {
 	f.request(http.MethodPost, path, map[string]any{
 		"source": map[string]any{"type": "agent", "agent_name": "Synthetic model assistant"}, "confirmed": true,
 		"operations": []any{
-			map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Model certificate", "owner_id": model, "standard": "standard_a", "certification_object": "Synthetic object", "region": "Synthetic region"}},
+			map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Model certificate", "owner_id": model, "standard": "standard_a", "certification_object": "Synthetic object", "region": "region_a"}},
 			map[string]any{"id": "file", "type": "add_document_version", "document": map[string]any{"name": "Model file", "owner_id": model, "cloud_url": "https://example.invalid/model", "stage": "final"}},
 			map[string]any{"id": "other-file", "type": "add_document_version", "document": map[string]any{"name": "Sibling file", "owner_id": other, "cloud_url": "https://example.invalid/sibling", "stage": "final"}},
 		},

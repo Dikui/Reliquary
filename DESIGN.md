@@ -277,6 +277,12 @@ The server installs the eight fixed categories and relationship rules. Module ty
 regions and ordered stages use the same labelled inputs and shared buttons as other
 settings; their names are user data. Stable keys survive renaming and reordering.
 
+Shelf region settings reuse the existing inline Edit and Save flow. Region aliases
+use the shared Textarea with one spelling per line; duplicate region keys, names
+and aliases block saving with a field error. Certification region controls use the
+shared native Select, with an explicit All regions choice. Certification reads show
+the configured display name and retain legacy unconfigured text verbatim.
+
 The shelf uses the Swiss tokens, a four-column hierarchy list and shared editor
 dialogs. It no longer has a relation graph or candidate-parent vocabulary. The
 existing detail tabs display parts, certifications and document records while the

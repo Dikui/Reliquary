@@ -169,3 +169,12 @@ test('部件认证在使用型号之后、资料文件之前展示', async t => 
   assert.ok(sections.indexOf('models') < sections.indexOf('node-certifications'))
   assert.ok(sections.indexOf('node-certifications') < sections.indexOf('node-files'))
 })
+
+// Small spec, task 34: component and ancestor certifications share region names.
+test('部件认证地区显示配置名称且保留旧地区原文', async t => {
+ const value=node(true);value.shelf.certifications[0].certification.region='north'
+ value.shelf.certifications.push({...structuredClone(value.shelf.certifications[0]),entity:entity('legacy-cert','certification'),certification:{...value.shelf.certifications[0].certification,region:'Legacy original'}})
+ const {root}=await mountPage(t,{part:true,api:{getShelfNode:()=>success(value)}})
+ const text=visibleText(descendants(root).find(n=>n.props.id==='node-certifications')!)
+ assert.match(text,/客户区域/);assert.match(text,/Legacy original/);assert.doesNotMatch(text,/north/)
+})
