@@ -51,6 +51,8 @@ url = "http://127.0.0.1:8080/mcp"
 bearer_token_env_var = "RELIQUARY_API_KEY"
 ```
 
+Codex 默认拦截带写入标记的 MCP 工具调用，在无人值守（`approval_policy="never"`）下连未确认的 `shelf_submit` 预览也会被拒。需要它维护货架时，在上述配置中加 `default_tools_approval_mode = "approve"`，或启动时传 `-c 'mcp_servers.reliquary.default_tools_approval_mode="approve"'`。这只放行工具调用；是否确认写入仍由 `confirmed` 与用户同意决定。
+
 参见 [Codex MCP 配置](https://developers.openai.com/codex/mcp/)。
 
 ## 按目标选工具
