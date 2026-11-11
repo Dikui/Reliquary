@@ -133,21 +133,25 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     for (const text of expected) assert.ok(result.html.includes(text), text)
     assert.doesNotMatch(result.html, /每次收录都经过模型审核|相同的全部访问权限|applies to every submission|same full access as your signed-in account/)
   })
-  test(`${locale}: the created key notice says the key can be viewed again and must be kept safe`, async () => {
+  // Medium regression, task 33: the token can be copied once; list data carries no secret.
+  test(`${locale}: the created token is shown once and the reloaded list is masked`, async () => {
     const result = await scenario(locale, async state => {
       state.form.name = 'Collector'
       await state.save()
-    }, { keys: [{ id: 17, name: 'Collector', api_key: 'token', created_at: '2026-10-12' }] })
+    }, { keys: [{ id: 17, name: 'Collector', created_at: '2026-10-12' }] })
     assert.deepEqual(result.warnings, [])
     assert.equal(result.state.createdVisible.value, true)
     assert.equal(result.state.createdToken.value, 'token')
     const expected = locale === 'zh-CN'
-      ? '你可以在此页再次查看完整密钥。请妥善保管，避免泄露。'
-      : 'You can view the full key again on this page. Keep it safe and do not share it.'
+      ? '完整密钥只显示这一次，请立即复制并妥善保管。'
+      : 'The full token is shown once. Copy it now and keep it safe.'
     assert.ok(result.html.replace(/<[^>]+>/g, '').includes(expected), 'the shared notice displays the new notice as text')
-    assert.doesNotMatch(result.html, /完整密钥只显示这一次|full token is shown once/)
+    assert.doesNotMatch(result.html, /再次查看完整密钥|view the full key again/)
     assert.deepEqual(result.requests, [{ payload: { name: 'Collector' } }])
-    assert.ok(result.html.includes('<code>token</code>'), 'the reloaded key list still displays the saved key')
+    assert.ok(result.html.includes('<code>********</code>'), 'the reloaded list shows a mask without a secret field')
+    assert.ok(!result.html.includes('<code>token</code>'))
+    await result.state.copy(result.state.createdToken.value)
+    assert.equal(result.copies.at(-1)?.value, 'token')
   })
   test(`${locale}: external Agent endpoints have localized guidance and copy their addresses`, async () => {
     const messages = (locale === 'zh-CN' ? zh : en).integrations.api
@@ -346,7 +350,7 @@ test('migration replacement Key page save creates only the requested name',async
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: API key pagination preserves page size choices and clamps the page`, async () => {
-    const keys = Array.from({ length: 17 }, (_, index) => ({ id: index + 1, name: `Key ${index + 1}`, api_key: `key-${index + 1}`, created_at: '2026-10-12' }))
+    const keys = Array.from({ length: 17 }, (_, index) => ({ id: index + 1, name: `Key ${index + 1}`, created_at: '2026-10-12' }))
     const result = await scenario(locale, async state => {
       await state.load()
       state.onPageChange({ current: 2, pageSize: 5 })

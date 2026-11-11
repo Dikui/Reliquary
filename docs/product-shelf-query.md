@@ -6,6 +6,8 @@ MCP 分别提供 `shelf_find`、`shelf_get`、`shelf_query`，均为只读工具
 
 ## 补充规范
 
+不传 `node_id` 时另返回 `import_fields`，按文件种类列出可映射列、键、必填及工作表字段，与方案校验同源；字段说明见[导入方案](product-shelf-import.md#导入方案)。节点请求省略此元数据。
+
 维护货架前调用只读 MCP 工具 `shelf_guide`，必传 `library_id`，可选 `node_id`。本工具只通过 MCP 提供，与其他货架工具一样同时返回结构化 JSON 和 JSON 文本。
 
 返回 `library_id`、`library_updated_at`、`as_of`、`max_file_bytes`、`rules`、`values`、`import_plans`，指定节点时另带 `gaps`。所有动态内容在同一只读数据库快照中读取，固定规则来自[嵌入的补充规范](../skills/reliquary/reference/shelf-supplement.md)。工具不保存提议或修改配置。

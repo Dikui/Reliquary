@@ -421,7 +421,7 @@ BACKUP_DIR=/Users/yourname/Backups/Reliquary-Rollback \
 
 ## 外部 Agent 接入
 
-Grok Bot、Claude Code 等外部工具需与 Reliquary 运行在同一台电脑上，端口只绑定 `127.0.0.1`。打开网页，在“设置 > API 集成”为每个工具创建自己的 API Key，复制完整令牌和连接地址。同页可查看 Key、修改名称与有效期或撤销 Key。
+Grok Bot、Claude Code 等外部工具需与 Reliquary 运行在同一台电脑上，端口只绑定 `127.0.0.1`。打开网页，在“设置 > API 集成”为每个工具创建自己的 API Key，复制完整令牌和连接地址。完整令牌只通过创建响应的 `token` 返回一次，页面关闭创建弹窗后仅显示掩码。同页可查看 Key 名称、修改名称与有效期或撤销 Key；创建、列表和编辑响应均不含存储用的 `api_key`。
 
 将 [外部接入总览](external-integration.md) 与 [收录接口说明](ingest-api.md) 提供给外部工具开发者或 Agent。该文档包含 Markdown 与图片要求、认证、查重与收录顺序、可执行示例、HTTP 与 MCP 接口、补全、重试和用户反馈。外部工具负责取得原始资料，Reliquary 负责去重、模型审核、处理、存储与检索。收录结果和待处理页面供用户确认后续操作。
 

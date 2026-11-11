@@ -113,12 +113,14 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 | 操作 | 输入与行为 |
 | --- | --- |
-| `create_certification` | `certification`，可带 `effective_at`。明确新增一条独立认证，同时建立所属节点到认证记录的 `has_certification` 关系。名称由提交方给出。 |
+| `create_certification` | `certification`，可带 `effective_at`。明确新增一条独立认证，同时建立所属节点到认证记录的 `has_certification` 关系。名称由提交方给出；认证导入的名称规则见下文。 |
 | `update_certification` | `certification`、`revision`，可带 `entity_id` 和 `effective_at`。按识别键更新一条已有记录。`certification` 是完整替换，省略的可选字段表示清空；省略名称表示保留原名。 |
 
 `certification` 包含 `name`（新增必填）、`owner_id`、`standard`、`certification_object`、`cell_part_id`、`region`、`year`、`agency`、`progress`、`start_date`、`obtained_date`、`issued_date`、`validity`、`number`、`cloud_url` 和 `conditions`。`owner_id` 必须明确指向本库的型号、部件、产品名称或平台，不按行名猜测节点。`standard` 接受配置键、规范名或别名，保存为配置键，查询同时返回规范名。`year` 是可选整数；三个日期使用 `YYYY-MM-DD`；有效期保留原写法；云盘链接只接受 HTTP(S)。认证对象、地区、机构和进度均保存提交方写法，不在代码里固定客户值。未指定地区或电芯部件时用空值参与识别，不补填推测值。
 
 识别键为所属节点、标准、认证对象、电芯部件和地区，不包含年份、机构、进度或证书编号。更新匹配零条或多条时返回 `uncertain` 阻塞冲突，不会自动新增、合并或拆分。显式 `entity_id` 也必须与识别键一致。多条候选须由人工在 `apply` 决定中提供 `target_entity_id` 与 `target_revision`，明确选中一条；零条时须修正操作或明确改为新增。新增操作本身表示提交方明确建立独立记录，因此可保存同键的不同认证，后续自动匹配会报告多条候选。
+
+认证进度及证书报告导入先按同一识别键分类：零条生成 `create_certification` 并以 `new` 反馈，一条生成 `update_certification`，多条仍为 `uncertain`。新增未映射 `name` 或单元格为空时，名称为 `所属节点原名 / 标准规范名 / 认证对象原文`，有电芯部件追加 ` / 电芯部件原名`，有地区追加 ` / 地区名`（配置项用显示名，配置外明确地区保留原文）；映射名称且非空时用原文。生成名称与已有或本批认证重名仍报冲突，不加后缀。导入只生成待确认提议，不改变通用 `update_certification` 的零匹配阻塞规则，也不让海外核对写入认证。
 
 认证对象可以填写 BMS；无法确定所属节点的独立认证行返回 `uncertain`，即使普通接受也不能写入。提交方可以修正、放弃或暂缓。部件不根据认证对象名称自动创建。电芯部件和条件引用须属于所属节点的组成范围，不能引用其他库的部件。条件沿用部件类型与部件集合的合取写法，须由所属范围内同一个型号同时满足。结构调整不能使已有或未来生效认证的条件、部件或归属关系失效。
 

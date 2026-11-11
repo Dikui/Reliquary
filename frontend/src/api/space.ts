@@ -20,7 +20,6 @@ export interface APIKey {
   status?: 'active' | 'migration_invalidated' | 'expired' | 'revoked'
   id: number
   name: string
-  api_key: string
   last_used_at?: string
   expires_at?: string
   created_at: string

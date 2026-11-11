@@ -80,12 +80,12 @@ func TestShelfImportCertificationProgressUsesIdentityAndFileDate(t *testing.T) {
 }
 
 // Medium spec, task 12: dates that cannot be parsed retain the original cell;
-// unknown owners and unmatched certification keys require an explicit correction.
+// unknown owners require an explicit correction. Task 33 covers new keys separately.
 func TestShelfImportCertificationInvalidDatesAndKeysNeedReview(t *testing.T) {
 	f, l, _ := shelfModelSetup(t)
 	configureCertificationStandards(f, &l)
 	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "obtained_date"}}, nil)
-	for _, sample := range []struct{ owner, date, kind string }{{"Synthetic model", "2026.02.30", "unparseable"}, {"BMS unknown", "", "uncertain"}, {"Synthetic model", "", "uncertain"}} {
+	for _, sample := range []struct{ owner, date, kind string }{{"Synthetic model", "2026.02.30", "unparseable"}, {"BMS unknown", "", "uncertain"}} {
 		t.Run(sample.owner+sample.date, func(t *testing.T) {
 			draft := importUpload(t, f, l.ID, "progress_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, sample.owner, "standard_a", "BMS", "Country", sample.date), ""), http.StatusCreated)
 			require.Len(t, draft.Items, 1)
@@ -99,7 +99,7 @@ func TestShelfImportCertificationInvalidDatesAndKeysNeedReview(t *testing.T) {
 }
 
 // Medium spec, task 12: report imports propose parts, attributes and explicit
-// model composition; creating a missing certification requires a human decision.
+// model composition; new certifications are proposed for explicit confirmation.
 func TestShelfImportCertificationReportProposesPartAndComposition(t *testing.T) {
 	f, l, n := shelfModelSetup(t)
 	configureCertificationStandards(f, &l)
@@ -107,11 +107,10 @@ func TestShelfImportCertificationReportProposesPartAndComposition(t *testing.T) 
 	data := importWorkbook(t, importRecordRow(3, "Synthetic model", "Customer spelling", "Container", "Country", " New cell ", " Pack original ", "Cluster original", "SYN-REPORT-1", "2026年10月20日", " Five years ", "https://example.com/report"), "")
 	draft := importUpload(t, f, l.ID, "report_20261028.xlsx", "", data, http.StatusCreated)
 	require.Len(t, draft.Items, 3)
-	require.Equal(t, "uncertain", draft.Items[2].Conflicts[0].Type)
-	replacement := draft.Items[2].Operation
-	replacement.Type = "create_certification"
-	replacement.Certification.Name = "Human chosen certificate name"
-	decisions := []types.ShelfDecision{{ItemID: draft.Items[0].ID, Action: "apply"}, {ItemID: draft.Items[1].ID, Action: "apply"}, {ItemID: draft.Items[2].ID, Action: "replace", Replacement: &replacement}}
+	require.Equal(t, "new", draft.Items[2].Conflicts[0].Type)
+	require.Equal(t, "create_certification", draft.Items[2].Operation.Type)
+	require.Equal(t, "Synthetic model / Synthetic Standard / Container /  New cell  / Country", draft.Items[2].Operation.Certification.Name)
+	decisions := []types.ShelfDecision{{ItemID: draft.Items[0].ID, Action: "apply"}, {ItemID: draft.Items[1].ID, Action: "apply"}, {ItemID: draft.Items[2].ID, Action: "apply"}}
 	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets/"+draft.ID+"/confirm", types.ShelfChangesetReview{Revision: draft.Revision, Decisions: decisions}, http.StatusOK, &draft)
 	var part types.EntityDetail
 	f.request(http.MethodGet, "/entities/"+draft.Items[0].EntityID, nil, http.StatusOK, &part)
@@ -213,7 +212,7 @@ func TestShelfImportCertificationExcelDatesRetainInvalidSerial(t *testing.T) {
 	configureCertificationStandards(f, &l)
 	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "issued_date"}}, nil)
 	style := `<styleSheet><fills><fill><patternFill patternType="none"/></fill></fills><cellXfs><xf fillId="0"/><xf fillId="0" numFmtId="14"/></cellXfs></styleSheet>`
-	for _, sample := range []struct{ raw, want, conflict string }{{"46320", "2026-10-25", "uncertain"}, {"60", "", "unparseable"}, {"invalid-date", "", "unparseable"}} {
+	for _, sample := range []struct{ raw, want, conflict string }{{"46320", "2026-10-25", "new"}, {"60", "", "unparseable"}, {"invalid-date", "", "unparseable"}} {
 		t.Run(sample.raw, func(t *testing.T) {
 			row := importRecordRow(3, "Synthetic model", "standard_a", "Container", "Country", sample.raw)
 			if sample.raw != "invalid-date" {
@@ -409,15 +408,12 @@ func TestShelfImportReportProjectModelsShareOnePart(t *testing.T) {
 	draft := importUpload(t, f, l.ID, "report_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Shared cell", "standard_a", "Cell", "Country", "Shared cell", "Synthetic model;Synthetic single"), ""), http.StatusCreated)
 	require.Len(t, draft.Items, 4)
 	require.Equal(t, "part", draft.Items[0].Operation.Entity.Kind)
-	replacement := draft.Items[3].Operation
-	replacement.Type = "create_certification"
-	replacement.Certification.Name = "Shared cell certificate"
+	require.Equal(t, "create_certification", draft.Items[3].Operation.Type)
+	require.Equal(t, "Shared cell / Synthetic Standard / Cell / Shared cell / Country", draft.Items[3].Operation.Certification.Name)
 	decisions := []types.ShelfDecision{}
 	for _, item := range draft.Items {
 		decisions = append(decisions, types.ShelfDecision{ItemID: item.ID, Action: "apply"})
 	}
-	decisions[3].Action = "replace"
-	decisions[3].Replacement = &replacement
 	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets/"+draft.ID+"/confirm", types.ShelfChangesetReview{Revision: draft.Revision, Decisions: decisions}, http.StatusOK, &draft)
 	partID := draft.Items[0].EntityID
 	for _, model := range []string{"model", "single"} {

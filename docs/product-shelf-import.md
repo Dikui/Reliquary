@@ -16,6 +16,8 @@ ATQ 方案编辑器另提供市场键与市场写法映射。市场在货架设�
 
 `GET /libraries/:id/shelf/import-plans` 返回当前库的方案，按 `key` 排序。每个文件种类用一个稳定的方案键。读取方案附带该方案最新批次的 `last_file_name`，尚无批次时省略。支持 `product_map`、`certification_progress`、`certification_report`、`overseas_sales` 和 `atq`。DC 与 AC 证书汇总都使用 `certification_report`，各工作表分别配置。
 
+不传节点调用 `shelf_guide` 时，`import_fields` 按 `file_kind` 返回方案校验使用的同一份字段定义：`columns` 是允许的 `columns[].field`，`column_keys` 列出须提供 `key` 的字段及其配置种类（区域 `region`、市场 `market`、标准 `standard`、产品线参数 `product_line_field`），其余字段不接受 `key`；`required_columns` 必填，`required_one_of` 的每组至少映射一个字段。`sheet_fields` 列出种类专属工作表字段及要求：`required`、`optional`、`required_with_cell_part`（报告含电芯部件时）、`required_with_certification`（海外标准核对矩阵列时）。各类共用 `worksheet`、`header_rows`、`columns` 与 `ignore`。传节点时省略此字段定义，继续返回节点相关要求与缺口。
+
 方案也通过变更集保存，没有直接修改货架的旁路：
 
 ```json
@@ -57,7 +59,7 @@ ATQ 方案编辑器另提供市场键与市场写法映射。市场在货架设�
 
 `model_separators` 按列出的顺序拆分型号，不修剪或改写拆分后的名称。`missing_values` 明确列出不能视为型号等身份字段的占位写法。数值参数支持数字及 `9~54`、`9～54` 形式的闭区间；布尔接受 `true/false/1/0`；日期接受 `YYYY-MM-DD`。
 
-`status_values` 将确切原文映射为固定状态及备注，仍保存原始状态文字。空白写法不能配置默认状态，须逐行决定。填充色使用大写 ARGB，如 `FFFFFF00`；索引色使用 `indexed:13`，主题色使用 `theme:4:0.5`，无 tint 时末尾为空。颜色含义可为 `ignore`、`uncertain`、`planned_eom` 或固定状态。固定状态颜色只核对区域文字，不替空白区域填写状态。身份或描述列的 `planned_eom` 作用于该行区域，区域列的标记只作用于该区域。未知颜色、无法确定含义的颜色和文字矛盾都成为待确认冲突。
+`status_values` 将确切原文映射为固定状态及备注，仍保存原始状态文字。空白写法不能配置默认状态，须逐行决定。底色键取自 XLSX：RGB 使用 `fgColor rgb` 原文大写（如 `FFFFFF00`）；索引色为 `indexed:<序号>`；主题色为 `theme:<序号>:<tint 原文>`，例如 `theme:9:0.59999389629810485`，无 tint 时冒号后为空（`theme:9:`）。不可用浮点数重新计算或缩短 tint 精度。颜色含义可为 `ignore`、`uncertain`、`planned_eom` 或固定状态。固定状态颜色只核对区域文字，不替空白区域填写状态。身份或描述列的 `planned_eom` 作用于该行区域，区域列的标记只作用于该区域。未知颜色、无法确定含义的颜色和文字矛盾都成为待确认冲突。底色冲突的 `details` 返回服务器实际使用的 `fill_key`、源单元格 `cell`、`worksheet` 和该行原文 `values`；合并单元格给出实际带底色的源单元格。可用此键在 `fill_meanings` 中配置含义后保存方案并重新上传。认证、ATQ 和海外核对的记录底色只接受明确的 `ignore`，其他含义仍须提交方处理。
 
 ## 首次方案的模型建议
 
@@ -134,7 +136,9 @@ ATQ 方案编辑器另提供市场键与市场写法映射。市场在货架设�
 
 认证工作表指定 `owner_kind`（`model`、`part`、`product` 或 `platform`），用 `owner` 列按名称、代码、明确别名或 ID 确定所属节点。可选 `product_line_id` 限定所属范围，按文件日期检查层级；无法证明属于指定产品线时转人工。共同必填列为 `owner`、`standard`、`certification_object` 和 `region`。地区单元格允许明确为空，仍参与识别。标准只按本库已配置的键、规范名或别名解析，不从名称猜年份。
 
-其他列可映射 `name`、`year`、`cell_part`、`agency`、`progress`、`start_date`、`obtained_date`、`issued_date`、`validity`、`number`、`cloud_url` 和 `sample_description`。名称与文字原样保存。已有认证只更新映射列，未映射字段和适用条件保留。识别键仍为所属节点、标准、认证对象、电芯部件和地区；零条匹配产生人工处理冲突，须明确改为 `create_certification` 并填写原始名称；多条匹配须提交含完整记录及目标修订号的修正操作，避免遗漏候选中的其他字段。同键重复行须逐项处理，不自动合并。`model_separators` 也用于拆分型号类别的所属节点列，不修剪拆分后的名字。
+其他列可映射 `name`、`year`、`cell_part`、`agency`、`progress`、`start_date`、`obtained_date`、`issued_date`、`validity`、`number`、`cloud_url` 和 `sample_description`。名称与文字原样保存。已有认证只更新映射列，未映射字段和适用条件保留。识别键仍为所属节点、标准、认证对象、电芯部件和地区；零条匹配生成 `create_certification`，差异以 `new` 反馈，确认后才新增；一条匹配继续生成 `update_certification`；多条匹配仍为 `uncertain`，须提交含完整记录及目标修订号的修正操作，避免遗漏候选中的其他字段。同键重复行须逐项处理，不自动合并。`model_separators` 也用于拆分型号类别的所属节点列，不修剪拆分后的名字。
+
+新增认证未映射 `name` 或名称单元格为空时，生成名称 `所属节点原名 / 标准规范名 / 认证对象原文`，有电芯部件时追加 ` / 电芯部件原名`，有地区时追加 ` / 地区名`。节点及部件使用已识别实体的原名，标准使用配置规范名；地区键或显示名对应配置项时使用其显示名，配置外的明确地区原文保留，空地区不追加。映射 `name` 且单元格非空时使用原文。生成名称与已有认证或本批其他行重名时，沿用现有同名冲突规则，不加后缀。此规则同时适用于认证进度与证书报告；通用更新操作和海外核对的语义不变。
 
 证书汇总工作表另需填写 `progress`，明确本表表示已完成认证的原文。若同时映射进度列，其值须与该配置一致。汇总可增加 `pack_model`、`cluster_model`、`container_model` 和 `model` 列。电芯部件不存在时提议新增，存在时提议更新属性，均须有已配置的工作表 `module_type`。Pack、簇和集装箱型号只成为部件属性。`model` 对应明确的型号或 AC 表项目名称，用于提议组成；所属节点本身是型号时可省略这一列。`model` 列也按已确认的 `model_separators` 拆分。多个型号合用同一部件时复用该部件，不生成副本。已有不同部件类型或重复行中不同的部件属性交给提交方处理。
 

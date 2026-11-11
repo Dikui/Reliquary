@@ -3131,7 +3131,7 @@ export default {
       regenerateMigratedKey: 'Generate a new API key',
       apiKeyNeverExpires: 'No expiry',
       apiKeyCreatedTitle: 'API key created',
-      apiKeyCreatedHint: 'You can view the full key again on this page. Keep it safe and do not share it.',
+      apiKeyCreatedHint: 'The full token is shown once. Copy it now and keep it safe.',
       apiKeyRevoke: 'Revoke',
       apiKeyRevokeConfirm: 'Revoke API key "{name}"? Requests using this key will be rejected.',
       apiKeyRevoked: 'API key revoked',

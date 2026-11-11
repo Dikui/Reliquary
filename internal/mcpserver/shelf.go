@@ -51,7 +51,7 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 	if err != nil {
 		panic(err)
 	}
-	addTool(server, "shelf_guide", mcp.ToolAnnotations{ReadOnlyHint: true}, "补充货架前读取本库补充规范，返回 rules、实时可用值 values、max_file_bytes 和已保存 import_plans。可选 node_id 附节点缺口。"+shelfExpertNotice+externalContentNotice,
+	addTool(server, "shelf_guide", mcp.ToolAnnotations{ReadOnlyHint: true}, "补充货架前读取本库补充规范，返回 rules、实时可用值 values、max_file_bytes 和已保存 import_plans。不传 node_id 时另含与方案校验同源的 import_fields；传 node_id 附节点缺口。"+shelfExpertNotice+externalContentNotice,
 		object(map[string]any{"library_id": text("已开启货架的库 ID，必填"), "node_id": text("可选产品线、平台、产品名称、型号或部件 ID")}, "library_id"), func(ctx context.Context, in struct {
 			LibraryID string `json:"library_id"`
 			NodeID    string `json:"node_id,omitempty"`

@@ -10,13 +10,14 @@ import (
 )
 
 type ShelfGuide struct {
-	LibraryID        string                 `json:"library_id"`
-	LibraryUpdatedAt time.Time              `json:"library_updated_at"`
-	AsOf             time.Time              `json:"as_of"`
-	MaxFileBytes     int64                  `json:"max_file_bytes"`
-	Values           types.ShelfGuideValues `json:"values"`
-	ImportPlans      []ShelfImportPlanView  `json:"import_plans"`
-	Gaps             *ShelfGuideGaps        `json:"gaps,omitempty"`
+	LibraryID        string                       `json:"library_id"`
+	LibraryUpdatedAt time.Time                    `json:"library_updated_at"`
+	AsOf             time.Time                    `json:"as_of"`
+	MaxFileBytes     int64                        `json:"max_file_bytes"`
+	Values           types.ShelfGuideValues       `json:"values"`
+	ImportPlans      []ShelfImportPlanView        `json:"import_plans"`
+	ImportFields     map[string]ShelfImportFields `json:"import_fields,omitempty"`
+	Gaps             *ShelfGuideGaps              `json:"gaps,omitempty"`
 }
 
 // ShelfGuide reads configuration and identities in one read-only snapshot.
@@ -30,6 +31,9 @@ func (s *EntityService) ShelfGuide(ctx context.Context, libraryID, nodeID string
 		}
 		at := time.Now()
 		result = &ShelfGuide{LibraryID: library.ID, LibraryUpdatedAt: library.UpdatedAt, AsOf: at, MaxFileBytes: library.ShelfConfig.FileSizeLimit()}
+		if nodeID == "" {
+			result.ImportFields = shelfImportFields
+		}
 		result.Values = types.ShelfGuideValues{
 			Kinds: library.EntitySchema.Kinds, Fields: library.EntitySchema.Fields,
 			ProductLines: []types.Entity{}, RequirementLists: []types.ShelfGuideRequirementList{},

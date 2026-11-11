@@ -10,7 +10,7 @@
     <p v-else-if="!keys.length" role="status">{{ t('integrations.api.noApiKeys') }}</p>
     <template v-else>
       <DataTable v-model:focused="focusedKey" :rows="pagedKeys" :columns="columns" :label="t('integrations.api.apiKeys')">
-        <template #cell-api_key="{ row }"><span v-if="row.status === 'migration_invalidated'">{{ t('integrations.api.migrationInvalidated') }}</span><code v-else>{{ row.api_key }}</code></template>
+        <template #cell-api_key="{ row }"><span v-if="row.status === 'migration_invalidated'">{{ t('integrations.api.migrationInvalidated') }}</span><code v-else>********</code></template>
         <template #cell-expires_at="{ row }">{{ row.status === 'migration_invalidated' ? t('integrations.api.migrationInvalidated') : row.expires_at ? new Date(row.expires_at).toLocaleString() : t('integrations.api.apiKeyNeverExpires') }}</template>
         <template #cell-actions="{ row }"><div class="settings-actions"><Button v-if="row.status === 'migration_invalidated'" variant="ghost" @click="openCreate">{{ t('integrations.api.regenerateMigratedKey') }}</Button><Button variant="ghost" @click="openEdit(row)">{{ t('integrations.api.editApiKey') }}</Button><Button variant="danger" @click="revoke(row)">{{ t('integrations.api.apiKeyRevoke') }}</Button></div></template>
       </DataTable>

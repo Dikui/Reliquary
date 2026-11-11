@@ -135,7 +135,7 @@ func (b *importMapBuilder) parseRecords(workbook *importWorkbookData) error {
 						// a group heading. Neither proves absence on this sheet.
 						b.skippedSheets[mapping.Worksheet] = true
 					}
-					b.issue(kind, err.Error(), raw)
+					b.issue(kind, err.Error(), b.cellIssueDetails(err, raw))
 				}
 				if len(b.ops) > 500 {
 					return apperrors.NewBadRequestError("import exceeds 500 changeset operations; split the workbook")
@@ -164,7 +164,7 @@ func (b *importMapBuilder) validateRecordCells(cells map[string]importCell) erro
 			return fmt.Errorf("formula, error or formatted numeric cells require explicit values")
 		}
 		if cell.Fill != "" && b.plan.Definition.FillMeanings[cell.Fill] != "ignore" {
-			return fmt.Errorf("uncertain: record cell fill requires an explicit interpretation")
+			return &importFillError{cell: cell, message: "record cell fill requires an explicit interpretation"}
 		}
 	}
 	return nil

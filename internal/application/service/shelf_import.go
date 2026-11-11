@@ -165,6 +165,22 @@ func (b *importMapBuilder) append(op types.ShelfOperation) string {
 	b.ops = append(b.ops, op)
 	return "$" + op.ID
 }
+
+// importFillError retains the XLSX identity without recomputing color values.
+type importFillError struct {
+	cell    importCell
+	message string
+}
+
+func (e *importFillError) Error() string { return "uncertain: " + e.message }
+
+func (b *importMapBuilder) cellIssueDetails(err error, values map[string]string) any {
+	if fill, ok := err.(*importFillError); ok {
+		return map[string]any{"fill_key": fill.cell.Fill, "cell": fill.cell.Ref, "worksheet": b.location.Worksheet, "values": values}
+	}
+	return values
+}
+
 func (b *importMapBuilder) issue(kind, message string, details any) {
 	b.append(types.ShelfOperation{Type: "create_entity", Entity: &types.ManagedEntityInput{Kind: "model"}, Issues: []types.ShelfConflict{{Type: kind, Message: message, Details: details}}})
 }
@@ -302,7 +318,7 @@ func (b *importMapBuilder) parse(workbook *importWorkbookData) error {
 					if strings.HasPrefix(err.Error(), "uncertain:") {
 						kind = "uncertain"
 					}
-					b.issue(kind, err.Error(), values)
+					b.issue(kind, err.Error(), b.cellIssueDetails(err, values))
 				}
 			}
 		}
@@ -361,10 +377,10 @@ func (b *importMapBuilder) modelRow(mapping types.ShelfImportSheet, cells map[st
 		if cell.Fill != "" {
 			meaning := b.plan.Definition.FillMeanings[cell.Fill]
 			if meaning == "" || meaning == "uncertain" {
-				return fmt.Errorf("uncertain: cell fill %s requires a confirmed meaning", cell.Fill)
+				return &importFillError{cell: cell, message: "cell fill requires a confirmed meaning"}
 			}
 			if slices.Contains([]string{"GA", "DEV", "Planning", "EOM", "待定"}, meaning) && column.Field != "sale_status" {
-				return fmt.Errorf("uncertain: a status color on an identity or parameter cell needs an explicit interpretation")
+				return &importFillError{cell: cell, message: "a status color on an identity or parameter cell needs an explicit interpretation"}
 			}
 			if meaning == "planned_eom" && column.Field != "sale_status" {
 				planned = true
@@ -384,7 +400,7 @@ func (b *importMapBuilder) modelRow(mapping types.ShelfImportSheet, cells map[st
 			}
 			meaning := b.plan.Definition.FillMeanings[cell.Fill]
 			if slices.Contains([]string{"GA", "DEV", "Planning", "EOM", "待定"}, meaning) && mapped.Status != "" && mapped.Status != meaning {
-				return fmt.Errorf("uncertain: status color contradicts regional text")
+				return &importFillError{cell: cell, message: "status color contradicts regional text"}
 			}
 			statuses = slices.DeleteFunc(statuses, func(v types.ShelfSaleStatus) bool { return v.Region == column.Key })
 			statuses = append(statuses, types.ShelfSaleStatus{Region: column.Key, Status: mapped.Status, Notes: mapped.Notes, Raw: cell.Value, PlannedEOM: planned || b.plan.Definition.FillMeanings[cell.Fill] == "planned_eom"})

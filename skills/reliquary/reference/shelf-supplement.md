@@ -54,14 +54,18 @@ requirement_ids 为本库活动资料要求 ID 数组，可明确关联多项，
 
 ## Excel 补充
 
+不传 node_id 时，import_fields 按 file_kind 返回与方案校验同源的 columns（允许的 field）、column_keys（须给 key 的配置种类）、required_columns 和 required_one_of（每组至少选一项）。sheet_fields 列出专属工作表字段及 required、optional、required_with_cell_part、required_with_certification 条件；所有种类共用 worksheet、header_rows、columns、ignore。仅 column_keys 中的列字段接受 key；配置种类 region、market、standard、product_line_field 分别对应区域、市场、标准、产品线参数。认证电芯列为 cell_part，报告另可映射 pack_model、cluster_model、container_model、model。
+
 返回的 import_plans 是本库已确认保存的方案：key、file_kind、definition.sheets 中的 worksheet、header_rows、列字母到字段和键的映射，以及 last_file_name、last_file_date。last_headers 保留最近批次的已映射列实际表头，多行以换行连接；旧批次未记录表头时缺省，不推断。表头来自最近文件，方案修订后须核对现有映射。
 
 使用 API Key 调 HTTP `POST /api/v1/libraries/:id/shelf/imports`，multipart 字段 file（xlsx，最多 32 MiB）、plan_key，以及必要的 file_date（非未来 RFC3339；文件名日期不可靠时必填）。这条路径生成待确认变更集，后续仍通过 shelf_submit 审阅和确认。同一文件内容、同一方案修订和同一生效日期重复上传，直接返回上次变更集，不新建批次。表中消失的行不会自动删除，须明确决定保留或归档；与手工值不同列为冲突，不覆盖。空白或无法识别的含义退回提交方。
+
+底色含义由 fill_meanings 指定，可用 ignore、uncertain、planned_eom 或现有固定状态；记录类底色只接受 ignore。键格式：主题色 `theme:<序号>:<tint 原文>`，无 tint 时冒号后为空；RGB 使用 `fgColor rgb` 原文大写；索引色 `indexed:<序号>`。不要重新计算 tint 精度。底色冲突 details 给出 fill_key、cell、worksheet 与行原文 values，应直接复制服务器的键修改方案后重传。
 
 ## 命名与识别
 
 名称原样保存，身份以 ID 和类别为准。同类别的名称、别名、代码共用唯一名称空间；资料要求例外，在同一所属清单内唯一。跨类别同名须明确确认实体 ID、类别和原写法。别名只能用于已确认的同一身份，不按近似拼写合并；same_entity 只加名称与别名，不合并提议属性。
 
-认证识别键为型号（或明确的所属部件、产品名称、平台）＋标准＋认证对象＋电芯部件＋地区。年份单列，标准使用库内键、规范名或明确别名；匹配零条或多条均退回提交方，不推断新增或合并。
+认证识别键为型号（或明确的所属部件、产品名称、平台）＋标准＋认证对象＋电芯部件＋地区。年份单列，标准使用库内键、规范名或明确别名；通用 update_certification 的零条或多条匹配仍须提交方处理。认证进度和报告导入在零条匹配时生成 create_certification，以 new 反馈；一条匹配更新，多条仍为 uncertain，不合并。新增未映射 name 或名称单元格为空时，名称为“所属节点原名 / 标准规范名 / 认证对象原文”，有电芯部件再加“ / 电芯部件原名”，有地区再加“ / 地区名”（配置项用显示名，配置外明确原文保留）；映射 name 且非空时用原文。同名仍报冲突，不加后缀。
 
 资料要求按“所属清单＋名称”识别，list_name 必须明确；导入清单由方案键和工作表确定。applies_to 只绑定产品线，市场键取 markets，与可售区域 regions 独立。阶段按 stages 数组顺序，键保持身份，不推断业务含义。没有区域状态记录不等于待定。无法确定的身份、归属、字段含义和条件均退回提交方，不推断。

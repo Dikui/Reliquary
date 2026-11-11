@@ -623,7 +623,7 @@ export default {
       regenerateMigratedKey: '重新生成 API Key',
       apiKeyNeverExpires: '长期有效',
       apiKeyCreatedTitle: 'API Key 已创建',
-      apiKeyCreatedHint: '你可以在此页再次查看完整密钥。请妥善保管，避免泄露。',
+      apiKeyCreatedHint: '完整密钥只显示这一次，请立即复制并妥善保管。',
       apiKeyRevoke: '撤销',
       apiKeyRevokeConfirm: '撤销 API Key「{name}」？使用此密钥的请求将被拒绝。',
       apiKeyRevoked: 'API Key 已撤销',

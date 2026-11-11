@@ -77,7 +77,6 @@ type apiKeyResponse struct {
 	Status     string     `json:"status"`
 	ID         uint64     `json:"id"`
 	Name       string     `json:"name"`
-	APIKey     string     `json:"api_key"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`
@@ -304,7 +303,6 @@ func apiKeyForResponse(key *types.APIKey) apiKeyResponse {
 		Status:     status,
 		ID:         key.ID,
 		Name:       key.Name,
-		APIKey:     key.APIKey,
 		LastUsedAt: key.LastUsedAt,
 		ExpiresAt:  key.ExpiresAt,
 		CreatedAt:  key.CreatedAt,

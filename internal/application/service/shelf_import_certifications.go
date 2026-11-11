@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"reliquary/internal/types"
@@ -27,6 +28,7 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 	if !ok {
 		return fmt.Errorf("uncertain: certification standard has no configured name or alias")
 	}
+	cellPartName := ""
 	record := types.ShelfCertification{OwnerID: owner.ID, Standard: standard.Key, CertificationObject: cells["certification_object:"].Value, Region: cells["region:"].Value}
 	if cell, ok := cells["cell_part:"]; ok && cell.Value != "" {
 		part, err := b.recordEntity("part", cell.Value)
@@ -34,6 +36,7 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 			return err
 		}
 		record.CellPartID = part.ID
+		cellPartName = part.CanonicalName
 	}
 	key := fmt.Sprintf("cert:%q/%q/%q/%q/%q", record.OwnerID, record.Standard, record.CertificationObject, record.CellPartID, record.Region)
 	if b.seenRecordKeys[key] {
@@ -101,7 +104,28 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 		}
 	}
 	b.seenRecordKeys[key] = true
-	op := types.ShelfOperation{Type: "update_certification", Revision: revision, Certification: &types.ShelfCertificationInput{Name: cells["name:"].Value, ShelfCertification: record}}
+	opType, name := "update_certification", cells["name:"].Value
+	if len(matches) == 0 {
+		opType = "create_certification"
+		if name == "" {
+			names := []string{owner.CanonicalName, standard.Name, record.CertificationObject}
+			if cellPartName != "" {
+				names = append(names, cellPartName)
+			}
+			if record.Region != "" {
+				regionName := record.Region
+				for _, region := range b.library.ShelfConfig.Regions {
+					if region.Key == record.Region {
+						regionName = region.Name
+						break
+					}
+				}
+				names = append(names, regionName)
+			}
+			name = strings.Join(names, " / ")
+		}
+	}
+	op := types.ShelfOperation{Type: opType, Revision: revision, Certification: &types.ShelfCertificationInput{Name: name, ShelfCertification: record}}
 	if len(matches) > 1 {
 		op.Issues = []types.ShelfConflict{{Type: "uncertain", Message: "certification key has multiple candidates; submit a corrected complete record", Details: map[string]any{"candidates": matches, "match_count": len(matches)}}}
 	}

@@ -249,7 +249,9 @@ below a 720px content width. Each group inherits the page heading. Model and
 API editors use the shared Dialog or Drawer; pending confirmations close when
 their owning view is disposed. Tables scroll within the shared DataTable.
 Native select and local date/time inputs keep platform popup behavior. API key
-expiry preserves the existing local-time conversion. Textareas retain the
+expiry preserves the existing local-time conversion. The created token is available
+only in the creation dialog for copying; the key list shows a mask and migration
+invalidations retain their existing status label. Textareas retain the
 approved vertical resize behavior. Shared tokens remain the color and type
 source of truth; these groups no longer use TDesign theme adapters.
 
