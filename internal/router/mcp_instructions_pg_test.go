@@ -90,6 +90,10 @@ func TestMCPSkillToolReferences(t *testing.T) {
 		vector_unavailable workflow
 		applied confirmation_required conflict discarded duplicate extracted in_library model_written
 		needs_selection not_found pending_review result_error
+		approval_policy jp no_record planned_eom
+		configure_shelf save_import_plan decisions origin file file_date plan_key overseas_sales
+		new modified uncertain suspected_same cross_kind_same_name disappeared unparseable
+		required_missing cross_table_contradiction revision_conflict unmapped_column defer keep retire
 	`)
 	for _, identifier := range allowed {
 		require.False(t, tools[identifier], "whitelist must not hide a registered tool: %s", identifier)
