@@ -11,7 +11,7 @@ import ManagedRelationEditor from './ManagedRelationEditor.vue'
 import ManagedAttributes from './ManagedAttributes.vue'
 
 const props = defineProps<{ library: LibraryCatalogItem; initialEntityId?: string }>()
-const emit = defineEmits<{ 'select-entity': [id: string, library: string]; 'open-source': [id: string] }>()
+const emit = defineEmits<{ 'open-source': [id: string] }>()
 const { t } = useI18n()
 const shelf = useProductShelf(toRef(props, 'library'))
 const { nodes, selected, records, entries, links, relations, loading, detailLoading, error, detailError, pending, linking } = shelf
@@ -59,7 +59,6 @@ async function choose(id: string) {
   if (!node) return
   setPath(node)
   query.value = ''
-  emit('select-entity', node.id, props.library.id)
   await shelf.select(node)
 }
 async function load() {
