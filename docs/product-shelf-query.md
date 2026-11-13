@@ -23,7 +23,7 @@ MCP 分别提供 `shelf_find`、`shelf_get`、`shelf_query`，均为只读工具
 `gaps` 的节点必须是本库产品线、平台、产品名称、型号或部件。型号及上层节点返回 model_count，以及四个独立的 `{items,total,truncated}` 列表：
 
 - documents：现有清单中的 missing 和 draft_only 行，保留 model_id、model_name、current_stage，以及原 requirement（含 ID、所属清单、初稿及终稿应交阶段）、条件、部分选配、所选版本和状态。未到期项不列入。
-- no_file_documents：现有清单中的 no_file（无文件）行，保留与 documents 相同的型号、要求、条件和状态字段，独立计数，不推断已经到期。每行 current_stage_unset=true 表示型号和产品名称均未设置当前阶段；型号节点的 gaps 也会返回 current_stage_unset=true，提醒先补阶段。型号设置或从产品名称沿用阶段时不提示未设置。
+- no_file_documents：现有清单中的 no_file（无文件）行，保留与 documents 相同的型号、要求、条件和状态字段，独立计数，不推断已经到期。每行 current_stage_unset=true 表示型号和产品名称均未设置当前阶段；未设阶段时清单状态只有 has_file 与 no_file，documents 不会出现 draft_only，初稿与终稿须按清单行 document.stage 区分；型号节点的 gaps 也会返回 current_stage_unset=true，提醒先补阶段。型号设置或从产品名称沿用阶段时不提示未设置。
 - sale_statuses：本库 regions 中该型号完全没有记录的区域，包含型号和区域的键及原名；已有条件记录的区域不算整区无记录。
 - pending_changesets：涉及节点、下属型号或其共用上层、组成部件、当前要求、认证、文件的待确认变更集摘要（id、revision、source、updated_at），按变更集去重。明确的关系两端、候选、决定和适用条件引用也参与判断；库设置提议影响整个库。原操作和冲突可用变更集 HTTP GET 读取。
 

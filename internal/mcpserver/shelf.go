@@ -65,7 +65,7 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 				Rules string `json:"rules"`
 			}{guide, string(rules)}, nil
 		})
-	addTool(server, "shelf_find", mcp.ToolAnnotations{ReadOnlyHint: true}, "按名称、别名或代码找货架节点，返回 items（含 id、kind、kind_label）、分页前 total 和 truncated，不自动选择同名候选。"+shelfExpertNotice+externalContentNotice,
+	addTool(server, "shelf_find", mcp.ToolAnnotations{ReadOnlyHint: true}, "按名称、别名或代码找货架节点，查询文本放在 q。返回 items（含 id、kind、kind_label）、分页前 total 和 truncated，不自动选择同名候选。truncated=true 表示本次未覆盖全部结果，非首页也为 true；offset 加本页条数小于 total 时才有下一页。"+shelfExpertNotice+externalContentNotice,
 		object(map[string]any{
 			"library_id": text("已开启货架的库 ID，必填"), "q": text("名称、别名或代码中的字面文本，必填"),
 			"limit": integer("默认 50，最大 100", 1, 100), "offset": integer("跳过条数，默认 0", 0, 0),
@@ -80,7 +80,7 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 		}, "library_id", "node_id"), func(ctx context.Context, in shelfGetInput) (any, error) {
 			return entities.ShelfGet(ctx, in.LibraryID, in.NodeID, types.ShelfReadOptions{AsOf: in.AsOf, Combination: in.Combination})
 		})
-	addTool(server, "shelf_query", mcp.ToolAnnotations{ReadOnlyHint: true}, "结构化筛选或按部件、认证标准反查型号，所有筛选须由同一可行组合满足。返回 items、分页前 total、truncated、as_of、detail；matching_conditions 外层为或，内层为且。默认 detail=summary，每项只含 entity（含 description，不含 attributes）、current_stage、本次筛选命中的 facts 及 matching_conditions、partial_options；只问数量时传 limit=1 读 total，要完整详情对选中型号用 shelf_get。"+shelfExpertNotice+externalContentNotice,
+	addTool(server, "shelf_query", mcp.ToolAnnotations{ReadOnlyHint: true}, "结构化筛选或按部件、认证标准反查型号，所有筛选须由同一可行组合满足。返回 items、分页前 total、truncated、as_of、detail；matching_conditions 外层为或，内层为且。truncated=true 表示本次未覆盖全部结果，非首页也为 true；offset 加本页条数小于 total 时才有下一页。默认 detail=summary，每项只含 entity（含 description，不含 attributes）、current_stage、本次筛选命中的 facts 及 matching_conditions、partial_options；只问数量时传 limit=1 读 total，要完整详情对选中型号用 shelf_get。"+shelfExpertNotice+externalContentNotice,
 		object(map[string]any{
 			"library_id": text("已开启货架的库 ID，必填"), "ancestor_id": text("产品线、平台或产品名称 ID，限定其下属型号"),
 			"sale_statuses": map[string]any{"type": "array", "description": "区域状态筛选，各项取交集；每项至少给 region、status、planned_eom、no_record 之一", "items": object(map[string]any{

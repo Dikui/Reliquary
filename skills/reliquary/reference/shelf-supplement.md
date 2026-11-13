@@ -6,7 +6,7 @@
 
 不传 node_id 时，values.requirement_lists 只返回各所属清单的 name、活动要求 total 和绑定的 product_lines（id、name），不返回逐条要求。归类前须明确节点，再传 node_id 读取 values.requirements 的 items、total、truncated。型号只取自身清单要求，上层节点按下属型号涉及的要求 ID 去重，部件没有应交清单，返回空列表。每条要求仅含 id、name（原实体名）、list_name、中英文名 name_zh/name_en、初稿及终稿应交阶段 draft_due_stage/final_due_stage；不含完整属性，修改时先读取完整实体快照。
 
-节点 gaps.documents 列出 missing（缺）和 draft_only（只有初稿），gaps.no_file_documents 单独列出 no_file（无文件），不把无文件推断为已到期。两类资料缺口均保留原清单状态和选配条件，上层节点汇总下属型号。型号与产品名称都未设当前阶段时，型号 gaps.current_stage_unset=true，每条无文件缺口也带此提示，须请维护者补阶段。gaps.sale_statuses 是完全没有记录的区域，gaps.pending_changesets 是相关待确认批次。部件只返回相关待确认批次，其余缺口列表为空。
+节点 gaps.documents 列出 missing（缺）和 draft_only（只有初稿），gaps.no_file_documents 单独列出 no_file（无文件），不把无文件推断为已到期。两类资料缺口均保留原清单状态和选配条件，上层节点汇总下属型号。型号与产品名称都未设当前阶段时，型号 gaps.current_stage_unset=true，每条无文件缺口也带此提示，须请维护者补阶段。此时清单状态只有 has_file 和 no_file，gaps 不列只有初稿的项；需要区分初稿与终稿时，读 shelf_get 清单每行 document.stage。gaps.sale_statuses 是完全没有记录的区域，gaps.pending_changesets 是相关待确认批次。部件只返回相关待确认批次，其余缺口列表为空。
 
 各缺口列表及节点资料要求分别先完整计数，再保留前 100 项；total 是截断前条数，truncated=true 时不得声称已列全。资料缺口按型号的清单条件行计数，values.requirements 按要求 ID 去重计数。可用 shelf_query 遍历型号、shelf_get 读完整清单，待确认批次用 HTTP 分页继续读取。
 
