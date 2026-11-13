@@ -77,7 +77,7 @@ func TestShelfModelPageOtherFiles(t *testing.T) {
 	require.Len(t, oldFiles, 1)
 	require.Equal(t, " Original V2 ", oldFiles[0].(map[string]any)["document"].(map[string]any)["version_label"])
 	var page map[string]any
-	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/query", map[string]any{"ancestor_id": model}, http.StatusOK, &page)
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/query", map[string]any{"ancestor_id": model, "detail": "full"}, http.StatusOK, &page)
 	require.Len(t, page["items"].([]any)[0].(map[string]any)["shelf"].(map[string]any)["other_documents"], 3)
 }
 

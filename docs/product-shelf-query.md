@@ -98,10 +98,13 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
   },
   "composition": [{"module_type": "module_key", "part_ids": ["part-id"]}],
   "as_of": "2026-11-07T00:00:00Z",
+  "detail": "summary",
   "limit": 50,
   "offset": 0
 }
 ```
+
+`detail` 控制每项详略，默认 `summary`，响应顶层 `detail` 回显本次取值。`summary` 每项只含 `entity`（保留名称、类别、代码、别名与 `description`，`attributes` 置空）、`current_stage`、`recorded`、`as_of`、`matching_conditions`、`partial_options`，以及本次筛选检查过的 `facts`：所筛区域的可售状态（未给区域时为全部区域）、所筛参数字段的取值、满足认证条件的认证；每条事实保留条件、来自部件或上层标记与来源证据。不返回 `shelf`，即资料清单、其他文件、组成、完整认证与参数表。`full` 每项返回与 `GET /shelf/nodes/:node_id` 相同的完整详情，体积随型号和资料数线性增长，只在确需逐项资料清单时少量使用。只要数量时传 `limit=1` 读 `total`。货架导出与节点缺口在服务内部读取完整详情，不受此参数影响。
 
 所有筛选项均可省略，默认返回当前活动型号。`ancestor_id` 限定所属层级范围，也允许直接指定型号本身。多个区域、参数和组成条件为合取，必须存在同一个部件组合同时满足全部条件。认证的标准、进度和地区必须由同一条适用认证记录满足，包含来自部件和来自上层的认证。查询按业务时间使用属性快照与关系有效区间，不展开或持久化完整组合实体。
 
@@ -115,7 +118,7 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
 
 响应包含 `items`、`total`、`truncated`、`as_of`。`total` 为分页前的型号数，不因同型号多条匹配认证而重复计数。每页默认 50 条，上限 100；`offset` 为非负数。只要本次返回的条目没有覆盖全部结果，`truncated` 就为 `true`，包括非第一页和越界空页。结果按当前型号名称与 ID 稳定排序。
 
-每个结果含 get 的完整节点详情，并增加 `matching_conditions` 和型号级 `partial_options`。`matching_conditions` 的外层为“或”，每组内部为“且”，同一部件类型重复条件取交集。只有全部选配均能满足筛选时，型号级 `partial_options` 才为 `false`；多条认证分别覆盖不同选配，也可以合起来覆盖全部选配。完整详情仍保留其他事实及其条件，引用命中原因时使用 `matching_conditions`。
+每个结果按 `detail` 返回摘要或 get 的完整节点详情，两种都增加 `matching_conditions` 和型号级 `partial_options`。`matching_conditions` 的外层为“或”，每组内部为“且”，同一部件类型重复条件取交集。只有全部选配均能满足筛选时，型号级 `partial_options` 才为 `false`；多条认证分别覆盖不同选配，也可以合起来覆盖全部选配。`full` 仍保留其他事实及其条件，`summary` 只保留命中事实；引用命中原因时使用 `matching_conditions`。
 
 这三个接口只提供货架中已记录的事实。GA 不代表认证齐全或可直接销售。没有记录时应明确说明“货架中没有记录”。资料清单和汇总见下文；节点范围全文检索由对应检索接口提供。
 

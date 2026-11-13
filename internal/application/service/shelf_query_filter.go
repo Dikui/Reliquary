@@ -81,6 +81,15 @@ SELECT (SELECT count(*) FROM matched) total,coalesce((SELECT jsonb_agg(to_jsonb(
 ) page),'[]'::jsonb) items`
 
 func (s *EntityService) ShelfQuery(ctx context.Context, libraryID string, input types.ShelfQueryRequest) (*types.ShelfQueryResult, error) {
+	// Callers outside the service default to summary; internal readers that need
+	// full model details call shelfQuery directly with an empty detail.
+	switch input.Detail {
+	case "":
+		input.Detail = types.ShelfQueryDetailSummary
+	case types.ShelfQueryDetailSummary, types.ShelfQueryDetailFull:
+	default:
+		return nil, apperrors.NewBadRequestError(fmt.Sprintf("unknown detail %q; use summary or full", input.Detail))
+	}
 	ctx = context.WithValue(ctx, shelfChecklistCacheKey{}, &shelfChecklistCache{})
 	var result *types.ShelfQueryResult
 	err := s.readShelfSnapshot(ctx, func(reader *EntityService) error {
@@ -110,6 +119,11 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 	if len(input.SaleStatuses) > 20 {
 		return nil, apperrors.NewBadRequestError("at most 20 regional filters are allowed")
 	}
+	detailLevel := types.ShelfQueryDetailFull
+	if input.Detail == types.ShelfQueryDetailSummary {
+		detailLevel = types.ShelfQueryDetailSummary
+	}
+	standardKey := ""
 	filters := []map[string]any{}
 	for _, status := range input.SaleStatuses {
 		if status.Region != "" && !slices.ContainsFunc(library.ShelfConfig.Regions, func(region types.ShelfOption) bool { return region.Key == status.Region }) {
@@ -172,9 +186,10 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		if cert.Standard != "" {
 			standard, ok := library.ShelfConfig.Standard(cert.Standard)
 			if !ok {
-				return &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, AsOf: at}, nil
+				return &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, AsOf: at, Detail: detailLevel}, nil
 			}
 			filter["standard"] = standard.Key
+			standardKey = standard.Key
 		}
 		if cert.Progress != nil {
 			filter["progress"] = *cert.Progress
@@ -221,16 +236,61 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 	if err := json.Unmarshal(row.Items, &matches); err != nil {
 		return nil, err
 	}
-	result := &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, Total: row.Total, AsOf: at}
+	result := &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, Total: row.Total, AsOf: at, Detail: detailLevel}
 	for _, match := range matches {
 		detail, err := s.shelfGet(ctx, libraryID, match.ID, types.ShelfReadOptions{AsOf: &at})
 		if err != nil {
 			return nil, err
 		}
-		result.Items = append(result.Items, types.ShelfQueryItem{ShelfNodeDetail: *detail, MatchingConditions: match.Conditions, PartialOptions: shelfMatchesPartial(match.Conditions, detail.Shelf.Composition)})
+		item := types.ShelfQueryItem{ShelfNodeDetail: *detail, MatchingConditions: match.Conditions, PartialOptions: shelfMatchesPartial(match.Conditions, detail.Shelf.Composition)}
+		if result.Detail == types.ShelfQueryDetailSummary {
+			item.ShelfNodeDetail, item.CurrentStage = shelfQuerySummary(detail, input, standardKey)
+		}
+		result.Items = append(result.Items, item)
 	}
 	result.Truncated = int64(len(result.Items)) < result.Total
 	return result, nil
+}
+
+// shelfQuerySummary keeps identity, the description (which may record values
+// absent from structured fields) and only the facts that the filters examined.
+func shelfQuerySummary(detail *types.ShelfNodeDetail, input types.ShelfQueryRequest, standardKey string) (types.ShelfNodeDetail, string) {
+	entity := detail.Entity
+	entity.Attributes, entity.AutoMatch = nil, nil
+	summary := types.ShelfNodeDetail{Entity: entity, AsOf: detail.AsOf, Recorded: detail.Recorded, Facts: []types.ShelfFact{}}
+	for _, fact := range detail.Facts {
+		if shelfQueryFactMatched(fact, input, standardKey) {
+			summary.Facts = append(summary.Facts, fact)
+		}
+	}
+	stage := ""
+	if detail.Shelf != nil {
+		stage = detail.Shelf.CurrentStage
+	}
+	return summary, stage
+}
+
+func shelfQueryFactMatched(fact types.ShelfFact, input types.ShelfQueryRequest, standardKey string) bool {
+	switch value := fact.Value.(type) {
+	case types.ShelfSaleStatus:
+		if fact.Field != "sale_statuses" {
+			return false
+		}
+		return slices.ContainsFunc(input.SaleStatuses, func(filter types.ShelfStatusFilter) bool {
+			return filter.Region == "" || filter.Region == value.Region
+		})
+	case types.ShelfCertification:
+		cert := input.Certification
+		if fact.Field != "certification" || cert == nil {
+			return false
+		}
+		return (standardKey == "" || value.Standard == standardKey) &&
+			(cert.Progress == nil || value.Progress == *cert.Progress) &&
+			(cert.Region == nil || value.Region == *cert.Region)
+	}
+	return fact.Origin == "self" && slices.ContainsFunc(input.Parameters, func(filter types.ShelfParameterFilter) bool {
+		return filter.Field == fact.Field
+	})
 }
 
 // Subtract matching rectangles from the domains of optional parts. This proves

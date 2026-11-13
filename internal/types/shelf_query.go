@@ -64,7 +64,15 @@ type ShelfCertificationFilter struct {
 	Region   *string `json:"region,omitempty"`
 }
 
+// Query detail levels. Summary keeps identity, description and the facts hit by
+// the filters, so batch answers do not carry every model's full checklist.
+const (
+	ShelfQueryDetailSummary = "summary"
+	ShelfQueryDetailFull    = "full"
+)
+
 type ShelfQueryRequest struct {
+	Detail        string                    `json:"detail,omitempty"`
 	DocumentGaps  bool                      `json:"document_gaps,omitempty"`
 	AncestorID    string                    `json:"ancestor_id,omitempty"`
 	SaleStatuses  []ShelfStatusFilter       `json:"sale_statuses,omitempty"`
@@ -81,6 +89,7 @@ type ShelfQueryItem struct {
 	ShelfNodeDetail
 	PartialOptions     bool               `json:"partial_options"`
 	MatchingConditions [][]ShelfCondition `json:"matching_conditions"`
+	CurrentStage       string             `json:"current_stage,omitempty"`
 }
 
 type ShelfQueryResult struct {
@@ -88,4 +97,5 @@ type ShelfQueryResult struct {
 	Total     int64            `json:"total"`
 	Truncated bool             `json:"truncated"`
 	AsOf      time.Time        `json:"as_of"`
+	Detail    string           `json:"detail"`
 }

@@ -63,7 +63,7 @@ func (s *EntityService) ExportShelf(ctx context.Context, libraryID string, input
 }
 
 func (s *EntityService) shelfExportModels(ctx context.Context, libraryID string, query types.ShelfQueryRequest) ([]types.ShelfQueryItem, error) {
-	query.Limit, query.Offset = 100, 0
+	query.Limit, query.Offset, query.Detail = 100, 0, types.ShelfQueryDetailFull
 	rows := []types.ShelfQueryItem{}
 	for {
 		page, err := s.shelfQuery(ctx, libraryID, query)

@@ -2,7 +2,7 @@
 name: reliquary
 description: 查询、阅读、引用、收录资料并将结论写回本机 Reliquary。用户需要检索 Reliquary 的库、核对资料原文与实体关系、读取关注动态、查询和维护产品货架或保存 AI产出时使用。
 metadata:
-  tested_against: "0.16.0"
+  tested_against: "0.16.5"
 ---
 
 # Reliquary
@@ -59,9 +59,9 @@ Codex 默认拦截带写入标记的 MCP 工具调用，在无人值守（`appro
 
 | 目标 | 工具 | 要注意的点 |
 |---|---|---|
-| 找资料 | `list_libraries` → `search` | 必须指定 `libraries`，按来源与可信度选库；每个新问题重新检索 |
+| 找资料 | `list_libraries` → `search` | 必须指定 `libraries`，按来源与可信度选库；资料正文问题每次重新检索，货架事实不必先检索 |
 | 问实体关系 | `graph_search` | 必须指定库；返回 `needs_selection` 时核对候选，用实体 ID 重试；截断或未同步时结论不完整 |
-| 查询产品货架 | `shelf_find` → `shelf_get` 或 `shelf_query` | 先读 shelf-expert 指南，同名且影响答案时先澄清；注明条件、来源与时点，总数与截断 |
+| 查询产品货架 | `shelf_find` → `shelf_get` 或 `shelf_query` | 先读 shelf-expert 指南，同名且影响答案时先澄清；批量查询用默认 summary，只问数量取 total；注明条件、来源与时点，总数与截断 |
 | 维护产品货架 | `shelf_guide` → `shelf_submit` | 补充前先读本库规范；原件与 Excel 用 API Key 调 HTTP 上传，先保存差异与冲突，经用户同意后确认同一变更集；含义不确定项先选择 |
 | 片段不足，读原文 | `get_entry` | 按位置传 Unicode `offset`、`length`，用 `next_offset` 续读，引用资料 ID、标题路径和段落 |
 | 看关注的新动态 | `list_follows` → `follow_feed` | 只读已有关注，用 `next_cursor` 翻页；进入动态时间不同于发布时间，读取不更新查看时间 |
@@ -76,7 +76,11 @@ Codex 默认拦截带写入标记的 MCP 工具调用，在无人值守（`appro
 |---|---|
 | 不指定库就检索 | 先 `list_libraries` 选库，再给 `search` 或 `graph_search` 传 `libraries` |
 | 只凭片段作答 | 用 `get_entry` 按位置读证据和上下文，关键结论都附位置引用 |
-| 复用旧检索结果 | 每个新问题重新检索，按本次结果读取原文 |
+| 复用旧检索结果 | 资料正文问题每次重新检索，按本次结果读取原文 |
+| 批量查货架时取完整详情 | `shelf_query` 用默认 summary；只问数量传 `limit=1` 读 `total`，需要逐项资料清单时对选中型号用 `shelf_get` |
+| 结构化参数为空就说“没有记录” | 再查 `shelf_get` 返回的 `entity.description`，并用 `search` 加 `shelf_node_ids` 查正文；都没有才说“货架中没有记录” |
+| 把数值筛选命中说成“至少达到” | 筛选按闭区间相交，`[9,54]` 会命中 `min=50`；按返回的原范围作答 |
+| 筛不到资料缺口就说“资料齐全” | `document_gaps` 只筛到期未交；无文件和未设当前阶段不算到期，说明阶段与无文件情况 |
 | 把 AI产出当事实 | `cannot_be_fact=true` 的内容单列，不作为事实依据 |
 | 引用未核实来源时不标注 | `source_unverified=true` 时在引用处标明来源未核实 |
 | 图谱截断或未同步时断言“没有关系” | 检查 `truncated` 和 `pending_sync`，说明结果不完整；仅报告本次范围内未找到 |
@@ -103,5 +107,5 @@ Codex 默认拦截带写入标记的 MCP 工具调用，在无人值守（`appro
 
 | 参考 | 文件 |
 |---|---|
-| HTTP 认证、31 个工具的接口映射与错误处理 | [HTTP 参考](reference/http.md) |
+| HTTP 认证、全部工具的接口映射与错误处理 | [HTTP 参考](reference/http.md) |
 | 位置、信任标记、检索降级、分页与相似报道折叠 | [字段参考](reference/fields.md) |

@@ -109,6 +109,29 @@ func TestShelfQueryParameterAndCompositionUseSameCombination(t *testing.T) {
 	f.request(http.MethodPost, path, input, http.StatusOK, &result)
 	require.EqualValues(t, 1, result.Total)
 	require.True(t, result.Items[0].PartialOptions)
+	// The default summary keeps identity and only the filtered facts, without
+	// the per-model checklist, documents or unrelated attributes.
+	require.Equal(t, types.ShelfQueryDetailSummary, result.Detail)
+	require.Nil(t, result.Items[0].Shelf)
+	require.Empty(t, result.Items[0].Entity.Attributes)
+	fields := map[string]int{}
+	for _, fact := range result.Items[0].Facts {
+		fields[fact.Field]++
+		require.NotEmpty(t, fact.Evidence.OperationLogID)
+	}
+	require.Equal(t, map[string]int{"sale_statuses": 2, "energy": 2}, fields)
+	var raw map[string]any
+	f.request(http.MethodPost, path, input, http.StatusOK, &raw)
+	item := raw["items"].([]any)[0].(map[string]any)
+	require.NotContains(t, item, "shelf")
+	input["detail"] = "full"
+	f.request(http.MethodPost, path, input, http.StatusOK, &result)
+	require.Equal(t, types.ShelfQueryDetailFull, result.Detail)
+	require.NotNil(t, result.Items[0].Shelf)
+	require.Greater(t, len(result.Items[0].Facts), len(fields))
+	input["detail"] = "everything"
+	f.request(http.MethodPost, path, input, http.StatusBadRequest, nil)
+	delete(input, "detail")
 	input["parameters"] = []any{map[string]any{"field": "energy", "min": 55}}
 	f.request(http.MethodPost, path, input, http.StatusOK, &result)
 	require.Zero(t, result.Total)
@@ -153,7 +176,7 @@ func TestShelfQueryCertificationsReverseLookupAndOrigins(t *testing.T) {
 	for _, item := range result.Items {
 		require.False(t, item.PartialOptions, "the fixed component certificate covers every option")
 	}
-	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"standard": "Customer spelling", "progress": "a", "region": "region_a"}}, http.StatusOK, &result)
+	f.request(http.MethodPost, path, map[string]any{"detail": "full", "certification": map[string]any{"standard": "Customer spelling", "progress": "a", "region": "region_a"}}, http.StatusOK, &result)
 	require.EqualValues(t, 1, result.Total)
 	require.True(t, result.Items[0].PartialOptions)
 	labels := map[string]string{}
