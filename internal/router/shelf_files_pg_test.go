@@ -2,6 +2,7 @@ package router
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -76,7 +77,7 @@ func TestShelfFilesSelectHistoricalVersion(t *testing.T) {
 	f.request(http.MethodPost, path+"/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "third", "type": "add_document_version", "entity_id": fileID, "revision": detail.Entity.Revision, "document": map[string]any{"owner_id": owner.ID, "cloud_url": "https://example.invalid/third", "stage": "final", "version_label": "Third"}}}}, http.StatusCreated, nil)
 	f.request(http.MethodGet, path+"/nodes/"+owner.ID, nil, http.StatusOK, &node)
 	require.Equal(t, "Third", node.Shelf.OtherDocuments[0].Document.VersionLabel)
-	f.request(http.MethodGet, path+"/nodes/"+owner.ID+"?as_of="+selectedAt, nil, http.StatusOK, &node)
+	f.request(http.MethodGet, path+"/nodes/"+owner.ID+"?as_of="+url.QueryEscape(selectedAt), nil, http.StatusOK, &node)
 	require.Equal(t, oldID, node.Shelf.OtherDocuments[0].Document.ID, "later uploads do not erase the earlier selection")
 
 }
