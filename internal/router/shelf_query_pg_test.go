@@ -493,3 +493,65 @@ func TestShelfStatusTableRegionalFilters(t *testing.T) {
 		f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/query", map[string]any{"sale_statuses": []any{filter}}, http.StatusBadRequest, nil)
 	}
 }
+
+// Facets count every matched model, not the page, so an agent can offer
+// options with model counts before asking a vague question's conditions.
+func TestShelfQueryFacetsCountMatchedModels(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	configureCertificationStandards(f, &library)
+	library.EntitySchema.Fields = append(library.EntitySchema.Fields, types.EntityFieldDefinition{Key: "energy", Name: "Energy", Type: "number", Kinds: []string{"model"}, ProductLineIDs: []string{shelfNode(nodes, "line")}})
+	f.request(http.MethodPut, "/libraries/"+library.ID, map[string]any{"entity_schema": library.EntitySchema}, http.StatusOK, nil)
+	a := []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(nodes, "a")}}}
+	b := []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(nodes, "b")}}}
+	statuses := []types.ShelfSaleStatus{{Region: "region_a", Status: "GA", Conditions: a}, {Region: "region_a", Status: "DEV", Conditions: b}}
+	parameters := map[string][]types.ShelfParameterValue{"energy": {{Value: 4, Conditions: a}, {Value: map[string]any{"min": 9, "max": 54}, Conditions: b}}}
+	operations := []types.ShelfOperation{
+		{ID: "status", Type: "set_sale_statuses", EntityID: shelfNode(nodes, "model"), Revision: 1, SaleStatuses: &statuses},
+		{ID: "parameter", Type: "set_parameter_values", EntityID: shelfNode(nodes, "model"), Revision: 2, ParameterValues: &parameters},
+	}
+	for owner, progress := range map[string]string{"platform": "granted", "a": "testing"} {
+		operations = append(operations, types.ShelfOperation{ID: "cert_" + owner, Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Facet certificate " + owner, ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, owner), Standard: "Customer spelling", CertificationObject: "Synthetic object", Region: "region_a", Progress: progress}}})
+	}
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: operations}, http.StatusCreated, nil)
+	path := "/libraries/" + library.ID + "/shelf/query"
+
+	var raw map[string]any
+	f.request(http.MethodPost, path, map[string]any{"limit": 1}, http.StatusOK, &raw)
+	require.NotContains(t, raw, "facets")
+
+	var result types.ShelfQueryResult
+	f.request(http.MethodPost, path, map[string]any{"limit": 1, "facets": true}, http.StatusOK, &result)
+	require.EqualValues(t, 2, result.Total)
+	require.Len(t, result.Items, 1)
+	require.NotNil(t, result.Facets)
+	require.ElementsMatch(t, []types.ShelfStatusFacet{
+		{Region: "region_a", RegionName: "Region A", Status: "DEV", Models: 1, ConditionalModels: 1},
+		{Region: "region_a", RegionName: "Region A", Status: "GA", Models: 1, ConditionalModels: 1},
+	}, result.Facets.SaleStatuses)
+	parts := map[string]int64{}
+	for _, facet := range result.Facets.Composition {
+		parts[facet.PartName] = facet.Models
+	}
+	require.Equal(t, map[string]int64{"Synthetic a": 1, "Synthetic b": 1, "Synthetic fixed": 2}, parts)
+	min, max := 4.0, 54.0
+	require.Equal(t, []types.ShelfParameterFacet{{Field: "energy", Name: "Energy", Models: 1, Missing: 1, Min: &min, Max: &max}}, result.Facets.Parameters)
+	require.ElementsMatch(t, []types.ShelfCertificationFacet{
+		{Standard: "standard_a", StandardName: "Synthetic Standard", Progress: "granted", Region: "region_a", Models: 2},
+		{Standard: "standard_a", StandardName: "Synthetic Standard", Progress: "testing", Region: "region_a", Models: 1},
+	}, result.Facets.Certifications)
+
+	// The models counted as missing can be listed without full details.
+	f.request(http.MethodPost, path, map[string]any{"parameters": []any{map[string]any{"field": "energy", "missing": true}}}, http.StatusOK, &result)
+	require.EqualValues(t, 1, result.Total)
+	require.Equal(t, shelfNode(nodes, "single"), result.Items[0].Entity.ID)
+	f.request(http.MethodPost, path, map[string]any{"parameters": []any{map[string]any{"field": "energy", "missing": true, "min": 1}}}, http.StatusBadRequest, nil)
+
+	// Facets follow the filters: only the model with a GA record remains.
+	f.request(http.MethodPost, path, map[string]any{"limit": 1, "facets": true, "sale_statuses": []any{map[string]any{"region": "region_a", "status": "GA"}}}, http.StatusOK, &result)
+	require.EqualValues(t, 1, result.Total)
+	require.Equal(t, int64(0), result.Facets.Parameters[0].Missing)
+	require.Equal(t, int64(1), result.Facets.Parameters[0].Models)
+	for _, facet := range result.Facets.Composition {
+		require.Equal(t, int64(1), facet.Models)
+	}
+}

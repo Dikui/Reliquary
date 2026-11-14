@@ -14,7 +14,7 @@ import (
 
 // Filters are evaluated in PostgreSQL against effective snapshots and edges.
 // Each walk step intersects admitted parts, rather than expanding configurations.
-const shelfQuerySQL = `WITH RECURSIVE
+const shelfQueryMatchSQL = `WITH RECURSIVE
 vars AS (SELECT ?::text library_id, ?::bigint space_id, ?::timestamptz at, ?::jsonb filters, ?::text ancestor_id),
 nodes AS MATERIALIZED (
  SELECT e.id,e.kind,e.canonical_name,e.archived_at,e.merged_into_id,v.attributes FROM entities e JOIN vars x ON e.library_id=x.library_id AND e.space_id=x.space_id
@@ -44,6 +44,11 @@ facts AS (
  WHERE f.value->>'type'='parameter'
  AND (f.value->>'min' IS NULL OR (CASE WHEN jsonb_typeof(row->'value')='number' THEN (row->>'value')::numeric ELSE (row->'value'->>'max')::numeric END)>=(f.value->>'min')::numeric)
  AND (f.value->>'max' IS NULL OR (CASE WHEN jsonb_typeof(row->'value')='number' THEN (row->>'value')::numeric ELSE (row->'value'->>'min')::numeric END)<=(f.value->>'max')::numeric)
+ UNION ALL
+ SELECT m.id,f.step,'[]'::jsonb FROM candidates m CROSS JOIN filters f
+ WHERE f.value->>'type'='parameter_missing' AND EXISTS (SELECT 1 FROM ancestors a WHERE a.model_id=m.id AND jsonb_exists(f.value->'lines',a.id))
+ AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(m.attributes->(f.value->>'field'))='array' THEN m.attributes->(f.value->>'field') ELSE '[]'::jsonb END) row
+  WHERE (CASE WHEN jsonb_typeof(row->'value')='number' THEN (row->>'value')::numeric ELSE (row->'value'->>'min')::numeric END) IS NOT NULL)
  UNION ALL
  SELECT m.id,f.step,jsonb_build_array(jsonb_build_object('module_type',f.value->>'module_type','part_ids',f.value->'part_ids')) FROM candidates m CROSS JOIN filters f WHERE f.value->>'type'='composition'
  UNION ALL
@@ -79,6 +84,35 @@ matched AS (SELECT w.model_id id,jsonb_agg(DISTINCT w.conditions) conditions FRO
 SELECT (SELECT count(*) FROM matched) total,coalesce((SELECT jsonb_agg(to_jsonb(page)) FROM (
  SELECT m.id,m.conditions FROM matched m JOIN candidates c ON c.id=m.id ORDER BY c.canonical_name,c.id LIMIT ? OFFSET ?
 ) page),'[]'::jsonb) items`
+
+// shelfQueryFacetSQL extends the page select with counts over every matched
+// model. Its one argument lists the numeric shelf fields with their lines.
+const shelfQueryFacetSQL = `,(SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY region,status),'[]'::jsonb) FROM (
+ SELECT region,status,count(*) models,count(*) FILTER (WHERE conditional) conditional_models
+ FROM (SELECT row->>'region' region,row->>'status' status,bool_and(jsonb_array_length(coalesce(nullif(row->'conditions','null'::jsonb),'[]'::jsonb))>0) conditional
+  FROM matched m JOIN candidates c ON c.id=m.id CROSS JOIN LATERAL jsonb_array_elements(coalesce(c.attributes->'sale_statuses','[]'::jsonb)) row
+  GROUP BY c.id,1,2) s GROUP BY region,status) t) sale_statuses,
+(SELECT coalesce(jsonb_agg(jsonb_build_object('module_type',module,'part_id',part_id,'part_name',part_name,'models',models) ORDER BY module,part_name),'[]'::jsonb)
+ FROM (SELECT p.module,p.part_id,n.canonical_name part_name,count(DISTINCT p.model_id) models FROM matched m JOIN parts p ON p.model_id=m.id JOIN nodes n ON n.id=p.part_id GROUP BY 1,2,3) s) composition,
+(SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY field),'[]'::jsonb) FROM (
+ SELECT field,count(lo) models,count(*)-count(lo) missing,min(lo) min,max(hi) max
+ FROM matched m JOIN candidates c ON c.id=m.id CROSS JOIN jsonb_array_elements(?::jsonb) k
+ CROSS JOIN LATERAL (SELECT k->>'field' field) f
+ LEFT JOIN LATERAL (SELECT min(CASE WHEN jsonb_typeof(row->'value')='number' THEN (row->>'value')::numeric ELSE (row->'value'->>'min')::numeric END) lo,
+  max(CASE WHEN jsonb_typeof(row->'value')='number' THEN (row->>'value')::numeric ELSE (row->'value'->>'max')::numeric END) hi
+  FROM jsonb_array_elements(CASE WHEN jsonb_typeof(c.attributes->f.field)='array' THEN c.attributes->f.field ELSE '[]'::jsonb END) row) v ON true
+ WHERE EXISTS (SELECT 1 FROM ancestors a WHERE a.model_id=c.id AND jsonb_exists(k->'lines',a.id))
+ GROUP BY field) t) parameters,
+(SELECT coalesce(jsonb_agg(jsonb_build_object('standard',standard,'progress',progress,'region',region,'models',models) ORDER BY standard,progress,region),'[]'::jsonb)
+ FROM (SELECT cert->>'standard' standard,coalesce(cert->>'progress','') progress,coalesce(cert->>'region','') region,count(DISTINCT m.id) models
+  FROM matched m JOIN nodes c ON c.kind='certification' AND c.archived_at IS NULL AND c.merged_into_id=''
+  CROSS JOIN LATERAL (SELECT c.attributes->'certification' cert) x
+  JOIN edges link ON link.relation_type='has_certification' AND link.subject_id=x.cert->>'owner_id' AND link.object_id=c.id
+  WHERE (x.cert->>'owner_id'=m.id
+   OR EXISTS (SELECT 1 FROM ancestors a JOIN nodes n ON n.id=a.id AND n.kind IN ('product','platform') WHERE a.model_id=m.id AND a.id=x.cert->>'owner_id')
+   OR EXISTS (SELECT 1 FROM parts p WHERE p.model_id=m.id AND p.part_id=x.cert->>'owner_id'))
+  AND (coalesce(x.cert->>'cell_part_id','')='' OR EXISTS (SELECT 1 FROM parts p WHERE p.model_id=m.id AND p.part_id=x.cert->>'cell_part_id'))
+  GROUP BY 1,2,3) s) certifications`
 
 func (s *EntityService) ShelfQuery(ctx context.Context, libraryID string, input types.ShelfQueryRequest) (*types.ShelfQueryResult, error) {
 	// Callers outside the service default to summary; internal readers that need
@@ -152,13 +186,21 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		return nil, apperrors.NewBadRequestError("at most 20 parameter filters are allowed")
 	}
 	for _, parameter := range input.Parameters {
-		if (parameter.Min == nil && parameter.Max == nil) || (parameter.Min != nil && parameter.Max != nil && *parameter.Min > *parameter.Max) {
-			return nil, apperrors.NewBadRequestError("parameter bounds require min or max in ascending order")
+		if parameter.Missing && (parameter.Min != nil || parameter.Max != nil) {
+			return nil, apperrors.NewBadRequestError("parameter missing cannot be combined with min or max")
 		}
-		if !slices.ContainsFunc(library.EntitySchema.Fields, func(field types.EntityFieldDefinition) bool {
+		if !parameter.Missing && ((parameter.Min == nil && parameter.Max == nil) || (parameter.Min != nil && parameter.Max != nil && *parameter.Min > *parameter.Max)) {
+			return nil, apperrors.NewBadRequestError("parameter bounds require min or max in ascending order, or missing=true")
+		}
+		index := slices.IndexFunc(library.EntitySchema.Fields, func(field types.EntityFieldDefinition) bool {
 			return field.Key == parameter.Field && field.Type == "number" && len(field.ProductLineIDs) > 0
-		}) {
+		})
+		if index < 0 {
 			return nil, apperrors.NewBadRequestError("parameter filter requires a configured numeric shelf field")
+		}
+		if parameter.Missing {
+			filters = append(filters, map[string]any{"type": "parameter_missing", "field": parameter.Field, "lines": library.EntitySchema.Fields[index].ProductLineIDs})
+			continue
 		}
 		filters = append(filters, map[string]any{"type": "parameter", "field": parameter.Field, "min": parameter.Min, "max": parameter.Max})
 	}
@@ -186,7 +228,11 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		if cert.Standard != "" {
 			standard, ok := library.ShelfConfig.Standard(cert.Standard)
 			if !ok {
-				return &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, AsOf: at, Detail: detailLevel}, nil
+				result := &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, AsOf: at, Detail: detailLevel}
+				if input.Facets {
+					result.Facets = &types.ShelfQueryFacets{SaleStatuses: []types.ShelfStatusFacet{}, Composition: []types.ShelfCompositionFacet{}, Parameters: []types.ShelfParameterFacet{}, Certifications: []types.ShelfCertificationFacet{}}
+				}
+				return result, nil
 			}
 			filter["standard"] = standard.Key
 			standardKey = standard.Key
@@ -223,10 +269,28 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		return nil, err
 	}
 	var row struct {
-		Total int64
-		Items types.JSON
+		Total          int64
+		Items          types.JSON
+		SaleStatuses   types.JSON
+		Composition    types.JSON
+		Parameters     types.JSON
+		Certifications types.JSON
 	}
-	if err := s.db.WithContext(ctx).Raw(shelfQuerySQL, library.ID, library.SpaceID, at, string(data), input.AncestorID, limit, input.Offset).Scan(&row).Error; err != nil {
+	query, args := shelfQueryMatchSQL, []any{library.ID, library.SpaceID, at, string(data), input.AncestorID, limit, input.Offset}
+	if input.Facets {
+		fields := []map[string]any{}
+		for _, field := range library.EntitySchema.Fields {
+			if field.Type == "number" && len(field.ProductLineIDs) > 0 && !field.Archived {
+				fields = append(fields, map[string]any{"field": field.Key, "lines": field.ProductLineIDs})
+			}
+		}
+		encoded, err := json.Marshal(fields)
+		if err != nil {
+			return nil, err
+		}
+		query, args = query+shelfQueryFacetSQL, append(args, string(encoded))
+	}
+	if err := s.db.WithContext(ctx).Raw(query, args...).Scan(&row).Error; err != nil {
 		return nil, err
 	}
 	var matches []struct {
@@ -237,6 +301,11 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		return nil, err
 	}
 	result := &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, Total: row.Total, AsOf: at, Detail: detailLevel}
+	if input.Facets {
+		if result.Facets, err = shelfQueryFacets(library, row.SaleStatuses, row.Composition, row.Parameters, row.Certifications); err != nil {
+			return nil, err
+		}
+	}
 	for _, match := range matches {
 		detail, err := s.shelfGet(ctx, libraryID, match.ID, types.ShelfReadOptions{AsOf: &at})
 		if err != nil {
@@ -250,6 +319,40 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 	}
 	result.Truncated = int64(len(result.Items)) < result.Total
 	return result, nil
+}
+
+// shelfQueryFacets decodes the aggregate columns and adds display names from
+// the library configuration so options can be offered without another read.
+func shelfQueryFacets(library *types.Library, statuses, composition, parameters, certifications types.JSON) (*types.ShelfQueryFacets, error) {
+	facets := &types.ShelfQueryFacets{}
+	for _, part := range []struct {
+		raw    types.JSON
+		target any
+	}{{statuses, &facets.SaleStatuses}, {composition, &facets.Composition}, {parameters, &facets.Parameters}, {certifications, &facets.Certifications}} {
+		if err := json.Unmarshal(part.raw, part.target); err != nil {
+			return nil, err
+		}
+	}
+	for i, facet := range facets.SaleStatuses {
+		for _, region := range library.ShelfConfig.Regions {
+			if region.Key == facet.Region {
+				facets.SaleStatuses[i].RegionName = region.Name
+			}
+		}
+	}
+	for i, facet := range facets.Parameters {
+		for _, field := range library.EntitySchema.Fields {
+			if field.Key == facet.Field {
+				facets.Parameters[i].Name = field.Name
+			}
+		}
+	}
+	for i, facet := range facets.Certifications {
+		if standard, ok := library.ShelfConfig.Standard(facet.Standard); ok {
+			facets.Certifications[i].StandardName = standard.Name
+		}
+	}
+	return facets, nil
 }
 
 // shelfQuerySummary keeps identity, the description (which may record values

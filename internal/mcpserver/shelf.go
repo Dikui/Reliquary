@@ -14,7 +14,7 @@ import (
 	"reliquary/skills"
 )
 
-const shelfExpertNotice = "货架专家须注明来源与数据时点，说明适用条件、来自部件和来自上层；GA 不代表可销售或认证齐全；报告总数并说明截断；同名且影响答案时先澄清；无记录说“货架中没有记录”。先读 reliquary_guide 的 shelf-expert 流程。"
+const shelfExpertNotice = "货架专家只依据 Reliquary 返回的内容作答，不联网检索；目标模糊时先追问锁定条件。须注明来源与数据时点，说明适用条件、来自部件和来自上层；GA 不代表可销售或认证齐全；报告总数并说明截断；同名且影响答案时先澄清；无记录说“货架中没有记录”。先读 reliquary_guide 的 shelf-expert 流程。"
 
 type shelfFindInput struct {
 	LibraryID string `json:"library_id"`
@@ -80,7 +80,7 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 		}, "library_id", "node_id"), func(ctx context.Context, in shelfGetInput) (any, error) {
 			return entities.ShelfGet(ctx, in.LibraryID, in.NodeID, types.ShelfReadOptions{AsOf: in.AsOf, Combination: in.Combination})
 		})
-	addTool(server, "shelf_query", mcp.ToolAnnotations{ReadOnlyHint: true}, "结构化筛选或按部件、认证标准反查型号，所有筛选须由同一可行组合满足。返回 items、分页前 total、truncated、as_of、detail；matching_conditions 外层为或，内层为且。truncated=true 表示本次未覆盖全部结果，非首页也为 true；offset 加本页条数小于 total 时才有下一页。默认 detail=summary，每项只含 entity（含 description，不含 attributes）、current_stage、本次筛选命中的 facts 及 matching_conditions、partial_options；只问数量时传 limit=1 读 total，要完整详情对选中型号用 shelf_get。"+shelfExpertNotice+externalContentNotice,
+	addTool(server, "shelf_query", mcp.ToolAnnotations{ReadOnlyHint: true}, "结构化筛选或按部件、认证标准反查型号，所有筛选须由同一可行组合满足。返回 items、分页前 total、truncated、as_of、detail；matching_conditions 外层为或，内层为且。truncated=true 表示本次未覆盖全部结果，非首页也为 true；offset 加本页条数小于 total 时才有下一页。默认 detail=summary，每项只含 entity（含 description，不含 attributes）、current_stage、本次筛选命中的 facts 及 matching_conditions、partial_options；只问数量时传 limit=1 读 total，要完整详情对选中型号用 shelf_get。目标模糊需要追问时传 facets=true 与 limit=1，按全部命中型号返回区域状态、部件、参数范围和认证的型号数，用作追问选项；计数不保证与其他条件在同一组合下成立，用户选定后重新筛选并以 total 为准。"+shelfExpertNotice+externalContentNotice,
 		object(map[string]any{
 			"library_id": text("已开启货架的库 ID，必填"), "ancestor_id": text("产品线、平台或产品名称 ID，限定其下属型号"),
 			"sale_statuses": map[string]any{"type": "array", "description": "区域状态筛选，各项取交集；每项至少给 region、status、planned_eom、no_record 之一", "items": object(map[string]any{
@@ -89,11 +89,12 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 				"planned_eom": boolean("true 只查标记计划退市的状态，false 排除计划退市"),
 				"no_record":   boolean("true 查该区域没有状态记录的型号，省略 region 时查所有区域都没有记录的型号；不能与 status、planned_eom 同用，无记录不等于待定"),
 			})},
-			"parameters":  map[string]any{"type": "array", "description": "结构化数值参数筛选，各项取交集。按闭区间相交匹配：记录 [9,54] 会命中 min=50，不代表保证达到 50，须核对返回值；只匹配结构化参数，描述和正文中的数值不参与筛选", "items": object(map[string]any{"field": text("本库参数字段键"), "min": map[string]any{"type": "number"}, "max": map[string]any{"type": "number"}}, "field")},
+			"parameters":  map[string]any{"type": "array", "description": "结构化数值参数筛选，各项取交集。按闭区间相交匹配：记录 [9,54] 会命中 min=50，不代表保证达到 50，须核对返回值；只匹配结构化参数，描述和正文中的数值不参与筛选", "items": object(map[string]any{"field": text("本库参数字段键"), "min": map[string]any{"type": "number"}, "max": map[string]any{"type": "number"}, "missing": boolean("true 查该字段所属产品线内没有结构化取值的型号（即 facets 的 missing），不能与 min、max 同用；这些型号的数值可能写在描述或正文中")}, "field")},
 			"composition": shelfConditionsSchema(), "part_id": text("反查使用此部件的型号"),
 			"certification": object(map[string]any{"standard": text("标准配置键、规范名或明确别名"), "progress": text("进度原文"), "region": text("配置区域键，空字符串筛选不分地区的认证，省略则不限地区")}),
 			"document_gaps": boolean("只查有到期未交（missing）资料的型号，默认 false；无文件、只有初稿和未设当前阶段的不算到期，0 条不等于资料齐全"), "as_of": text("业务时间，RFC3339，省略为当前时间"),
 			"detail": enum("返回详略，默认 summary；full 返回每个型号的完整详情，体积大，仅在确需逐项资料清单时少量使用", "summary", "full"),
+			"facets": boolean("true 时额外返回 facets：在全部命中型号上统计 sale_statuses（区域、状态、型号数、只对部分选配成立的型号数）、composition（部件及型号数）、parameters（有结构化值的型号数、缺失数、最小值与最大值）、certifications（标准、进度、区域及型号数）；默认 false"),
 			"limit":  integer("默认 50，最大 100", 1, 100), "offset": integer("跳过条数，默认 0", 0, 0),
 		}, "library_id"), func(ctx context.Context, in shelfQueryInput) (any, error) {
 			return entities.ShelfQuery(ctx, in.LibraryID, in.ShelfQueryRequest)

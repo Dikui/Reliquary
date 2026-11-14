@@ -55,6 +55,15 @@ Codex 默认拦截带写入标记的 MCP 工具调用，在无人值守（`appro
 
 参见 [Codex MCP 配置](https://developers.openai.com/codex/mcp/)。
 
+### 关闭客户端联网
+
+Reliquary 的全部功能只用本机资料，后端不联网检索。客户端自带的网页搜索和抓取不受 Reliquary 控制，规则只能约束代理，要可靠禁止须在客户端关闭：
+
+- Claude Code：在项目 `.claude/settings.json` 的 `permissions.deny` 中加入 `WebSearch` 和 `WebFetch`。
+- Codex：在 `~/.codex/config.toml` 顶层设 `web_search = "disabled"`，或启动时传 `-c 'web_search="disabled"'`。
+
+客户端仍能执行命令时，代理可能用命令行访问网络；需要彻底隔离时，再用客户端的沙箱或网络策略限制。
+
 ## 按目标选工具
 
 | 目标 | 工具 | 要注意的点 |
@@ -81,6 +90,8 @@ Codex 默认拦截带写入标记的 MCP 工具调用，在无人值守（`appro
 | 结构化参数为空就说“没有记录” | 再查 `shelf_get` 返回的 `entity.description`，并用 `search` 加 `shelf_node_ids` 查正文；都没有才说“货架中没有记录” |
 | 把数值筛选命中说成“至少达到” | 筛选按闭区间相交，`[9,54]` 会命中 `min=50`；按返回的原范围作答 |
 | 筛不到资料缺口就说“资料齐全” | `document_gaps` 只筛到期未交；无文件和未设当前阶段不算到期，说明阶段与无文件情况 |
+| 联网检索或用常识补答案 | 只依据 Reliquary 工具返回的内容；库中没有就说明没有记录，术语解释标注“非库内内容” |
+| 用户目标模糊时自行定口径直接查 | `shelf_query` 传 `facets=true` 与 `limit=1` 摸底，按返回的选项和型号数一次问齐会改变结果的条件，锁定后回显再查 |
 | 把 AI产出当事实 | `cannot_be_fact=true` 的内容单列，不作为事实依据 |
 | 引用未核实来源时不标注 | `source_unverified=true` 时在引用处标明来源未核实 |
 | 图谱截断或未同步时断言“没有关系” | 检查 `truncated` 和 `pending_sync`，说明结果不完整；仅报告本次范围内未找到 |
