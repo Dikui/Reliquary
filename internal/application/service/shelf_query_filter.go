@@ -185,6 +185,7 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 	if len(input.Parameters) > 20 {
 		return nil, apperrors.NewBadRequestError("at most 20 parameter filters are allowed")
 	}
+	ranges := []shelfRangeFilter{}
 	for _, parameter := range input.Parameters {
 		if parameter.Missing && (parameter.Min != nil || parameter.Max != nil) {
 			return nil, apperrors.NewBadRequestError("parameter missing cannot be combined with min or max")
@@ -198,10 +199,12 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		if index < 0 {
 			return nil, apperrors.NewBadRequestError("parameter filter requires a configured numeric shelf field")
 		}
+		missing := map[string]any{"type": "parameter_missing", "field": parameter.Field, "lines": library.EntitySchema.Fields[index].ProductLineIDs}
 		if parameter.Missing {
-			filters = append(filters, map[string]any{"type": "parameter_missing", "field": parameter.Field, "lines": library.EntitySchema.Fields[index].ProductLineIDs})
+			filters = append(filters, missing)
 			continue
 		}
+		ranges = append(ranges, shelfRangeFilter{index: len(filters), missing: missing, field: library.EntitySchema.Fields[index]})
 		filters = append(filters, map[string]any{"type": "parameter", "field": parameter.Field, "min": parameter.Min, "max": parameter.Max})
 	}
 	if err := types.ValidateShelfConditions(input.Composition); err != nil {
@@ -319,7 +322,28 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		result.Items = append(result.Items, item)
 	}
 	result.Truncated = int64(len(result.Items)) < result.Total
+	// A range filter silently drops models whose value was never structured, so
+	// each one reports how many would match if that value were the only gap.
+	for _, r := range ranges {
+		swapped := slices.Clone(filters)
+		swapped[r.index] = r.missing
+		data, err := json.Marshal(swapped)
+		if err != nil {
+			return nil, err
+		}
+		var count struct{ Total int64 }
+		if err := s.db.WithContext(ctx).Raw(shelfQueryMatchSQL, library.ID, library.SpaceID, at, string(data), input.AncestorID, 1, 0).Scan(&count).Error; err != nil {
+			return nil, err
+		}
+		result.ParameterMissing = append(result.ParameterMissing, types.ShelfParameterMissing{Field: r.field.Key, Name: r.field.Name, Models: count.Total})
+	}
 	return result, nil
+}
+
+type shelfRangeFilter struct {
+	index   int
+	missing map[string]any
+	field   types.EntityFieldDefinition
 }
 
 // shelfQueryFacets decodes the aggregate columns and adds display names from

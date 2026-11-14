@@ -89,7 +89,7 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 				"planned_eom": boolean("true 只查标记计划退市的状态，false 排除计划退市"),
 				"no_record":   boolean("true 查该区域没有状态记录的型号，省略 region 时查所有区域都没有记录的型号；不能与 status、planned_eom 同用，无记录不等于待定"),
 			})},
-			"parameters":  map[string]any{"type": "array", "description": "结构化数值参数筛选，各项取交集。按闭区间相交匹配：记录 [9,54] 会命中 min=50，不代表保证达到 50，须核对返回值；只匹配结构化参数，描述和正文中的数值不参与筛选", "items": object(map[string]any{"field": text("本库参数字段键"), "min": map[string]any{"type": "number"}, "max": map[string]any{"type": "number"}, "missing": boolean("true 查该字段所属产品线内没有结构化取值的型号（即 facets 的 missing），不能与 min、max 同用；这些型号的数值可能写在描述或正文中")}, "field")},
+			"parameters":  map[string]any{"type": "array", "description": "结构化数值参数筛选，各项取交集。按闭区间相交匹配：记录 [9,54] 会命中 min=50，不代表保证达到 50，须核对返回值；只匹配结构化参数，描述和正文中的数值不参与筛选。按 min/max 筛选时响应带 parameter_missing：满足其他筛选但该字段无结构化取值、因而未计入结果的型号数", "items": object(map[string]any{"field": text("本库参数字段键"), "min": map[string]any{"type": "number"}, "max": map[string]any{"type": "number"}, "missing": boolean("true 查该字段所属产品线内没有结构化取值的型号（即 facets 的 missing），不能与 min、max 同用；这些型号的数值可能写在描述或正文中")}, "field")},
 			"composition": shelfConditionsSchema(), "part_id": text("反查使用此部件的型号"),
 			"certification": object(map[string]any{"standard": text("标准配置键、规范名或明确别名"), "progress": text("进度原文"), "region": text("配置区域键，空字符串筛选不分地区的认证，省略则不限地区")}),
 			"document_gaps": boolean("只查有到期未交（missing）资料的型号，默认 false；无文件、只有初稿和未设当前阶段的不算到期，0 条不等于资料齐全"), "as_of": text("业务时间，RFC3339，省略为当前时间"),

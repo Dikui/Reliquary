@@ -103,6 +103,18 @@ type ShelfQueryResult struct {
 	AsOf      time.Time         `json:"as_of"`
 	Detail    string            `json:"detail"`
 	Facets    *ShelfQueryFacets `json:"facets,omitempty"`
+	// ParameterMissing is present whenever a parameter range filter is used.
+	ParameterMissing []ShelfParameterMissing `json:"parameter_missing,omitempty"`
+}
+
+// ShelfParameterMissing counts models that meet every other filter but have no
+// structured value for the field, so a range filter cannot see them. Their value
+// may sit in the description or attached text. Models missing several filtered
+// fields are counted under none of them.
+type ShelfParameterMissing struct {
+	Field  string `json:"field"`
+	Name   string `json:"name,omitempty"`
+	Models int64  `json:"models"`
 }
 
 // ShelfQueryFacets counts, over every matched model rather than the page, the

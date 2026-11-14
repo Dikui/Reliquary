@@ -547,6 +547,21 @@ func TestShelfQueryFacetsCountMatchedModels(t *testing.T) {
 	require.EqualValues(t, 1, result.Total)
 	require.Equal(t, shelfNode(nodes, "single"), result.Items[0].Entity.ID)
 	f.request(http.MethodPost, path, map[string]any{"parameters": []any{map[string]any{"field": "energy", "missing": true, "min": 1}}}, http.StatusBadRequest, nil)
+	raw = nil
+	f.request(http.MethodPost, path, map[string]any{"parameters": []any{map[string]any{"field": "energy", "missing": true}}}, http.StatusOK, &raw)
+	require.NotContains(t, raw, "parameter_missing")
+
+	// A range filter reports the models it could not see because the value was
+	// never structured; zero is reported explicitly so nothing is left implied.
+	var ranged types.ShelfQueryResult
+	f.request(http.MethodPost, path, map[string]any{"parameters": []any{map[string]any{"field": "energy", "min": 1}}}, http.StatusOK, &ranged)
+	require.EqualValues(t, 1, ranged.Total)
+	require.Equal(t, shelfNode(nodes, "model"), ranged.Items[0].Entity.ID)
+	require.Equal(t, []types.ShelfParameterMissing{{Field: "energy", Name: "Energy", Models: 1}}, ranged.ParameterMissing)
+	var narrowed types.ShelfQueryResult
+	f.request(http.MethodPost, path, map[string]any{"sale_statuses": []any{map[string]any{"region": "region_a", "status": "GA"}}, "parameters": []any{map[string]any{"field": "energy", "min": 1}}}, http.StatusOK, &narrowed)
+	require.EqualValues(t, 1, narrowed.Total)
+	require.Equal(t, []types.ShelfParameterMissing{{Field: "energy", Name: "Energy", Models: 0}}, narrowed.ParameterMissing)
 
 	// Facets follow the filters: only the model with a GA record remains.
 	f.request(http.MethodPost, path, map[string]any{"limit": 1, "facets": true, "sale_statuses": []any{map[string]any{"region": "region_a", "status": "GA"}}}, http.StatusOK, &result)
