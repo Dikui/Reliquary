@@ -49,7 +49,8 @@ test('上层节点显示下属型号和选配清单矩阵，单元格链接到�
   assert.match(visibleText(section(root, 'models')), /型号 model.*客户区域.*GA.*计划退市.*原始备注.*客户初期/)
   assert.match(visibleText(section(root, 'checklist-summary')), /客户图纸.*已交.*客户模块.*部件原名.*缺.*另一个部件/)
   assert.ok(descendants(section(root, 'checklist-summary')).some(item => item.tag === 'a' && String(item.props.href).endsWith('#requirement-drawing')))
-  assert.ok(requests.some(item => item.ancestor_id === 'product' && item.as_of === '2026-11-07T12:00:00Z'))
+  // The table renders statuses, stages and checklists, which the summary omits.
+  assert.ok(requests.some(item => item.ancestor_id === 'product' && item.as_of === '2026-11-07T12:00:00Z' && item.detail === 'full'))
 })
 
 // Small spec, task 17: parts show reverse usage, fixed/optional roles and exact attributes.
@@ -57,7 +58,7 @@ test('部件页显示使用型号和组成角色，保留别名及附属属性',
   const { root, requests } = await mountPage(t, { part: true })
   assert.match(visibleText(root), /部件原名.*别名原文.*Pack 原名/)
   assert.match(visibleText(section(root, 'models')), /型号 model.*产品线原名.*客户模块.*选配.*另一个部件.*型号 fixed.*固定组成/)
-  assert.ok(requests.some(item => item.part_id === 'part'))
+  assert.ok(requests.some(item => item.part_id === 'part' && item.detail === 'full'))
   assert.doesNotMatch(visibleText(root), /当前阶段|可售状态|资料缺口/)
   assert.match(visibleText(section(root, 'node-certifications')), /认证地区.*标准原文.*客户进度.*客户机构.*原表日期.*长期原文.*TEST-17/)
 })

@@ -337,7 +337,7 @@ export default {
     singleValue: 'Use one value', rangeValue: 'Use range', addValue: 'Add parameter value',
     compositionHint: 'Several parts of one part type become alternatives. Each confirmation adds or removes one part.', compositionAction: 'Action', addPart: 'Add part', removePart: 'Remove part',
     edit: 'Edit model', attach: 'Attach document', setStage: 'Set separately', assignParts: 'Assign parts', addCertification: 'Add certification',
-    title: 'Model details', hierarchy: 'Hierarchy', onPage: 'On this page', currentStage: 'Current stage', inheritedStage: 'Inherited from product',
+    title: 'Model details', hierarchy: 'Hierarchy', onPage: 'On this page', currentStage: 'Current stage', inheritedStage: 'Inherited from product', ownStage: 'Set on this model', stageUnset: 'Not set', stageUnsetHint: 'Neither the model nor its product has a stage; set it once on the product:', stagesNotConfigured: 'No stages are configured in shelf settings yet; configure them before choosing one.',
     allConditions: 'All options', completeCombination: 'Choose a part for every part type to view a combination.', noRecord: 'No record in the shelf',
     certCount: '{count} certifications', module: 'Part type', part: 'Part', pack: 'Pack model', cluster: 'Cluster model', container: 'Container model', optional: 'Options · {count}',
     standard: 'Standard', certObject: 'Certification object', applies: 'Applies to', progress: 'Progress', agency: 'Agency', dates: 'Dates', validity: 'Validity', number: 'Certificate / report',

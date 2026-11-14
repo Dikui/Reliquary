@@ -337,7 +337,7 @@ export default {
     singleValue: '改为单值', rangeValue: '改为区间', addValue: '添加参数值',
     compositionHint: '同一部件类型挂多个部件即为选配。每次确认添加或移除一个部件。', compositionAction: '操作', addPart: '添加部件', removePart: '移除部件',
     edit: '编辑型号', attach: '挂资料文件', setStage: '单独设置', assignParts: '指定部件', addCertification: '新增认证',
-    title: '型号详情', hierarchy: '层级', onPage: '本页', currentStage: '当前阶段', inheritedStage: '沿用产品名称',
+    title: '型号详情', hierarchy: '层级', onPage: '本页', currentStage: '当前阶段', inheritedStage: '沿用产品名称', ownStage: '型号单独设置', stageUnset: '未设置', stageUnsetHint: '型号和产品名称都未设置，可在产品名称页统一设置：', stagesNotConfigured: '货架设置中还没有配置阶段，请先配置阶段再选择。',
     allConditions: '全部适用', completeCombination: '选齐各类部件后查看组合信息。', noRecord: '货架中没有记录',
     certCount: '{count} 条认证', module: '部件类型', part: '部件', pack: 'Pack 型号', cluster: '簇型号', container: '集装箱型号', optional: '选配 · {count}',
     standard: '标准', certObject: '认证对象', applies: '适用', progress: '进度', agency: '机构', dates: '日期', validity: '有效期', number: '证书 / 报告',

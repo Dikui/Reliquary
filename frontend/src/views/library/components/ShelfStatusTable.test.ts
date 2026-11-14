@@ -69,6 +69,8 @@ test('status region parameter certification and document gap filters use the sha
   await change('参数', 'energy'); await change('下限', '9'); await change('上限', '54')
   await change('认证标准', 'standard'); await change('资料有缺口', true)
   await click(descendants(root).find(node => node.tag === 'button' && visibleText(node) === '应用筛选')!)
+  // Cells render sale statuses, which only full details carry.
+  assert.equal(requests.at(-1).detail, 'full')
   assert.deepEqual(requests.at(-1).sale_statuses, [{ region: 'north', status: 'DEV' }])
   assert.deepEqual(requests.at(-1).parameters, [{ field: 'energy', min: 9, max: 54 }])
   assert.deepEqual(requests.at(-1).certification, { standard: 'standard' })

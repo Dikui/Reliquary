@@ -267,6 +267,20 @@ test('型号阶段可覆盖并恢复沿用产品名称，完整快照保留其�
   assert.deepEqual(writes[1][0].patch.attributes, { current_stage: 'review', custom: '保留' })
   const facts = descendants(root).find(node => node.tag === 'dl' && node.props.class === 'facts')!
   assert.doesNotMatch(visibleText(facts), /沿用产品名称/)
+  assert.match(visibleText(facts), /型号单独设置/)
+})
+
+// An unset stage names its source and points to the product; without stage
+// options the separate setting is disabled instead of offering an empty list.
+test('型号和产品名称都未设阶段时指向产品名称，未配置阶段时禁用单独设置', async t => {
+  const value = data(); value.shelf.current_stage = ''; value.shelf.stage_owner_id = ''
+  const { root } = await mountPage(t, { value, config: { ...library, shelf_config: { ...library.shelf_config, stages: [] } } })
+  const facts = descendants(root).find(node => node.tag === 'dl' && node.props.class === 'facts')!
+  assert.match(visibleText(facts), /未设置/)
+  assert.match(visibleText(facts), /型号和产品名称都未设置.*产品原名/)
+  assert.match(visibleText(facts), /货架设置中还没有配置阶段/)
+  assert.ok(descendants(facts).some(node => node.tag === 'a' && visibleText(node) === '产品原名'))
+  assert.equal(button(root, '单独设置').props.disabled, true)
 })
 
 // Small spec, task 24 / ADR 0023: each add or removal confirms one relationship operation.

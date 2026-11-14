@@ -102,7 +102,7 @@ async function load() {
   const libraryID = props.library.id, lineID = line.value
   try {
     const items: ShelfQueryItem[] = []
-    const query: ShelfQuery = { ...applied.value, ancestor_id: lineID, limit: 100, offset: 0 }
+    const query: ShelfQuery = { ...applied.value, ancestor_id: lineID, detail: 'full', limit: 100, offset: 0 }
     let count = 0
     do {
       const page = unwrap(await queryShelf(libraryID, query))

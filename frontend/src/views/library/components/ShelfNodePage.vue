@@ -67,7 +67,7 @@ async function load() {
     if (result.recorded) {
       let total = 0
       do {
-        const page = unwrap(await queryShelf(libraryID, { ...(result.entity.kind === 'part' ? { part_id: id } : { ancestor_id: id }), as_of: result.as_of, limit: 100, offset: nextModels.length }))
+        const page = unwrap(await queryShelf(libraryID, { ...(result.entity.kind === 'part' ? { part_id: id } : { ancestor_id: id }), as_of: result.as_of, detail: 'full', limit: 100, offset: nextModels.length }))
         if (current !== generation) return
         total = page.total
         if (!page.items.length && nextModels.length < total) throw new Error(t('shelfStatus.incomplete'))

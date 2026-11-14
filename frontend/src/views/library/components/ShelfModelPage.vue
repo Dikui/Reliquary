@@ -38,6 +38,11 @@ const kind = (entity: Entity) => props.library.entity_schema?.kinds.find(item =>
 const owner = (id?: string) => [node.value?.entity, ...ancestors.value, ...(detail.value?.composition.flatMap(group => group.parts) || [])].find(item => item?.id === id)
 const ownerText = (id?: string) => { const entity = owner(id); return entity ? `${kind(entity)} ${entity.canonical_name}` : id || t('shelfStatus.noRecord') }
 const stage = (key?: string) => props.library.shelf_config?.stages?.find(item => item.key === key)?.name || key || t('shelfStatus.noRecord')
+// Say where the stage comes from, so an unset model points to its product.
+const productNode = computed(() => ancestors.value.find(item => item.kind === 'product'))
+const stageOwner = computed(() => detail.value?.current_stage ? owner(detail.value.stage_owner_id) : undefined)
+const stageSource = computed(() => !detail.value?.current_stage ? 'unset' : detail.value.stage_owner_id && detail.value.stage_owner_id !== props.nodeId ? 'inherited' : 'own')
+const stagesConfigured = computed(() => !!props.library.shelf_config?.stages?.length)
 const conditionText = (conditions?: ShelfCondition[] | null) => shelfConditionText(conditions, props.library.shelf_config?.module_types, detail.value?.composition) || t('shelfModel.allConditions')
 const requirement = (entity: Entity) => (entity.attributes?.requirement || {}) as ShelfRequirement
 const certConditions = (cert: ShelfCertification) => node.value?.facts.find(fact => fact.field === 'certification' && fact.entity_id === cert.entity.id)?.conditions || cert.certification.conditions
@@ -146,9 +151,12 @@ onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
       <template v-if="!loading && !error">
         <div>
           <dt>{{ t('shelfModel.currentStage') }}</dt>
-          <dd>{{ stage(detail?.current_stage) }}
-            <small v-if="detail?.stage_owner_id && detail.stage_owner_id !== node.entity.id">{{ t('shelfModel.inheritedStage') }}</small>
-            <Button variant="ghost" :disabled="editorLoading" @click="openEditor('stage')">{{ t('shelfModel.setStage') }}</Button>
+          <dd>{{ detail?.current_stage ? stage(detail.current_stage) : t('shelfModel.stageUnset') }}
+            <small v-if="stageSource === 'inherited'">{{ t('shelfModel.inheritedStage') }} <a v-if="stageOwner" :href="href(stageOwner.id)">{{ stageOwner.canonical_name }}</a></small>
+            <small v-else-if="stageSource === 'own'">{{ t('shelfModel.ownStage') }}</small>
+            <small v-else-if="productNode">{{ t('shelfModel.stageUnsetHint') }} <a :href="href(productNode.id)">{{ productNode.canonical_name }}</a></small>
+            <small v-if="!stagesConfigured" role="note">{{ t('shelfModel.stagesNotConfigured') }}</small>
+            <Button :disabled="editorLoading || (!stagesConfigured && stageSource !== 'own')" @click="openEditor('stage')">{{ t('shelfModel.setStage') }}</Button>
           </dd>
         </div>
         <div>

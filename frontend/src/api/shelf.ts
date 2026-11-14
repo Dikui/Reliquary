@@ -53,6 +53,9 @@ export interface ShelfQuery {
   parameters?: { field: string; min?: number; max?: number }[]
   certification?: { standard?: string; progress?: string; region?: string }
   document_gaps?: boolean
+  // The server defaults to summary; pages that render statuses, stages or
+  // checklists need full model details.
+  detail?: 'summary' | 'full'
   limit?: number
   offset?: number
   as_of?: string

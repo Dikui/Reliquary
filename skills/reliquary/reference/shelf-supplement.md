@@ -40,7 +40,7 @@
 
 save_import_plan 的 file_kind 使用 product_map、certification_progress、certification_report、overseas_sales 或 atq。每个非忽略工作表的 columns 项必填 column（Excel 列字母）、field，区域、参数、市场等映射另给配置 key。product_map 需 product_line_id 及 platform、product、model 列；atq 需 product_line_id、名称列（name 或 name_zh 或 name_en）与 due_stages；认证进度及报告需 owner_kind、owner、standard、certification_object、region 列，报告另需明确完成进度 progress；overseas_sales 需 owner_kind、owner 及至少一种状态或认证核对列，不写认证事实。保存现有方案时传其 revision，未提供方案时不能猜映射。
 
-资料要求的完整 attributes.requirement 可记录 list_name、name_zh、name_en、file_category、stage_label、due_text、draft_due_stage、final_due_stage、markets、owner、priority、source_list、source_version。markets 的值只接受 required、optional、not_needed，键取本库 markets；应交阶段用本库 stages 的键。当前阶段 current_stage 记在产品名称，型号可覆盖，清空覆盖后沿用产品名称。
+资料要求的完整 attributes.requirement 可记录 list_name、name_zh、name_en、file_category、stage_label、due_text、draft_due_stage、final_due_stage、markets、owner、priority、source_list、source_version。markets 的值只接受 required、optional、not_needed，键取本库 markets；应交阶段用本库 stages 的键。当前阶段 current_stage 记在产品名称，型号可覆盖，清空覆盖后沿用产品名称。设置时用 update_entity，patch.attributes 为读取到的完整属性快照加上 current_stage，值取本库 stages 的键；由用户选择，不推测。
 
 ## 资料原件与归类
 
