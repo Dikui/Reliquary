@@ -109,6 +109,8 @@ func TestShelfQueryParameterAndCompositionUseSameCombination(t *testing.T) {
 	f.request(http.MethodPost, path, input, http.StatusOK, &result)
 	require.EqualValues(t, 1, result.Total)
 	require.True(t, result.Items[0].PartialOptions)
+	// Both filters are met by part b; the group reports that condition once.
+	require.Equal(t, [][]types.ShelfCondition{b}, result.Items[0].MatchingConditions)
 	// The default summary keeps identity and only the filtered facts, without
 	// the per-model checklist, documents or unrelated attributes.
 	require.Equal(t, types.ShelfQueryDetailSummary, result.Detail)

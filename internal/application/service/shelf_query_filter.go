@@ -307,6 +307,7 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		}
 	}
 	for _, match := range matches {
+		match.Conditions = shelfMergeMatches(match.Conditions)
 		detail, err := s.shelfGet(ctx, libraryID, match.ID, types.ShelfReadOptions{AsOf: &at})
 		if err != nil {
 			return nil, err
@@ -394,6 +395,32 @@ func shelfQueryFactMatched(fact types.ShelfFact, input types.ShelfQueryRequest, 
 	return fact.Origin == "self" && slices.ContainsFunc(input.Parameters, func(filter types.ShelfParameterFilter) bool {
 		return filter.Field == fact.Field
 	})
+}
+
+// shelfMergeMatches folds conditions on the same module within a group into
+// one intersection, so two filters hit by the same part are reported once, and
+// drops groups that become identical.
+func shelfMergeMatches(matches [][]types.ShelfCondition) [][]types.ShelfCondition {
+	merged := [][]types.ShelfCondition{}
+	for _, group := range matches {
+		next := []types.ShelfCondition{}
+		for _, condition := range group {
+			index := slices.IndexFunc(next, func(item types.ShelfCondition) bool { return item.ModuleType == condition.ModuleType })
+			if index < 0 {
+				next = append(next, types.ShelfCondition{ModuleType: condition.ModuleType, PartIDs: slices.Clone(condition.PartIDs)})
+				continue
+			}
+			next[index].PartIDs = shelfPartIntersection(next[index].PartIDs, condition.PartIDs)
+		}
+		if !slices.ContainsFunc(merged, func(existing []types.ShelfCondition) bool {
+			return slices.EqualFunc(existing, next, func(a, b types.ShelfCondition) bool {
+				return a.ModuleType == b.ModuleType && slices.Equal(a.PartIDs, b.PartIDs)
+			})
+		}) {
+			merged = append(merged, next)
+		}
+	}
+	return merged
 }
 
 // Subtract matching rectangles from the domains of optional parts. This proves
