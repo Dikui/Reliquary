@@ -159,7 +159,15 @@ func (s *EntityService) writeShelfImportPlan(ctx context.Context, draft *types.S
 		}
 		worksheets[sheet.Worksheet] = true
 		if sheet.Ignore {
+			if sheet.Range != "" || sheet.Transpose {
+				return nil, apperrors.NewBadRequestError("ignored worksheets take no range or transpose")
+			}
 			continue
+		}
+		if sheet.Range != "" {
+			if _, err := parseImportRange(sheet.Range); err != nil {
+				return nil, apperrors.NewBadRequestError(err.Error())
+			}
 		}
 		if err := validateShelfImportColumns(input.FileKind, sheet); err != nil {
 			return nil, err

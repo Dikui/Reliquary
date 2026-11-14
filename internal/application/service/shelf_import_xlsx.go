@@ -38,6 +38,8 @@ type importCell struct {
 	Inline          importRichText `xml:"is"`
 	Formula         *string        `xml:"f"`
 	Fill            string
+	Strike          bool
+	FontColor       string // set only when it differs from the workbook default font
 	FormattedNumber bool
 	DateSerial      bool
 	Date1904        bool
@@ -47,7 +49,31 @@ type importWorksheet struct {
 	Rows                  []int
 	Merges                []importMerge
 	ConditionalFormatting bool
+	// The fields below are inventory only. Parsers never read them; the
+	// coverage ledger reports them so no source signal disappears silently.
+	Hidden     bool
+	HiddenRows map[int]bool
+	HiddenCols [][2]int
+	Comments   map[string]string
+	Hyperlinks map[string]string
+	Drawing    bool
+	// Origin maps a virtual reference to its source cell after range or
+	// transpose normalization; nil for an unchanged worksheet.
+	Origin map[string]string
 }
+
+func (sheet *importWorksheet) hiddenAt(col, row int) bool {
+	if sheet.HiddenRows[row] {
+		return true
+	}
+	for _, span := range sheet.HiddenCols {
+		if col >= span[0] && col <= span[1] {
+			return true
+		}
+	}
+	return false
+}
+
 type importMerge struct {
 	Left, Top, Right, Bottom int
 	Anchor                   string
@@ -120,8 +146,9 @@ func readImportWorkbook(data []byte) (*importWorkbookData, error) {
 			Date1904 bool `xml:"date1904,attr"`
 		} `xml:"workbookPr"`
 		Sheets []struct {
-			Name string `xml:"name,attr"`
-			ID   string `xml:"id,attr"`
+			Name  string `xml:"name,attr"`
+			ID    string `xml:"id,attr"`
+			State string `xml:"state,attr"`
 		} `xml:"sheets>sheet"`
 	}
 	var rels struct {
@@ -147,8 +174,15 @@ func readImportWorkbook(data []byte) (*importWorkbookData, error) {
 				} `xml:"fgColor"`
 			} `xml:"patternFill"`
 		} `xml:"fills>fill"`
+		Fonts []struct {
+			Strike *struct {
+				Val string `xml:"val,attr"`
+			} `xml:"strike"`
+			Color *importColor `xml:"color"`
+		} `xml:"fonts>font"`
 		Formats []struct {
 			Fill         int `xml:"fillId,attr"`
+			Font         int `xml:"fontId,attr"`
 			NumberFormat int `xml:"numFmtId,attr"`
 		} `xml:"cellXfs>xf"`
 	}
@@ -162,7 +196,20 @@ func readImportWorkbook(data []byte) (*importWorkbookData, error) {
 		}
 	}
 	colors := make([]string, len(styles.Formats))
+	strikes := make([]bool, len(styles.Formats))
+	fontColors := make([]string, len(styles.Formats))
+	defaultFont := ""
+	if len(styles.Fonts) > 0 {
+		defaultFont = styles.Fonts[0].Color.key()
+	}
 	for i, format := range styles.Formats {
+		if format.Font > 0 && format.Font < len(styles.Fonts) {
+			font := styles.Fonts[format.Font]
+			strikes[i] = font.Strike != nil && font.Strike.Val != "0" && font.Strike.Val != "false"
+			if color := font.Color.key(); color != defaultFont {
+				fontColors[i] = color
+			}
+		}
 		if format.Fill < 0 || format.Fill >= len(styles.Fills) {
 			return nil, fmt.Errorf("invalid xlsx fill index")
 		}
@@ -211,13 +258,21 @@ func readImportWorkbook(data []byte) (*importWorkbookData, error) {
 			Rows []struct {
 				Number int          `xml:"r,attr"`
 				Style  *int         `xml:"s,attr"`
+				Hidden bool         `xml:"hidden,attr"`
 				Cells  []importCell `xml:"c"`
 			} `xml:"sheetData>row"`
 			Columns []struct {
-				Min   int `xml:"min,attr"`
-				Max   int `xml:"max,attr"`
-				Style int `xml:"style,attr"`
+				Min    int  `xml:"min,attr"`
+				Max    int  `xml:"max,attr"`
+				Style  int  `xml:"style,attr"`
+				Hidden bool `xml:"hidden,attr"`
 			} `xml:"cols>col"`
+			Hyperlinks []struct {
+				Ref      string `xml:"ref,attr"`
+				ID       string `xml:"id,attr"`
+				Location string `xml:"location,attr"`
+			} `xml:"hyperlinks>hyperlink"`
+			Drawings           []struct{} `xml:"drawing"`
 			ConditionalFormats []struct{} `xml:"conditionalFormatting"`
 			Merges             []struct {
 				Ref string `xml:"ref,attr"`
@@ -229,7 +284,44 @@ func readImportWorkbook(data []byte) (*importWorkbookData, error) {
 		if len(raw.Rows) > 10000 || len(raw.Merges) > 10000 {
 			return nil, fmt.Errorf("worksheet exceeds import row or merge limit")
 		}
-		sheet := &importWorksheet{Cells: map[string]importCell{}, ConditionalFormatting: len(raw.ConditionalFormats) > 0}
+		sheet := &importWorksheet{Cells: map[string]importCell{}, ConditionalFormatting: len(raw.ConditionalFormats) > 0, Hidden: item.State == "hidden" || item.State == "veryHidden", HiddenRows: map[int]bool{}, Comments: map[string]string{}, Hyperlinks: map[string]string{}, Drawing: len(raw.Drawings) > 0}
+		for _, c := range raw.Columns {
+			if c.Hidden {
+				sheet.HiddenCols = append(sheet.HiddenCols, [2]int{c.Min, c.Max})
+			}
+		}
+		sheetRels, err := readImportSheetRels(files, name, decode)
+		if err != nil {
+			return nil, err
+		}
+		for _, link := range raw.Hyperlinks {
+			first := strings.Split(link.Ref, ":")[0]
+			if _, _, err := importCellCoordinates(first); err != nil {
+				return nil, fmt.Errorf("invalid hyperlink reference")
+			}
+			target := sheetRels.target(link.ID)
+			if link.Location != "" {
+				target = strings.TrimPrefix(target+"#"+link.Location, "#")
+			}
+			sheet.Hyperlinks[first] = target
+		}
+		if comments := sheetRels.comments; comments != "" {
+			var list struct {
+				Items []struct {
+					Ref  string         `xml:"ref,attr"`
+					Text importRichText `xml:"text"`
+				} `xml:"commentList>comment"`
+			}
+			if err := decode(comments, &list, true); err != nil {
+				return nil, err
+			}
+			for _, comment := range list.Items {
+				if _, _, err := importCellCoordinates(comment.Ref); err != nil {
+					return nil, fmt.Errorf("invalid comment reference")
+				}
+				sheet.Comments[comment.Ref] = comment.Text.text()
+			}
+		}
 		lastRow := 0
 		for _, row := range raw.Rows {
 			if row.Number <= lastRow || row.Number > 1048576 {
@@ -237,6 +329,9 @@ func readImportWorkbook(data []byte) (*importWorkbookData, error) {
 			}
 			lastRow = row.Number
 			sheet.Rows = append(sheet.Rows, row.Number)
+			if row.Hidden {
+				sheet.HiddenRows[row.Number] = true
+			}
 			for _, cell := range row.Cells {
 				col, r, err := importCellCoordinates(cell.Ref)
 				if err != nil || r != row.Number {
@@ -263,6 +358,8 @@ func readImportWorkbook(data []byte) (*importWorkbookData, error) {
 				}
 				if style < len(colors) {
 					cell.Fill = colors[style]
+					cell.Strike = strikes[style]
+					cell.FontColor = fontColors[style]
 					cell.FormattedNumber = styles.Formats[style].NumberFormat != 0 && (cell.Type == "" || cell.Type == "n") && cell.Value != ""
 					format := styles.Formats[style].NumberFormat
 					cell.DateSerial = cell.FormattedNumber && (format >= 14 && format <= 17 || format == 22)
@@ -307,6 +404,69 @@ func readImportWorkbook(data []byte) (*importWorkbookData, error) {
 			sheet.Merges = append(sheet.Merges, m)
 		}
 		result.Sheets[item.Name] = sheet
+	}
+	return result, nil
+}
+
+type importColor struct {
+	RGB     string `xml:"rgb,attr"`
+	Indexed *int   `xml:"indexed,attr"`
+	Theme   *int   `xml:"theme,attr"`
+	Tint    string `xml:"tint,attr"`
+	Auto    bool   `xml:"auto,attr"`
+}
+
+// key uses the same raw identity as fills; automatic or absent color is "".
+func (c *importColor) key() string {
+	switch {
+	case c == nil || c.Auto:
+		return ""
+	case c.Theme != nil:
+		return fmt.Sprintf("theme:%d:%s", *c.Theme, c.Tint)
+	case c.Indexed != nil:
+		return fmt.Sprintf("indexed:%d", *c.Indexed)
+	}
+	return strings.ToUpper(c.RGB)
+}
+
+type importSheetRels struct {
+	targets  map[string]string
+	comments string
+}
+
+func (r importSheetRels) target(id string) string { return r.targets[id] }
+
+// Worksheet relationships name hyperlink targets and the legacy comment part.
+// Modern threaded comments also write that part, so it covers both.
+func readImportSheetRels(files map[string]*zip.File, sheetPath string, decode func(string, any, bool) error) (importSheetRels, error) {
+	result := importSheetRels{targets: map[string]string{}}
+	relsPath := path.Join(path.Dir(sheetPath), "_rels", path.Base(sheetPath)+".rels")
+	if _, ok := files[relsPath]; !ok {
+		return result, nil
+	}
+	var rels struct {
+		Items []struct {
+			ID     string `xml:"Id,attr"`
+			Type   string `xml:"Type,attr"`
+			Target string `xml:"Target,attr"`
+			Mode   string `xml:"TargetMode,attr"`
+		} `xml:"Relationship"`
+	}
+	if err := decode(relsPath, &rels, false); err != nil {
+		return result, err
+	}
+	for _, rel := range rels.Items {
+		result.targets[rel.ID] = rel.Target
+		if strings.HasSuffix(rel.Type, "/comments") && rel.Mode != "External" {
+			name := path.Clean(path.Join(path.Dir(sheetPath), rel.Target))
+			if strings.HasPrefix(rel.Target, "/") {
+				name = path.Clean(strings.TrimPrefix(rel.Target, "/"))
+			}
+			if !strings.HasPrefix(name, "xl/") {
+				return result, fmt.Errorf("invalid comments path")
+			}
+			result.comments = name
+		}
 	}
 	return result, nil
 }

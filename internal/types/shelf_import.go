@@ -39,15 +39,20 @@ type ShelfImportDeadline struct {
 }
 
 type ShelfImportSheet struct {
-	Worksheet     string              `json:"worksheet"`
-	Ignore        bool                `json:"ignore,omitempty"`
-	ProductLineID string              `json:"product_line_id,omitempty"`
-	HeaderRows    int                 `json:"header_rows"`
-	Columns       []ShelfImportColumn `json:"columns,omitempty"`
-	OwnerKind     string              `json:"owner_kind,omitempty"`
-	ModuleType    string              `json:"module_type,omitempty"`
-	Progress      string              `json:"progress,omitempty"`
-	CheckValues   map[string]bool     `json:"check_values,omitempty"`
+	Worksheet     string `json:"worksheet"`
+	Ignore        bool   `json:"ignore,omitempty"`
+	ProductLineID string `json:"product_line_id,omitempty"`
+	HeaderRows    int    `json:"header_rows"`
+	// Range limits the table to a source region such as A3:F200. Transpose
+	// reads records from columns. Columns and header_rows then refer to the
+	// normalized sheet where each record is a row.
+	Range       string              `json:"range,omitempty"`
+	Transpose   bool                `json:"transpose,omitempty"`
+	Columns     []ShelfImportColumn `json:"columns,omitempty"`
+	OwnerKind   string              `json:"owner_kind,omitempty"`
+	ModuleType  string              `json:"module_type,omitempty"`
+	Progress    string              `json:"progress,omitempty"`
+	CheckValues map[string]bool     `json:"check_values,omitempty"`
 }
 
 type ShelfImportColumn struct {
@@ -74,6 +79,14 @@ type ShelfImportColumnFeedback struct {
 	Header       string   `json:"header"`
 	NonemptyRows int      `json:"nonempty_rows"`
 	Examples     []string `json:"examples"`
+}
+
+// ShelfImportCoverageFeedback lists source content that no mapping consumed.
+type ShelfImportCoverageFeedback struct {
+	Worksheet string   `json:"worksheet"`
+	Reason    string   `json:"reason"`
+	Count     int      `json:"count"`
+	Examples  []string `json:"examples"`
 }
 
 // The caller identifies the proposed write; the model only fills the requested

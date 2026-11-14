@@ -39,7 +39,8 @@ func importFeedbackWorkbook(t *testing.T, mappedRow string) []byte {
 }
 
 // Medium spec, task 25 / ADR 0023: unmapped content is persisted as an
-// acknowledgeable notice, without losing the mapped product proposal.
+// acknowledgeable notice, without losing the mapped product proposal. ADR 0025
+// adds blocking coverage notices for the header-only column and ignored sheet.
 func TestShelfImportReportsUnmappedColumns(t *testing.T) {
 	f, library := importSetup(t)
 	var plans []types.ShelfImportPlan
@@ -57,8 +58,10 @@ func TestShelfImportReportsUnmappedColumns(t *testing.T) {
 			notices = append(notices, item)
 		}
 	}
-	require.Len(t, notices, 3)
+	require.Len(t, notices, 5)
 	require.Equal(t, "unmapped_column", notices[0].Conflicts[0].Type)
+	require.Equal(t, map[string]any{"worksheet": "Map", "reason": "header_area", "count": float64(1), "examples": []any{"Header only"}}, notices[3].Conflicts[0].Details)
+	require.Equal(t, map[string]any{"worksheet": "Ignored", "reason": "ignored_sheet", "count": float64(1), "examples": []any{"Ignored content"}}, notices[4].Conflicts[0].Details)
 	require.Equal(t, map[string]any{"worksheet": "Map", "column": "F", "header": " Extra information \n Notes & context ", "nonempty_rows": float64(4), "examples": []any{" First original ", "0", "Third"}}, notices[0].Conflicts[0].Details)
 	require.Equal(t, "Z", notices[1].Conflicts[0].Details.(map[string]any)["column"])
 	require.Equal(t, "", notices[1].Conflicts[0].Details.(map[string]any)["header"])
@@ -68,7 +71,7 @@ func TestShelfImportReportsUnmappedColumns(t *testing.T) {
 	f.request(http.MethodGet, base+"/changesets/"+draft.ID, nil, http.StatusOK, &read)
 	require.Equal(t, draft, read)
 	require.Equal(t, draft, importUpload(t, f, library.ID, "feedback_20261028.xlsx", "", data, http.StatusCreated))
-	confirmed := confirmImport(t, f, library.ID, draft)
+	confirmed := confirmImportDiscardingUncovered(t, f, library.ID, draft)
 	require.Equal(t, "confirmed", confirmed.Status)
 	var page struct{ Items []types.Entity }
 	f.request(http.MethodGet, base+"/find?q=Feedback+model", nil, http.StatusOK, &page)
@@ -98,14 +101,18 @@ func TestShelfImportRecordKindsAcknowledgeUnmappedColumnsWithoutWrites(t *testin
 			var before, after types.EntityDetail
 			f.request(http.MethodGet, "/entities/"+shelfNode(nodes, "model"), nil, http.StatusOK, &before)
 			draft := importUpload(t, f, library.ID, "feedback_20261028.xlsx", "", importFeedbackWorkbook(t, `<row r="3"></row>`), http.StatusCreated)
-			require.Len(t, draft.Items, 3)
+			require.Len(t, draft.Items, 5)
 			for _, item := range draft.Items {
 				require.Equal(t, "import_notice", item.Operation.Type)
+			}
+			for _, item := range draft.Items[:3] {
 				require.Equal(t, "unmapped_column", item.Conflicts[0].Type)
 				require.Equal(t, "Map", item.Operation.ImportLocation.Worksheet)
 			}
+			require.Equal(t, "uncovered_content", draft.Items[3].Conflicts[0].Type)
+			require.Equal(t, "Ignored", draft.Items[4].Operation.ImportLocation.Worksheet)
 			require.Equal(t, float64(4), draft.Items[0].Conflicts[0].Details.(map[string]any)["nonempty_rows"])
-			confirmImport(t, f, library.ID, draft)
+			confirmImportDiscardingUncovered(t, f, library.ID, draft)
 			f.request(http.MethodGet, "/entities/"+shelfNode(nodes, "model"), nil, http.StatusOK, &after)
 			require.Equal(t, before, after)
 		})
@@ -122,9 +129,10 @@ func TestShelfImportReportsUnmappedColumnsOnEveryMappedSheet(t *testing.T) {
 	}}}
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{{ID: "plan", Type: "save_import_plan", ImportPlan: &plan}}}, http.StatusCreated, nil)
 	draft := importUpload(t, f, library.ID, "feedback_20261028.xlsx", "", importFeedbackWorkbook(t, `<row r="3"></row>`), http.StatusCreated)
-	require.Len(t, draft.Items, 4)
+	require.Len(t, draft.Items, 5)
 	require.Equal(t, map[string]any{"worksheet": "Ignored", "column": "A", "header": "", "nonempty_rows": float64(1), "examples": []any{"Ignored content"}}, draft.Items[3].Conflicts[0].Details)
-	confirmImport(t, f, library.ID, draft)
+	require.Equal(t, "header_area", draft.Items[4].Conflicts[0].Details.(map[string]any)["reason"])
+	confirmImportDiscardingUncovered(t, f, library.ID, draft)
 }
 
 // Medium spec, task 25: only inert notices may use column feedback. Existing

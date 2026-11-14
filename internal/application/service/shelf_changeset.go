@@ -120,11 +120,11 @@ func shelfOperationValid(op types.ShelfOperation) error {
 		return apperrors.NewBadRequestError("unknown operation type or incompatible operation payload")
 	}
 	for _, issue := range op.Issues {
-		if op.Type == "import_notice" && slices.Contains([]string{"cross_table_contradiction", "unmapped_column"}, issue.Type) {
+		if op.Type == "import_notice" && slices.Contains([]string{"cross_table_contradiction", "unmapped_column", "uncovered_content"}, issue.Type) {
 			continue
 		}
 		if op.Type == "import_notice" {
-			return apperrors.NewBadRequestError("import notices only accept cross table contradictions or unmapped columns")
+			return apperrors.NewBadRequestError("import notices only accept cross table contradictions, unmapped columns or uncovered content")
 		}
 		if !slices.Contains([]string{"unparseable", "uncertain", "required_missing", "cross_table_contradiction"}, issue.Type) {
 			return apperrors.NewBadRequestError("unsupported submitter issue type")

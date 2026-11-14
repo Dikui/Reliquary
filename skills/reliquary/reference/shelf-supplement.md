@@ -36,7 +36,7 @@
 | select_document_version | entity_id、revision、version_id；选择本文件已有版本为当前 |
 | reparse_document | entity_id、revision、reparse.version_id、reparse.parser_key |
 | save_import_plan | import_plan.key、name、file_kind、revision（新建为 0）、sheets；每张表 worksheet、header_rows、columns，忽略表给 ignore=true；非忽略表按文件种类提供产品线或 owner_kind 及必需映射 |
-| import_notice | issues，类型为 cross_table_contradiction 或 unmapped_column，仅记录导入核对提示 |
+| import_notice | issues，类型为 cross_table_contradiction、unmapped_column 或 uncovered_content，仅记录导入核对提示；uncovered_content 只能 discard 或 defer |
 
 save_import_plan 的 file_kind 使用 product_map、certification_progress、certification_report、overseas_sales 或 atq。每个非忽略工作表的 columns 项必填 column（Excel 列字母）、field，区域、参数、市场等映射另给配置 key。product_map 需 product_line_id 及 platform、product、model 列；atq 需 product_line_id、名称列（name 或 name_zh 或 name_en）与 due_stages；认证进度及报告需 owner_kind、owner、standard、certification_object、region 列，报告另需明确完成进度 progress；overseas_sales 需 owner_kind、owner 及至少一种状态或认证核对列，不写认证事实。保存现有方案时传其 revision，未提供方案时不能猜映射。
 
@@ -55,6 +55,8 @@ requirement_ids 为本库活动资料要求 ID 数组，可明确关联多项，
 ## Excel 补充
 
 不传 node_id 时，import_fields 按 file_kind 返回与方案校验同源的 columns（允许的 field）、column_keys（须给 key 的配置种类）、required_columns 和 required_one_of（每组至少选一项）。sheet_fields 列出专属工作表字段及 required、optional、required_with_cell_part、required_with_certification 条件；所有种类共用 worksheet、header_rows、columns、ignore。仅 column_keys 中的列字段接受 key；配置种类 region、market、standard、product_line_field 分别对应区域、市场、标准、产品线参数。认证电芯列为 cell_part，报告另可映射 pack_model、cluster_model、container_model、model。
+
+工作表可另给 range（如 A3:F200，限定表格区域）与 transpose（记录按列排列）。设置后先把区域整理成每条记录一行的表，区域左上角为 A1，转置时区域第一列成为表头；columns 的列字母与 header_rows 按整理后的表填写，import_location 仍给原单元格。忽略的表不接受这两项。
 
 返回的 import_plans 是本库已确认保存的方案：key、file_kind、definition.sheets 中的 worksheet、header_rows、列字母到字段和键的映射，以及 last_file_name、last_file_date。last_headers 保留最近批次的已映射列实际表头，多行以换行连接；旧批次未记录表头时缺省，不推断。表头来自最近文件，方案修订后须核对现有映射。
 

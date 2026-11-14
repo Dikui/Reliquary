@@ -9,6 +9,10 @@ export interface ShelfReviewConflict {
 export interface ShelfImportColumnFeedback {
   worksheet: string; column: string; header: string; nonempty_rows: number; examples: string[]
 }
+// Source content no mapping consumed (ADR 0025); only discard or defer apply.
+export interface ShelfImportCoverageFeedback {
+  worksheet: string; reason: string; count: number; examples: string[]
+}
 export interface ShelfReviewOperation {
   id: string
   type: string

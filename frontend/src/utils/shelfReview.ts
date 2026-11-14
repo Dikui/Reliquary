@@ -1,9 +1,9 @@
-import type { ShelfReviewDecision, ShelfReviewItem, ShelfReviewOperation, ShelfNameConfirmation, ShelfImportColumnFeedback } from '../api/shelf-review'
+import type { ShelfReviewDecision, ShelfReviewItem, ShelfReviewOperation, ShelfNameConfirmation, ShelfImportColumnFeedback, ShelfImportCoverageFeedback } from '../api/shelf-review'
 
-export const SHELF_REVIEW_GROUPS = ['new', 'suspected_same', 'cross_kind_same_name', 'modified', 'disappeared', 'unparseable', 'uncertain', 'required_missing', 'cross_table_contradiction', 'unmapped_column'] as const
+export const SHELF_REVIEW_GROUPS = ['new', 'suspected_same', 'cross_kind_same_name', 'modified', 'disappeared', 'unparseable', 'uncertain', 'required_missing', 'cross_table_contradiction', 'uncovered_content', 'unmapped_column'] as const
 // An operation with several findings appears once, under its blocking finding.
 export function shelfReviewGroup(item: ShelfReviewItem): string {
-  return ['required_missing', 'uncertain', 'unparseable', 'cross_kind_same_name', 'suspected_same', 'disappeared', 'cross_table_contradiction', 'unmapped_column', 'modified', 'new'].find(type => item.conflicts.some(conflict => conflict.type === type)) || 'modified'
+  return ['required_missing', 'uncertain', 'unparseable', 'cross_kind_same_name', 'suspected_same', 'disappeared', 'cross_table_contradiction', 'uncovered_content', 'unmapped_column', 'modified', 'new'].find(type => item.conflicts.some(conflict => conflict.type === type)) || 'modified'
 }
 export function shelfReviewReady(item: ShelfReviewItem, decision?: ShelfReviewDecision): boolean {
   if (!decision) return false
@@ -21,6 +21,14 @@ export function shelfUnmappedColumnFeedback(item: ShelfReviewItem): ShelfImportC
     || !Array.isArray(details.examples) || !details.examples.every(value => typeof value === 'string')) return undefined
   return details as ShelfImportColumnFeedback
 }
+export function shelfCoverageFeedback(item: ShelfReviewItem): ShelfImportCoverageFeedback | undefined {
+  if (item.operation.type !== 'import_notice') return undefined
+  const details = item.conflicts.find(conflict => conflict.type === 'uncovered_content')?.details as Partial<ShelfImportCoverageFeedback> | undefined
+  if (!details || typeof details.worksheet !== 'string' || typeof details.reason !== 'string'
+    || typeof details.count !== 'number' || !Number.isSafeInteger(details.count) || details.count < 0
+    || !Array.isArray(details.examples) || !details.examples.every(value => typeof value === 'string')) return undefined
+  return details as ShelfImportCoverageFeedback
+}
 export function shelfNameConfirmations(item: ShelfReviewItem): ShelfNameConfirmation[] {
   return item.conflicts.flatMap(conflict => {
     const details = conflict.details as { conflicts?: ShelfNameConfirmation[] } | undefined
@@ -30,6 +38,8 @@ export function shelfNameConfirmations(item: ShelfReviewItem): ShelfNameConfirma
 export function shelfReviewSubject(item: ShelfReviewItem): { name: string; kind: string } {
   const feedback = shelfUnmappedColumnFeedback(item)
   if (feedback) return { name: `${feedback.worksheet} · ${feedback.column}`, kind: '' }
+  const coverage = shelfCoverageFeedback(item)
+  if (coverage) return { name: coverage.worksheet, kind: '' }
   const operation = item.operation
   const before = item.before as Record<string, unknown> | null
   const after = item.after as Record<string, unknown> | null
@@ -69,6 +79,7 @@ const SHELF_CONFLICT_MESSAGES: Array<[RegExp, string]> = [
   [/^certification key has multiple candidates; submit a corrected complete record$/, 'certificationCandidates'],
   [/^uncertain: market necessity "(.*)" has no explicit meaning$/, 'marketNecessity'],
   [/^uncertain: certification key must match exactly one record or an explicitly selected candidate$/, 'certificationKeyMatch'],
+  [/^source content is not covered by the import plan; discard to leave it out or defer it as a customer question$/, 'uncovered'],
 ]
 export function shelfConflictMessage(message: string): { key: string, value: string } | null {
   for (const [pattern, key] of SHELF_CONFLICT_MESSAGES) {

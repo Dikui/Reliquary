@@ -75,19 +75,20 @@ func (s *EntityService) ImportShelfWorkbook(ctx context.Context, libraryID, plan
 			result = &existing[0]
 			return nil
 		}
-		source.ImportHeaders = shelfImportHeaders(plan.Definition, workbook)
+		layout := normalizeImportWorkbook(plan.Definition, workbook)
+		source.ImportHeaders = shelfImportHeaders(plan.Definition, layout)
 		builder, err := bound.newImportMapBuilder(ctx, library, plan, *fileDate)
 		if err != nil {
 			return err
 		}
 		if plan.FileKind == "product_map" {
-			if err := builder.parse(workbook); err != nil {
+			if err := builder.parse(layout); err != nil {
 				return err
 			}
 			if err := builder.disappeared(source.ImportBatchID); err != nil {
 				return err
 			}
-		} else if err := builder.parseRecords(workbook); err != nil {
+		} else if err := builder.parseRecords(layout); err != nil {
 			return err
 		}
 		if plan.FileKind == "atq" {
@@ -95,7 +96,9 @@ func (s *EntityService) ImportShelfWorkbook(ctx context.Context, libraryID, plan
 				return err
 			}
 		}
-		builder.unmappedColumns(workbook)
+		builder.unmappedColumns(layout)
+		translateImportLocations(builder.ops, layout)
+		builder.coverage(workbook, layout)
 		if len(builder.ops) > 500 {
 			return apperrors.NewBadRequestError("import exceeds 500 changeset operations; split the workbook")
 		}

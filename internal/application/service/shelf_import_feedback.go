@@ -46,6 +46,7 @@ func (b *importMapBuilder) unmappedColumns(workbook *importWorkbookData) {
 			mapped[column.Column] = true
 		}
 		byColumn := map[string][]importCell{}
+		virtualRow := map[string]int{}
 		for ref, cell := range sheet.Cells {
 			_, row, _ := importCellCoordinates(ref)
 			column := strings.TrimRight(ref, "0123456789")
@@ -53,6 +54,7 @@ func (b *importMapBuilder) unmappedColumns(workbook *importWorkbookData) {
 				continue
 			}
 			byColumn[column] = append(byColumn[column], cell)
+			virtualRow[cell.Ref] = row
 		}
 		columns := make([]string, 0, len(byColumn))
 		for column := range byColumn {
@@ -62,9 +64,7 @@ func (b *importMapBuilder) unmappedColumns(workbook *importWorkbookData) {
 		for _, column := range columns {
 			cells := byColumn[column]
 			slices.SortFunc(cells, func(a, c importCell) int {
-				_, left, _ := importCellCoordinates(a.Ref)
-				_, right, _ := importCellCoordinates(c.Ref)
-				return cmp.Compare(left, right)
+				return cmp.Compare(virtualRow[a.Ref], virtualRow[c.Ref])
 			})
 			headers, seen := []string{}, map[string]bool{}
 			for row := 1; row <= mapping.HeaderRows; row++ {

@@ -7,6 +7,8 @@ export type ShelfImportKind = typeof IMPORT_KINDS[number]
 export interface ShelfImportColumn { column: string; field: string; key?: string }
 export interface ShelfImportSheet {
   worksheet: string; ignore?: boolean; product_line_id?: string; header_rows: number; columns: ShelfImportColumn[]
+  // range limits the table to a source region; transpose reads records from columns.
+  range?: string; transpose?: boolean
   owner_kind?: string; module_type?: string; progress?: string; check_values?: Record<string, boolean>
 }
 export interface ShelfImportDefinition {

@@ -175,7 +175,8 @@ test('an ignored worksheet can be enabled and given a column mapping', async t =
   const stored = plan(); (stored.definition.sheets as any[]).push({ worksheet: 'Previously ignored', header_rows: 0, ignore: true })
   const { root } = await mount(t, { listShelfImportPlans: async () => ({ success: true, data: [stored] }) })
   await click(find(root, 'button', '查看'))
-  const checkbox = descendants(root).filter(node => node.tag === 'input' && node.props.type === 'checkbox')[1]!
+  // Sheet 1 shows ignore and transpose; the ignored sheet 2 shows only ignore.
+  const checkbox = descendants(root).filter(node => node.tag === 'input' && node.props.type === 'checkbox')[2]!
   checkbox.props.onChange({ target: { checked: false } }); await settle()
   await click(descendants(root).filter(node => node.tag === 'button' && visibleText(node) === '添加列映射')[1]!)
   assert.ok(field(root, '列 2.1'))
@@ -241,4 +242,28 @@ test('plan rows show the latest imported file supplied by the library', async t 
   const { root } = await mount(t, { listShelfImportPlans: async () => ({ success: true, data: [{ ...plan(), last_file_name: 'latest_20261029.xlsx' }] }) })
   assert.match(visibleText(root), /最近的文件/)
   assert.match(visibleText(root), /latest_20261029.xlsx/)
+})
+
+// ADR 0025: a sheet's table range and transpose flag are edited and saved with
+// the plan; clearing them removes the keys instead of sending empty values.
+test('worksheet range and transpose are saved with the plan', async t => {
+  const stored = plan(); Object.assign(stored.definition.sheets[0]!, { transpose: true })
+  const { root, writes } = await mount(t, { listShelfImportPlans: async () => ({ success: true, data: [stored] }) })
+  await click(find(root, 'button', '查看'))
+  await input(root, '表格区域（可选，如 A3:F200） 1', 'b2:d9')
+  await savePlan(root)
+  assert.equal(writes[0].sheets[0].range, 'B2:D9')
+  assert.equal(writes[0].sheets[0].transpose, true)
+})
+
+test('cleared range and transpose are omitted from the saved plan', async t => {
+  const stored = plan(); Object.assign(stored.definition.sheets[0]!, { range: 'A3:F200', transpose: true })
+  const { root, writes } = await mount(t, { listShelfImportPlans: async () => ({ success: true, data: [stored] }) })
+  await click(find(root, 'button', '查看'))
+  await input(root, '表格区域（可选，如 A3:F200） 1', '')
+  // Sheet 1 checkboxes: ignore, then transpose.
+  const transpose = descendants(root).filter(node => node.tag === 'input' && node.props.type === 'checkbox')[1]!
+  transpose.props.onChange({ target: { checked: false } }); await settle()
+  await savePlan(root)
+  assert.ok(!('range' in writes[0].sheets[0]) && !('transpose' in writes[0].sheets[0]))
 })

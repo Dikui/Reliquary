@@ -5,14 +5,14 @@ import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vu
 import { Button, EmptyState, Select } from '@/components/ui'
 import { confirm, toast } from '@/components/ui/feedback'
 import { formatDateTime } from '@/utils/dateTime'
-import { SHELF_REVIEW_GROUPS, shelfReviewGroup, shelfReviewReady, shelfReviewSubject, shelfOperationForEdit, shelfNameConfirmations, shelfUnmappedColumnFeedback, shelfConflictMessage } from '@/utils/shelfReview'
+import { SHELF_REVIEW_GROUPS, shelfReviewGroup, shelfReviewReady, shelfReviewSubject, shelfOperationForEdit, shelfNameConfirmations, shelfUnmappedColumnFeedback, shelfCoverageFeedback, shelfConflictMessage } from '@/utils/shelfReview'
 import { getEntity } from '@/api/entities'
 import ShelfReviewValue from './ShelfReviewValue.vue'
 import type { LibraryCatalogItem } from '@/api/library'
 import { listShelfChangesets, getShelfChangeset, saveShelfReview, confirmShelfChangeset, type ShelfReviewChangeset, type ShelfReviewDecision, type ShelfReviewItem, type ShelfReviewOperation } from '@/api/shelf-review'
 
 const props = defineProps<{ library: LibraryCatalogItem }>()
-const { t, locale } = useI18n(), route = useRoute(), router = useRouter()
+const { t, te, locale } = useI18n(), route = useRoute(), router = useRouter()
 function conflictText(message: string) {
   const known = shelfConflictMessage(message)
   return known ? t(`shelfReview.conflictMessages.${known.key}`, { value: known.value }) : message
@@ -25,7 +25,7 @@ const targets = ref<Record<string, string>>({})
 let generation = 0, detailGeneration = 0
 const blocked = computed(() => busy.value || loading.value || detailLoading.value || selected.value?.status !== 'pending')
 const dirty = computed(() => JSON.stringify(decisions.value) !== baseline.value || Object.keys(edits.value).length > 0)
-const groups = computed(() => SHELF_REVIEW_GROUPS.map(type => ({ type, items: selected.value?.items.filter(item => shelfReviewGroup(item) === type) || [] })).filter(group => group.type !== 'unmapped_column' || group.items.length))
+const groups = computed(() => SHELF_REVIEW_GROUPS.map(type => ({ type, items: selected.value?.items.filter(item => shelfReviewGroup(item) === type) || [] })).filter(group => !['unmapped_column', 'uncovered_content'].includes(group.type) || group.items.length))
 const required = computed(() => selected.value?.items.filter(item => item.conflicts.some(conflict => conflict.type === 'required_missing') && !shelfReviewReady(item, decisions.value[item.id])).length || 0)
 const canConfirm = computed(() => !!selected.value && selected.value.status === 'pending' && !Object.keys(edits.value).length && selected.value.items.every(item => shelfReviewReady(item, decisions.value[item.id])))
 function adopt(set: ShelfReviewChangeset) {
@@ -67,6 +67,8 @@ function actions(item: ShelfReviewItem): ShelfReviewDecision['action'][] {
   const type = shelfReviewGroup(item)
   if (type === 'disappeared') return ['retire', 'keep', 'defer']
   if (type === 'uncertain' && selected.value?.source.type === 'agent') return ['return_to_submitter', 'discard', 'defer']
+  // Uncovered content cannot be accepted: it is either left out or asked about.
+  if (type === 'uncovered_content') return ['discard', 'defer']
   return [...(['new', 'modified'].includes(type) || item.operation.type === 'import_notice' ? ['apply' as const] : []), 'discard', 'defer']
 }
 async function writeConfirmation() {
@@ -153,6 +155,7 @@ onBeforeUnmount(() => { generation++; detailGeneration++; if (typeof window !== 
         <details v-for="group in groups" :key="group.type" class="review-group" :open="group.items.length > 0">
           <summary><h3>{{ t(`shelfReview.groups.${group.type}`) }}</h3><span>{{ t('shelfReview.groupCount', { count: group.items.length, remaining: group.items.filter(item => !decisions[item.id]).length }) }}</span></summary>
           <p v-if="group.type === 'unmapped_column'" class="review-hint">{{ t('shelfReview.unmappedHint') }}</p>
+          <p v-if="group.type === 'uncovered_content'" class="review-hint">{{ t('shelfReview.uncoveredHint') }}</p>
           <Button v-if="group.type === 'new' && group.items.length" :disabled="blocked" class="review-bulk" @click="acceptNew">{{ t('shelfReview.acceptGroup') }}</Button>
           <article v-for="item in group.items" :key="item.id" :aria-label="shelfReviewSubject(item).name">
             <div class="review-what">
@@ -163,6 +166,12 @@ onBeforeUnmount(() => { generation++; detailGeneration++; if (typeof window !== 
                 <dt>{{ t('shelfReview.columnHeader') }}</dt><dd>{{ shelfUnmappedColumnFeedback(item)?.header || t('shelfReview.columnNoHeader') }}</dd>
                 <dt>{{ t('shelfReview.columnRows') }}</dt><dd>{{ shelfUnmappedColumnFeedback(item)?.nonempty_rows.toLocaleString(locale) }}</dd>
                 <dt>{{ t('shelfReview.columnExamples') }}</dt><dd><ul><li v-for="(example, index) in shelfUnmappedColumnFeedback(item)?.examples" :key="index">{{ example }}</li></ul></dd>
+              </dl>
+              <dl v-if="shelfCoverageFeedback(item)" class="review-column">
+                <dt>{{ t('shelfReview.columnWorksheet') }}</dt><dd>{{ shelfCoverageFeedback(item)?.worksheet }}</dd>
+                <dt>{{ t('shelfReview.coverageReason') }}</dt><dd>{{ te(`shelfReview.coverageReasons.${shelfCoverageFeedback(item)?.reason}`) ? t(`shelfReview.coverageReasons.${shelfCoverageFeedback(item)?.reason}`) : shelfCoverageFeedback(item)?.reason }}</dd>
+                <dt>{{ t('shelfReview.coverageCount') }}</dt><dd>{{ shelfCoverageFeedback(item)?.count.toLocaleString(locale) }}</dd>
+                <dt v-if="shelfCoverageFeedback(item)?.examples.length">{{ t('shelfReview.columnExamples') }}</dt><dd v-if="shelfCoverageFeedback(item)?.examples.length"><ul><li v-for="(example, index) in shelfCoverageFeedback(item)?.examples" :key="index">{{ example }}</li></ul></dd>
               </dl>
               <p v-for="(conflict, index) in item.conflicts" :key="index">{{ conflict.message && conflictText(conflict.message) }}</p>
               <p v-if="group.type === 'disappeared'">{{ t('shelfReview.disappearedHint') }}</p>

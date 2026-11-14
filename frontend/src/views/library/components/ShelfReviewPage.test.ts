@@ -224,6 +224,28 @@ test('reviewer sees unmapped column content and acknowledges it before confirmin
   assert.deepEqual(confirmations[0], { revision: 5, decisions: [{ item_id: 'column-f', action: 'apply' }] })
 })
 
+// ADR 0025: uncovered source content shows its reason and examples and can
+// only be rejected or deferred; acknowledging it as accepted is not offered.
+test('uncovered content can only be rejected or deferred before confirming', async t => {
+  const proposal = {
+    id: 'strike', operation: { id: 'strike', type: 'import_notice', import_location: { worksheet: 'Map', cells: ['C4'] } },
+    before: null, after: null,
+    conflicts: [{ type: 'uncovered_content', message: 'source content is not covered by the import plan; discard to leave it out or defer it as a customer question', details: { worksheet: 'Map', reason: 'strike', count: 2, examples: ['Model Strike', 'Old model'] } }],
+  }
+  const initial = changeset([proposal]); initial.source = { type: 'import', file_name: 'synthetic.xlsx', import_batch_id: 'batch-0025' }
+  const { root, saves } = await mount(t, initial)
+  const group = descendants(root).find(node => node.tag === 'details' && node.props.class === 'review-group' && visibleText(node).includes('未覆盖内容'))!
+  assert.ok(group)
+  for (const value of ['Map', '删除线', '2', 'Model Strike', 'Old model', '这些内容不在导入方案的读取范围内。']) assert.ok(visibleText(group).includes(value), value)
+  const labels = descendants(group).filter(node => node.tag === 'button').map(visibleText)
+  assert.ok(!labels.includes('知道了') && !labels.includes('接受'))
+  assert.equal(find(root, 'button', '确认写入').props.disabled, true)
+  await click(find(group, 'button', '拒绝'))
+  assert.equal(find(root, 'button', '确认写入').props.disabled, false)
+  await click(find(root, 'button', '保存进度'))
+  assert.deepEqual(saves[0].decisions, [{ item_id: 'strike', action: 'discard' }])
+})
+
 // Small regression, task 25: submitters can attach arbitrary issue details.
 // An incomplete notice must not prevent the whole review page from rendering.
 test('incomplete column feedback remains reviewable without a rendering error', async t => {

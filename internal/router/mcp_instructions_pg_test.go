@@ -94,6 +94,7 @@ func TestMCPSkillToolReferences(t *testing.T) {
 		configure_shelf save_import_plan decisions origin file file_date plan_key overseas_sales
 		new modified uncertain suspected_same cross_kind_same_name disappeared unparseable
 		required_missing cross_table_contradiction revision_conflict unmapped_column defer keep retire
+		range transpose uncovered_content
 	`)
 	for _, identifier := range allowed {
 		require.False(t, tools[identifier], "whitelist must not hide a registered tool: %s", identifier)
