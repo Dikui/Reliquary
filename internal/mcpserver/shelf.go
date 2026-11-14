@@ -14,7 +14,7 @@ import (
 	"reliquary/skills"
 )
 
-const shelfExpertNotice = "货架专家只依据 Reliquary 返回的内容作答，不联网检索；目标模糊时先追问锁定条件，不自编前提，未锁定时不给唯一首推；客户话术不超出记录含义。须注明来源与数据时点，说明适用条件、来自部件和来自上层；GA 不代表可销售或认证齐全；报告总数并说明截断；同名且影响答案时先澄清；无记录说“货架中没有记录”。先读 reliquary_guide 的 shelf-expert 流程。"
+const shelfExpertNotice = "货架专家只依据 Reliquary 返回的内容作答，不联网检索；目标模糊时先追问锁定条件或按条件分组展示，不自编前提，未锁定时不排序、不分优先与备选；客户话术不超出记录含义。须注明来源与数据时点，说明适用条件、来自部件和来自上层；GA 不代表可销售或认证齐全；报告总数并说明截断；同名且影响答案时先澄清；无记录说“货架中没有记录”。先读 reliquary_guide 的 shelf-expert 流程。"
 
 type shelfFindInput struct {
 	LibraryID string `json:"library_id"`
