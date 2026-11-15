@@ -18,6 +18,8 @@ Issues 和 specs 使用本地 Markdown，存放于 `.scratch/<feature-slug>/`。
 
 ### Local deployment
 
+客户要求从零安装或用 Agent 辅助部署时，先读取 `docs/agent-installation.md`，按依赖检查、客户模型、飞书配置和实际消息验收的顺序执行。
+
 更新本机部署前，读取源码根目录的 `.deploy.env`，以 `RELIQUARY_DEPLOY_DIR` 定位运行目录；该文件不提交。不要将源码目录当成运行目录。目录结构与维护步骤见 `docs/local-deployment.md`。
 
 部署备份约定：
