@@ -52,6 +52,7 @@ type RouterParams struct {
 	ChunkHandler            *handler.ChunkHandler
 	ChatGPTHandler          *handler.ChatGPTHandler       `optional:"true"`
 	ChatGPTPolicyHandler    *handler.ChatGPTPolicyHandler `optional:"true"`
+	AgentModelHandler       *handler.AgentModelHandler    `optional:"true"`
 	ModelHandler            *handler.ModelHandler
 	ModelCredentialsHandler *handler.ModelCredentialsHandler
 	AuthHandler             *handler.AuthHandler
@@ -199,6 +200,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 		}
 		RegisterChunkRoutes(v1, params.ChunkHandler, accessGuards)
 		RegisterChatGPTRoutes(v1, params.ChatGPTHandler, params.ChatGPTPolicyHandler)
+		if params.AgentModelHandler != nil {
+			v1.POST("/agent/models/:model_id/responses", params.AgentModelHandler.Respond)
+		}
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, accessGuards)
 		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))

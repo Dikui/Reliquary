@@ -1,6 +1,6 @@
 # 项目推送规则
 
-- 仓库公开性：GitHub PRIVATE，目标仓库为 https://github.com/Dikui/Reliquary。
+- 仓库公开性：GitHub PUBLIC，目标仓库为 https://github.com/Dikui/Reliquary。
 - 默认分支：main；服务器保护状态每次推送前重新核对，不推断完整服务器策略。
 - 允许推送的 remote：origin，URL 为 https://github.com/Dikui/Reliquary.git。目标分支为当前分支对应的 upstream；直接推送 main 前单独列明并确认。
 - 提交约定：沿用 feat:、fix:、docs: 等前缀；不在提交信息和分支名写入凭据或本机私有路径。
@@ -36,4 +36,24 @@
 internal/models/rerank/aliyun_reranker_test.go ^[[:space:]]*APIKey:[[:space:]]*"test-[a-z]{3}",[[:space:]]*CustomHeaders:
 internal/router/shelf_parsers_pg_test.go "base_url": server\.URL \+ "/v1", "api_[k]ey": "synthetic-[k]ey", "supports_vision": true\}
 frontend/src/components/ModelEditorDialog.vue ^[[:space:]]*<Input v-else v-model="formData\.api[K]ey" :aria-label="\$t\('model\.editor\.api[K]eyOptional'\)" :type="showApi[K]ey \? 'text' : 'pass[w]ord'"$
+```
+
+以下限定规则覆盖飞书 Agent 的占位值、合成测试凭据及运行时变量引用，已逐项核验。规则同时限定文件和表达式。
+
+```safe-push-allow
+agents/feishu/config.ts ^[[:space:]]*api[K]ey: required\('RELIQUARY_API_[K]EY'\),$
+agents/feishu/env.example ^(RELIQUARY_API_[K]EY=replace-with-existing-key|FEISHU_APP_[S]ECRET=replace-with-app-secret|# MODEL_API_[K]EY=replace-with-model-key)$
+agents/feishu/feishu.ts app[S]ecret: (this\.)?config\.appSecret, httpInstance: this\.http|page_[t]oken: pageToken, sort_type: 'ByCreateTimeAsc'|page[T]oken = response\.data\?\.has_more \? response\.data\.page_to[k]en : undefined;
+agents/feishu/pi.test.ts RELIQUARY_API_[K]EY: '(customer-local-key|synthetic-api-key)'|MODEL_API_[K]EY: 'synthetic-model-key'|access_[t]oken: access, refresh_[t]oken: 'never-share-refresh'
+agents/feishu/shelf.test.ts ^[[:space:]]*const old[T]oken = proposal\.token;$
+agents/feishu/shelf.ts proposal\.to[k]en = randomBytes\(6\)\.toString\('hex'\)\.toUpperCase\(\);
+agents/feishu/tools.test.ts RELIQUARY_API_[K]EY: 'synthetic-library-secret'|Authorization: synthetic-library-secret.*pass[w]ord: 'raw-error'
+agents/feishu/tools.ts ^[[:space:]]*const to[k]en = value\.replace\(
+agents/feishu/README.md console\.log\(await \(await fetch\('http://127\.0\.0\.1:8787/ready'\)
+agents/feishu/local.ts console\.(log|error)\(
+agents/feishu/main.ts console\.log\(
+agents/feishu/migrate.ts console\.log\(JSON\.stringify\(await migrateState
+agents/feishu/setup.ts console\.log\(JSON\.stringify\(\{ component:
+scripts/agent-local.py MODEL_API_[K]EY=getpass\.getpass\('模型 API Key：'\)|FEISHU_APP_[S]ECRET=getpass\.getpass\('飞书 App Secret：'\)|console\.log\(
+scripts/test-agent-local.py 'to[k]en': '(local-fixture-key|fixture-key)'|self\.assertIn\("MODEL_API_[K]EY='synthetic-
 ```

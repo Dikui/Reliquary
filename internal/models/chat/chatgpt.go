@@ -171,6 +171,14 @@ func (c *ChatGPTChat) open(ctx context.Context, messages []Message, opts *ChatOp
 	if err != nil {
 		return nil, err
 	}
+	body, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("marshal ChatGPT request: %w", err)
+	}
+	return c.openBody(ctx, body)
+}
+
+func (c *ChatGPTChat) openBody(ctx context.Context, body []byte) (*http.Response, error) {
 	if err := secutils.ValidateURLForSSRF(c.endpoint); err != nil {
 		return nil, fmt.Errorf("ChatGPT endpoint SSRF check failed: %w", err)
 	}
@@ -180,10 +188,6 @@ func (c *ChatGPTChat) open(ctx context.Context, messages []Message, opts *ChatOp
 	}
 	if strings.TrimSpace(token) == "" {
 		return nil, fmt.Errorf("ChatGPT sign-in is required")
-	}
-	body, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf("marshal ChatGPT request: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
 	if err != nil {

@@ -1,0 +1,23 @@
+name: reliquary-feishu
+services:
+  agent:
+    image: ${AGENT_IMAGE:?Set AGENT_IMAGE to the tested image tag}
+    pull_policy: never
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 25s
+    env_file:
+      - ./agent.env
+    volumes:
+      - type: bind
+        source: ${AGENT_STATE_DIR:?Set AGENT_STATE_DIR to an absolute local directory}
+        target: /data
+        bind:
+          create_host_path: false
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'

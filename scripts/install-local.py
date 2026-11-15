@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a source-independent local deployment; never start or stop containers."""
+"""Prepare a local runtime, or build and start a customer installation with --install."""
 import argparse
 import json
 import os
@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import webbrowser
 
 SOURCE = Path(__file__).resolve().parent.parent
 LABEL = 'com.reliquary.autostart'
@@ -117,6 +118,115 @@ def install_autostart(root, ollama):
     print(f'Installed {agent}')
 
 
+def install(root, env_file, project, app_port=None, frontend_port=None):
+    """Resume first installation without overwriting any existing configuration."""
+    for command in ('docker', 'git'):
+        if not shutil.which(command):
+            raise ValueError(f'{command} is required; see docs/local-deployment.md#客户全新安装')
+    deploy = root / 'deploy'
+    marker = deploy / 'customer-install.json'
+    if deploy.exists() and not marker.exists():
+        raise ValueError('This command installs into a new runtime directory; existing deployments use their upgrade procedure')
+    if not deploy.exists():
+        for resource in ('container', 'volume', 'network'):
+            existing = run('docker', resource, 'ls', '-q', '--filter', f'label=com.docker.compose.project={project}')
+            if existing.strip():
+                raise ValueError('Compose project already exists; choose an unused --project-name for this installation')
+        prepare(root, env_file, project)
+        marker.write_text(json.dumps({'project': project, 'status': 'prepared'}) + '\n')
+    values = deployment_values(deploy / '.env')
+    if values.get('COMPOSE_PROJECT_NAME') != project:
+        raise ValueError('Existing installation has a different project name')
+    if json.loads(marker.read_text()).get('status') == 'base_ready':
+        print(f'基础安装已完成。继续配置：python3 "{root / "scripts/agent-local.py"}" configure')
+        return
+    for key, port in [('APP_PORT', app_port), ('FRONTEND_PORT', frontend_port)]:
+        if port is not None:
+            if not 1 <= port <= 65535:
+                raise ValueError('Port must be between 1 and 65535')
+            values[key] = str(port)
+    revision = run('git', '-C', str(SOURCE), 'rev-parse', 'HEAD').strip()
+    version = (SOURCE / 'VERSION').read_text().strip()
+    tag = f'{version}-{revision[:12]}-{secrets.token_hex(3)}'
+    print('构建后端及网页镜像，自动下载 Go、Node 和前端依赖…', flush=True)
+    with tempfile.TemporaryDirectory(prefix='reliquary-install-') as temporary:
+        override = Path(temporary) / 'build.json'
+        override.write_text(json.dumps({'services': {
+            'app': {'image': f'reliquary-app:{tag}', 'build': {'args': {'VERSION_ARG': version, 'COMMIT_ID_ARG': revision}}},
+            'frontend': {'image': f'reliquary-ui:{tag}', 'build': {'dockerfile': 'Dockerfile.build', 'args': {'COMMIT_ID_ARG': revision}}},
+        }}))
+        subprocess.run(['docker', 'compose', '--env-file', str(deploy / '.env'), '-f', str(SOURCE / 'docker-compose.yml'),
+                        '-f', str(override), 'build', 'app', 'frontend'], cwd=SOURCE, check=True)
+    print('构建飞书 Agent，自动下载 Pi Agent、Pi AI、Pi MCP 和飞书 SDK…', flush=True)
+    agent_image = f'reliquary-feishu:{tag}'
+    subprocess.run(['docker', 'build', '-t', agent_image, str(SOURCE / 'agents/feishu')], check=True)
+    config_path = deploy / 'docker-compose.yml'
+    config = json.loads(config_path.read_text())
+    config['services']['app']['image'] = f'reliquary-app:{tag}'
+    config['services']['frontend']['image'] = f'reliquary-ui:{tag}'
+    config_path.write_text(json.dumps(config, indent=2) + '\n')
+    values['RELIQUARY_VERSION'] = tag
+    # Keep the generated callbacks aligned with the customer-selected ports.
+    values['CHATGPT_CALLBACK_URL'] = f"http://127.0.0.1:{values.get('APP_PORT', '8080')}/auth/callback"
+    values['CHATGPT_SETTINGS_URL'] = f"http://127.0.0.1:{values.get('FRONTEND_PORT', '80')}/platform/settings?section=models"
+    from importlib.util import module_from_spec, spec_from_file_location
+    spec = spec_from_file_location('agent_local', SOURCE / 'scripts/agent-local.py')
+    agent = module_from_spec(spec)
+    spec.loader.exec_module(agent)
+    hosts = [host for host in values.get('SSRF_WHITELIST', '').split(',') if host]
+    values['SSRF_WHITELIST'] = ','.join(dict.fromkeys([*hosts, 'auth.openai.com', 'api.openai.com']))
+    agent.write_env(deploy / '.env', values)
+    directory = root / 'agents/feishu'
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    state = directory / 'data'
+    new_state = not state.exists()
+    state.mkdir(exist_ok=True, mode=0o700)
+    # The one-shot helper adjusts only the newly selected state mount for Node's UID.
+    if new_state:
+        subprocess.run(['docker', 'run', '--rm', '--user', '0:0', '-v', f'{state}:/data', '--entrypoint', 'sh', agent_image,
+                        '-c', 'chown node:node /data && chmod 700 /data'], check=True)
+    network = config['networks']['Reliquary-network'].get('name', project + '_Reliquary-network')
+    agent_config = run('docker', 'compose', '--env-file', str(deploy / '.env'), '-f', str(SOURCE / 'agents/feishu/compose.yaml'),
+                       'config', '--no-interpolate', '--no-env-resolution', '--no-path-resolution', '--format', 'json',
+                       env={**os.environ, 'AGENT_IMAGE': agent_image, 'AGENT_STATE_DIR': str(state)})
+    agent_config = json.loads(agent_config)
+    agent_config['name'] = project + '-feishu'
+    agent_config['services']['agent']['image'] = agent_image
+    agent_config['services']['agent']['volumes'][0]['source'] = str(state)
+    agent_config['services']['agent']['env_file'] = ['./agent.env']
+    agent_config['services']['agent']['networks'] = ['backend']
+    agent_config['networks'] = {'backend': {'external': True, 'name': network}}
+    (directory / 'compose.yaml').write_text(json.dumps(agent_config, indent=2) + '\n')
+    if not (directory / 'agent.env').exists():
+        agent.write_env(directory / 'agent.env', {})
+    shutil.copy2(SOURCE / 'scripts/agent-local.py', root / 'scripts/agent-local.py')
+    subprocess.run(['docker', 'compose', '--project-directory', str(deploy), 'up', '-d', '--no-build', '--pull', 'never', '--wait'], check=True)
+    if not run('git', '-C', str(SOURCE), 'status', '--porcelain').strip():
+        subprocess.run([str(deploy / 'reliquary-admin'), 'record-runtime', '--source', str(SOURCE)], cwd=deploy, check=True)
+    else:
+        print('当前使用未提交源码测试，正式发布后需登记准确源码，才能使用可恢复备份。')
+    marker.write_text(json.dumps({'project': project, 'status': 'base_ready', 'revision': revision}) + '\n')
+    settings = values['CHATGPT_SETTINGS_URL']
+    print(f'基础服务已启动。请在网页配置资料库和模型：{settings}')
+    webbrowser.open(settings)
+    print(f'继续配置机器人：python3 "{root / "scripts/agent-local.py"}" configure')
+
+
+def deployment_values(path):
+    values = {}
+    for line in path.read_text().splitlines():
+        if not line.strip() or line.lstrip().startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        value = value.strip()
+        if value.startswith('"'):
+            value = json.loads(value)
+        elif value.startswith("'") and value.endswith("'"):
+            value = value[1:-1].replace("\\'", "'")
+        values[key.strip()] = value
+    return values
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
@@ -124,11 +234,16 @@ def main():
     parser.add_argument('--project-name', default='reliquary', help='Keep the old name when reusing database volumes')
     parser.add_argument('--install-autostart', action='store_true', help='Only register an already prepared deployment')
     parser.add_argument('--ollama', action='store_true', help='Also restore the local Ollama desktop app')
+    parser.add_argument('--install', action='store_true', help='Build all dependencies and start a new customer installation')
+    parser.add_argument('--app-port', type=int, help='Backend port for a new customer installation')
+    parser.add_argument('--frontend-port', type=int, help='Web port for a new customer installation')
     args = parser.parse_args()
     root = args.root.expanduser().resolve()
     try:
         if args.install_autostart:
             install_autostart(root, args.ollama)
+        elif args.install:
+            install(root, args.env_file.expanduser().resolve() if args.env_file else None, args.project_name, args.app_port, args.frontend_port)
         else:
             prepare(root, args.env_file.expanduser().resolve() if args.env_file else None, args.project_name)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:

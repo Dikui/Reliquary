@@ -1,0 +1,18 @@
+FROM node:26.12.1-bookworm-slim@sha256:88e480776c6149ff1d098cd304f44bf18057fb5d284a3329b78162d29821e28c AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+ARG COMMIT_ID_ARG
+ENV VITE_IS_DOCKER=true VITE_FRONTEND_COMMIT=$COMMIT_ID_ARG
+RUN npm run build
+
+FROM nginx:1.30.3-alpine@sha256:0d3b80406a13a767339fbe2f41406d6c7da727ab89cf8fae399e81f780f814d1
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/templates/default.conf.template
+COPY nginx-api-proxy.conf /etc/nginx/api-proxy.conf
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+ENV MAX_FILE_SIZE_MB=50
+EXPOSE 80
+ENTRYPOINT ["/docker-entrypoint.sh"]

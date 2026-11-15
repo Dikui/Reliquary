@@ -60,31 +60,20 @@ See [ADR 0014](docs/adr/0014-internal-knowledge-base.md) and [CONTEXT.md](CONTEX
 
 ## Quick start
 
-**Requirements:** Git, Node.js/npm, a Docker-compatible runtime (OrbStack, Docker Desktop) and Docker Compose. Images are built locally; no packages or public images are published.
+Use macOS or Linux with Python 3.9+, Git and a running Docker engine with Compose v2. The first build downloads Go, Node, Pi, the Feishu SDK and locked dependencies inside containers.
 
 ```bash
 git clone https://github.com/Dikui/Reliquary.git
 cd Reliquary
-cp .env.example .env   # set DB passwords, SYSTEM_AES_KEY, NEO4J_PASSWORD and model endpoints
-./scripts/build-frontend-dist.sh
-./reliquary-admin check-deployment
-docker compose up -d --wait postgres redis neo4j
-./reliquary-admin check-deployment
-docker compose up -d --build
+python3 scripts/install-local.py --install --root "$HOME/Reliquary"
+python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 ```
 
-Then open:
+The installer builds images, creates a separate runtime directory and starts the base services. The configuration command selects libraries, your API provider or ChatGPT subscription, and your Feishu app and group. It checks a model tool call and starts the bot. Authorize ChatGPT in the Web UI when connecting an account for the first time. Existing connected models can be reused. Complete Feishu app permissions and account authorization yourself.
 
-- Web UI: <http://localhost>
-- API: <http://localhost:8080>
-- MCP: `http://localhost:8080/mcp`
+The default Web UI is <http://127.0.0.1>, API is <http://127.0.0.1:8080>, and MCP is `http://127.0.0.1:8080/mcp`. For occupied ports, add `--app-port 18080 --frontend-port 18081`. A second installation on the same host also needs a unique `--project-name` and `REDIS_PORT` in its environment file.
 
-There is no login. Ports bind to `127.0.0.1` only, so the UI works straight away on the same machine; external tools authenticate with API keys ([ADR 0015](docs/adr/0015-no-login-local-only.md)).
-
-Host directories default to `~/Reliquary/vault`, `~/Reliquary/files` and `~/Backups/Reliquary` (`RELIQUARY_VAULT_DIR`, `RELIQUARY_FILES_DIR`, `BACKUP_DIR` in `.env`). Keep them out of the Desktop and Documents folders. `check-deployment` creates missing directories and rejects unsafe paths.
-
-> [!TIP]
-> For long-term use, follow the [local deployment guide](docs/local-deployment.md) to keep runtime config and data outside the source checkout.
+Data and conversations stay on the customer's machine. Local browser access uses the existing local-access policy. External tools authenticate with API keys. See the [local deployment guide](docs/local-deployment.md) for installation, storage, authorization and recovery, and the [agent guide](agents/feishu/README.md) for Feishu usage.
 
 ## Usage
 

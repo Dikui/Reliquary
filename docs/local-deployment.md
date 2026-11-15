@@ -6,7 +6,9 @@
 ~/Project/Reliquary/ Git 源码，仅更新、构建和登记发布源码时需要
 ~/Reliquary/
 ├── deploy/          .env、运行用 Compose、config/、维护工具
-├── scripts/         登录后启动脚本
+├── scripts/         登录后启动脚本、agent-local.py
+├── agents/feishu/   compose.yaml、agent.env、enabled
+│   └── data/        Agent SQLite、Pi sessions/ 和本地运行状态
 ├── data/
 │   ├── vault/       Markdown 文件库
 │   └── files/       上传资源
@@ -26,7 +28,47 @@ RELIQUARY_DEPLOY_DIR="$HOME/Reliquary/deploy"
 
 Docker 管理镜像、容器日志和 PostgreSQL、Neo4j 数据卷。Ollama 模型可供多个项目共用，继续由 Ollama 管理。macOS 的 LaunchAgent 文件仍安装在 `~/Library/LaunchAgents/`，引用本目录的脚本。启动无需保留打开的终端或 Codex 对话。
 
-## 新机器安装
+## 客户全新安装
+
+支持 macOS、Linux。安装 [Python 3.9+](https://www.python.org/downloads/)、[Git](https://git-scm.com/downloads) 和带 Compose v2 的 [Docker](https://docs.docker.com/get-started/get-docker/)，然后启动 Docker。Compose 需支持 `config --no-env-resolution`。系统安装、浏览器账号登录和飞书权限审批需要本人完成。后续运行依赖 Docker，引导脚本依赖 Python。
+
+```sh
+git clone https://github.com/Dikui/Reliquary.git
+cd Reliquary
+python3 scripts/install-local.py --install --root "$HOME/Reliquary"
+python3 "$HOME/Reliquary/scripts/agent-local.py" configure
+```
+
+安装依次执行以下操作。
+
+1. 校验新的运行目录和未被占用的 Compose 项目名，生成随机数据库密码及加密密钥。
+2. 构建 Go 后端、Vue 网页和飞书 Agent。Docker 下载 Go、Node 和数据库基础镜像，`npm ci` 按锁文件下载 Pi Agent、Pi AI、Pi MCP、飞书 SDK 等依赖。宿主机无需安装 Go 或 Node。
+3. 启动 PostgreSQL、Redis、Neo4j、后端和网页，等待健康检查。数据库迁移只作用于本次安装的独立数据库。
+4. 打开本机网页。客户先创建资料库，再运行 `configure`，按提示选择模型并填写飞书应用配置。首次 ChatGPT 连接需要浏览器授权和模型选择。已有活跃 ChatGPT 模型可直接复用。
+5. 引导程序创建本机 Agent API Key，保存权限为 `0600` 的 `agent.env`，实际检查 Reliquary、模型工具调用和飞书应用身份。然后启动机器人，提示在目标群 @机器人发送验证消息。
+
+支持 `openai-completions`、`openai-responses` 和 `anthropic-messages` API。填写客户自己的端点、模型名、密钥、上下文和输出上限。ChatGPT 模式复用 Reliquary 的账号加密存储、令牌续期和用量暂停策略，Agent 只持有本机 API Key。一个回答可能调用模型多次，每次计入订阅请求限额。客户独立授权后可以脱离开发者机器运行。密钥和账号令牌属于运行数据，仓库只保存模板。
+
+飞书需创建企业自建应用，启用机器人、长连接和 `im.message.receive_v1`，开通并发布所需权限，再加入指定群。`configure` 显示权限清单，并要求输入 App ID、App Secret、Tenant Key 和 Chat ID。使用本人现有租户即可。具体权限和群内操作见 [Agent 指南](../agents/feishu/README.md)。
+
+默认占用本机 80、8080 和 6379 端口。网页和后端可用 `--frontend-port`、`--app-port` 修改。需要并行安装时，给 `--project-name` 指定新名字，并通过 `--env-file` 提供不同的 `REDIS_PORT`。命令因下载或构建失败中断时，修正原因后重跑同一安装命令。基础服务已经就绪时，命令会提示继续 `configure`。
+
+### 运行与更新
+
+```sh
+python3 "$HOME/Reliquary/scripts/agent-local.py" status
+python3 "$HOME/Reliquary/scripts/agent-local.py" stop
+python3 "$HOME/Reliquary/scripts/agent-local.py" start
+python3 "$HOME/Project/Reliquary/scripts/agent-local.py" update --root "$HOME/Reliquary"
+```
+
+`status` 显示连接状态及收发记录数。`stop` 同时清除自动恢复标记。更新从源码构建新 Agent 镜像，保留会话目录，启动失败时恢复原 Compose 镜像。更新基础服务沿用下文的升级流程。客户正式使用干净的发布提交安装时会自动登记基础服务源码，供已有维护工具使用。未提交源码安装适用于本地测试，正式使用前应从发布提交重建并登记。
+
+账号授权存于 PostgreSQL，加密密钥在 `deploy/.env`。Agent 的 SQLite 保存会话、任务、消息与确认关系，Pi 的 `data/sessions/` 保存实际模型对话。恢复需要保留数据库卷、`.env`、文件数据和完整 Agent 状态目录。复制状态前停止 Agent，避免遗漏 SQLite WAL 中的数据。迁移和镜像回退见 [Agent 指南](../agents/feishu/README.md#迁移旧状态)。已有 `reliquary-admin` 备份范围覆盖基础服务，Agent 状态需要单独纳入一致性备份，申请备份时明确这一范围。
+
+macOS 登录后自动恢复可按下节注册，已启用的 Agent 会随基础服务恢复。Linux 重启策略由 Docker 的 `restart: unless-stopped` 执行，Docker 服务需在开机时启动。仅休眠或关闭终端无需重新授权。
+
+## 仅准备运行目录
 
 需要 Python 3.9+、Git、Node.js/npm、Docker Compose v2（支持 `config --no-env-resolution`）。macOS 自启动支持 OrbStack 和 Docker Desktop；如需本机 Ollama，同时安装 Ollama 桌面应用并准备模型。其他系统可使用相同运行目录，自启动需自行配置。
 

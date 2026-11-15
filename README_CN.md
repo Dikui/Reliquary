@@ -60,31 +60,20 @@ Reliquary 是个人 AI 工作平台的内部资料库。它不抓取任何内容
 
 ## 快速开始
 
-**环境要求：** Git、Node.js/npm、Docker 兼容运行环境（OrbStack、Docker Desktop）与 Docker Compose。镜像在本地构建，未发布安装包或公共镜像。
+需要 macOS 或 Linux、Python 3.9+、Git 和已启动的 Docker Compose v2。首次构建会下载 Go、Node、Pi、飞书 SDK 和全部锁定依赖。宿主机只需运行 Python 和 Docker。
 
 ```bash
 git clone https://github.com/Dikui/Reliquary.git
 cd Reliquary
-cp .env.example .env   # 配置数据库密码、SYSTEM_AES_KEY、NEO4J_PASSWORD 与模型服务地址
-./scripts/build-frontend-dist.sh
-./reliquary-admin check-deployment
-docker compose up -d --wait postgres redis neo4j
-./reliquary-admin check-deployment
-docker compose up -d --build
+python3 scripts/install-local.py --install --root "$HOME/Reliquary"
+python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 ```
 
-启动后访问：
+第一条命令构建镜像、创建独立运行目录并启动基础服务。第二条命令引导选择资料库、客户自己的 API 或 ChatGPT 订阅、飞书应用和测试群，然后检查模型工具调用并启动机器人。ChatGPT 在网页授权并选择模型，已有连接可直接复用。飞书应用配置与账号授权由客户本人完成。
 
-- 网页：<http://localhost>
-- API：<http://localhost:8080>
-- MCP：`http://localhost:8080/mcp`
+默认网页为 <http://127.0.0.1>，API 为 <http://127.0.0.1:8080>，MCP 为 `http://127.0.0.1:8080/mcp`。端口冲突时增加 `--app-port 18080 --frontend-port 18081`。同机第二套安装还需独立 `--project-name` 和 `.env` 中的 `REDIS_PORT`。
 
-没有登录。端口只绑定 `127.0.0.1`，在本机打开网页即可使用；外部工具通过 API Key 访问（[ADR 0015](docs/adr/0015-no-login-local-only.md)）。
-
-宿主机目录默认为 `~/Reliquary/vault`、`~/Reliquary/files` 与 `~/Backups/Reliquary`（`.env` 中的 `RELIQUARY_VAULT_DIR`、`RELIQUARY_FILES_DIR`、`BACKUP_DIR`），不要放在“桌面”或“文稿”下。`check-deployment` 会创建缺失目录并拒绝不安全的路径。
-
-> [!TIP]
-> 长期使用请按[本地部署指南](docs/local-deployment.md)安装，将运行配置和数据放在源码目录之外。
+资料和会话存于客户本机。网页采用本机免登录访问，外部工具使用 API Key。完整安装、存储、授权、更新与恢复步骤见[本地部署指南](docs/local-deployment.md)，飞书使用方法见[Agent 指南](agents/feishu/README.md)。
 
 ## 使用
 

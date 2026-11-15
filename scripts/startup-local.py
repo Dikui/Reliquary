@@ -57,6 +57,10 @@ def main(ollama):
             raise RuntimeError(f'{name} is not ready; retrying next minute')
     if ollama and not reachable('http://127.0.0.1:11434/api/tags'):
         raise RuntimeError('Ollama is not ready; retrying next minute')
+    agent = ROOT / 'agents/feishu'
+    if (agent / 'enabled').exists():
+        run(['docker', 'compose', '--project-directory', str(agent), 'up', '-d', '--no-build', '--pull', 'never',
+             '--wait', '--wait-timeout', '120'], timeout=180)
 
 
 if __name__ == '__main__':

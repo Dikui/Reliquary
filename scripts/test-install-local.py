@@ -16,6 +16,20 @@ spec.loader.exec_module(startup)
 
 
 class InstallationTests(unittest.TestCase):
+    def test_customer_install_does_not_adopt_existing_runtime(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'deploy').mkdir()
+            with self.assertRaisesRegex(ValueError, 'new runtime'):
+                installer.install(root, None, 'reliquary')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with mock.patch.object(installer, 'run', return_value='existing-volume'), \
+                 mock.patch.object(installer, 'prepare') as prepare:
+                with self.assertRaisesRegex(ValueError, 'project already exists'):
+                    installer.install(root, None, 'reliquary')
+                prepare.assert_not_called()
+
     def test_orbstack_starts_when_daemon_is_unavailable(self):
         with tempfile.TemporaryDirectory() as tmp:
             deploy = Path(tmp)
