@@ -1,17 +1,17 @@
 # 飞书知识助手
 
-独立单进程 Agent，通过 Pi 调用 Reliquary。支持查询、比较、澄清、会话恢复、指定答案派生，以及经发起人确认的货架修改。固定库和群由程序校验。完整 Reliquary API Key 仍拥有服务端全部权限。
+独立单进程 Agent，通过 Pi 调用 Reliquary 的全部八个业务流程。支持会话恢复、指定答案派生，以及经发起人确认的资料收录、报告写回和货架修改。固定库和群由程序校验。完整 Reliquary API Key 仍拥有服务端全部权限。
 
 ## 客户安装入口
 
-从仓库根目录执行全套安装，引导会自动构建 Pi 和基础服务。
+从仓库根目录安装基础服务。首次运行 `configure` 时才构建飞书 Agent 镜像。
 
 ```sh
 python3 scripts/install-local.py --install --root "$HOME/Reliquary"
 python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 ```
 
-支持客户自己的 API 和 Reliquary 网页连接的 ChatGPT 订阅。已有活跃订阅模型直接复用。新账号由客户在浏览器完成授权。运行目录内的 `agent-local.py` 提供 `check`、`start`、`stop` 和 `status`。从源码执行 `update --root /运行根目录` 可更新 Agent 镜像。完整安装说明见[本地部署指南](../../docs/local-deployment.md#客户全新安装)。
+Pi 独立调用客户自己的 API 或 ChatGPT 订阅，通过 Reliquary 的工具和技能访问知识库。ChatGPT 账号由客户在浏览器完成 Pi 授权。运行目录内的 `agent-local.py` 提供 `login`、`check`、`start`、`stop` 和 `status`。从源码执行 `update --root /运行根目录` 可更新 Agent 镜像。完整安装说明见[本地部署指南](../../docs/local-deployment.md#客户全新安装)。
 
 ## 飞书应用
 
@@ -22,7 +22,9 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 - `im:message:readonly` 核对原消息和群。
 - `im:message.group_msg` 核对发送结果。这是敏感权限，应用可读取所在群的全部消息，建议机器人只加入专用群。
 
-仅将指定群内 @ 机器人的文字交给模型。附件、Excel、解析器与库设置维护尚未接入。
+指定群内 @ 机器人的文字进入会话。回复机器人消息发送文件，可在同一会话读取 UTF-8 文本、盘点 Excel、暂存货架原件和提交 Excel 导入预览。附件由发送人和会话共同限定，单文件最多 32 MiB。
+
+Agent 从 `reliquary_guide` 获取全部流程，复用技能包正文，按流程引用接入只读 MCP 工具。资料收录和报告写回通过 `ingest_propose` 展示完整草稿，货架修改与导入复用变更集预览。实际写入由发起人回复预览中的确认口令触发。收录响应中断时保留待核对状态，避免重复覆盖。
 
 ## 构建
 
@@ -61,7 +63,11 @@ docker compose --project-directory /srv/reliquary-feishu stop
 
 客户 API 使用 `MODEL_SOURCE=api`，支持 `openai-completions`、`openai-responses` 和 `anthropic-messages`。填写地址、密钥、模型名称、上下文和输出长度。代理地址必须能从容器访问，内部地址加入 `NO_PROXY`。
 
-客户 ChatGPT 订阅使用 `MODEL_SOURCE=chatgpt` 和已在 Reliquary 中创建的 `MODEL_ID`。模型请求经本机 `/api/v1/agent/models/:model_id/responses` 转发，OAuth 令牌由后端加密保存和续期，Agent 通过本机 API Key 认证。订阅暂停或授权失效会返回可处理的错误码。模型账号设置中的现有订阅额度策略同时适用，工具循环中的每次模型请求都会计入请求数。首次客户授权由 Reliquary 网页引导。
+客户 ChatGPT 订阅使用 `MODEL_SOURCE=chatgpt`，默认模型为 `gpt-6.1-sol`。Pi 直接请求 ChatGPT，OAuth 凭据保存在 Agent 的 `data/auth.json`，由 Pi 续期。Reliquary API Key 用于知识库工具调用。重新登录使用以下命令，在输出的授权页完成账号登录。浏览器回调使用本机端口 1455。
+
+```sh
+python3 /运行根目录/scripts/agent-local.py login
+```
 
 以下为开发者本机复用 Codex 登录文件的兼容运行方式，不用于客户安装。`MODEL_API=openai-codex-responses` 必须显式填写；缺少 `MODEL_API` 时 Agent 拒绝启动，不会回落到 Codex 登录。
 

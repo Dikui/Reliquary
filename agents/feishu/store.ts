@@ -9,6 +9,7 @@ import type { ShelfProposal } from './shelf.js';
 export type IncomingMessage = {
   messageId: string; parentId: string | null; eventId: string; senderId: string;
   text: string; branch: boolean; rejection?: string;
+  attachment?: { fileKey: string; name: string };
 };
 export type Job = {
   id: number; message_id: string; parent_id: string | null; text: string; branch: number; sender_id: string;
@@ -95,6 +96,9 @@ export class Store {
       const columns = this.db.prepare('PRAGMA table_info(outbox)').all();
       if (!columns.some(column => column.name === 'proposal_id')) this.db.exec('ALTER TABLE outbox ADD COLUMN proposal_id TEXT');
       if (!columns.some(column => column.name === 'proposal_token')) this.db.exec('ALTER TABLE outbox ADD COLUMN proposal_token TEXT');
+      if (!this.db.prepare('PRAGMA table_info(jobs)').all().some(column => column.name === 'attachment')) {
+        this.db.exec('ALTER TABLE jobs ADD COLUMN attachment TEXT');
+      }
       this.transaction(() => {
         const owner = this.db.prepare('SELECT * FROM runtime WHERE id=1').get() as { pid: number; scope: string; token: string } | undefined;
         const key = JSON.stringify({ appId: scope.appId, tenantKey: scope.tenantKey, chatId: scope.chatId });
@@ -118,15 +122,20 @@ export class Store {
 
   accept(message: IncomingMessage): boolean {
     const result = this.db.prepare(`INSERT OR IGNORE INTO jobs
-      (tenant, app, chat, message_id, parent_id, event_id, sender_id, text, branch, rejection)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(this.scope.tenantKey, this.scope.appId, this.scope.chatId,
+      (tenant, app, chat, message_id, parent_id, event_id, sender_id, text, branch, rejection, attachment)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(this.scope.tenantKey, this.scope.appId, this.scope.chatId,
         message.messageId, message.parentId, message.eventId, message.senderId, message.text,
-        Number(message.branch), message.rejection ?? null);
+        Number(message.branch), message.rejection ?? null, message.attachment ? JSON.stringify(message.attachment) : null);
     return result.changes === 1;
   }
 
   nextJob(): Job | undefined {
     return this.db.prepare("SELECT * FROM jobs WHERE status='queued' ORDER BY id LIMIT 1").get() as Job | undefined;
+  }
+
+  attachments(job: Job): { messageId: string; fileKey: string; name: string }[] {
+    return this.db.prepare('SELECT message_id, attachment FROM jobs WHERE conversation_id=? AND sender_id=? AND attachment IS NOT NULL ORDER BY id')
+      .all(job.conversation_id, job.sender_id).map(row => ({ messageId: String(row.message_id), ...JSON.parse(String(row.attachment)) }));
   }
 
   runningJobs(): Job[] {

@@ -9,7 +9,6 @@ export const TOOL_NAMES = [
   'list_libraries', 'reliquary_guide', 'search', 'get_entry', 'list_entities', 'get_entity',
   'graph_search', 'shelf_find', 'shelf_get', 'shelf_query', 'shelf_guide',
 ] as const;
-const WORKFLOWS = ['compare', 'entity-profile', 'shelf-expert'];
 const REQUIRED_PARAMETERS: Record<string, string[]> = {
   search: ['query', 'libraries'], get_entry: ['id'], list_entities: ['library_id'], get_entity: ['id'],
   graph_search: ['libraries'], shelf_find: ['library_id', 'q'], shelf_get: ['library_id', 'node_id'],
@@ -55,8 +54,11 @@ export class QueryTools {
   private projector: OutputProjector;
   private schemas = new Map<string, TSchema>();
   private guideCatalog = '';
+  private workflows: string[] = [];
+  private libraries = new Map<string, string>();
   private secrets: string[];
   private shelfSchema?: TSchema;
+  private ingestSchema?: TSchema;
 
   constructor(private config: Config, private client: McpClient) {
     this.secrets = [config.apiKey, config.modelKey];
@@ -75,11 +77,30 @@ export class QueryTools {
     this.instructions = this.redact(this.client.instructions ?? '');
     if (!this.instructions.trim()) throw new QueryError('missing_rules', 'Reliquary 未提供使用规则');
     const available = await this.client.listTools();
+    this.schemas.clear();
     const shelf = available.find(tool => tool.name === 'shelf_submit');
     if (shelf) this.shelfSchema = this.schema('shelf_submit', shelf);
+    const ingest = available.find(tool => tool.name === 'ingest');
+    if (ingest) this.ingestSchema = this.schema('ingest', ingest);
     for (const name of TOOL_NAMES) {
-      const remote = available.find(tool => tool.name === name);
-      if (!remote) throw new QueryError('missing_tool', `Reliquary 缺少必需工具 ${name}`);
+      if (!available.some(tool => tool.name === name)) throw new QueryError('missing_tool', `Reliquary 缺少必需工具 ${name}`);
+    }
+    const guide = await this.client.callTool('reliquary_guide', {}, { timeoutMs: this.config.timeoutMs });
+    if (guide.isError) throw new QueryError('missing_guide', '无法读取 Reliquary 指南目录');
+    this.guideCatalog = this.redact(guide.content.filter(block => block.type === 'text').map(block => block.text).join('\n'));
+    this.workflows = [...this.guideCatalog.matchAll(/^- ([\w-]+):/gm)].map(match => match[1]);
+    if (!this.workflows.length) throw new QueryError('missing_guide', '业务指南目录为空');
+    const workflowText: string[] = [];
+    for (const workflow of this.workflows) {
+      const result = await this.client.callTool('reliquary_guide', { workflow }, { timeoutMs: this.config.timeoutMs });
+      if (result.isError) throw new QueryError('missing_guide', `无法读取流程 ${workflow}`);
+      workflowText.push(...result.content.filter(block => block.type === 'text').map(block => block.text));
+    }
+    const referenced = new Set(workflowText.join('\n').match(/`([a-z][a-z_]+)`/g)?.map(value => value.slice(1, -1)));
+    this.definitions.length = 0;
+    for (const remote of available.filter(tool => TOOL_NAMES.includes(tool.name as typeof TOOL_NAMES[number]) ||
+      tool.annotations?.readOnlyHint && referenced.has(tool.name))) {
+      const name = remote.name;
       const schema = this.schema(name, remote);
       this.schemas.set(name, schema);
       this.definitions.push({
@@ -92,16 +113,11 @@ export class QueryTools {
     }
     const libraries = await this.call('list_libraries', {});
     if (!libraries.ok) throw new QueryError(libraries.error.code, libraries.error.message);
-    const guide = await this.client.callTool('reliquary_guide', {}, { timeoutMs: this.config.timeoutMs });
-    if (guide.isError) throw new QueryError('missing_guide', '无法读取 Reliquary 指南目录');
-    this.guideCatalog = this.redact(guide.content.filter(block => block.type === 'text')
-      .flatMap(block => block.text.split('\n')).filter(line => WORKFLOWS.some(name => line.startsWith(`- ${name}:`))).join('\n'));
-    if (this.guideCatalog.split('\n').length !== WORKFLOWS.length) throw new QueryError('missing_guide', '必需业务指南不完整');
   }
 
   private schema(name: string, remote: Tool): TSchema {
     if (name === 'reliquary_guide') {
-      return Type.Object({ workflow: Type.Optional(Type.Union(WORKFLOWS.map(name => Type.Literal(name)))) }, { additionalProperties: false });
+      return Type.Object({ workflow: Type.Optional(Type.Union(this.workflows.map(name => Type.Literal(name)))) }, { additionalProperties: false });
     }
     const schema = record(closeSchema(remote.inputSchema));
     const properties = record(schema.properties ?? {});
@@ -117,8 +133,11 @@ export class QueryTools {
     try {
       const schema = this.schemas.get(name);
       if (!schema || !Value.Check(schema, params)) throw new QueryError('invalid_arguments', '工具名称或参数不符合查询契约');
-      const args = record(params);
-      const targets = args.libraries ?? (args.library_id ? [args.library_id] : []);
+      const args = structuredClone(record(params));
+      if (name === 'follow_feed' && !args.libraries) args.libraries = this.config.libraries;
+      if (Array.isArray(args.libraries)) args.libraries = args.libraries.map(id => this.libraries.get(String(id)) ?? id);
+      if (args.library) args.library = this.libraries.get(String(args.library)) ?? args.library;
+      const targets = args.libraries ?? (args.library_id ? [args.library_id] : args.library ? [args.library] : []);
       if (!Array.isArray(targets) || targets.some(id => !this.config.libraries.includes(String(id))) ||
           ('libraries' in args && targets.length === 0)) {
         throw new QueryError('library_scope', '只能查询管理员配置的目标库');
@@ -132,14 +151,33 @@ export class QueryTools {
         if (!content.trim()) throw new QueryError('guide_unavailable', '业务指南为空');
         return { ok: true, data: { workflow: String(args.workflow), content }, warnings: [] };
       }
-      const raw = toolData(await this.client.callTool(name, args, { signal, timeoutMs: this.config.timeoutMs }));
+      let raw = toolData(await this.client.callTool(name, args, { signal, timeoutMs: this.config.timeoutMs }));
       if (name === 'list_libraries') {
         for (const library of (record(raw).libraries as unknown[] ?? []).map(record)) {
           if (!this.config.libraries.includes(String(library.id))) continue;
+          this.libraries.set(String(library.directory ?? library.id), String(library.id));
+          this.libraries.set(String(library.id), String(library.id));
           const parsers = record(library.shelf_config ?? {}).parsers;
           if (Array.isArray(parsers)) this.protectSecrets(...parsers.map(parser => String(record(parser).authorization ?? '')));
         }
       }
+      if (name === 'list_follows') {
+        const allowed = new Set<string>();
+        for (const id of this.config.libraries) {
+          const result = record(toolData(await this.client.callTool('list_topics', { library_id: id }, { signal, timeoutMs: this.config.timeoutMs })));
+          for (const topic of (result.topics as unknown[] ?? []).map(record)) allowed.add(String(topic.id));
+        }
+        const follows = [];
+        for (const item of (record(raw).follows as unknown[] ?? []).map(record)) {
+          if (item.target_type === 'topic' && allowed.has(String(item.target_id))) follows.push(item);
+          if (item.target_type === 'entity') {
+            const result = await this.call('get_entity', { id: item.target_id }, signal);
+            if (result.ok) follows.push(item);
+          }
+        }
+        raw = { follows };
+      }
+      if (name === 'get_content_check' || name === 'list_content_checks') raw = await this.scopeChecks(raw, signal);
       if (name === 'get_entry' || name === 'get_entity') {
         const response = record(raw);
         const library = name === 'get_entry' ? response.library_id : record(response.entity).library_id;
@@ -163,21 +201,75 @@ export class QueryTools {
 
   async close(): Promise<void> { await this.client.close(); }
 
+  private async scopeChecks(raw: unknown, signal?: AbortSignal): Promise<unknown> {
+    const result = structuredClone(record(raw));
+    if (Array.isArray(result.items)) {
+      const items = [];
+      for (const item of result.items.map(record)) {
+        const detail = toolData(await this.client.callTool('get_content_check', { id: item.id }, { signal, timeoutMs: this.config.timeoutMs }));
+        const scoped = record(await this.scopeChecks(detail, signal));
+        const targets = scoped.targets as unknown[] ?? [];
+        if (targets.length) items.push({ ...item, error: item.error ? '原运行包含错误' : '', total: targets.length });
+      }
+      result.items = items;
+      result.scope_note = '只展示涉及配置资料库的运行；total 保留服务端分页总数。';
+    }
+    const allowed = new Map<string, boolean>();
+    const visible = async (id: unknown) => {
+      const key = String(id);
+      if (!allowed.has(key)) allowed.set(key, (await this.call('get_entry', { id: key }, signal)).ok);
+      return allowed.get(key)!;
+    };
+    if (Array.isArray(result.targets)) {
+      const targets = [];
+      for (const id of result.targets) if (await visible(id)) targets.push(id);
+      result.targets = targets;
+      result.total = targets.length;
+      result.scope_note = '问题与目标已按配置资料库筛选；completed 保留原运行进度。';
+    }
+    if (Array.isArray(result.results)) {
+      const results = [];
+      for (const item of result.results.map(record)) {
+        if (!await visible(item.entry_id)) continue;
+        const findings = [];
+        for (const finding of (item.findings as unknown[] ?? []).map(record)) {
+          const evidence = (finding.evidence as unknown[] ?? []).map(record);
+          if ((await Promise.all(evidence.map(value => visible(value.entry_id)))).every(Boolean)) findings.push(finding);
+        }
+        results.push({ ...item, findings });
+      }
+      result.results = results;
+      result.error = result.error ? '原运行包含错误' : '';
+    }
+    return result;
+  }
+
+  entrySchema(): TSchema {
+    if (!this.ingestSchema) throw new QueryError('missing_tool', 'Reliquary 缺少收录接口');
+    return this.ingestSchema;
+  }
+
+  validateIngest(input: Record<string, unknown>): void {
+    if (!Value.Check(this.entrySchema(), input)) throw new QueryError('invalid_arguments', '收录参数不符合契约');
+    const items = (input.items as unknown[]).map(record);
+    if (!items.every(item => this.config.libraries.includes(this.libraries.get(String(item.library)) ?? ''))) {
+      throw new QueryError('library_scope', '只能写入配置的目标库');
+    }
+  }
+
+  async ingest(input: Record<string, unknown>): Promise<unknown> {
+    this.validateIngest(input);
+    return this.projector.project('ingest', toolData(await this.client.callTool('ingest', input, { timeoutMs: this.config.timeoutMs })));
+  }
+
   proposalSchema(): TSchema {
     if (!this.shelfSchema) throw new QueryError('missing_tool', 'Reliquary 缺少货架变更集接口');
     const properties = record(record(this.shelfSchema).properties);
     const operation = structuredClone(properties.operations) as Record<string, any>;
-    operation.items.properties.type.enum = ['create_entity', 'update_entity', 'add_alias', 'archive_entity',
-      'save_relation', 'end_relation', 'set_sale_statuses', 'set_parameter_values', 'create_certification', 'update_certification'];
-    for (const name of ['entry_id', 'excluded', 'relation_type', 'library', 'library_updated_at', 'document',
-      'classification', 'version_id', 'reparse', 'import_plan', 'import_location']) delete operation.items.properties[name];
-    delete operation.items.properties.entity.properties.auto_match;
-    delete operation.items.properties.patch.properties.auto_match;
     const decisions = structuredClone(properties.decisions) as Record<string, any>;
     decisions.items.properties.replacement = operation.items;
-    decisions.items.properties.action.enum = ['apply', 'discard', 'defer', 'replace', 'same_entity'];
     return Type.Unsafe({ type: 'object', additionalProperties: false, required: ['library_id'],
-      properties: { library_id: properties.library_id, operations: operation, decisions } });
+      properties: { library_id: properties.library_id, changeset_id: properties.changeset_id, operations: operation, decisions } });
   }
 
   async submitShelf(args: Record<string, unknown>): Promise<Record<string, any>> {
@@ -194,10 +286,10 @@ export class QueryTools {
     return record(raw);
   }
 
-  async readChangesets(library: string, id?: string, page = 1): Promise<Record<string, any>> {
+  async readChangesets(library: string, id?: string, page = 1, allSources = false): Promise<Record<string, any>> {
     if (!this.config.libraries.includes(library)) throw new QueryError('library_scope', '目标库超出配置范围');
     const path = `/api/v1/libraries/${encodeURIComponent(library)}/shelf/changesets`;
-    const url = `${this.config.apiURL}${path}${id ? `/${encodeURIComponent(id)}` : `?source_type=agent&page=${page}&page_size=100`}`;
+    const url = `${this.config.apiURL}${path}${id ? `/${encodeURIComponent(id)}` : `?${allSources ? '' : 'source_type=agent&'}page=${page}&page_size=100`}`;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${this.config.apiKey}` },
       redirect: 'error', signal: AbortSignal.timeout(this.config.timeoutMs) });
     if (!response.ok) throw new QueryError('changeset_unavailable', '变更集状态暂时无法读取', true);

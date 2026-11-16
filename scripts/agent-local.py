@@ -12,7 +12,6 @@ import subprocess
 import tempfile
 import urllib.error
 import urllib.request
-import webbrowser
 
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -60,17 +59,6 @@ def api(base, path, body=None):
     if result.get('success') is False:
         raise ValueError('Reliquary 拒绝操作，请检查服务日志中的错误码')
     return result.get('data', result)
-
-
-def choose(items, label):
-    if not items:
-        raise ValueError(f'没有可选{label}，请先在网页设置中创建，再重新执行 configure')
-    for index, item in enumerate(items, 1):
-        print(f"{index}. {item.get('display_name') or item.get('name') or item.get('email') or item['id']}")
-    number = int(input(f'选择{label}序号：'))
-    if not 1 <= number <= len(items):
-        raise ValueError('选择序号无效')
-    return items[number - 1]
 
 
 def source_checkout(root):
@@ -148,23 +136,10 @@ def configure(root):
     ids = sorted({libraries[index - 1]['id'] for index in selected})
     source = input('模型来源 [1 客户 API / 2 ChatGPT 订阅]：').strip()
     if source == '2':
-        models = api(base, '/models')
-        models = models.get('models', models) if isinstance(models, dict) else models
-        available = [item for item in models if item.get('source') == 'chatgpt' and item.get('status') == 'active']
-        if not available:
-            url = frontend + '/platform/settings?section=models'
-            print('请在以下网页选择已连接的 ChatGPT 账号并创建聊天模型。首次使用时点击 Continue with ChatGPT 授权。')
-            print(url)
-            webbrowser.open(url)
-            input('网页操作完成后按回车继续：')
-            models = api(base, '/models')
-            models = models.get('models', models) if isinstance(models, dict) else models
-            available = [item for item in models if item.get('source') == 'chatgpt' and item.get('status') == 'active']
-        model = choose(available, 'ChatGPT 模型')
-        values.update(MODEL_SOURCE='chatgpt', MODEL_API='openai-responses', MODEL_ID=model['id'], MODEL_NAME=model['name'],
-                      MODEL_CONTEXT_WINDOW=str(model.get('parameters', {}).get('context_window') or 128000),
-                      MODEL_MAX_TOKENS=str(model.get('parameters', {}).get('max_output_tokens') or 8192))
-        for key in ['MODEL_API_KEY', 'MODEL_BASE_URL', 'CODEX_AUTH_FILE']:
+        model = input('Pi 模型名称 [gpt-6.1-sol]：').strip() or 'gpt-6.1-sol'
+        values.update(MODEL_SOURCE='chatgpt', MODEL_API='openai-codex-responses', MODEL_NAME=model,
+                      MODEL_CONTEXT_WINDOW='128000', MODEL_MAX_TOKENS='8192')
+        for key in ['MODEL_ID', 'MODEL_API_KEY', 'MODEL_BASE_URL', 'CODEX_AUTH_FILE']:
             values.pop(key, None)
     elif source == '1':
         protocol = input('协议 [openai-completions / openai-responses / anthropic-messages]：').strip()
@@ -203,6 +178,13 @@ def configure(root):
             values[key] = proxy
     values['NO_PROXY'] = 'app,localhost,127.0.0.1'
     write_env(directory / 'agent.env', values)
+    if source == '2':
+        try:
+            credential = json.loads((directory / 'data/auth.json').read_text()).get('openai-codex', {})
+        except (FileNotFoundError, json.JSONDecodeError):
+            credential = {}
+        if credential.get('type') != 'oauth':
+            operate(root, 'login')
     print('配置已保存。检查将调用模型并消耗少量额度。')
     operate(root, 'check')
     operate(root, 'start')
@@ -225,10 +207,14 @@ def maintenance_lock(root):
 
 def operate(root, action):
     directory = root / 'agents/feishu'
-    if action == 'check':
-        probe = 'node --use-env-proxy dist/setup.js --model'
-        subprocess.run(compose(root, 'run', '--rm', '--no-deps', 'agent', 'sh', '-c',
-                              'AGENT_DATA_DIR=$(mktemp -d) ' + probe), check=True)
+    if action == 'login':
+        print('在浏览器完成 Pi 的独立 ChatGPT 登录，凭据将保存至 Agent 数据目录。')
+        subprocess.run(compose(root, 'run', '--rm', '--no-deps', '-p', '127.0.0.1:1455:1455',
+                              '-e', 'PI_OAUTH_CALLBACK_HOST=0.0.0.0', 'agent',
+                              'node', '--use-env-proxy', 'dist/local.js', '--login'), check=True)
+    elif action == 'check':
+        subprocess.run(compose(root, 'run', '--rm', '--no-deps', 'agent',
+                              'node', '--use-env-proxy', 'dist/setup.js', '--model'), check=True)
     elif action == 'start':
         (directory / 'enabled').touch(mode=0o600)
         subprocess.run(compose(root, 'up', '-d', '--no-build', '--pull', 'never', '--wait'), check=True)
@@ -270,7 +256,7 @@ def operate(root, action):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['configure', 'check', 'start', 'stop', 'status', 'update'])
+    parser.add_argument('action', choices=['configure', 'login', 'check', 'start', 'stop', 'status', 'update'])
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parent.parent)
     args = parser.parse_args()
     try:

@@ -4,6 +4,7 @@ import { EventDispatcher, LoggerLevel } from '@larksuiteoapi/node-sdk';
 import { loadFeishuConfig } from './config.js';
 import { DeliveryError, FeishuTransport, parseIncomingMessage } from './feishu.js';
 import { splitReply, type Outgoing } from './store.js';
+import { Readable } from 'node:stream';
 
 const config = { appId: 'app', appSecret: 'secret', tenantKey: 'tenant', chatId: 'chat' };
 function event(text: string, parentId?: string) {
@@ -27,6 +28,10 @@ test('飞书事件仅接收指定群的机器人提及，并保留回复和派�
   foreign.event.message.chat_id = 'foreign';
   await dispatcher.invoke(foreign, { needCheck: false });
   assert.equal(message, undefined);
+  const file = event('附件', 'answer');
+  Object.assign(file.event.message, { message_type: 'file', mentions: [], content: JSON.stringify({ file_key: 'file-key', file_name: 'map.xlsx' }) });
+  await dispatcher.invoke(file, { needCheck: false });
+  assert.deepEqual((message as ReturnType<typeof parseIncomingMessage>)?.attachment, { fileKey: 'file-key', name: 'map.xlsx' });
   const untargeted = event('问题');
   untargeted.event.message.mentions[0].id.open_id = 'someone';
   await dispatcher.invoke(untargeted, { needCheck: false });
@@ -76,4 +81,15 @@ test('飞书回复校验原群，并从分页历史核对未知发送结果', as
   };
   assert.deepEqual(await transport.reconcile(row), { messageId: 'outgoing' });
   assert.deepEqual(requested, ['first', 'second']);
+  const http = transport.client.httpInstance as any;
+  const adapter = http.defaults.adapter;
+  http.defaults.adapter = async (request: any) => ({
+    data: Readable.from([Buffer.from('workbook')]), headers: { 'content-type': 'application/octet-stream' },
+    status: 200, statusText: 'OK', config: request,
+  });
+  const tokenManager = transport.client.tokenManager as any;
+  const accessToken = tokenManager.getTenantAccessToken;
+  tokenManager.getTenantAccessToken = async () => 'synthetic-token';
+  try { assert.equal((await transport.download('incoming', 'file-key')).toString(), 'workbook'); }
+  finally { http.defaults.adapter = adapter; tokenManager.getTenantAccessToken = accessToken; }
 });

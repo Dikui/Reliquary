@@ -202,8 +202,36 @@ export class OutputProjector {
       this.assertLibraries();
       value = { libraries: rows.filter(row => this.libraries.includes(String(record(row).id))) };
     }
-    const data = this.visit(value, outputs[tool], '', warnings);
+    const shape = outputs[tool];
+    const data = !shape || ['shelf_guide', 'shelf_changeset'].includes(tool)
+      ? this.generic(value, warnings) : this.visit(value, shape, '', warnings);
     return { data: data ?? null, warnings: [...warnings] };
+  }
+
+  private generic(value: unknown, warnings: Set<string>): Json | undefined {
+    if (value === null || typeof value === 'boolean' || typeof value === 'number') return value;
+    if (typeof value === 'string') return this.redact(value);
+    if (Array.isArray(value)) {
+      const output: Json[] = [];
+      for (const item of value) {
+        const result = this.generic(item, warnings);
+        if (result !== undefined) output.push(result);
+      }
+      return output;
+    }
+    if (!value || typeof value !== 'object') return undefined;
+    const input = record(value);
+    if (typeof input.library_id === 'string' && !this.libraries.includes(input.library_id)) {
+      warnings.add('已过滤目标库范围以外的记录，结果可能不完整');
+      return undefined;
+    }
+    const output: Record<string, Json> = {};
+    for (const [key, item] of Object.entries(input)) {
+      if (/authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret/i.test(key)) continue;
+      const result = this.generic(item, warnings);
+      if (result !== undefined) output[key] = result;
+    }
+    return output;
   }
 
   private visit(value: unknown, shape: Shape, library: string, warnings: Set<string>, parent: RecordValue = {}): Json | undefined {
@@ -245,7 +273,7 @@ export class OutputProjector {
       return this.visit(value, special[field] ?? 'parameterValue', library, warnings);
     }
     if (shape === 'attributes') {
-      const attributes: Record<string, Shape> = {};
+      const attributes: Record<string, Shape> = { current_stage: 'scalar' };
       for (const field of this.libraryFields.get(library) ?? []) {
         const special: Record<string, Shape> = { shelf_statuses: ['sale'], shelf_certification: 'certification', shelf_requirement: 'requirement', shelf_rules: [['condition']] };
         attributes[String(field.key)] = Array.isArray(field.product_line_ids) && field.product_line_ids.length

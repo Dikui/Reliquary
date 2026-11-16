@@ -1,4 +1,4 @@
-import { isAbsolute, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { QueryError } from './output.js';
 
 export type Config = ReturnType<typeof loadConfig>;
@@ -46,14 +46,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   };
   const libraries = [...new Set(required('RELIQUARY_LIBRARY_IDS').split(',').map(id => id.trim()).filter(Boolean))];
   if (!libraries.length) throw new QueryError('invalid_config', 'RELIQUARY_LIBRARY_IDS must contain a library ID');
-  const managedSubscription = env.MODEL_SOURCE?.trim() === 'chatgpt';
   if (env.MODEL_SOURCE && !['api', 'chatgpt'].includes(env.MODEL_SOURCE.trim())) {
     throw new QueryError('invalid_config', 'MODEL_SOURCE must be api or chatgpt');
   }
-  const modelId = managedSubscription ? required('MODEL_ID') : '';
   const apiURL = endpoint('RELIQUARY_API_URL');
-  // Codex reuse is a developer-only mode and must be named explicitly; a missing protocol never falls back to it.
-  const modelAPI = managedSubscription ? 'openai-responses' : required('MODEL_API');
+  const modelAPI = env.MODEL_SOURCE?.trim() === 'chatgpt' ? 'openai-codex-responses'
+    : required('MODEL_API');
   if (!['openai-completions', 'openai-responses', 'anthropic-messages', 'openai-codex-responses'].includes(modelAPI)) {
     throw new QueryError('invalid_config', 'Unsupported MODEL_API');
   }
@@ -62,20 +60,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   if (codexAuthFile && (!subscription || !isAbsolute(codexAuthFile))) {
     throw new QueryError('invalid_config', 'CODEX_AUTH_FILE requires an absolute path and the Codex subscription protocol');
   }
-  const contextWindow = integer('MODEL_CONTEXT_WINDOW', subscription || managedSubscription ? 128000 : undefined);
-  const maxTokens = integer('MODEL_MAX_TOKENS', subscription || managedSubscription ? 8192 : undefined);
+  const contextWindow = integer('MODEL_CONTEXT_WINDOW', subscription ? 128000 : undefined);
+  const maxTokens = integer('MODEL_MAX_TOKENS', subscription ? 8192 : undefined);
   if (maxTokens >= contextWindow) throw new QueryError('invalid_config', 'MODEL_MAX_TOKENS must be less than MODEL_CONTEXT_WINDOW');
   return {
     apiURL,
     apiKey: required('RELIQUARY_API_KEY'),
     libraries,
-    modelURL: managedSubscription ? `${apiURL}/api/v1/agent/models/${encodeURIComponent(modelId)}`
-      : subscription ? 'https://chatgpt.com/backend-api' : endpoint('MODEL_BASE_URL'),
-    modelKey: managedSubscription ? required('RELIQUARY_API_KEY') : subscription ? '' : required('MODEL_API_KEY'),
-    managedSubscription,
-    modelId,
+    modelURL: subscription ? 'https://chatgpt.com/backend-api' : endpoint('MODEL_BASE_URL'),
+    modelKey: subscription ? '' : required('MODEL_API_KEY'),
+    authFile: join(loadDataDir(env), 'auth.json'),
     codexAuthFile,
-    model: env.MODEL_NAME?.trim() || (subscription ? 'gpt-5.6-sol' : required('MODEL_NAME')),
+    model: env.MODEL_NAME?.trim() || (subscription ? 'gpt-6.1-sol' : required('MODEL_NAME')),
     modelAPI: modelAPI as 'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'openai-codex-responses',
     contextWindow,
     maxTokens,

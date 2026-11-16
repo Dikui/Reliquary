@@ -8,6 +8,7 @@ import { Store, type Job } from './store.js';
 import { ShelfEditor } from './shelf.js';
 import { createRedactor } from './output.js';
 import type { QueryTools } from './tools.js';
+import { attachmentTool } from './attachment.js';
 
 // Stage 3 medium spec. The synthetic service replaces only remote changeset storage.
 test('货架提议经本人当前口令确认且重复投递只写入一次', async () => {
@@ -161,4 +162,75 @@ test('货架提议经本人当前口令确认且重复投递只写入一次', as
     assert.equal(drafts.size, countBefore + 1);
     assert.equal(writes, 2);
   } finally { store.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+// Complete-skill integration contract: use the existing confirmation and attachment boundaries.
+test('资料收录与附件进入同一会话并经发起人确认', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'skill-confirm-'));
+  const store = new Store(directory, { appId: 'app', tenantKey: 'tenant', chatId: 'chat' });
+  let writes = 0;
+  const queries = {
+    entrySchema: () => Type.Object({ items: Type.Array(Type.Object({ library: Type.String(), content: Type.String(),
+      source_ref: Type.Optional(Type.String()) })) }),
+    validateIngest: (input: any) => { assert.equal(input.items[0].library, 'library'); },
+    redact: createRedactor([]),
+    ingest: async (input: any) => { writes++; return { data: { results: [{ entry_id: 'saved', source_ref: input.items[0].source_ref }] } }; },
+    projectChangeset: (data: any) => ({ data, warnings: [] }),
+  } as unknown as QueryTools;
+  const editor = new ShelfEditor(queries, store);
+  const invoke = (tool: any, input: any) => tool.execute('call', input, undefined, undefined, {});
+  const originalFetch = globalThis.fetch;
+  try {
+    store.accept({ messageId: 'file', eventId: 'file', senderId: 'owner', parentId: null, branch: false,
+      text: '收录资料', attachment: { fileKey: 'private-file', name: 'report.md' } });
+    const job = store.nextJob()!;
+    store.route(job);
+    const transport = { download: async (id: string, key: string) => {
+      assert.equal(id, 'file'); assert.equal(key, 'private-file'); return Buffer.from('# 资料\n原文');
+    } };
+    const attachment = attachmentTool({ libraries: ['library'] } as any, queries, store, job, transport, editor);
+    const files = await invoke(attachment, { action: 'list' });
+    assert.match(JSON.stringify(files), /report.md/);
+    assert.doesNotMatch(JSON.stringify(files), /private-file/);
+    assert.match(JSON.stringify(await invoke(attachment, { action: 'read', library_id: 'library', message_id: 'file' })), /原文/);
+    assert.equal((await invoke(attachment, { action: 'read', library_id: 'foreign', message_id: 'file' })).isError, true);
+    await invoke(editor.entryDefinition(job), { items: [{ library: 'library', content: '# 资料\n原文' }] });
+    const proposal = store.proposalForJob(job.id)!;
+    assert.equal(writes, 0);
+    assert.match(proposal.request.items[0].source_ref, /^feishu:/);
+    store.finish(job, { text: editor.render(proposal), proposalId: proposal.id });
+    store.sent(store.dueOutgoing()[0], 'preview');
+    store.accept({ messageId: 'confirm', eventId: 'confirm', senderId: 'owner', parentId: 'preview', branch: false, text: `确认 ${proposal.token}` });
+    const confirmation = store.nextJob()!;
+    store.route(confirmation);
+    assert.equal((await editor.command(confirmation))!.proposal!.status, 'confirmed');
+    assert.equal(writes, 1);
+    await editor.command(confirmation);
+    assert.equal(writes, 1);
+    await editor.recover(store.proposal(proposal.id)!);
+    assert.equal(writes, 1);
+    store.accept({ messageId: 'excel', eventId: 'excel', senderId: 'owner', parentId: 'preview', branch: false,
+      text: '检查表格', attachment: { fileKey: 'excel-key', name: 'map.xlsx' } });
+    store.finish(confirmation, { text: '已完成' });
+    const excelJob = store.nextJob()!;
+    store.route(excelJob);
+    const excel = attachmentTool({ libraries: ['library'], apiURL: 'http://fixture', apiKey: 'synthetic-key', timeoutMs: 1000 } as any,
+      queries, store, excelJob, { download: async () => Buffer.from('synthetic workbook') }, editor);
+    globalThis.fetch = async (url, options) => {
+      assert.match(String(url), /shelf\/imports\/inspect$/);
+      assert.ok(options?.body instanceof FormData);
+      return Response.json({ success: true, data: { Sheets: { Map: { Cells: { A1: { Value: 'Model' }, A2: { Value: 'Sample' } }, Hidden: false } } } });
+    };
+    const inspection = await invoke(excel, { action: 'read', library_id: 'library', message_id: 'excel', worksheet: 'Map', limit: 1 });
+    assert.match(JSON.stringify(inspection), /Model/);
+    assert.equal(inspection.details.data.next_offset, 1);
+    globalThis.fetch = async url => {
+      assert.match(String(url), /shelf\/imports$/);
+      return Response.json({ success: true, data: { id: 'imported-draft', library_id: 'library', revision: 1,
+        status: 'pending', source: { agent_name: 'fixture' }, items: [] } });
+    };
+    const imported = await invoke(excel, { action: 'import', library_id: 'library', message_id: 'excel', plan_key: 'map', file_date: '2026-01-01T00:00:00Z' });
+    assert.notEqual(imported.isError, true);
+    assert.equal(store.proposalForJob(excelJob.id)!.changeset!.id, 'imported-draft');
+  } finally { globalThis.fetch = originalFetch; store.close(); await rm(directory, { recursive: true, force: true }); }
 });

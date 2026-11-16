@@ -38,19 +38,32 @@ class AgentInstallationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             agent.write_env(root / 'deploy/.env', {'APP_PORT': '18080'})
-            answers = iter(['1', '2', '1', 'test-app', 'test-tenant', 'test-chat', ''])
-            responses = [[{'id': 'library', 'name': '测试库'}],
-                         [{'id': 'model', 'name': 'customer-model', 'source': 'chatgpt', 'status': 'active'}],
-                         {'token': 'fixture-key'}]
+            auth = root / 'agents/feishu/data/auth.json'
+            auth.parent.mkdir(parents=True)
+            auth.write_text('{"openai-codex":{"type":"oauth"}}')
+            answers = iter(['1', '2', '', 'test-app', 'test-tenant', 'test-chat', ''])
+            responses = [[{'id': 'library', 'name': '测试库'}], {'token': 'fixture-key'}]
             with mock.patch('builtins.input', side_effect=lambda _: next(answers)), \
                  mock.patch.object(agent.getpass, 'getpass', return_value='synthetic-secret'), \
-                 mock.patch.object(agent, 'api', side_effect=responses), \
+                 mock.patch.object(agent, 'api', side_effect=responses) as api, \
                  mock.patch.object(agent, 'install_agent'), \
-                 mock.patch.object(agent, 'operate'), \
-                 mock.patch.object(agent.webbrowser, 'open') as browser:
+                 mock.patch.object(agent, 'operate') as operate:
                 agent.configure(root)
-            browser.assert_not_called()
-            self.assertEqual(agent.read_env(root / 'agents/feishu/agent.env')['MODEL_ID'], 'model')
+            values = agent.read_env(root / 'agents/feishu/agent.env')
+            self.assertEqual(values['MODEL_NAME'], 'gpt-6.1-sol')
+            self.assertEqual(values['MODEL_API'], 'openai-codex-responses')
+            self.assertNotIn('MODEL_ID', values)
+            self.assertEqual([call.args[1] for call in api.call_args_list], ['/libraries', '/space/api-keys'])
+            self.assertEqual(operate.call_args_list, [mock.call(root, 'check'), mock.call(root, 'start')])
+            auth.write_text('{}')
+            answers = iter(['1', '2', '', 'test-app', 'test-tenant', 'test-chat', ''])
+            with mock.patch('builtins.input', side_effect=lambda _: next(answers)), \
+                 mock.patch.object(agent.getpass, 'getpass', return_value='synthetic-secret'), \
+                 mock.patch.object(agent, 'api', return_value=[{'id': 'library', 'name': '测试库'}]), \
+                 mock.patch.object(agent, 'install_agent'), \
+                 mock.patch.object(agent, 'operate') as operate:
+                agent.configure(root)
+            self.assertEqual(operate.call_args_list, [mock.call(root, 'login'), mock.call(root, 'check'), mock.call(root, 'start')])
 
     def test_agent_update_restores_previous_image_after_failure(self):
         with tempfile.TemporaryDirectory() as temporary:

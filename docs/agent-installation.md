@@ -150,19 +150,18 @@ PY
 
 ### 客户 ChatGPT 订阅
 
-1. 打开实际 `WEB_BASE` 后加 `/platform/settings?section=models` 的地址，检查已有账号和模型。例如网页端口为 18081 时，地址为 `http://127.0.0.1:18081/platform/settings?section=models`。
-2. 已有可用 ChatGPT 模型时直接记录并复用。
-3. 首次连接时点击 **Continue with ChatGPT**，将已打开的准确页面交给客户完成账号选择、登录与订阅授权。
-4. 确认浏览器返回本机 `/auth/callback`，账号显示已连接，并完成首次用量提示。
-5. 新建聊天模型，来源选择“用 ChatGPT 登录”，选择该账号目录中的模型，保存。
+1. 在第 6 步的配置向导选择 ChatGPT 订阅，填写 Pi 支持的模型名称，默认 `gpt-6.1-sol`。
+2. 已有 Pi 登录时继续使用。首次连接由向导启动 Pi 登录，输出准确授权页。
+3. 将授权页交给客户完成账号选择、登录与订阅授权。
+4. 确认浏览器返回 `http://localhost:1455/auth/callback`，终端显示 Pi 登录完成。
 
-默认回调为 `http://127.0.0.1:8080/auth/callback`。安装器会随所选端口生成实际值。浏览器在部署电脑运行。远程安装需要先安排能回到后端的本地隧道。若自动打开失败，提供或打开实际授权 URL，再等待客户完成。具体支持的账号与模型以授权结果为准。[官方登录流程](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+浏览器在部署电脑运行，本机端口 1455 需要可用。远程安装先安排能回到 Pi 登录进程的隧道。提供或打开终端输出的实际授权 URL，再等待客户完成。具体支持的账号与模型以 Pi 登录结果为准。
 
-客户首次部署需建立本机 Reliquary 授权，后续沿用数据库内的连接和令牌续期。向导的订阅模式从 Reliquary 模型列表选择，宿主 Codex 登录文件的兼容接法另见[Agent 指南](../agents/feishu/README.md#模型与凭据)。
+Pi 凭据保存到 `agents/feishu/data/auth.json`，由 Pi 续期。Pi 直接访问模型，通过 Reliquary 的工具和技能访问知识库。重新授权使用 `agent-local.py login`。宿主 Codex 登录文件的兼容接法另见[Agent 指南](../agents/feishu/README.md#模型与凭据)。
 
 Agent 对话模型与资料后台处理配置分别设置。需要摘要、实体处理时，在网页创建聊天模型并分配给资料库。需要向量检索时配置共享 Embedding，重排按需配置。ChatGPT 接入用于生成，Embedding 与重排使用其支持的其他来源。仅配置 Agent API 参数会接通机器人对话。
 
-完成条件为 API 参数齐全，或 Reliquary 存在活跃的 ChatGPT 模型。实际工具调用在第 6 步验证。
+完成条件为 API 参数齐全，或已确定 Pi 的 ChatGPT 模型名称。订阅登录和实际工具调用在第 6 步验证。
 
 ## 5. 准备飞书应用与目标群
 
@@ -199,7 +198,7 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 交互顺序如下。使用可交互终端，密钥在 `getpass` 提示中输入，或从客户指定私有文件读入内存后提交到该提示。当前向导会提前提示长连接与事件配置，先填写已准备的参数并启动本机客户端，再按第 7 步保存订阅及发布事件。
 
 1. 按编号选择第 4 步的资料库，多个编号使用逗号分隔。
-2. 模型来源输入 `1` 或 `2`。API 模式依次填写协议、根地址、模型名、Key、上下文和输出上限。订阅模式选择已连接模型编号。
+2. 模型来源输入 `1` 或 `2`。API 模式依次填写协议、根地址、模型名、Key、上下文和输出上限。订阅模式填写 Pi 模型名称，首次使用时在浏览器完成 Pi 登录。
 3. 依次填写 App ID、App Secret、Tenant Key、Chat ID。
 4. 按实际网络填写代理，直连时留空。容器访问宿主代理时使用其可达地址，例如 `host.docker.internal`。
 
@@ -267,7 +266,7 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" status
 | 提示现有会话绑定其他群或库 | 先核对输入。确需换范围时使用独立安装，或按[状态迁移](../agents/feishu/README.md#迁移旧状态)处理 |
 | 状态健康但群里没有回复 | 核对目标群、真实 @、机器人成员资格、Tenant Key、事件发布状态及四项权限，检查脱敏日志 |
 | ChatGPT 回调失败或显示需登录 | 检查实际回调地址、浏览器所在电脑和网络，对需要重登的账号完成授权后重试 |
-| 订阅额度暂停 | 保留账号与会话状态，查看模型设置和用量页，按提示恢复 |
+| 订阅额度暂停 | 保留 Pi 账号与会话状态，查看 ChatGPT 账号用量，按提示恢复 |
 
 ```sh
 python3 "$HOME/Reliquary/scripts/agent-local.py" check
@@ -297,4 +296,4 @@ python3 scripts/install-local.py --root "$HOME/Reliquary" --install-autostart
 - 配置、数据、会话的位置以及第 9 步的日常命令。故障或待客户完成的步骤写明准确位置与原因。
 - 实际新增的资料、API Key、应用和权限范围，报告隐藏凭据值。
 
-当前既有验收覆盖 macOS 全新安装、真实 API、复用已有 ChatGPT 授权和飞书多轮。Linux 宿主、首次真人订阅授权全流程与整机重启恢复仍需在客户环境实测。仅脚本或容器检查通过时按实际范围报告。
+当前既有验收覆盖 macOS 全新安装、真实 API 和飞书多轮。Pi 独立授权、Linux 宿主与整机重启恢复按客户环境的实际检查结果报告。仅脚本或容器检查通过时按实际范围报告。

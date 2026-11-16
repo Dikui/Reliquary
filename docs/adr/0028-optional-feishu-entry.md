@@ -8,11 +8,11 @@ Status: accepted
 资料库本体只在内网运行：网页、HTTP API 与 MCP 继续只绑定回环地址，沿用 [ADR 0015](0015-no-login-local-only.md)。飞书 Agent 是可选的对话入口，启用后允许以下数据出网：
 
 - 群内 @机器人 的问题和机器人回复，经飞书服务器传输并保存在飞书。
-- 每轮对话的完整上下文，包括问题、工具调用结果中的资料片段和历史回复，发送给客户选择的模型服务商；ChatGPT 订阅模式经 Reliquary 后端转发给 OpenAI。
+- 每轮对话的完整上下文，包括问题、工具调用结果中的资料片段和历史回复，发送给客户选择的模型服务商；ChatGPT 订阅模式由 Pi 直接连接 OpenAI。
 
 资料库正文、文件和数据库不同步到任何外部服务，回复和模型上下文里只包含本轮工具实际读到的内容。
 
-代码放在本仓库 `agents/feishu/`，通过 MCP 和 `/api/v1/agent/models` 调用 Reliquary，不依赖服务端内部实现。安装分两步：`install-local.py --install` 只安装资料库本体；`agent-local.py configure` 首次运行时才构建 Agent 镜像、生成运行配置并接通飞书。
+代码放在本仓库 `agents/feishu/`，通过 MCP 和 HTTP API 调用 Reliquary，不依赖服务端内部实现。安装分两步：`install-local.py --install` 只安装资料库本体；`agent-local.py configure` 首次运行时才构建 Agent 镜像、生成运行配置并接通飞书。
 
 客户自行部署时，模型账号、模型密钥、飞书应用与授权都属于客户，保存在客户本机的运行目录；开发者不持有客户凭据，仓库只保存模板。Agent 状态（SQLite、Pi 会话）与基础服务在同一停机窗口内由 `reliquary-admin` 备份和恢复，凭据（`agent.env`、Pi 的 `auth.json`）不进入备份包，恢复后由 `configure` 重填。
 

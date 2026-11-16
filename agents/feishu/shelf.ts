@@ -6,12 +6,13 @@ import { safeFailure, type QueryTools } from './tools.js';
 import type { Job, Store } from './store.js';
 
 type Data = Record<string, any>;
-export type ShelfProposalInput = { library_id: string; operations?: Data[]; decisions?: Data[] };
+export type ShelfProposalInput = { library_id: string; changeset_id?: string; operations?: Data[]; decisions?: Data[] };
 export type ShelfProposal = {
   id: string; conversationId: string; ownerId: string; jobId: number; libraryId: string;
   status: 'preparing' | 'pending' | 'committing' | 'unknown' | 'confirmed' | 'cancelled';
   source: string; request: Data; changeset?: Data; token: string; expires: number;
   fingerprint: string; notice?: string;
+  kind?: 'ingest';
 };
 
 function stable(value: any): string {
@@ -24,9 +25,10 @@ function stable(value: any): string {
 // Generated timestamps and relation IDs change during each rollback-only preview.
 function semanticSnapshot(value: any, created: boolean): any {
   if (!value) return value;
-  const keys = ['id', 'library_id', 'canonical_name', 'name', 'kind', 'code', 'description', 'aliases', 'attributes',
-    'archived_at', 'subject_id', 'object_id', 'relation_type', 'valid_from', 'valid_to'];
-  return Object.fromEntries(keys.filter(key => key in value && !(created && key === 'id'))
+  if (Array.isArray(value)) return value.map(item => semanticSnapshot(item, created));
+  if (typeof value !== 'object') return value;
+  const keys = Object.keys(value).filter(key => !['created_at', 'updated_at', 'revision', 'version', 'kind_label'].includes(key));
+  return Object.fromEntries(keys.filter(key => !(created && key === 'id'))
     .map(key => [key, key === 'archived_at' ? Boolean(value[key]) : value[key]]));
 }
 
@@ -63,12 +65,12 @@ export class ShelfEditor {
     const schema = this.queries.proposalSchema();
     return {
       name: 'shelf_propose', label: '货架修改提议', parameters: schema,
-      description: '提出或修订当前会话中你发起的货架变更，只保存待确认变更集。首次传 library_id、operations；修订传 library_id、decisions。操作沿用 shelf_submit 的类型。用户所说的确认由宿主处理，本工具不能确认。先读 shelf_guide 和目标完整信息；参数可局部修改，区域状态按区域与条件合并；空数组会清空。',
+      description: '提出或修订货架变更，只保存待确认变更集。首次传 library_id、operations；接续已有批次传 library_id、changeset_id；修订传 library_id、decisions。操作沿用 shelf_submit 的类型。确认由宿主处理。先读 shelf_guide 和目标完整信息；参数可局部修改，区域状态按区域与条件合并；空数组会清空。',
       execute: async (_id, input) => {
         try {
           if (!Value.Check(schema, input)) throw new QueryError('invalid_proposal', '提议参数不符合契约');
           const proposal = await this.propose(job, input as ShelfProposalInput);
-      const output = { ok: true, proposal_id: proposal.id, status: proposal.status,
+          const output = { ok: true, proposal_id: proposal.id, status: proposal.status,
             changeset: this.queries.projectChangeset(proposal.changeset).data,
             note: '已保存待确认提议。程序将在本轮回复中附上完整预览和确认口令，货架尚未修改。' };
           return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
@@ -80,11 +82,55 @@ export class ShelfEditor {
     };
   }
 
+  entryDefinition(job: Job): ToolDefinition {
+    return {
+      name: 'ingest_propose', label: '资料收录提议', parameters: this.queries.entrySchema(),
+      description: '按 ingest 契约准备资料收录或报告写回，保存完整正文、目标库与来源供发起人确认。提议可修订，实际提交由宿主收到确认口令后执行。',
+      execute: async (_id, input) => {
+        try {
+          this.queries.validateIngest(record(input));
+          if (!job.conversation_id) throw new QueryError('invalid_session', '提议缺少会话');
+          const active = this.store.activeProposal(job.conversation_id!, job.sender_id);
+          if (active && (active.kind !== 'ingest' || active.status !== 'pending')) {
+            throw new QueryError('proposal_pending', '请先处理已有提议');
+          }
+          const request = structuredClone(input) as Data;
+          for (const [index, item] of request.items.entries()) {
+            item.source_ref ||= active?.request.items[index]?.source_ref ?? `feishu:${job.message_id}:${index}`;
+          }
+          const proposal: ShelfProposal = {
+            id: active?.id ?? randomUUID(), kind: 'ingest', conversationId: job.conversation_id!, ownerId: job.sender_id,
+            jobId: job.id, libraryId: '', status: 'pending', source: 'Reliquary Feishu', request,
+            token: randomBytes(6).toString('hex').toUpperCase(), expires: Date.now() + 10 * 60 * 1000, fingerprint: '',
+          };
+          this.queries.validateIngest(request);
+          this.store.saveProposal(proposal);
+          const output = { ok: true, proposal_id: proposal.id, status: proposal.status, note: '已准备完整预览，等待发起人确认。' };
+          return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
+        } catch (error) {
+          const output = safeFailure(error);
+          return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output, isError: true };
+        }
+      },
+    };
+  }
+
+  async adopt(job: Job, draft: Data): Promise<void> {
+    const active = this.store.activeProposal(job.conversation_id!, job.sender_id);
+    if (active && active.changeset?.id !== draft.id) throw new QueryError('proposal_pending', '请先处理已有提议');
+    if (!job.conversation_id || !draft.id || !draft.library_id) throw new QueryError('invalid_proposal', '变更集缺少身份或会话信息');
+    const proposal: ShelfProposal = { id: active?.id ?? randomUUID(), conversationId: job.conversation_id!, ownerId: job.sender_id,
+      jobId: job.id, libraryId: draft.library_id, status: 'pending', source: draft.source?.agent_name ?? '',
+      request: {}, token: '', expires: 0, fingerprint: '' };
+    this.preview(proposal, draft);
+  }
+
   context(job: Job): string {
     const proposal = this.store.activeProposal(job.conversation_id!, job.sender_id);
     if (!proposal) return '本会话当前没有由该发送人发起的待确认提议。';
-    return `当前发送人提议 ${proposal.id}，状态 ${proposal.status}。\n${proposal.changeset
-      ? JSON.stringify(this.queries.projectChangeset(proposal.changeset).data) : '提议结果待核对'}\n确认和取消由宿主校验口令，历史消息中的口令不构成授权。`;
+    const content = proposal.kind === 'ingest' ? proposal.request : proposal.changeset
+      ? this.queries.projectChangeset(proposal.changeset).data : '提议结果待核对';
+    return this.queries.redact(`当前发送人提议 ${proposal.id}，状态 ${proposal.status}。\n${JSON.stringify(content)}\n确认和取消由宿主校验口令，历史消息中的口令不构成授权。`);
   }
 
   private async normalize(library: string, operations: Data[]): Promise<Data[]> {
@@ -96,6 +142,7 @@ export class ShelfEditor {
       const now = new Date().toISOString();
       if (op.entity) op.entity.effective_at ||= now;
       if (op.patch) op.patch.effective_at ||= now;
+      if (op.document) op.document.occurred_at ||= now;
       if (['set_sale_statuses', 'set_parameter_values', 'create_certification', 'update_certification'].includes(op.type)) op.effective_at ||= now;
       if (op.type === 'save_relation' && !op.relation_id) op.relation.valid_from ||= now;
       if (op.type === 'end_relation') op.valid_to ||= now;
@@ -103,8 +150,8 @@ export class ShelfEditor {
       const collect = (value: any) => {
         if (!value || typeof value !== 'object') return;
         for (const [key, child] of Object.entries(value)) {
-          if (['entity_id', 'candidate_entity_id', 'subject_id', 'object_id', 'owner_id', 'cell_part_id', 'other_entity_id'].includes(key) && child) references.add(String(child));
-          if (key === 'part_ids' && Array.isArray(child)) child.forEach(id => references.add(String(id)));
+          if (['entity_id', 'candidate_entity_id', 'subject_id', 'object_id', 'owner_id', 'cell_part_id', 'other_entity_id', 'requirement_id', 'product_line_id'].includes(key) && child) references.add(String(child));
+          if (['part_ids', 'requirement_ids', 'product_line_ids'].includes(key) && Array.isArray(child)) child.forEach(id => references.add(String(id)));
           collect(child);
         }
       };
@@ -149,8 +196,18 @@ export class ShelfEditor {
     if (!Value.Check(this.queries.proposalSchema(), input)) throw new QueryError('invalid_proposal', '提议参数不符合契约');
     if (!job.conversation_id || !this.queries) throw new QueryError('invalid_session', '提议缺少会话');
     let proposal = this.store.activeProposal(job.conversation_id, job.sender_id);
+    if (proposal?.kind === 'ingest') throw new QueryError('proposal_pending', '请先处理已有资料收录提议');
     if (proposal && ['preparing', 'unknown', 'committing'].includes(proposal.status)) {
       throw new QueryError('proposal_unsettled', '上一请求结果待核对，请先等待恢复');
+    }
+    if (input.changeset_id && !proposal) {
+      const draft = await this.queries.readChangesets(input.library_id, input.changeset_id);
+      await this.adopt(job, draft);
+      proposal = this.store.activeProposal(job.conversation_id, job.sender_id);
+      if (!input.decisions) return this.store.proposalForJob(job.id)!;
+    }
+    if (input.changeset_id && proposal?.changeset?.id !== input.changeset_id) {
+      throw new QueryError('unknown_proposal', '请先处理当前提议');
     }
     if (Boolean(input.operations) === Boolean(input.decisions)) throw new QueryError('invalid_proposal', '首次提供 operations，修订提供 decisions');
     if (input.operations) {
@@ -194,7 +251,7 @@ export class ShelfEditor {
   }
 
   private preview(proposal: ShelfProposal, draft: Data) {
-    if (draft.library_id !== proposal.libraryId || draft.source?.agent_name !== proposal.source) {
+    if (draft.library_id !== proposal.libraryId || (draft.source?.agent_name ?? '') !== proposal.source) {
       throw new QueryError('proposal_mismatch', '变更集与本次提议不匹配');
     }
     proposal.changeset = draft;
@@ -206,6 +263,12 @@ export class ShelfEditor {
   }
 
   render(proposal: ShelfProposal): string {
+    if (proposal.kind === 'ingest') {
+      if (proposal.status === 'confirmed') return `资料提交结果\n${JSON.stringify(proposal.changeset, null, 2)}`;
+      if (proposal.status === 'cancelled') return '资料收录提议已取消。';
+      if (proposal.status !== 'pending') return '资料提交结果待核对，请勿重复新建。';
+      return this.queries.redact(`待确认资料收录 ${proposal.id}\n${JSON.stringify(proposal.request, null, 2)}\n\n相同来源的内容变化会覆盖旧正文。发起人请在 10 分钟内回复本条并 @机器人，发送“确认 ${proposal.token}”或“取消 ${proposal.token}”。`);
+    }
     if (proposal.status === 'unknown' || proposal.status === 'preparing' || proposal.status === 'committing') {
       return `提议 ${proposal.id} 的服务端结果待核对。程序恢复后会继续查询，请勿重复创建。`;
     }
@@ -246,8 +309,25 @@ export class ShelfEditor {
     if (!proposal || proposal.conversationId !== job.conversation_id || proposal.ownerId !== job.sender_id || proposal.token !== match[2]) {
       return { text: '确认未执行。口令、发起人或预览消息不匹配，请使用本人当前提议的最新预览。' };
     }
-    if (proposal.status === 'confirmed') return { text: this.render(proposal), proposal };
+    if (proposal.status === 'confirmed' || proposal.status === 'cancelled') return { text: this.render(proposal), proposal };
     if (proposal.status !== 'pending') return { text: '当前提议已取消或结果待核对，未发起新的提交。' };
+    if (proposal.kind === 'ingest') {
+      if (match[1] === '取消') proposal.status = 'cancelled';
+      else if (Date.now() > proposal.expires) {
+        proposal.token = randomBytes(6).toString('hex').toUpperCase();
+        proposal.expires = Date.now() + 10 * 60 * 1000;
+      } else {
+        proposal.jobId = job.id;
+        proposal.status = 'committing';
+        this.store.saveProposal(proposal);
+        try {
+          proposal.changeset = await this.queries.ingest(proposal.request) as Data;
+          proposal.status = 'confirmed';
+        } catch { proposal.status = 'unknown'; }
+      }
+      this.store.saveProposal(proposal);
+      return { text: this.render(proposal), proposal };
+    }
     if (match[1] === '取消') {
       const current = await this.queries.readChangesets(proposal.libraryId, proposal.changeset!.id);
       if (current.status === 'confirmed') {
@@ -306,6 +386,12 @@ export class ShelfEditor {
   }
 
   async recover(proposal: ShelfProposal): Promise<void> {
+    if (proposal.kind === 'ingest') {
+      // Retrying an acknowledged-but-lost ingest could overwrite a newer edit.
+      if (proposal.status === 'committing') proposal.status = 'unknown';
+      this.store.saveProposal(proposal);
+      return;
+    }
     try {
       let draft: Data | undefined;
       if (proposal.changeset) {

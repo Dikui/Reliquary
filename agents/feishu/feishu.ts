@@ -15,13 +15,21 @@ export function parseIncomingMessage(value: unknown, config: FeishuConfig, botId
       message.chat_id !== config.chatId || message.chat_type !== 'group' || sender.sender_type !== 'user') return;
   const mentions = Array.isArray(message.mentions) ? message.mentions.map(record) : [];
   const bot = mentions.find(mention => record(mention.id).open_id === botId);
-  if (!bot) return;
+  if (!bot && !(message.message_type === 'file' && message.parent_id)) return;
   if (typeof message.message_id !== 'string' || typeof event.event_id !== 'string') return;
   const senderId = record(sender.sender_id).open_id;
   if (typeof senderId !== 'string') return;
   const result: IncomingMessage = { messageId: message.message_id, eventId: event.event_id, senderId,
     parentId: typeof message.parent_id === 'string' ? message.parent_id : null, text: '', branch: false };
-  if (message.message_type !== 'text') return { ...result, rejection: '当前支持文字提问，请 @机器人 发送文字。' };
+  if (message.message_type === 'file') {
+    try {
+      const file = record(JSON.parse(String(message.content)));
+      if (typeof file.file_key !== 'string' || typeof file.file_name !== 'string') throw new Error();
+      return { ...result, text: `用户发送附件 ${file.file_name}。先读取附件目录，结合会话确认用途。`,
+        attachment: { fileKey: file.file_key, name: file.file_name } };
+    } catch { return { ...result, rejection: '无法读取附件信息，请重新发送。' }; }
+  }
+  if (message.message_type !== 'text') return { ...result, rejection: '请发送文字，或回复机器人消息发送文件。' };
   try {
     const text = record(JSON.parse(String(message.content))).text;
     if (typeof text !== 'string') throw new Error();
@@ -56,7 +64,8 @@ export class FeishuTransport {
   private botId = '';
   private http = defaultHttpInstance.create({ timeout: 15000 });
   constructor(readonly config: FeishuConfig, private log: (event: string, details?: object) => void) {
-    this.http.interceptors.response.use(response => response.data);
+    this.http.interceptors.response.use(response => (response.config as { $return_headers?: boolean }).$return_headers
+      ? { data: response.data, headers: response.headers } : response.data);
     this.client = new Client({ appId: config.appId, appSecret: config.appSecret, httpInstance: this.http as unknown as HttpInstance, loggerLevel: LoggerLevel.error,
       logger: { error: () => log('feishu_sdk_error'), warn: () => {}, info: () => {}, debug: () => {}, trace: () => {} } });
   }
@@ -90,6 +99,23 @@ export class FeishuTransport {
   onFatal?: () => void;
 
   connectionStatus() { return this.ws?.getConnectionStatus().state ?? 'idle'; }
+
+  async download(messageId: string, fileKey: string): Promise<Buffer> {
+    await this.original(messageId);
+    const resource = await this.client.im.v1.messageResource.get({ path: { message_id: messageId, file_key: fileKey }, params: { type: 'file' } });
+    const stream = resource.getReadableStream();
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of stream) {
+      size += chunk.length;
+      if (size > 32 * 1024 * 1024) {
+        stream.destroy();
+        throw new QueryError('file_too_large', '附件超过 32 MiB');
+      }
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
 
   private async original(messageId: string): Promise<MessageInfo> {
     const response = await this.client.im.v1.message.get({ path: { message_id: messageId } });

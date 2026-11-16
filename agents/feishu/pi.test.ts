@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { zstdDecompressSync } from 'node:zlib';
 import { loadConfig } from './config.js';
 import { QueryAgent } from './pi.js';
 import { connectQueryTools, TOOL_NAMES } from './tools.js';
@@ -12,11 +13,11 @@ import { createRedactor } from './output.js';
 import { Store } from './store.js';
 import { Worker } from './worker.js';
 
-// Customer installation uses the local subscription relay, never an OAuth token.
-test('客户订阅模式通过本机转发完成工具调用并保留会话', async () => {
+test('客户订阅模式由 Pi 直接调用模型并保留工具调用会话', async () => {
   const dataDir = await mkdtemp(join(tmpdir(), 'reliquary-customer-pi-'));
   const originalFetch = globalThis.fetch;
   const secrets = ['customer-local-key'];
+  const access = `header.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'customer' } })).toString('base64url')}.signature`;
   let requests = 0;
   let requestFailure: unknown;
   const queries = {
@@ -26,11 +27,16 @@ test('客户订阅模式通过本机转发完成工具调用并保留会话', as
   };
   let agent: QueryAgent | undefined;
   try {
+    await writeFile(join(dataDir, 'auth.json'), JSON.stringify({ 'openai-codex': {
+      type: 'oauth', access, refresh: 'customer-refresh', expires: Date.now() + 3600000,
+    } }), { mode: 0o600 });
     globalThis.fetch = async (input, init) => { try {
       const request = input instanceof Request ? input : new Request(input, init);
-      assert.equal(request.url, 'http://localhost/api/v1/agent/models/customer-model/responses');
-      assert.equal(request.headers.get('authorization'), 'Bearer customer-local-key');
-      const body = await request.json() as any;
+      assert.equal(request.url, 'https://chatgpt.com/backend-api/codex/responses');
+      assert.equal(request.headers.get('authorization'), `Bearer ${access}`);
+      const bytes = Buffer.from(await request.arrayBuffer());
+      const body = JSON.parse((request.headers.get('content-encoding') === 'zstd' ? zstdDecompressSync(bytes) : bytes).toString());
+      assert.equal(body.model, 'gpt-6.1-sol');
       assert.equal(body.store, false);
       assert.equal(body.stream, true);
       assert.equal(body.max_output_tokens, undefined);
@@ -50,11 +56,11 @@ test('客户订阅模式通过本机转发完成工具调用并保留会话', as
     };
     const config = loadConfig({ MODEL_SOURCE: 'chatgpt', MODEL_ID: 'customer-model', MODEL_NAME: 'gpt-6.1-sol',
       RELIQUARY_API_URL: 'http://localhost', RELIQUARY_API_KEY: 'customer-local-key', RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: dataDir });
-    agent = await QueryAgent.open(config, queries as never);
+    agent = await QueryAgent.open({ ...config, dataDir: join(dataDir, 'check') }, queries as never);
     const answer = await agent.ask('检查资料库').catch(error => { throw requestFailure ?? error; });
     assert.equal(answer.text, '连接正常');
     assert.equal(requests, 2);
-    assert.ok(!(await readFile(agent.session.sessionFile!, 'utf8')).includes('customer-local-key'));
+    assert.doesNotMatch(await readFile(agent.session.sessionFile!, 'utf8'), /customer-local-key|customer-refresh|signature/);
   } finally { globalThis.fetch = originalFetch; await agent?.close(); await rm(dataDir, { recursive: true, force: true }); }
 });
 
@@ -64,6 +70,7 @@ test('本地查询会话串行运行、恢复固定配置并从指定答案派�
   const dataDir = await mkdtemp(join(tmpdir(), 'reliquary-pi-'));
   const requests: Record<string, any>[] = [];
   const toolCalls: string[] = [];
+  const names = [...TOOL_NAMES, 'list_topics'];
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -76,27 +83,28 @@ test('本地查询会话串行运行、恢复固定配置并从指定答案派�
         protocolVersion: '2025-03-26', capabilities: { tools: {} },
         serverInfo: { name: 'synthetic-reliquary', version: '1' }, instructions: '只引用工具返回的事实。',
       };
-      if (body.method === 'tools/list') result = { tools: TOOL_NAMES.map(name => {
+      if (body.method === 'tools/list') result = { tools: names.map(name => {
         const properties: Record<string, object> = {};
         if (['search', 'graph_search'].includes(name)) properties.libraries = { type: 'array', items: { type: 'string' } };
         if (name === 'search') properties.query = { type: 'string' };
         if (['get_entry', 'get_entity'].includes(name)) properties.id = { type: 'string' };
-        if (['list_entities', 'shelf_find', 'shelf_get', 'shelf_query', 'shelf_guide'].includes(name)) properties.library_id = { type: 'string' };
+        if (['list_entities', 'list_topics', 'shelf_find', 'shelf_get', 'shelf_query', 'shelf_guide'].includes(name)) properties.library_id = { type: 'string' };
         if (name === 'shelf_find') properties.q = { type: 'string' };
         if (name === 'shelf_get') properties.node_id = { type: 'string' };
-        return { name, inputSchema: { type: 'object', properties, required: Object.keys(properties) } };
+        return { name, annotations: { readOnlyHint: true }, inputSchema: { type: 'object', properties, required: Object.keys(properties) } };
       }) };
       if (body.method === 'tools/call') {
         const { name, arguments: args } = body.params;
         toolCalls.push(name);
         if (name === 'reliquary_guide') {
-          result = { content: [{ type: 'text', text: args.workflow ? '按证据比较，遇到歧义先澄清。' : '- compare: 对比\n- entity-profile: 实体\n- shelf-expert: 货架' }] };
+          result = { content: [{ type: 'text', text: args.workflow ? '按证据比较，遇到歧义先澄清。主题先用 `list_topics`。' : '- compare: 对比\n- entity-profile: 实体\n- shelf-expert: 货架\n- topic-brief: 主题简报' }] };
         } else {
           let data: unknown = {};
           if (name === 'list_libraries') data = { libraries: [{ id: 'library', name: '演示', entity_schema: { fields: [] }, shelf_config: {} }] };
           if (name === 'search') data = { results: [{ entry_id: 'entry', library_id: 'library', title: '规格', snippets: [{ content: '50 kWh', locations: [{ heading_path: ['参数'], paragraph: 1, start: 0, end: 6 }] }] }] };
           if (name === 'get_entry') data = { library_id: 'library', header: { id: 'entry', title: '规格' }, body: '50 kWh', offset: 0, total_length: 6 };
           if (name === 'shelf_query') data = { items: [], total: 0, truncated: false, as_of: '2026-11-15T00:00:00Z' };
+          if (name === 'list_topics') data = { topics: [{ id: 'topic', library_id: 'library', name: '合成主题' }] };
           result = { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data };
         }
       }
@@ -117,7 +125,10 @@ test('本地查询会话串行运行、恢复固定配置并从指定答案派�
     if (question === '等待超时') return;
     const results = messages.slice(userIndex + 1).filter(message => message.role === 'tool');
     let next: { name: string; arguments: object } | undefined;
-    const steps = question.includes('比较') ? [
+    const steps = question.includes('主题简报') ? [
+      { name: 'reliquary_guide', arguments: { workflow: 'topic-brief' } },
+      { name: 'list_topics', arguments: { library_id: 'library' } },
+    ] : question.includes('比较') ? [
       { name: 'reliquary_guide', arguments: { workflow: 'compare' } },
       { name: 'search', arguments: { libraries: ['library'], query: 'A' } },
       { name: 'search', arguments: { libraries: ['library'], query: 'B' } },
@@ -153,13 +164,15 @@ test('本地查询会话串行运行、恢复固定配置并从指定答案派�
     const [answer, comparison] = await Promise.all([agent.ask('欧洲'), agent.ask('比较 A 和 B')]);
     assert.match(comparison.text, /资料 entry/);
     assert.ok(comparison.evidence.length >= 4);
+    const brief = await agent.ask('主题简报');
+    assert.ok(brief.evidence.some((entry: any) => entry.tool === 'list_topics'));
     assert.doesNotMatch(comparison.text, /synthetic-model-key/);
     const later = await agent.ask('后续问题');
     const sessionText = await readFile(join(dataDir, 'sessions', later.sessionFile), 'utf8');
     assert.doesNotMatch(sessionText, /synthetic-api-key|synthetic-model-key|UNAUTHORIZED_CONTEXT/);
     await agent.close();
     agent = await QueryAgent.open({ ...config, model: 'updated-model' }, queries, { sessionFile: answer.sessionFile });
-    assert.deepEqual(agent.session.getActiveToolNames().sort(), [...TOOL_NAMES].sort());
+    assert.deepEqual(agent.session.getActiveToolNames().sort(), [...names].sort());
     await agent.ask('/skill:unknown !echo 继续');
     assert.equal(requests.at(-1)?.model, 'updated-model');
     assert.ok(JSON.stringify(requests.at(-1)).includes('后续问题'));
@@ -172,13 +185,13 @@ test('本地查询会话串行运行、恢复固定配置并从指定答案派�
     await agent.ask('禁止工具');
     assert.ok(!toolCalls.includes('bash'));
     assert.match(JSON.stringify(requests.at(-1)), /not found|not available|Unknown tool/i);
-    assert.ok(requests.every(body => body.tools.length === TOOL_NAMES.length));
+    assert.ok(requests.every(body => body.tools.length === names.length));
     // Stage 3: the host adds one proposal tool and persists its result for later turns.
     const maintained = await QueryAgent.open(config, queries, { sessionFile: later.sessionFile,
       proposalTool: { name: 'shelf_propose', label: 'proposal', description: 'fixture proposal',
         parameters: { type: 'object', properties: {} } as never,
         execute: async () => ({ content: [{ type: 'text', text: 'pending' }], details: {} }) }, shelfContext: '没有待确认提议' });
-    assert.deepEqual(maintained.session.getCallableToolNames().sort(), [...TOOL_NAMES, 'shelf_propose'].sort());
+    assert.deepEqual(maintained.session.getCallableToolNames().sort(), [...names, 'shelf_propose'].sort());
     await maintained.close();
     const receipt = await QueryAgent.recordHost(config, later.sessionFile, 'host-result', '宿主已确认合成修改');
     const receiptBranch = await QueryAgent.open(config, queries, { sessionFile: receipt.sessionFile, answerEntryId: receipt.answerEntryId });

@@ -4,6 +4,7 @@ import { safeFailure, type QueryTools } from './tools.js';
 import { DeliveryError, type FeishuTransport } from './feishu.js';
 import { Store, type Job } from './store.js';
 import { ShelfEditor, type ShelfProposal } from './shelf.js';
+import { attachmentTool } from './attachment.js';
 
 export class Worker {
   private modelWork: Promise<void> | undefined;
@@ -14,7 +15,7 @@ export class Worker {
   lastError: string | null = null;
 
   constructor(private config: Config, private queries: QueryTools, readonly store: Store,
-    private transport: Pick<FeishuTransport, 'reply' | 'reconcile'>,
+    private transport: Pick<FeishuTransport, 'reply' | 'reconcile'> & Partial<Pick<FeishuTransport, 'download'>>,
     private log: (event: string, details?: object) => void,
     private shelf?: ShelfEditor) {}
 
@@ -88,10 +89,17 @@ export class Worker {
           return true;
         }
       }
+      const additionalTools = [];
+      if (this.shelf) {
+        additionalTools.push(this.shelf.entryDefinition(job));
+        if (this.transport.download) additionalTools.push(attachmentTool(this.config, this.queries, this.store, job,
+          { download: this.transport.download.bind(this.transport) }, this.shelf));
+      }
       this.active = await QueryAgent.open(this.config, this.queries, {
         sessionFile: conversation.session_file ?? conversation.parent_file ?? undefined,
         answerEntryId: conversation.session_file ? undefined : conversation.branch_entry ?? undefined,
         proposalTool: this.shelf?.definition(job), shelfContext: this.shelf?.context(job),
+        additionalTools,
       });
       const checkpoint = this.active.checkpoint();
       this.store.started(job, checkpoint.sessionFile, checkpoint.baseLeaf);
