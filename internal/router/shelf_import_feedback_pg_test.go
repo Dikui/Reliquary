@@ -84,7 +84,7 @@ func TestShelfImportRecordKindsAcknowledgeUnmappedColumnsWithoutWrites(t *testin
 	for _, kind := range []string{"certification_progress", "certification_report", "atq", "overseas_sales"} {
 		t.Run(kind, func(t *testing.T) {
 			f, library, nodes := shelfModelSetup(t)
-			mapping := types.ShelfImportSheet{Worksheet: "Map", HeaderRows: 2, OwnerKind: "model", Progress: "Completed"}
+			mapping := types.ShelfImportSheet{Worksheet: "Map", HeaderRows: 2, OwnerKind: "model", Progress: "Completed", NoCellPart: strings.HasPrefix(kind, "certification_")}
 			mapping.Columns = []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}}
 			if kind == "atq" {
 				mapping.ProductLineID = shelfNode(nodes, "line")

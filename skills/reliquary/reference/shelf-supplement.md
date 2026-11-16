@@ -54,7 +54,7 @@ requirement_ids 为本库活动资料要求 ID 数组，可明确关联多项，
 
 ## Excel 补充
 
-不传 node_id 时，import_fields 按 file_kind 返回与方案校验同源的 columns（允许的 field）、column_keys（须给 key 的配置种类）、required_columns 和 required_one_of（每组至少选一项）。sheet_fields 列出专属工作表字段及 required、optional、required_with_cell_part、required_with_certification 条件；所有种类共用 worksheet、header_rows、columns、ignore。仅 column_keys 中的列字段接受 key；配置种类 region、market、standard、product_line_field 分别对应区域、市场、标准、产品线参数。认证电芯列为 cell_part，报告另可映射 pack_model、cluster_model、container_model、model。
+不传 node_id 时，import_fields 按 file_kind 返回与方案校验同源的 columns（允许的 field）、column_keys（须给 key 的配置种类）、required_columns 和 required_one_of（每组至少选一项）。sheet_fields 列出专属工作表字段及 required、optional、required_with_cell_part、required_without_cell_part、required_with_certification 条件；认证进度和报告表须映射 cell_part，或在用户确认本表没有电芯列后设 no_cell_part，二者只能选一；所有种类共用 worksheet、header_rows、columns、ignore。仅 column_keys 中的列字段接受 key；配置种类 region、market、standard、product_line_field 分别对应区域、市场、标准、产品线参数。认证电芯列为 cell_part，报告另可映射 pack_model、cluster_model、container_model、model。
 
 工作表可另给 range（如 A3:F200，限定表格区域）与 transpose（记录按列排列）。设置后先把区域整理成每条记录一行的表，区域左上角为 A1，转置时区域第一列成为表头；columns 的列字母与 header_rows 按整理后的表填写，import_location 仍给原单元格。忽略的表不接受这两项。
 
@@ -68,7 +68,7 @@ requirement_ids 为本库活动资料要求 ID 数组，可明确关联多项，
 
 名称原样保存，身份以 ID 和类别为准。同类别的名称、别名、代码共用唯一名称空间；资料要求例外，在同一所属清单内唯一。跨类别同名须明确确认实体 ID、类别和原写法。别名只能用于已确认的同一身份，不按近似拼写合并；same_entity 只加名称与别名，不合并提议属性。
 
-认证识别键为型号（或明确的所属部件、产品名称、平台）＋标准＋认证对象＋电芯部件＋地区。年份单列，标准使用库内键、规范名或明确别名；通用 update_certification 的零条或多条匹配仍须提交方处理。认证进度和报告导入在零条匹配时生成 create_certification，以 new 反馈；一条匹配更新，多条仍为 uncertain，不合并。新增未映射 name 或名称单元格为空时，名称为“所属节点原名 / 标准规范名 / 认证对象原文”，有电芯部件再加“ / 电芯部件原名”，有地区再加“ / 地区名”（使用配置区域显示名）；映射 name 且非空时用原文。同名仍报冲突，不加后缀。
+认证识别键为型号（或明确的所属部件、产品名称、平台）＋标准＋认证对象＋电芯部件＋地区。年份单列，标准使用库内键、规范名或明确别名；电芯等区分认证的差异须写入 cell_part_id 或 conditions，只写在名称或描述里时，新增与已有记录识别键和条件相同会被 uncertain 拦下；名称里出现所属型号组成中的部件名或别名，而该部件不在 cell_part_id 或 conditions 里，新增、改名或改身份时同样被拦下；导入行唯一匹配已有认证、却把非空的年份、机构或证书编号改成另一个值时为 uncertain，同一张证书须改用明确的 update_certification 提交，另一张证书须把差异写进识别字段或条件；通用 update_certification 的零条或多条匹配仍须提交方处理。认证进度和报告导入在零条匹配时生成 create_certification，以 new 反馈；一条匹配更新，多条仍为 uncertain，不合并。新增未映射 name 或名称单元格为空时，名称为“所属节点原名 / 标准规范名 / 认证对象原文”，有电芯部件再加“ / 电芯部件原名”，有地区再加“ / 地区名”（使用配置区域显示名）；映射 name 且非空时用原文。同名仍报冲突，不加后缀。
 
 资料要求按“所属清单＋名称”识别，list_name 必须明确；导入清单由方案键和工作表确定。applies_to 只绑定产品线，市场键取 markets，与可售区域 regions 独立。阶段按 stages 数组顺序，键保持身份，不推断业务含义。没有区域状态记录不等于待定。无法确定的身份、归属、字段含义和条件均退回提交方，不推断。
 

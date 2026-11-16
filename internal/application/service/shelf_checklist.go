@@ -183,18 +183,22 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 				if !slices.Contains(v.Requirements(), r.ID) {
 					continue
 				}
-				level, ok := owners[documentIDValue(v.OwnerID)]
+				scope, scopeConditions, ok := d.documentScope(v, id)
+				if !ok {
+					continue
+				}
+				level, ok := owners[scope]
 				if !ok || level != rank {
 					continue
 				}
 				admitted := cloneShelfDomains(domain)
 				valid := true
-				conditions := append([]types.ShelfCondition{}, v.Conditions...)
+				conditions := append(append([]types.ShelfCondition{}, v.Conditions...), scopeConditions...)
 				if rank == 1 {
 					for _, edge := range d.edges {
-						if edge.SubjectID == id && edge.ObjectID == documentIDValue(v.OwnerID) && edge.RelationType == "composed_of" {
+						if edge.SubjectID == id && edge.ObjectID == scope && edge.RelationType == "composed_of" {
 							module, _ := edge.Attributes["module_type"].(string)
-							conditions = append(conditions, types.ShelfCondition{ModuleType: module, PartIDs: []string{documentIDValue(v.OwnerID)}})
+							conditions = append(conditions, types.ShelfCondition{ModuleType: module, PartIDs: []string{scope}})
 						}
 					}
 				}
@@ -237,6 +241,44 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 	}
 	return stage, stageOwner, rows
 }
+
+// documentScope returns the node whose checklist level a file counts at. A file
+// on a certification record counts at the certification owner and inherits the
+// certification's conditions, including its cell part within this model.
+func (d *shelfChecklistData) documentScope(v *types.ShelfDocumentVersion, modelID string) (string, []types.ShelfCondition, bool) {
+	id := documentIDValue(v.OwnerID)
+	node, ok := d.nodes[id]
+	if !ok || node.Kind != "certification" {
+		return id, nil, true
+	}
+	if node.ArchivedAt != nil || node.MergedIntoID != "" {
+		return "", nil, false
+	}
+	raw, ok := node.Attributes["certification"]
+	if !ok {
+		return "", nil, false
+	}
+	var record types.ShelfCertification
+	if types.DecodeShelfValue(raw, &record) != nil || record.OwnerID == "" {
+		return "", nil, false
+	}
+	conditions := append([]types.ShelfCondition{}, record.Conditions...)
+	if record.CellPartID != "" && record.CellPartID != record.OwnerID {
+		found := false
+		for _, edge := range d.edges {
+			if edge.SubjectID == modelID && edge.ObjectID == record.CellPartID && edge.RelationType == "composed_of" {
+				module, _ := edge.Attributes["module_type"].(string)
+				conditions = append(conditions, types.ShelfCondition{ModuleType: module, PartIDs: []string{record.CellPartID}})
+				found = true
+			}
+		}
+		if !found {
+			return "", nil, false
+		}
+	}
+	return record.OwnerID, conditions, true
+}
+
 func (d *shelfChecklistData) status(stage string, r types.ShelfRequirement, v *types.ShelfDocumentVersion) (string, string) {
 	if stage == "" {
 		if v != nil {

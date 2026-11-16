@@ -289,3 +289,40 @@ func TestShelfChecklistRequirementMetadataCannotBeErased(t *testing.T) {
 	r := checklistRequirement(t, f, l, "Protected metadata", "", "final_due")
 	f.request(http.MethodPatch, "/entities/"+r.ID, map[string]any{"revision": 1, "attributes": map[string]any{}}, http.StatusBadRequest, nil)
 }
+
+// A certification report linked to a requirement counts at the certification
+// owner's level and keeps the certification's cell part as a condition, so the
+// checklist recognizes every saved requirement link.
+func TestShelfChecklistCountsCertificationFiles(t *testing.T) {
+	f, l, n := checklistSetup(t)
+	l.ShelfConfig.Standards = []types.ShelfStandard{{Key: "standard_a", Name: "Synthetic Standard"}}
+	f.request(http.MethodPut, "/libraries/"+l.ID, map[string]any{"shelf_config": l.ShelfConfig}, http.StatusOK, &l)
+	model := shelfNode(n, "model")
+	f.request(http.MethodPatch, "/entities/"+shelfNode(n, "product"), map[string]any{"revision": 1, "attributes": map[string]any{"current_stage": "final_due"}}, http.StatusOK, nil)
+	r := checklistRequirement(t, f, l, "Certification report", "", "final_due")
+	checklistBind(f, l, r, shelfNode(n, "line"))
+	path := "/libraries/" + l.ID + "/shelf/changesets"
+	var draft types.ShelfChangeset
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Cell A certificate", "owner_id": model, "standard": "standard_a", "certification_object": "Container", "cell_part_id": shelfNode(n, "a"), "region": "region_a", "number": "CERT-A"}}}}, http.StatusCreated, &draft)
+	cert := draft.Items[0].EntityID
+	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "file", "type": "add_document_version", "document": map[string]any{"name": "Certificate report", "owner_id": cert, "certificate_number": "CERT-A", "requirement_id": r.ID, "cloud_url": "https://example.invalid/report", "stage": "final"}}}}, http.StatusCreated, nil)
+	got := map[string]string{}
+	for _, raw := range checklistRead(f, l, model)["checklist"].([]any) {
+		row := raw.(map[string]any)
+		c := row["conditions"].([]any)
+		require.Len(t, c, 1)
+		got[c[0].(map[string]any)["part_ids"].([]any)[0].(string)] = row["status"].(string)
+		if row["status"] == "delivered" {
+			require.Equal(t, cert, row["owner_id"])
+			require.Equal(t, "self", row["origin"])
+		}
+	}
+	require.Equal(t, map[string]string{shelfNode(n, "a"): "delivered", shelfNode(n, "b"): "missing"}, got)
+	var result types.ShelfQueryResult
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/query", map[string]any{"document_gaps": true, "part_id": shelfNode(n, "a")}, http.StatusOK, &result)
+	require.Zero(t, result.Total)
+	// The other model does not contain cell A, so the report does not apply to it.
+	rows := checklistRead(f, l, shelfNode(n, "single"))["checklist"].([]any)
+	require.Len(t, rows, 1)
+	require.Equal(t, "missing", rows[0].(map[string]any)["status"])
+}

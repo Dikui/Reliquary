@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -230,6 +231,144 @@ func (s *EntityService) resolveShelfCertification(ctx context.Context, draft *ty
 	return &matches[selected], nil
 }
 
+// Certifications are identified by owner, standard, object, cell part and region;
+// part conditions may separate records with the same key. A difference kept only
+// in the name, number or description is not structured, so another active record
+// with the same fields is rejected instead of saved.
+func (s *EntityService) rejectDuplicateShelfCertification(ctx context.Context, library *types.Library, record types.ShelfCertification, excludeID string, at time.Time) error {
+	times := []time.Time{at}
+	if now := time.Now(); !now.Equal(at) {
+		times = append(times, now)
+	}
+	for _, t := range times {
+		rows, err := s.shelfCertificationEntities(ctx, library, t)
+		if err != nil {
+			return err
+		}
+		for _, entity := range rows {
+			raw, ok := entity.Attributes["certification"]
+			if entity.ID == excludeID || !ok {
+				continue
+			}
+			var existing types.ShelfCertification
+			if err := types.DecodeShelfValue(raw, &existing); err != nil {
+				return err
+			}
+			if shelfCertificationKeyEqual(existing, record) && shelfConditionsEquivalent(existing.Conditions, record.Conditions) {
+				return apperrors.NewBadRequestError("uncertain: another certification has the same owner, standard, object, cell part, region and conditions; record the distinguishing difference in these fields (for example cell_part_id) or update the existing record").WithDetails(map[string]any{"candidates": []types.Entity{entity}})
+			}
+		}
+	}
+	return nil
+}
+
+// A name that mentions a part in the owner's composition (by exact name or
+// alias) must also record that part as cell_part_id or in conditions; otherwise
+// the difference exists only as text. Matches use whole tokens, and a part name
+// inside a longer matched part name is not counted.
+func (s *EntityService) rejectShelfCertificationNameParts(ctx context.Context, library *types.Library, record types.ShelfCertification, name string, at time.Time) error {
+	if strings.TrimSpace(name) == "" {
+		return nil
+	}
+	db := s.db.WithContext(ctx)
+	owner, err := shelfCertificationOwner(db, library, record.OwnerID)
+	if err != nil {
+		return err
+	}
+	models, err := shelfCertificationModels(db, library, owner, at)
+	if err != nil {
+		return err
+	}
+	ids := []string{}
+	if len(models) > 0 {
+		if err := db.Model(&types.Relation{}).Where("library_id=? AND subject_id IN ? AND relation_type='composed_of' AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", library.ID, models, at, at).Distinct("object_id").Pluck("object_id", &ids).Error; err != nil {
+			return err
+		}
+	}
+	recorded := map[string]bool{owner.ID: true, record.CellPartID: true}
+	for _, condition := range record.Conditions {
+		for _, id := range condition.PartIDs {
+			recorded[id] = true
+		}
+	}
+	parts := []types.Entity{}
+	if len(ids) > 0 {
+		if err := db.Where("id IN ? AND library_id=? AND kind='part' AND archived_at IS NULL AND merged_into_id=''", ids, library.ID).Find(&parts).Error; err != nil {
+			return err
+		}
+	}
+	if err := s.loadAliases(ctx, library.SpaceID, parts); err != nil {
+		return err
+	}
+	type spelling struct{ id, text string }
+	spellings := []spelling{}
+	for _, part := range parts {
+		for _, text := range append([]string{part.CanonicalName}, part.Aliases...) {
+			if text = normalizeEntityName(text); text != "" {
+				spellings = append(spellings, spelling{part.ID, text})
+			}
+		}
+	}
+	slices.SortStableFunc(spellings, func(a, b spelling) int { return len(b.text) - len(a.text) })
+	text := normalizeEntityName(name)
+	covered := make([]bool, len(text))
+	wordByte := func(i int) bool {
+		if i < 0 || i >= len(text) {
+			return false
+		}
+		c := text[i]
+		return c >= 'a' && c <= 'z' || c >= '0' && c <= '9'
+	}
+	missing := []types.Entity{}
+	for _, candidate := range spellings {
+		for start := 0; start < len(text); {
+			offset := strings.Index(text[start:], candidate.text)
+			if offset < 0 {
+				break
+			}
+			from, to := start+offset, start+offset+len(candidate.text)
+			start = from + 1
+			if wordByte(from-1) && wordByte(from) || wordByte(to-1) && wordByte(to) || slices.Contains(covered[from:to], true) {
+				continue
+			}
+			for i := from; i < to; i++ {
+				covered[i] = true
+			}
+			if !recorded[candidate.id] {
+				recorded[candidate.id] = true
+				index := slices.IndexFunc(parts, func(part types.Entity) bool { return part.ID == candidate.id })
+				missing = append(missing, parts[index])
+			}
+		}
+	}
+	if len(missing) > 0 {
+		return apperrors.NewBadRequestError("uncertain: certification name mentions a part that is not recorded as cell_part_id or in conditions; record the part in these fields or remove it from the name").WithDetails(map[string]any{"name": name, "parts": missing})
+	}
+	return nil
+}
+
+func shelfConditionsEquivalent(a, b []types.ShelfCondition) bool {
+	normalize := func(conditions []types.ShelfCondition) map[string][]string {
+		result := map[string][]string{}
+		for _, condition := range conditions {
+			parts := append(result[condition.ModuleType], condition.PartIDs...)
+			slices.Sort(parts)
+			result[condition.ModuleType] = slices.Compact(parts)
+		}
+		return result
+	}
+	left, right := normalize(a), normalize(b)
+	if len(left) != len(right) {
+		return false
+	}
+	for module, parts := range left {
+		if !slices.Equal(parts, right[module]) {
+			return false
+		}
+	}
+	return true
+}
+
 func shelfCertificationTime(draft *types.ShelfChangeset, op types.ShelfOperation) time.Time {
 	if draft.Source.Type == "import" {
 		return *draft.Source.FileDate
@@ -261,6 +400,12 @@ func (s *EntityService) writeShelfCertification(ctx context.Context, draft *type
 		if op.Certification.Name == "" {
 			return nil, apperrors.NewBadRequestError("certification name is required")
 		}
+		if err := s.rejectDuplicateShelfCertification(ctx, library, record, "", at); err != nil {
+			return nil, err
+		}
+		if err := s.rejectShelfCertificationNameParts(ctx, library, record, op.Certification.Name, at); err != nil {
+			return nil, err
+		}
 		entity, err := s.createManagedEntity(ctx, draft.LibraryID, types.ManagedEntityInput{Name: op.Certification.Name, Kind: "certification", Attributes: attrs, EffectiveAt: &at, NameConfirmations: confirmations}, item.EntityID)
 		if err != nil {
 			return nil, err
@@ -282,6 +427,29 @@ func (s *EntityService) writeShelfCertification(ctx context.Context, draft *type
 		return nil, err
 	}
 	item.EntityID = entity.ID
+	// An update that changes identity (a legacy region correction or new
+	// conditions) must not collide with another record. Unchanged identities keep
+	// working on legacy duplicates selected explicitly.
+	var previous types.ShelfCertification
+	if err := types.DecodeShelfValue(entity.Attributes["certification"], &previous); err != nil {
+		return nil, err
+	}
+	identityChanged := !shelfCertificationKeyEqual(previous, record) || !shelfConditionsEquivalent(previous.Conditions, record.Conditions)
+	if identityChanged {
+		if err := s.rejectDuplicateShelfCertification(ctx, library, record, entity.ID, at); err != nil {
+			return nil, err
+		}
+	}
+	// Check the name when it is replaced or its identity fields change; plain
+	// progress updates keep working on legacy names.
+	if name := op.Certification.Name; name != "" || identityChanged {
+		if name == "" {
+			name = entity.CanonicalName
+		}
+		if err := s.rejectShelfCertificationNameParts(ctx, library, record, name, at); err != nil {
+			return nil, err
+		}
+	}
 	// Replace the complete record explicitly, leaving other configured fields intact.
 	for key, value := range entity.Attributes {
 		if key != "certification" {

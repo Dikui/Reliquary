@@ -16,7 +16,7 @@ ATQ 方案编辑器另提供市场键与市场写法映射。市场在货架设�
 
 `GET /libraries/:id/shelf/import-plans` 返回当前库的方案，按 `key` 排序。每个文件种类用一个稳定的方案键。读取方案附带该方案最新批次的 `last_file_name`，尚无批次时省略。支持 `product_map`、`certification_progress`、`certification_report`、`overseas_sales` 和 `atq`。DC 与 AC 证书汇总都使用 `certification_report`，各工作表分别配置。
 
-不传节点调用 `shelf_guide` 时，`import_fields` 按 `file_kind` 返回方案校验使用的同一份字段定义：`columns` 是允许的 `columns[].field`，`column_keys` 列出须提供 `key` 的字段及其配置种类（区域 `region`、市场 `market`、标准 `standard`、产品线参数 `product_line_field`），其余字段不接受 `key`；`required_columns` 必填，`required_one_of` 的每组至少映射一个字段。`sheet_fields` 列出种类专属工作表字段及要求：`required`、`optional`、`required_with_cell_part`（报告含电芯部件时）、`required_with_certification`（海外标准核对矩阵列时）。各类共用 `worksheet`、`header_rows`、`columns` 与 `ignore`。传节点时省略此字段定义，继续返回节点相关要求与缺口。
+不传节点调用 `shelf_guide` 时，`import_fields` 按 `file_kind` 返回方案校验使用的同一份字段定义：`columns` 是允许的 `columns[].field`，`column_keys` 列出须提供 `key` 的字段及其配置种类（区域 `region`、市场 `market`、标准 `standard`、产品线参数 `product_line_field`），其余字段不接受 `key`；`required_columns` 必填，`required_one_of` 的每组至少映射一个字段。`sheet_fields` 列出种类专属工作表字段及要求：`required`、`optional`、`required_with_cell_part`（报告含电芯部件时）、`required_without_cell_part`（认证表没有映射 `cell_part` 时）、`required_with_certification`（海外标准核对矩阵列时）。各类共用 `worksheet`、`header_rows`、`columns` 与 `ignore`。传节点时省略此字段定义，继续返回节点相关要求与缺口。
 
 方案也通过变更集保存，没有直接修改货架的旁路：
 
@@ -159,6 +159,10 @@ ATQ 方案编辑器另提供市场键与市场写法映射。市场在货架设�
 认证工作表指定 `owner_kind`（`model`、`part`、`product` 或 `platform`），用 `owner` 列按名称、代码、明确别名或 ID 确定所属节点。可选 `product_line_id` 限定所属范围，按文件日期检查层级；无法证明属于指定产品线时转人工。共同必填列为 `owner`、`standard`、`certification_object` 和 `region`。地区单元格按本库 `shelf_config.regions` 的键、显示名或明确别名解析为区域键，比较时去首尾空白且不区分大小写。不预置国家或客户写法，不按地理归属推断。非空且无法解析时返回 `uncertain`，`details` 保留单元格原文，由提交方修正或在区域设置增加别名。空单元格保持为空，表示不分地区，仍参与识别。标准只按本库已配置的键、规范名或别名解析。单元格写成“标准:年份”（半角或全角冒号，四位年份）且冒号前是已配置标准时，拆为标准和年份；同时映射了 `year` 列且两者不同时为 `uncertain`。其他写法不拆、不猜。
 
 其他列可映射 `name`、`year`、`cell_part`、`agency`、`progress`、`start_date`、`obtained_date`、`issued_date`、`validity`、`number`、`cloud_url` 和 `sample_description`。名称与文字原样保存。已有认证只更新映射列，未映射字段和适用条件保留。识别键仍为所属节点、标准、认证对象、电芯部件和地区；零条匹配生成 `create_certification`，差异以 `new` 反馈，确认后才新增；一条匹配继续生成 `update_certification`；多条匹配仍为 `uncertain`，须提交含完整记录及目标修订号的修正操作，避免遗漏候选中的其他字段。同键重复行须逐项处理，不自动合并。`model_separators` 也用于拆分型号类别的所属节点列，不修剪拆分后的名字。
+
+认证进度与证书报告工作表须映射 `cell_part` 列，或设 `no_cell_part: true`，表示人工已确认本表没有电芯列；两者都缺或同时出现时方案不能保存，其他种类不接受 `no_cell_part`。此项只在保存方案时检查，之前保存的方案在重新保存前照常可用。
+
+导入行唯一匹配已有认证时，若年份、机构或证书编号由一个非空值变成另一个非空值（比较时忽略大小写和多余空白），该行带 `uncertain`，详情 `changes` 列出各字段的前后值：可能是另一张证书（如同一标准的不同版本）。同一张证书须由提交方改用明确的 `update_certification`；另一张须把差异写进识别字段或条件。空值补上新值属于正常进度，不受影响。
 
 新增认证未映射 `name` 或名称单元格为空时，生成名称 `所属节点原名 / 标准规范名 / 认证对象原文`，有电芯部件时追加 ` / 电芯部件原名`，有地区时追加 ` / 地区名`。节点及部件使用已识别实体的原名，标准使用配置规范名；地区使用已解析区域的显示名，空地区不追加。映射 `name` 且单元格非空时使用原文。生成名称与已有认证或本批其他行重名时，沿用现有同名冲突规则，不加后缀。此规则同时适用于认证进度与证书报告；通用更新操作和海外核对的语义不变。
 

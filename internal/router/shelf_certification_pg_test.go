@@ -1,8 +1,10 @@
 package router
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,6 +48,16 @@ func TestShelfCertificationConfirmedCreateAndProgressUpdate(t *testing.T) {
 	f.request(http.MethodGet, "/entities/"+id, nil, http.StatusOK, &detail)
 	require.EqualValues(t, 2, detail.Entity.Revision)
 	require.Equal(t, "Completed", detail.Entity.Attributes["certification"].(map[string]any)["progress"])
+}
+
+// setLegacyCertificationField simulates data saved before duplicate identities
+// were rejected.
+func setLegacyCertificationField(t *testing.T, f *managedNamesFixture, id, field, value string) {
+	t.Helper()
+	raw, _ := json.Marshal(value)
+	for _, statement := range []string{`UPDATE entities SET attributes=jsonb_set(attributes,ARRAY['certification',?::text],?::jsonb) WHERE id=?`, `UPDATE entity_attribute_versions SET attributes=jsonb_set(attributes,ARRAY['certification',?::text],?::jsonb) WHERE entity_id=?`} {
+		require.NoError(t, f.db.Exec(statement, field, string(raw), id).Error)
+	}
 }
 
 func configureCertificationStandards(f *managedNamesFixture, library *types.Library) {
@@ -118,8 +130,24 @@ func TestShelfCertificationUnmatchedKeysReturnToSubmitter(t *testing.T) {
 	blocked := submit(record, "update_certification", false)
 	require.Equal(t, "uncertain", blocked.Items[0].Conflicts[0].Type)
 	first := submit(record, "create_certification", true)
-	record["name"] = "Synthetic cert two"
+	// A difference kept only in the name is not an identity: the duplicate is
+	// returned to the submitter and nothing is written.
+	record["name"] = "Synthetic cert two (cell only in name)"
+	duplicate := submit(record, "create_certification", false)
+	require.Equal(t, "uncertain", duplicate.Items[0].Conflicts[0].Type)
+	require.Contains(t, duplicate.Items[0].Conflicts[0].Message, "cell_part_id")
+	f.request(http.MethodPost, path+"/"+duplicate.ID+"/confirm", map[string]any{"revision": duplicate.Revision, "decisions": []any{map[string]any{"item_id": "cert", "action": "apply"}}}, http.StatusConflict, nil)
+	// The same identity with an explicit cell part is a distinct record.
+	record["cell_part_id"] = shelfNode(nodes, "a")
+	distinct := submit(record, "create_certification", true)
+	require.NotEmpty(t, distinct.Items[0].EntityID)
+	delete(record, "cell_part_id")
+	// Legacy data may still hold duplicate identities; updates must choose one.
+	record["certification_object"] = "Legacy BMS"
+	record["name"] = "Synthetic legacy duplicate"
 	second := submit(record, "create_certification", true)
+	record["certification_object"] = "BMS"
+	setLegacyCertificationField(t, f, second.Items[0].EntityID, "certification_object", "BMS")
 	record["name"] = ""
 	blocked = submit(record, "update_certification", false)
 	require.Equal(t, "uncertain", blocked.Items[0].Conflicts[0].Type)
@@ -350,4 +378,44 @@ func TestShelfCertificationAncestorConditionsNeedOnePossibleModel(t *testing.T) 
 	f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "certification": map[string]any{"name": "Impossible parent certificate", "owner_id": shelfNode(nodes, "product"), "standard": "standard_a", "certification_object": "Container", "region": "region_a", "conditions": []any{map[string]any{"module_type": "module_a", "part_ids": []string{shelfNode(nodes, "a")}}, map[string]any{"module_type": "module_b", "part_ids": []string{part.ID}}}}}}}, http.StatusCreated, &saved)
 	require.Equal(t, "uncertain", saved.Items[0].Conflicts[0].Type)
 	f.request(http.MethodPost, path+"/"+saved.ID+"/confirm", map[string]any{"revision": saved.Revision, "decisions": []any{map[string]any{"item_id": "cert", "action": "apply"}}}, http.StatusConflict, nil)
+}
+
+// Problem 2 guard: a part named in the certification name must also be recorded
+// as cell_part_id or in conditions. Whole tokens only; plain updates of legacy
+// names are not rechecked.
+func TestShelfCertificationNameMentionsMustBeRecorded(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	configureCertificationStandards(f, &library)
+	path := "/libraries/" + library.ID + "/shelf/changesets"
+	submit := func(kind string, record map[string]any, confirmed bool) types.ShelfChangeset {
+		var draft types.ShelfChangeset
+		f.request(http.MethodPost, path, map[string]any{"source": map[string]any{"type": "web"}, "confirmed": confirmed, "operations": []any{map[string]any{"id": "cert", "type": kind, "revision": 1, "certification": record}}}, http.StatusCreated, &draft)
+		return draft
+	}
+	record := map[string]any{"name": "Synthetic model / UL / Synthetic a", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Container", "region": "region_a"}
+	blocked := submit("create_certification", record, false)
+	require.Equal(t, "uncertain", blocked.Items[0].Conflicts[0].Type)
+	require.Contains(t, blocked.Items[0].Conflicts[0].Message, "name mentions a part")
+	f.request(http.MethodPost, path+"/"+blocked.ID+"/confirm", map[string]any{"revision": blocked.Revision, "decisions": []any{map[string]any{"item_id": "cert", "action": "apply"}}}, http.StatusConflict, nil)
+
+	// Recording the part as the cell resolves it; a longer token is not a match.
+	record["cell_part_id"] = shelfNode(nodes, "a")
+	created := submit("create_certification", record, true)
+	require.NotEmpty(t, created.Items[0].EntityID)
+	other := map[string]any{"name": "Synthetic model / UL / Synthetic abc", "owner_id": shelfNode(nodes, "model"), "standard": "standard_a", "certification_object": "Rack", "region": "region_a"}
+	require.NotEmpty(t, submit("create_certification", other, true).Items[0].EntityID)
+
+	// Renaming to mention an unrecorded part is blocked; a plain update is not rechecked.
+	record["name"] = "Synthetic model / UL / Synthetic a + Synthetic b"
+	renamed := submit("update_certification", record, false)
+	require.Equal(t, "uncertain", renamed.Items[0].Conflicts[0].Type)
+	require.Contains(t, renamed.Items[0].Conflicts[0].Message, "name mentions a part")
+	legacy := "Synthetic model / UL / Synthetic a / Synthetic b"
+	require.NoError(t, f.db.Exec(`UPDATE entities SET canonical_name=?, normalized_name=? WHERE id=?`, legacy, strings.ToLower(legacy), created.Items[0].EntityID).Error)
+	record["name"] = ""
+	record["progress"] = "Done"
+	update := submit("update_certification", record, true)
+	var detail types.EntityDetail
+	f.request(http.MethodGet, "/entities/"+update.Items[0].EntityID, nil, http.StatusOK, &detail)
+	require.Equal(t, "Done", detail.Entity.Attributes["certification"].(map[string]any)["progress"])
 }

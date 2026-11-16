@@ -36,12 +36,12 @@ var shelfImportFields = map[string]ShelfImportFields{
 	"certification_progress": {
 		Columns:         []string{"name", "owner", "standard", "year", "certification_object", "cell_part", "region", "agency", "progress", "start_date", "obtained_date", "issued_date", "validity", "number", "cloud_url", "sample_description"},
 		RequiredColumns: []string{"owner", "standard", "certification_object", "region"},
-		SheetFields:     map[string]string{"owner_kind": "required", "product_line_id": "optional"},
+		SheetFields:     map[string]string{"owner_kind": "required", "product_line_id": "optional", "no_cell_part": "required_without_cell_part"},
 	},
 	"certification_report": {
 		Columns:         []string{"name", "owner", "standard", "year", "certification_object", "cell_part", "region", "agency", "progress", "start_date", "obtained_date", "issued_date", "validity", "number", "cloud_url", "sample_description", "model", "pack_model", "cluster_model", "container_model"},
 		RequiredColumns: []string{"owner", "standard", "certification_object", "region"},
-		SheetFields:     map[string]string{"owner_kind": "required", "product_line_id": "optional", "progress": "required", "module_type": "required_with_cell_part"},
+		SheetFields:     map[string]string{"owner_kind": "required", "product_line_id": "optional", "progress": "required", "module_type": "required_with_cell_part", "no_cell_part": "required_without_cell_part"},
 	},
 	"overseas_sales": {
 		Columns:         []string{"owner", "standard", "certification_object", "cell_part", "region", "agency", "progress", "validity", "number", "cloud_url", "sale_status", "certification"},
@@ -255,6 +255,15 @@ func (s *EntityService) validateRecordImportSheet(ctx context.Context, library *
 	}
 	if sheet.ModuleType != "" && !shelfOptionExists(library.ShelfConfig.ModuleTypes, sheet.ModuleType) {
 		return apperrors.NewBadRequestError("worksheet module_type must be configured")
+	}
+	if sheet.NoCellPart && schema.SheetFields["no_cell_part"] == "" {
+		return apperrors.NewBadRequestError("no_cell_part only applies to certification progress and report worksheets")
+	}
+	if schema.SheetFields["no_cell_part"] == "required_without_cell_part" {
+		hasCell := slices.ContainsFunc(sheet.Columns, func(c types.ShelfImportColumn) bool { return c.Field == "cell_part" })
+		if hasCell == sheet.NoCellPart {
+			return apperrors.NewBadRequestError("certification worksheet must map a cell_part column or set no_cell_part after a human confirms the sheet has no cell column, not both")
+		}
 	}
 	if schema.SheetFields["progress"] == "required" && strings.TrimSpace(sheet.Progress) == "" {
 		return apperrors.NewBadRequestError("report worksheet requires a confirmed completed progress spelling")

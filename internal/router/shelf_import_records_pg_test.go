@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -30,6 +31,10 @@ func importRecordRow(row int, values ...string) string {
 
 func importRecordPlan(f *managedNamesFixture, library types.Library, kind string, columns []types.ShelfImportColumn, extra map[string]any) {
 	sheet := map[string]any{"worksheet": "Map", "header_rows": 2, "owner_kind": "model", "columns": columns}
+	if kind == "certification_progress" || kind == "certification_report" {
+		// Synthetic plans without a cell column stand for a human-confirmed declaration.
+		sheet["no_cell_part"] = !slices.ContainsFunc(columns, func(c types.ShelfImportColumn) bool { return c.Field == "cell_part" })
+	}
 	for k, v := range extra {
 		sheet[k] = v
 	}
@@ -325,8 +330,11 @@ func TestShelfImportATQDiscardedInvalidRowRetainsDisappearanceBaseline(t *testin
 func TestShelfImportCertificationAmbiguousKeyPreservesCandidates(t *testing.T) {
 	f, l, n := shelfModelSetup(t)
 	configureCertificationStandards(f, &l)
+	// New writes reject duplicate identities; build the legacy duplicate directly.
 	for _, name := range []string{"First certificate", "Second certificate"} {
-		f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": name, "owner_id": shelfNode(n, "model"), "standard": "standard_a", "certification_object": "Container", "region": "region_a", "number": name}}}}, http.StatusCreated, nil)
+		var created types.ShelfChangeset
+		f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": name, "owner_id": shelfNode(n, "model"), "standard": "standard_a", "certification_object": "Container " + name, "region": "region_a", "number": name}}}}, http.StatusCreated, &created)
+		setLegacyCertificationField(t, f, created.Items[0].EntityID, "certification_object", "Container")
 	}
 	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "progress"}}, nil)
 	draft := importUpload(t, f, l.ID, "cert_20261028.xlsx", "", importWorkbook(t, importRecordRow(3, "Synthetic model", "standard_a", "Container", "region_a", "Planning"), ""), http.StatusCreated)
@@ -457,4 +465,62 @@ func TestShelfImportATQGroupTitleCannotProposeArchive(t *testing.T) {
 	draft := importUpload(t, f, l.ID, "atq_20261029.xlsx", "", importWorkbook(t, importRecordRow(3, "Grouping heading", ""), ""), http.StatusCreated)
 	require.Len(t, draft.Items, 1)
 	require.Equal(t, "uncertain", draft.Items[0].Conflicts[0].Type)
+}
+
+// Problem 2 guard: a single key match must not silently replace a different
+// certificate's year, agency or number; filling an empty value stays progress.
+func TestShelfImportCertificationReplacementNeedsReview(t *testing.T) {
+	f, l, n := shelfModelSetup(t)
+	configureCertificationStandards(f, &l)
+	var seed types.ShelfChangeset
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{
+		map[string]any{"id": "old", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": "Synthetic edition 2012", "owner_id": shelfNode(n, "model"), "standard": "standard_a", "year": 2012, "agency": "Lab one", "number": "OLD-1", "certification_object": "Container", "region": "region_a"}},
+		map[string]any{"id": "empty", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": "Synthetic pending", "owner_id": shelfNode(n, "model"), "standard": "standard_a", "certification_object": "Rack", "region": "region_a"}},
+	}}, http.StatusCreated, &seed)
+	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "year"}, {Column: "F", Field: "agency"}, {Column: "G", Field: "number"}}, nil)
+	rows := importRecordRow(3, "Synthetic model", "standard_a", "Container", "region_a", "2022", "Lab two", "NEW-2") + importRecordRow(4, "Synthetic model", "standard_a", "Rack", "region_a", "2022", "Lab two", "NEW-3")
+	draft := importUpload(t, f, l.ID, "progress_20261028.xlsx", "", importWorkbook(t, rows, ""), http.StatusCreated)
+	require.Len(t, draft.Items, 2)
+	replaced := draft.Items[0]
+	require.Equal(t, "update_certification", replaced.Operation.Type)
+	require.Equal(t, "Container", replaced.Operation.Certification.CertificationObject)
+	require.Equal(t, "uncertain", replaced.Conflicts[0].Type)
+	changes := replaced.Conflicts[0].Details.(map[string]any)["changes"].(map[string]any)
+	require.Len(t, changes, 3)
+	for _, field := range []string{"year", "agency", "number"} {
+		require.Contains(t, changes, field)
+	}
+	for _, conflict := range draft.Items[1].Conflicts {
+		require.NotEqual(t, "uncertain", conflict.Type)
+	}
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets/"+draft.ID+"/confirm", types.ShelfChangesetReview{Revision: draft.Revision, Decisions: []types.ShelfDecision{{ItemID: replaced.ID, Action: "apply"}, {ItemID: draft.Items[1].ID, Action: "apply"}}}, http.StatusConflict, nil)
+	var old types.EntityDetail
+	f.request(http.MethodGet, "/entities/"+seed.Items[0].EntityID, nil, http.StatusOK, &old)
+	require.Equal(t, "OLD-1", old.Entity.Attributes["certification"].(map[string]any)["number"])
+}
+
+// Problem 2 guard: certification sheets either map a cell column or carry the
+// human-confirmed no_cell_part declaration; other kinds reject the declaration.
+func TestShelfImportPlanDeclaresCellColumn(t *testing.T) {
+	f, l, n := shelfModelSetup(t)
+	base := []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}}
+	withCell := append(append([]types.ShelfImportColumn{}, base...), types.ShelfImportColumn{Column: "E", Field: "cell_part"})
+	for i, sample := range []struct {
+		kind    string
+		columns []types.ShelfImportColumn
+		noCell  bool
+		status  int
+	}{
+		{"certification_progress", base, false, http.StatusConflict},
+		{"certification_progress", withCell, true, http.StatusConflict},
+		{"certification_progress", base, true, http.StatusCreated},
+		{"certification_report", withCell, false, http.StatusCreated},
+		{"atq", []types.ShelfImportColumn{{Column: "A", Field: "name"}, {Column: "B", Field: "due_stages"}}, true, http.StatusConflict},
+	} {
+		sheet := map[string]any{"worksheet": "Map", "header_rows": 2, "owner_kind": "model", "columns": sample.columns, "no_cell_part": sample.noCell, "progress": "Done", "module_type": "module_a"}
+		if sample.kind == "atq" {
+			sheet = map[string]any{"worksheet": "Map", "header_rows": 2, "columns": sample.columns, "no_cell_part": true, "product_line_id": shelfNode(n, "line")}
+		}
+		f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "plan", "type": "save_import_plan", "import_plan": map[string]any{"key": fmt.Sprintf("map_%d", i), "name": fmt.Sprintf("Synthetic declaration %d", i), "file_kind": sample.kind, "sheets": []any{sheet}}}}}, sample.status, nil)
+	}
 }

@@ -53,6 +53,9 @@ type ShelfImportSheet struct {
 	ModuleType  string              `json:"module_type,omitempty"`
 	Progress    string              `json:"progress,omitempty"`
 	CheckValues map[string]bool     `json:"check_values,omitempty"`
+	// NoCellPart records the human confirmation that a certification sheet has
+	// no column to map as cell_part.
+	NoCellPart bool `json:"no_cell_part,omitempty"`
 }
 
 type ShelfImportColumn struct {

@@ -64,11 +64,14 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 		}
 	}
 	revision := int64(0)
+	var previous *types.ShelfCertification
 	if len(matches) == 1 {
 		if err := types.DecodeShelfValue(matches[0].Attributes["certification"], &record); err != nil {
 			return err
 		}
 		revision = matches[0].Revision
+		existing := record
+		previous = &existing
 	}
 	if b.plan.FileKind == "certification_report" {
 		if cell, ok := cells["progress:"]; ok && cell.Value != mapping.Progress {
@@ -133,11 +136,31 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 	if len(matches) > 1 {
 		op.Issues = []types.ShelfConflict{{Type: "uncertain", Message: "certification key has multiple candidates; submit a corrected complete record", Details: map[string]any{"candidates": matches, "match_count": len(matches)}}}
 	}
+	if previous != nil {
+		if changes := shelfCertificateReplacements(*previous, record); len(changes) > 0 {
+			op.Issues = append(op.Issues, types.ShelfConflict{Type: "uncertain", Message: "imported row replaces the year, agency or number of the matched certification; submit an explicit update if it is the same certificate, or record the distinguishing difference if it is another one", Details: map[string]any{"changes": changes, "candidates": matches}})
+		}
+	}
 	if text := cells["sample_description:"].Value; text != "" {
 		op.Issues = append(op.Issues, types.ShelfConflict{Type: "uncertain", Message: "sample description requires explicit part-condition review", Details: map[string]any{"kind": "conditions", "text": text}})
 	}
 	b.append(op)
 	return nil
+}
+
+// A key match whose year, agency or number changes from one nonempty value to
+// another may be a different certificate; filling an empty value is progress.
+func shelfCertificateReplacements(before, after types.ShelfCertification) map[string]map[string]any {
+	changes := map[string]map[string]any{}
+	if before.Year != 0 && after.Year != 0 && before.Year != after.Year {
+		changes["year"] = map[string]any{"before": before.Year, "after": after.Year}
+	}
+	for _, field := range []struct{ name, before, after string }{{"agency", before.Agency, after.Agency}, {"number", before.Number, after.Number}} {
+		if normalizeEntityName(field.before) != "" && normalizeEntityName(field.after) != "" && normalizeEntityName(field.before) != normalizeEntityName(field.after) {
+			changes[field.name] = map[string]any{"before": field.before, "after": field.after}
+		}
+	}
+	return changes
 }
 
 func (b *importMapBuilder) recordRegion(value string) (string, error) {
