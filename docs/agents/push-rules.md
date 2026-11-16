@@ -56,4 +56,5 @@ agents/feishu/migrate.ts console\.log\(JSON\.stringify\(await migrateState
 agents/feishu/setup.ts console\.log\(JSON\.stringify\(\{ component:
 scripts/agent-local.py MODEL_API_[K]EY=getpass\.getpass\('模型 API Key：'\)|FEISHU_APP_[S]ECRET=getpass\.getpass\('飞书 App Secret：'\)|console\.log\(
 scripts/test-agent-local.py 'to[k]en': '(local-fixture-key|fixture-key)'|self\.assertIn\("MODEL_API_[K]EY='synthetic-
+scripts/test-reliquary-admin.py "FEISHU_APP_[S]ECRET": "synthetic-feishu-app-value"
 ```
