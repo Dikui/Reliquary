@@ -73,6 +73,60 @@ def choose(items, label):
     return items[number - 1]
 
 
+def source_checkout(root):
+    """Prefer the source recorded by install-local.py, then this script's own checkout."""
+    candidates = []
+    marker = root / 'deploy/customer-install.json'
+    if marker.exists() and json.loads(marker.read_text()).get('source'):
+        candidates.append(Path(json.loads(marker.read_text())['source']))
+    candidates.append(Path(__file__).resolve().parent.parent)
+    for source in candidates:
+        if (source / 'agents/feishu/Dockerfile').is_file():
+            return source
+    raise ValueError('找不到含 agents/feishu 的源码目录，请从源码执行 scripts/agent-local.py configure --root 运行目录')
+
+
+def build_image(source):
+    revision = subprocess.check_output(['git', '-C', str(source), 'rev-parse', '--short=12', 'HEAD'], text=True).strip()
+    image = 'reliquary-feishu:' + (source / 'VERSION').read_text().strip() + '-' + revision + '-' + secrets.token_hex(3)
+    subprocess.run(['docker', 'build', '-t', image, str(source / 'agents/feishu')], check=True)
+    return image
+
+
+def install_agent(root):
+    """Build the optional Feishu entry on first use; compose.yaml is written last as the completion mark."""
+    directory = root / 'agents/feishu'
+    if (directory / 'compose.yaml').exists():
+        return
+    deploy = root / 'deploy'
+    source = source_checkout(root)
+    print('首次启用飞书入口：构建 Agent 镜像，自动下载 Pi Agent、Pi AI、Pi MCP 和飞书 SDK…', flush=True)
+    image = build_image(source)
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    state = directory / 'data'
+    state.mkdir(mode=0o700, exist_ok=True)
+    # State restored by reliquary-admin belongs to the host user; hand all of it to Node's UID.
+    subprocess.run(['docker', 'run', '--rm', '--user', '0:0', '-v', f'{state}:/data', '--entrypoint', 'sh', image,
+                    '-c', 'chown -R node:node /data && chmod 700 /data'], check=True)
+    project = read_env(deploy / '.env')['COMPOSE_PROJECT_NAME']
+    base = json.loads((deploy / 'docker-compose.yml').read_text())
+    network = base['networks']['Reliquary-network'].get('name', project + '_Reliquary-network')
+    config = json.loads(subprocess.check_output(
+        ['docker', 'compose', '--env-file', str(deploy / '.env'), '-f', str(source / 'agents/feishu/compose.yaml'),
+         'config', '--no-interpolate', '--no-env-resolution', '--no-path-resolution', '--format', 'json'],
+        text=True, env={**os.environ, 'AGENT_IMAGE': image, 'AGENT_STATE_DIR': str(state)}))
+    config['name'] = project + '-feishu'
+    service = config['services']['agent']
+    service['image'] = image
+    service['volumes'][0]['source'] = str(state)
+    service['env_file'] = ['./agent.env']
+    service['networks'] = ['backend']
+    config['networks'] = {'backend': {'external': True, 'name': network}}
+    if not (directory / 'agent.env').exists():
+        write_env(directory / 'agent.env', {})
+    (directory / 'compose.yaml').write_text(json.dumps(config, indent=2) + '\n')
+
+
 def configure(root):
     runtime = read_env(root / 'deploy/.env')
     base = 'http://127.0.0.1:' + runtime.get('APP_PORT', '8080')
@@ -81,6 +135,7 @@ def configure(root):
     values = read_env(directory / 'agent.env') if (directory / 'agent.env').exists() else {}
     if (directory / 'enabled').exists():
         raise ValueError('请先执行 stop，待当前任务结束后再更改运行配置')
+    install_agent(root)
     print('请先在网页创建或选择自己的资料库。空库可以完成连接，回答业务问题需要先录入资料。')
     print(frontend)
     libraries = api(base, '/libraries')
@@ -125,6 +180,7 @@ def configure(root):
         raise ValueError('请选择 1 或 2')
     print('飞书应用需启用机器人，订阅长连接事件 im.message.receive_v1，发布权限并加入目标群。')
     print('权限：im:message.group_at_msg:readonly、im:message:send_as_bot、im:message:readonly、im:message.group_msg')
+    print('注意：im:message.group_msg 允许应用读取所在群的全部消息，仅用于核对发送结果；建议机器人只加入专用群。')
     print('打开 https://open.feishu.cn/app 完成配置。Tenant Key 见企业信息，Chat ID 可从群设置中的群信息获取。')
     values.update(FEISHU_APP_ID=input('飞书 App ID：').strip(), FEISHU_APP_SECRET=getpass.getpass('飞书 App Secret：'),
                   FEISHU_TENANT_KEY=input('飞书 Tenant Key：').strip(), FEISHU_CHAT_ID=input('飞书 Chat ID：').strip())
@@ -184,14 +240,18 @@ def operate(root, action):
         source = Path(__file__).resolve().parent.parent
         if not (source / 'agents/feishu/Dockerfile').exists():
             raise ValueError('请从仓库中的 scripts/agent-local.py 执行 update --root 运行目录')
-        revision = subprocess.check_output(['git', '-C', str(source), 'rev-parse', '--short=12', 'HEAD'], text=True).strip()
-        image = 'reliquary-feishu:' + (source / 'VERSION').read_text().strip() + '-' + revision + '-' + secrets.token_hex(3)
-        subprocess.run(['docker', 'build', '-t', image, str(source / 'agents/feishu')], check=True)
+        if not (directory / 'compose.yaml').exists():
+            raise ValueError('尚未启用飞书入口，请先执行 configure')
+        image = build_image(source)
         path = directory / 'compose.yaml'
         before = path.read_bytes()
         config = json.loads(before)
         config['services']['agent']['image'] = image
         path.write_text(json.dumps(config, indent=2) + '\n')
+        if not (directory / 'enabled').exists():
+            # A stopped agent stays stopped; the next start uses the new image.
+            print('Agent 已停止，新镜像将在下次 start 时使用。')
+            return
         try:
             subprocess.run(compose(root, 'up', '-d', '--no-build', '--pull', 'never', '--wait'), check=True)
         except BaseException:

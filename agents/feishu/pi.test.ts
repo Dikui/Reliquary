@@ -265,11 +265,20 @@ test('本地查询会话串行运行、恢复固定配置并从指定答案派�
   }
 });
 
+test('客户 API 缺少协议时拒绝启动，不回落到开发者 Codex 登录', () => {
+  const base = { RELIQUARY_API_URL: 'http://localhost', RELIQUARY_API_KEY: 'key', RELIQUARY_LIBRARY_IDS: 'library',
+    AGENT_DATA_DIR: '/data', MODEL_BASE_URL: 'https://model.invalid/v1', MODEL_API_KEY: 'synthetic-model-key', MODEL_NAME: 'model' };
+  for (const env of [base, { ...base, MODEL_SOURCE: 'api' }]) {
+    assert.throws(() => loadConfig(env), /MODEL_API/);
+  }
+});
+
 test('Codex 订阅配置使用固定端点且缺少登录时明确失败', async () => {
   const dataDir = await mkdtemp(join(tmpdir(), 'reliquary-auth-'));
   try {
     const config = loadConfig({ RELIQUARY_API_URL: 'http://localhost', RELIQUARY_API_KEY: 'key',
-      RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: dataDir, MODEL_BASE_URL: 'https://ignored.invalid' });
+      RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: dataDir, MODEL_BASE_URL: 'https://ignored.invalid',
+      MODEL_API: 'openai-codex-responses' });
     assert.equal(config.modelAPI, 'openai-codex-responses');
     assert.equal(config.modelURL, 'https://chatgpt.com/backend-api');
     await assert.rejects(QueryAgent.open(config, { redact: (text: string) => text } as never), /--login/);
@@ -309,7 +318,8 @@ test('Codex 订阅凭据通过 Pi Responses 协议使用且不进入会话', asy
       ];
       return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'content-type': 'text/event-stream' } });
     };
-    const config = loadConfig({ RELIQUARY_API_URL: 'http://localhost', RELIQUARY_API_KEY: 'key', RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: dataDir });
+    const config = loadConfig({ RELIQUARY_API_URL: 'http://localhost', RELIQUARY_API_KEY: 'key', RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: dataDir,
+      MODEL_API: 'openai-codex-responses' });
     agent = await QueryAgent.open(config, queries as never);
     const answer = await agent.ask('连接检查');
     assert.ok(called);
@@ -357,7 +367,7 @@ test('只读复用 Codex 缓存并读取续期后的令牌，过期时保持缓�
       ].map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'content-type': 'text/event-stream' } });
     };
     const config = loadConfig({ RELIQUARY_API_URL: 'http://localhost', RELIQUARY_API_KEY: 'key',
-      RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: dataDir, CODEX_AUTH_FILE: path });
+      RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: dataDir, CODEX_AUTH_FILE: path, MODEL_API: 'openai-codex-responses' });
     agent = await QueryAgent.open(config, queries as never);
     const answer = await agent.ask('连接检查');
     const renewed = await save(second);

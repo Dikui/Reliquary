@@ -1,6 +1,6 @@
 # Agent 辅助安装指南
 
-客户拿到仓库后，将下列指令交给能访问本机终端和浏览器的 Agent。本指南用于在客户自己的电脑安装 Reliquary、配置客户模型并接通飞书。
+客户拿到仓库后，将下列指令交给能访问本机终端和浏览器的 Agent。本指南用于在客户自己的电脑安装 Reliquary 资料库本体；客户需要飞书对话入口时，再配置客户模型并接通飞书。
 
 > 请先阅读 AGENTS.md 和 docs/agent-installation.md，按指南在本机完成安装。复用已有基础软件，自动下载 Pi 及项目依赖。引导我选择自己的 API 或 ChatGPT 订阅，配置飞书机器人，并验证首次提问与多轮回复。遇到需要我登录、输入密钥或批准权限的步骤，请打开准确页面并说明操作，完成后继续。保留已有部署和业务数据，完成后给我安装位置、验证结果和日常启动命令。
 
@@ -26,7 +26,7 @@ docker-compose.yml
 VERSION
 ```
 
-当前经过验收的 0.17.0 安装实现位于 `codex/managed-entity-library` 分支，参考提交为 `d0b4111d`。后续版本以客户指定的发布提交及上述入口文件为准。
+安装使用客户指定的发布提交；客户未指定时使用默认分支 `main` 的最新提交，并以上述入口文件存在为准。
 
 在 Git 工作副本内执行并记录版本、提交、分支和未提交改动。保留客户的本地改动。
 
@@ -42,8 +42,7 @@ cat VERSION
 
 ```sh
 mkdir -p "$HOME/Project"
-git clone --branch codex/managed-entity-library \
-  https://github.com/Dikui/Reliquary.git "$HOME/Project/Reliquary"
+git clone https://github.com/Dikui/Reliquary.git "$HOME/Project/Reliquary"
 cd "$HOME/Project/Reliquary"
 ```
 
@@ -67,7 +66,7 @@ Python 需要 3.9+，Compose 需要支持 `--no-env-resolution`、`--no-path-res
 
 缺少软件时，Agent 按客户系统使用已有包管理器或官方安装程序补齐。需要管理员密码或桌面初始化时交给客户完成，随后重新检查。Docker Desktop 自带 Compose。Linux 使用官方对应发行版的安装步骤。[Python](https://www.python.org/downloads/)、[Git](https://git-scm.com/downloads)、[Docker 安装](https://docs.docker.com/engine/install/)、[Compose 安装](https://docs.docker.com/compose/install/)
 
-Docker 构建会下载 Go、Node、Pi Agent、Pi AI、Pi MCP、飞书 SDK 和锁定依赖。宿主机无需另装这些开发依赖。检查网络能访问仓库、镜像与包源、所选模型服务和飞书。估算空间和下载量，明显超出客户预算时先报告。
+Docker 构建会下载 Go、Node 和锁定依赖；启用飞书入口时另外下载 Pi Agent、Pi AI、Pi MCP 和飞书 SDK。宿主机无需另装这些开发依赖。检查网络能访问仓库、镜像与包源、所选模型服务和飞书。估算空间和下载量，明显超出客户预算时先报告。
 
 完成条件为上述命令成功，Compose 参数满足要求。Windows 原生安装尚无经过验收的路径，应向客户说明当前支持范围。
 
@@ -90,16 +89,16 @@ python3 scripts/install-local.py --install --root "$HOME/Reliquary"
 
 同机另装一套时，给出独立 `--root`、`--project-name`、`--app-port`、`--frontend-port`。如需更换 Redis 端口，复制 `.env.example` 到权限为 `0600` 的本机临时文件，通过 `--env-file` 传入。该模式会保留文件内凭据，必须同时生成独立随机数据库密码和恰好 32 字节的 `SYSTEM_AES_KEY`。按[本地部署指南](local-deployment.md#客户全新安装)处理，沿用原回环绑定。
 
-安装器会构建三个应用镜像、初始化独立数据库、启动 PostgreSQL、Redis、Neo4j、后端和网页，并生成以下运行文件。
+安装器会构建后端和网页镜像、初始化独立数据库、启动 PostgreSQL、Redis、Neo4j、后端和网页，并生成以下运行文件。标注“configure 生成”的文件在第 6 步首次 `configure` 时才出现。
 
 | 位置 | 内容 |
 | --- | --- |
 | `deploy/.env` | 端口、数据库凭据、加密密钥与 ChatGPT 回调配置 |
 | `deploy/docker-compose.yml` | 基础服务运行配置 |
 | `scripts/agent-local.py` | 已安装的 Agent 配置和运维入口 |
-| `agents/feishu/compose.yaml` | Agent 容器配置 |
-| `agents/feishu/agent.env` | 客户模型与飞书配置 |
-| `agents/feishu/data/` | Agent SQLite、Pi 会话及恢复状态 |
+| `agents/feishu/compose.yaml` | Agent 容器配置（configure 生成） |
+| `agents/feishu/agent.env` | 客户模型与飞书配置（configure 生成） |
+| `agents/feishu/data/` | Agent SQLite、Pi 会话及恢复状态（configure 生成） |
 | `data/files/` | 上传资源，普通正文保存在 PostgreSQL 数据卷 |
 
 安装日志出现基础服务已启动后，检查基础容器状态及后端、网页代理健康接口。以下命令从实际运行配置读取端口。记录输出的 `WEB_BASE` 和 `API_BASE`，后续网页操作均使用这两个地址。
@@ -130,6 +129,8 @@ PY
 打开第 3 步实际 `WEB_BASE` 后加 `/platform/settings?section=library` 的地址。在“库”页点击“新建库”，填写客户指定的名称、英文目录名和说明。英文目录名可使用小写字母、数字和单个连字符。至少创建一个实际资料库，记录其 ID 与目录名。
 
 空库可以完成模型与飞书连接验收。普通资料由外部工具通过 HTTP 或 MCP 送入 Markdown，网页创建入口用于资料库。收录资料或使用货架时读取对应说明。[收录接口](ingest-api.md)、[货架说明](product-shelf-query.md)
+
+以下第 4 步后半至第 8 步只在客户需要飞书入口时执行。开始前向客户说明数据外流范围并取得同意：群内问答经飞书服务器传输并保存在飞书；每轮对话上下文（问题、工具读到的资料片段、历史回复）发送给所选模型服务商。资料库本体仍只在本机运行。[ADR 0028](adr/0028-optional-feishu-entry.md)
 
 客户选择以下一种 Agent 模型来源。现有授权或私有环境文件可直接复用，密钥无需粘贴到聊天。
 
@@ -174,9 +175,9 @@ Agent 打开飞书开放平台，核对客户当前企业和所选应用。客�
 | `im:message.group_at_msg:readonly` | 接收群内 @ 消息 |
 | `im:message:send_as_bot` | 回复消息 |
 | `im:message:readonly` | 核对原消息与目标群 |
-| `im:message.group_msg` | 读取群消息，核对发送超时后是否已经送达 |
+| `im:message.group_msg` | 读取群消息，核对发送超时后是否已经送达（敏感权限：应用可读取所在群的全部消息） |
 
-读取权限涵盖飞书授予应用的范围。本程序只将配置的目标群内 @ 机器人的文字交给模型。
+`im:message.group_msg` 让应用能读取所在群的全部消息，申请前向客户单独说明；本程序只用它在发送结果不明时核对机器人自己的回复，只将配置的目标群内 @ 机器人的文字交给模型。建议把机器人只加入专用群。
 
 1. 在“版本管理与发布”创建版本，发布机器人能力和权限，使应用可用范围包含客户。
 2. 在客户指定群的“设置 → 群机器人 → 添加机器人”加入该应用机器人。
@@ -202,7 +203,7 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 3. 依次填写 App ID、App Secret、Tenant Key、Chat ID。
 4. 按实际网络填写代理，直连时留空。容器访问宿主代理时使用其可达地址，例如 `host.docker.internal`。
 
-向导生成本机 Reliquary API Key，将 `agent.env` 保存为 `0600`，实际检查 Reliquary、模型工具调用和飞书机器人身份，随后启动 Agent。模型检查会消耗少量额度。
+首次运行先从安装时登记的源码构建 Agent 镜像并生成 `agents/feishu/` 运行配置。向导随后生成本机 Reliquary API Key，将 `agent.env` 保存为 `0600`，实际检查 Reliquary、模型工具调用和飞书机器人身份，随后启动 Agent。模型检查会消耗少量额度。
 
 成功输出应包含以下三项，随后检查容器状态。
 
@@ -260,7 +261,7 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" status
 | --- | --- |
 | 下载、构建或首次启动失败 | 保留本次配置和数据，修正网络、磁盘或 Docker 后重跑相同安装命令 |
 | 提示已有运行目录或 Compose 项目 | 检查 `deploy/customer-install.json` 和资源归属。同次安装继续，新装选择独立目录、项目名与端口 |
-| 基础安装完成后重跑安装只提示 configure | 继续第 4 至 6 步。需要复启基础容器时从运行 `deploy/` 执行 `docker compose up -d --no-build --pull never --wait` |
+| 基础安装完成后重跑安装只提示 configure | 本体已装好；需要飞书入口时继续第 4 至 6 步。需要复启基础容器时从运行 `deploy/` 执行 `docker compose up -d --no-build --pull never --wait` |
 | 模型或飞书身份检查失败 | `configure` 已保存配置。修正实际错误后重试 `check`，成功后执行 `start` |
 | 已运行时需要改配置 | 保留原状态和会话，执行 `stop`，等任务结束后重新 `configure` |
 | 提示现有会话绑定其他群或库 | 先核对输入。确需换范围时使用独立安装，或按[状态迁移](../agents/feishu/README.md#迁移旧状态)处理 |
@@ -277,7 +278,7 @@ docker compose --project-directory "$HOME/Reliquary/agents/feishu" logs --tail 5
 docker compose --project-directory "$HOME/Reliquary/deploy" logs --tail 50 app
 ```
 
-`check` 会调用模型。按当前状态选择命令，停止仅用于客户要求停机或修改配置。恢复保留数据库卷、`deploy/.env`、上传资源及完整 `agents/feishu/data/`，包括 SQLite WAL 与 Pi 会话。故障排查以保留状态并修正原因为先。备份、数据清理和已有环境升级按各自授权与[维护流程](local-deployment.md#日常维护与升级)执行。
+`check` 会调用模型。按当前状态选择命令，停止仅用于客户要求停机或修改配置。`reliquary-admin backup` 已把 `agents/feishu/data/`（含 SQLite WAL 与 Pi 会话，不含凭据）与数据库放在同一备份包；恢复后需运行 `configure` 重填 Agent 凭据。故障排查以保留状态并修正原因为先。备份、数据清理和已有环境升级按各自授权与[维护流程](local-deployment.md#日常维护与升级)执行。
 
 客户需要 macOS 登录后自动恢复时，从源码执行下列命令。已存在启动项时先核对并复用。Linux 检查 Docker 已配置开机启动，容器沿用 `restart: unless-stopped`。
 

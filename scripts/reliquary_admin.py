@@ -41,6 +41,118 @@ class AdminError(RuntimeError):
     pass
 
 
+# The optional Feishu entry (ADR 0028) lives beside deploy/ in the runtime root.
+# Its state shares the backup's stopped window; credentials never enter packages.
+AGENT_PACKAGE_DIRECTORY = "agent"
+AGENT_EXCLUDED = {"auth.json", "runtime-lock.sqlite", "runtime-lock.sqlite-wal", "runtime-lock.sqlite-shm", "runtime-lock.sqlite-journal"}
+AGENT_REQUIRED = {"kind": "agent", "name": "feishu", "fields": ["MODEL_API_KEY or ChatGPT model", "FEISHU_APP_SECRET", "RELIQUARY_API_KEY"]}
+
+
+def agent_directory(deploy):
+    """Return the installed agent directory, or None when the entry was never enabled."""
+    directory = Path(deploy).parent / "agents/feishu"
+    return directory if Path(deploy).name == "deploy" and (directory / "compose.yaml").is_file() else None
+
+
+def agent_image(directory):
+    return json.loads((directory / "compose.yaml").read_text())["services"]["agent"]["image"]
+
+
+def agent_compose(directory, *args):
+    return run(["docker", "compose", "--project-directory", str(directory), *args], cwd=directory)
+
+
+@contextlib.contextmanager
+def agent_stopped(directory, timeout):
+    """Stop the agent before writers pause so its proposals match the snapshot."""
+    running = bool(agent_compose(directory, "ps", "--status", "running", "--quiet", "agent").strip())
+    if running:
+        agent_compose(directory, "stop", "--timeout", str(timeout), "agent")
+    try:
+        yield
+    finally:
+        if running and (directory / "enabled").exists():
+            agent_compose(directory, "start", "agent")
+
+
+def extract_agent_archive(data, target):
+    """Accept only regular files and directories below target."""
+    target.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:") as archive:
+        for member in archive:
+            name = Path(member.name)
+            if name.is_absolute() or ".." in name.parts:
+                raise AdminError(f"Unsafe agent state path: {member.name}")
+            if name.parts and name.parts[0] in AGENT_EXCLUDED and len(name.parts) == 1:
+                continue
+            destination = target / name
+            if member.isdir():
+                destination.mkdir(parents=True, exist_ok=True)
+            elif member.isfile():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with archive.extractfile(member) as stream, destination.open("wb") as output:
+                    shutil.copyfileobj(stream, output)
+                destination.chmod(0o600)
+            else:
+                raise AdminError(f"Agent state may contain only files and directories: {member.name}")
+
+
+def copy_agent_state(directory, target):
+    # Read through the agent image as root: on Linux the state belongs to the container's node user.
+    excludes = [f"--exclude=./{name}" for name in sorted(AGENT_EXCLUDED)]
+    data = run(["docker", "run", "--rm", "--user", "0:0", "-v", f"{directory / 'data'}:/data:ro", "--entrypoint", "tar",
+                agent_image(directory), "-C", "/data", *excludes, "-cf", "-", "."])
+    extract_agent_archive(data, target)
+
+
+def agent_restore_target(ctx, package):
+    """Validate before the database import; restore only into the standard runtime layout."""
+    if not (Path(package) / AGENT_PACKAGE_DIRECTORY).is_dir():
+        return None
+    root = Path(ctx.root)
+    if root.name != "deploy":
+        print(f"Feishu agent state stays in {Path(package) / AGENT_PACKAGE_DIRECTORY}; this target is not a runtime deploy/ directory.")
+        return None
+    directory = root.parent / "agents/feishu"
+    if (directory / "enabled").exists():
+        raise AdminError("Stop the Feishu agent (agent-local.py stop) before restore")
+    state = directory / "data"
+    if state.exists() and (not state.is_dir() or any(state.iterdir())):
+        raise AdminError(f"Agent state directory must be empty: {state}")
+    return directory
+
+
+def verify_agent_state(source, scratch):
+    """Open a disposable copy so WAL replay never touches the package."""
+    import sqlite3
+    snapshot_tree(source, scratch)
+    database = scratch / "feishu.sqlite"
+    if not database.is_file():
+        raise AdminError("Agent state in the package has no feishu.sqlite")
+    connection = sqlite3.connect(database)
+    try:
+        if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise AdminError("Agent SQLite integrity check failed")
+        counts = {table: connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+                  for table in ("conversations", "jobs", "outbox", "shelf_proposals")}
+    except sqlite3.DatabaseError as error:
+        raise AdminError(f"Agent state cannot be read: {error}") from None
+    finally:
+        connection.close()
+    return {"integrity": "ok", **counts}
+
+
+def restore_agent_state(directory, source):
+    state = directory / "data"
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    snapshot_tree(source, state)
+    state.chmod(0o700)
+    if (directory / "compose.yaml").is_file():
+        run(["docker", "run", "--rm", "--user", "0:0", "-v", f"{state}:/data", "--entrypoint", "sh", agent_image(directory),
+             "-c", "chown -R node:node /data && chmod 700 /data"])
+    print(f"Feishu agent state restored to {state}. Run agent-local.py configure to enter its credentials; it stays stopped until then.")
+
+
 def run(argv, *, env=None, cwd=ROOT, data=None, capture=True, check=True, output=None, stdin=None):
     proc = subprocess.run([str(a) for a in argv], cwd=cwd, env=env,
                           input=data, stdin=stdin, stdout=output if output else (subprocess.PIPE if capture else None),
@@ -901,8 +1013,10 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                         raise AdminError("Runtime source materials are missing; run record-runtime --source <source-checkout> before backing up")
             # Export and validate code and image availability while writers are still running.
             code = source_copy(ctx, stage, args.include_worktree, runtime_commit, runtime_source, runtime_code)
-            with ctx.stopped("drain" if kind == "pack" else "snapshot", args.timeout, args.keep_paused,
-                             getattr(args, "automatic", False), destination):
+            agent = agent_directory(getattr(ctx, "root", ROOT))
+            with (agent_stopped(agent, args.timeout) if agent else contextlib.nullcontext()), \
+                    ctx.stopped("drain" if kind == "pack" else "snapshot", args.timeout, args.keep_paused,
+                                getattr(args, "automatic", False), destination):
                 before = ctx.cli_json("manifest")
                 owner_path = ctx.root / ".maintenance-schedule/active.json"
                 if getattr(args, "automatic", False) and owner_path.exists():
@@ -913,6 +1027,8 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                     sanitize_config(path, stage / "config" / path.name)
                 ctx.copy_storage("vault", stage / "vault")
                 ctx.copy_storage("resources", stage / "resources")
+                if agent:
+                    copy_agent_state(agent, stage / AGENT_PACKAGE_DIRECTORY)
                 with ctx.cloned_database() as database:
                     side = {"DB_NAME": database, "VAULT_ROOT": str(stage / "vault") if ctx.local_server or ctx.direct else "/maintenance-vault"}
                     if not ctx.local_server and not ctx.direct:
@@ -934,6 +1050,8 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                     ctx.cli_json("verify", "--manifest", expected, "--vectors", overrides=clone_check)
                     original_manifest.unlink()
                     required += scrubbed.get("required", [])
+                    if agent:
+                        required.append(AGENT_REQUIRED)
                     json_write(stage / "required-credentials.json", {"required": required, "paused_models": scrubbed.get("paused_models", []), "paused_sources": scrubbed.get("paused_sources", [])})
                     with (stage / "database.dump").open("wb") as stream:
                         ctx.pg("pg_dump", database, "-Fc", "--no-owner", "--no-acl", output=stream)
@@ -961,7 +1079,8 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                             "versions": versions, "required_credentials": required,
                             "comparison": "Exact preserved data and file hashes; vectors, runtime state and search scores are regenerated. Retrieval compares article IDs."}
                 json_write(stage / "manifest.json", metadata)
-                scan_secrets(stage, {**effective, **{k: v for k, v in ctx.env.items() if SECRET.search(k)}})
+                agent_secrets = read_env(agent / "agent.env") if agent and (agent / "agent.env").is_file() else {}
+                scan_secrets(stage, {**effective, **{k: v for k, v in ctx.env.items() if SECRET.search(k)}, **agent_secrets})
                 scan_overrides = {} if ctx.direct or ctx.local_server else {"RELIQUARY_ADMIN_CLI_SCAN_HOST": str(stage)}
                 ctx.cli_json("secret-scan", "--directory", str(stage) if ctx.direct or ctx.local_server else "/maintenance-scan", overrides=scan_overrides)
                 ctx.scan_dump_credentials(stage / "database.dump")
@@ -1053,6 +1172,7 @@ def restore(ctx, package, args):
         mode, target = ctx.storage(name)
         if mode == "host":
             empty_directory(target)
+    agent = agent_restore_target(ctx, package)
     if not ctx.direct and not ctx.local_server and ctx.compose("ps", "--status", "running", "--quiet", ctx.app).strip():
         raise AdminError("Stop the destination app before restore")
     with (package / "database.dump").open("rb") as stream:
@@ -1063,6 +1183,8 @@ def restore(ctx, package, args):
             raise AdminError("Database restore failed; destination remains paused: " + proc.stderr.decode()[-2000:])
     for name in ("vault", "resources"):
         ctx.restore_storage(name, package / name)
+    if agent:
+        restore_agent_state(agent, package / AGENT_PACKAGE_DIRECTORY)
     legacy = ctx.legacy_schema()
     preserve_version = getattr(args, "preserve_version", False)
     ctx.preserve_version = preserve_version
@@ -1116,6 +1238,8 @@ def print_credentials(required, preserve_version=False):
         name = item.get("name", item.get("id", ""))
         if item.get("kind") == "environment" and name in {"SYSTEM_AES_KEY", "JWT_SECRET", "DB_PASSWORD", "POSTGRES_PASSWORD"}:
             print(f"  [x] environment: {name} / regenerated for this environment")
+        elif item.get("kind") == "agent":
+            print(f"  [ ] Feishu agent: {', '.join(item.get('fields', []))} / run agent-local.py configure, then start")
         else:
             print(f"  [ ] {item.get('kind', 'credential')}: {name} / {', '.join(item.get('fields', []))}")
     print("Confirm these retained public settings on the new machine:")
@@ -1830,6 +1954,8 @@ def run_drill(ctx, args):
                 root = Path(temp)
                 snapshot_tree(package / "vault", root / "vault", vault=True)
                 snapshot_tree(package / "resources", root / "resources")
+                if (package / AGENT_PACKAGE_DIRECTORY).is_dir():
+                    result["checks"]["agent_state"] = verify_agent_state(package / AGENT_PACKAGE_DIRECTORY, root / AGENT_PACKAGE_DIRECTORY)
                 with (package / "database.dump").open("rb") as stream:
                     proc = subprocess.run(ctx.pg_command("pg_restore", database, "--clean", "--if-exists", "--no-owner", "--no-acl", "--single-transaction", "--exit-on-error"),
                                           env={**ctx.env, "PGPASSWORD": ctx.env.get("DB_PASSWORD", "")}, cwd=ctx.root, stdin=stream, stderr=subprocess.PIPE)

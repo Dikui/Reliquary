@@ -138,7 +138,7 @@ def install(root, env_file, project, app_port=None, frontend_port=None):
     if values.get('COMPOSE_PROJECT_NAME') != project:
         raise ValueError('Existing installation has a different project name')
     if json.loads(marker.read_text()).get('status') == 'base_ready':
-        print(f'基础安装已完成。继续配置：python3 "{root / "scripts/agent-local.py"}" configure')
+        print(f'基础安装已完成。需要飞书对话入口时运行：python3 "{root / "scripts/agent-local.py"}" configure')
         return
     for key, port in [('APP_PORT', app_port), ('FRONTEND_PORT', frontend_port)]:
         if port is not None:
@@ -157,9 +157,6 @@ def install(root, env_file, project, app_port=None, frontend_port=None):
         }}))
         subprocess.run(['docker', 'compose', '--env-file', str(deploy / '.env'), '-f', str(SOURCE / 'docker-compose.yml'),
                         '-f', str(override), 'build', 'app', 'frontend'], cwd=SOURCE, check=True)
-    print('构建飞书 Agent，自动下载 Pi Agent、Pi AI、Pi MCP 和飞书 SDK…', flush=True)
-    agent_image = f'reliquary-feishu:{tag}'
-    subprocess.run(['docker', 'build', '-t', agent_image, str(SOURCE / 'agents/feishu')], check=True)
     config_path = deploy / 'docker-compose.yml'
     config = json.loads(config_path.read_text())
     config['services']['app']['image'] = f'reliquary-app:{tag}'
@@ -173,43 +170,22 @@ def install(root, env_file, project, app_port=None, frontend_port=None):
     spec = spec_from_file_location('agent_local', SOURCE / 'scripts/agent-local.py')
     agent = module_from_spec(spec)
     spec.loader.exec_module(agent)
+    # ChatGPT sign-in needs these two hosts, as docs/personal-use.md (使用 ChatGPT 订阅) requires.
     hosts = [host for host in values.get('SSRF_WHITELIST', '').split(',') if host]
     values['SSRF_WHITELIST'] = ','.join(dict.fromkeys([*hosts, 'auth.openai.com', 'api.openai.com']))
     agent.write_env(deploy / '.env', values)
-    directory = root / 'agents/feishu'
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    state = directory / 'data'
-    new_state = not state.exists()
-    state.mkdir(exist_ok=True, mode=0o700)
-    # The one-shot helper adjusts only the newly selected state mount for Node's UID.
-    if new_state:
-        subprocess.run(['docker', 'run', '--rm', '--user', '0:0', '-v', f'{state}:/data', '--entrypoint', 'sh', agent_image,
-                        '-c', 'chown node:node /data && chmod 700 /data'], check=True)
-    network = config['networks']['Reliquary-network'].get('name', project + '_Reliquary-network')
-    agent_config = run('docker', 'compose', '--env-file', str(deploy / '.env'), '-f', str(SOURCE / 'agents/feishu/compose.yaml'),
-                       'config', '--no-interpolate', '--no-env-resolution', '--no-path-resolution', '--format', 'json',
-                       env={**os.environ, 'AGENT_IMAGE': agent_image, 'AGENT_STATE_DIR': str(state)})
-    agent_config = json.loads(agent_config)
-    agent_config['name'] = project + '-feishu'
-    agent_config['services']['agent']['image'] = agent_image
-    agent_config['services']['agent']['volumes'][0]['source'] = str(state)
-    agent_config['services']['agent']['env_file'] = ['./agent.env']
-    agent_config['services']['agent']['networks'] = ['backend']
-    agent_config['networks'] = {'backend': {'external': True, 'name': network}}
-    (directory / 'compose.yaml').write_text(json.dumps(agent_config, indent=2) + '\n')
-    if not (directory / 'agent.env').exists():
-        agent.write_env(directory / 'agent.env', {})
+    # The Feishu entry is optional; agent-local.py configure builds it from this source on first use.
     shutil.copy2(SOURCE / 'scripts/agent-local.py', root / 'scripts/agent-local.py')
     subprocess.run(['docker', 'compose', '--project-directory', str(deploy), 'up', '-d', '--no-build', '--pull', 'never', '--wait'], check=True)
     if not run('git', '-C', str(SOURCE), 'status', '--porcelain').strip():
         subprocess.run([str(deploy / 'reliquary-admin'), 'record-runtime', '--source', str(SOURCE)], cwd=deploy, check=True)
     else:
         print('当前使用未提交源码测试，正式发布后需登记准确源码，才能使用可恢复备份。')
-    marker.write_text(json.dumps({'project': project, 'status': 'base_ready', 'revision': revision}) + '\n')
+    marker.write_text(json.dumps({'project': project, 'status': 'base_ready', 'revision': revision, 'source': str(SOURCE)}) + '\n')
     settings = values['CHATGPT_SETTINGS_URL']
     print(f'基础服务已启动。请在网页配置资料库和模型：{settings}')
     webbrowser.open(settings)
-    print(f'继续配置机器人：python3 "{root / "scripts/agent-local.py"}" configure')
+    print(f'资料库本体安装完成。需要飞书对话入口时运行：python3 "{root / "scripts/agent-local.py"}" configure')
 
 
 def deployment_values(path):

@@ -60,20 +60,30 @@ See [ADR 0014](docs/adr/0014-internal-knowledge-base.md) and [CONTEXT.md](CONTEX
 
 ## Quick start
 
-Use macOS or Linux with Python 3.9+, Git and a running Docker engine with Compose v2. The first build downloads Go, Node, Pi, the Feishu SDK and locked dependencies inside containers.
+Use macOS or Linux with Python 3.9+, Git and a running Docker engine with Compose v2. Go, Node and locked dependencies are downloaded and built inside containers.
 
 ```bash
 git clone https://github.com/Dikui/Reliquary.git
 cd Reliquary
 python3 scripts/install-local.py --install --root "$HOME/Reliquary"
+```
+
+The installer builds images, creates a separate runtime directory and starts the library services.
+
+### Optional: Feishu chat entry
+
+```bash
 python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 ```
 
-The installer builds images, creates a separate runtime directory and starts the base services. The configuration command selects libraries, your API provider or ChatGPT subscription, and your Feishu app and group. It checks a model tool call and starts the bot. Authorize ChatGPT in the Web UI when connecting an account for the first time. Existing connected models can be reused. Complete Feishu app permissions and account authorization yourself.
+The first run builds the Feishu agent (downloading Pi and the Feishu SDK), then selects libraries, your API provider or ChatGPT subscription, and your Feishu app and group. It checks a model tool call and starts the bot. Authorize ChatGPT in the Web UI when connecting an account for the first time. Existing connected models can be reused. Complete Feishu app permissions and account authorization yourself.
+
+> [!IMPORTANT]
+> With the Feishu entry enabled, group questions and answers travel through and are stored by Feishu, and each turn's context (question, library excerpts read by tools, earlier replies) is sent to the selected model provider. The library itself still runs only on this machine. See [ADR 0028](docs/adr/0028-optional-feishu-entry.md).
 
 The default Web UI is <http://127.0.0.1>, API is <http://127.0.0.1:8080>, and MCP is `http://127.0.0.1:8080/mcp`. For occupied ports, add `--app-port 18080 --frontend-port 18081`. A second installation on the same host also needs a unique `--project-name` and `REDIS_PORT` in its environment file.
 
-Data and conversations stay on the customer's machine. Local browser access uses the existing local-access policy. External tools authenticate with API keys. See the [local deployment guide](docs/local-deployment.md) for installation, storage, authorization and recovery, and the [agent guide](agents/feishu/README.md) for Feishu usage.
+Library data stays on this machine. Local browser access uses the existing local-access policy. External tools authenticate with API keys. See the [local deployment guide](docs/local-deployment.md) for installation, storage, authorization and recovery, and the [agent guide](agents/feishu/README.md) for Feishu usage.
 
 ## Usage
 

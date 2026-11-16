@@ -7,7 +7,7 @@ import { QueryTools, TOOL_NAMES, safeFailure } from './tools.js';
 import { createRedactor, OutputProjector } from './output.js';
 
 const config = loadConfig({ RELIQUARY_API_URL: 'http://localhost:8080', RELIQUARY_API_KEY: 'synthetic-library-secret',
-  RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: '/tmp/reliquary-unit' });
+  RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: '/tmp/reliquary-unit', MODEL_API: 'openai-codex-responses' });
 const library = { id: 'library', name: '演示库', shelf_enabled: true,
   entity_schema: { kinds: [], fields: [{ key: 'energy', type: 'number', name: '能量', kinds: ['model'], product_line_ids: ['line'] }] },
   shelf_config: { regions: [{ key: 'eu', name: '欧洲' }], parsers: [{ authorization: 'synthetic-parser-secret' }] } };

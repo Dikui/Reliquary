@@ -10,6 +10,16 @@ import (
 // OpenAgentResponse preserves Pi's transcript, including function results and
 // encrypted reasoning, while admitting only the documented local tool types.
 func (c *ChatGPTChat) OpenAgentResponse(ctx context.Context, body []byte) (*http.Response, error) {
+	raw, err := c.PrepareAgentRequest(body)
+	if err != nil {
+		return nil, err
+	}
+	return c.openBody(ctx, raw)
+}
+
+// PrepareAgentRequest validates and normalizes a request without contacting
+// the provider, so callers can reject it before reserving subscription quota.
+func (c *ChatGPTChat) PrepareAgentRequest(body []byte) ([]byte, error) {
 	var request map[string]json.RawMessage
 	if err := json.Unmarshal(body, &request); err != nil || request == nil {
 		return nil, fmt.Errorf("invalid agent request")
@@ -49,10 +59,11 @@ func (c *ChatGPTChat) OpenAgentResponse(ctx context.Context, body []byte) (*http
 	request["model"], _ = json.Marshal(c.modelName)
 	request["store"] = json.RawMessage("false")
 	request["stream"] = json.RawMessage("true")
-	raw, err := json.Marshal(request)
-	if err != nil {
-		return nil, err
-	}
+	return json.Marshal(request)
+}
+
+// OpenPreparedAgentResponse sends a body returned by PrepareAgentRequest.
+func (c *ChatGPTChat) OpenPreparedAgentResponse(ctx context.Context, raw []byte) (*http.Response, error) {
 	return c.openBody(ctx, raw)
 }
 

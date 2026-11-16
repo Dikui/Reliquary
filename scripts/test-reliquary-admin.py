@@ -406,6 +406,129 @@ class AdminStorageTests(unittest.TestCase):
             self.assertEqual((vault / name).read_bytes(), content)
         self.assertEqual((self.root / "restored-files/upload.png").read_bytes(), b"Uploaded image")
 
+    def agent_runtime(self, name, *, leaked=None):
+        """A runtime root whose deploy/ sits beside an enabled Feishu agent."""
+        runtime = self.root / name
+        directory = runtime / "agents/feishu"
+        directory.mkdir(parents=True)
+        (directory / "compose.yaml").write_text('{"services":{"agent":{"image":"reliquary-feishu:test"}}}')
+        (directory / "enabled").touch()
+        admin.write_env(directory / "agent.env", {"FEISHU_APP_SECRET": "synthetic-feishu-app-value", "FEISHU_CHAT_ID": "oc_test"})
+        state = self.root / (name + "-state")
+        state.mkdir()
+        import sqlite3
+        connection = sqlite3.connect(state / "feishu.sqlite")
+        for table in ("conversations", "jobs", "outbox", "shelf_proposals"):
+            connection.execute(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY)")
+        connection.execute("INSERT INTO shelf_proposals VALUES (7)")
+        connection.commit()
+        connection.close()
+        (state / "sessions").mkdir()
+        (state / "sessions/conversation.jsonl").write_text(leaked or '{"role":"user","content":"问题"}\n')
+        (state / "auth.json").write_text('{"access":"pi-managed-login"}')
+        (state / "runtime-lock.sqlite").write_bytes(b"lock")
+        archive = io.BytesIO()
+        with tarfile.open(fileobj=archive, mode="w") as tar:
+            tar.add(state, arcname=".")
+        calls = []
+        def docker(argv, **kwargs):
+            calls.append([str(a) for a in argv])
+            if "ps" in argv:
+                return b"agent-container"
+            if "tar" in argv:
+                return archive.getvalue()
+            return b""
+        return runtime, directory, calls, docker
+
+    def agent_host_context(self, deploy):
+        class HostContext(admin.Context):
+            def compose(self, *args, **kwargs):
+                return b""
+            def configured_backup_directory(self):
+                return None
+            def runtime_env(self):
+                return self.env
+            @contextlib.contextmanager
+            def stopped(self, *args):
+                yield
+            @contextlib.contextmanager
+            def cloned_database(self):
+                yield "temporary-clone"
+            def cli_json(self, *args, **kwargs):
+                if args[0] == "manifest":
+                    return {"tables": {}, "files": {}, "required_credentials": []}
+                if args[0] == "scrub":
+                    return {"required": []}
+                return {"ok": True}
+            def sql(self, query, *args):
+                return "0" if "count(*)" in query else "test-version"
+            def pg(self, *args, output=None, **kwargs):
+                if output:
+                    output.write(b"Test scrubbed database")
+            def legacy_schema(self):
+                return False
+            def scan_dump_credentials(self, *args):
+                pass
+        deploy.mkdir(parents=True, exist_ok=True)
+        values = {"HOME": str(self.root / "home"), "RELIQUARY_VAULT_DIR": str(deploy.parent / "vault"),
+                  "RELIQUARY_FILES_DIR": str(deploy.parent / "files"), "BACKUP_DIR": str(self.root / "backups")}
+        with mock.patch.dict(admin.os.environ, {}, clear=True):
+            ctx = HostContext(deploy, values)
+        ctx.database_only = False
+        ctx.check_host_directories()
+        admin.json_write(deploy.parent / "vault/.reliquary/manifest.json", {"required": []})
+        return ctx
+
+    def agent_backup(self, ctx, docker):
+        options = argparse.Namespace(timeout=30, keep_paused=False, include_worktree=True, automatic=False, with_images=False, directory=str(self.root / "backups"))
+        def source_copy(context, stage, *args):
+            (stage / "source").mkdir()
+            return {"commit": "test-commit"}
+        with mock.patch.object(admin, "run", side_effect=docker), mock.patch.object(admin, "source_copy", side_effect=source_copy), \
+             mock.patch.object(admin, "runtime_images", return_value={}), mock.patch.object(admin, "images_save", return_value={}), \
+             contextlib.redirect_stdout(io.StringIO()):
+            return admin.backup(ctx, options)
+
+    # ADR 0028: the agent's proposals and sessions share the base snapshot; its credentials never enter the package.
+    def test_backup_includes_stopped_agent_state_without_credentials_and_restores_it(self):
+        runtime, directory, calls, docker = self.agent_runtime("runtime")
+        package = self.agent_backup(self.agent_host_context(runtime / "deploy"), docker)
+        admin.check_files(package)
+        self.assertEqual(sorted(p.name for p in (package / "agent").iterdir()), ["feishu.sqlite", "sessions"])
+        self.assertIn(admin.AGENT_REQUIRED, json.loads((package / "required-credentials.json").read_text())["required"])
+        compose = [call[call.index("--project-directory") + 2:] for call in calls if "--project-directory" in call]
+        self.assertEqual([c[0] for c in compose], ["ps", "stop", "start"])
+        self.assertEqual(admin.verify_agent_state(package / "agent", self.root / "drill-agent")["shelf_proposals"], 1)
+
+        target = self.root / "restored"
+        destination = self.agent_host_context(target / "deploy")
+        admin.shutil.rmtree(target / "vault/.reliquary")
+        output = io.StringIO()
+        with mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), \
+             mock.patch.object(admin, "start_paused_environment"), contextlib.redirect_stdout(output):
+            admin.restore(destination, package, argparse.Namespace(skip_models=True))
+        state = target / "agents/feishu/data"
+        self.assertEqual((state / "sessions/conversation.jsonl").read_bytes(), (package / "agent/sessions/conversation.jsonl").read_bytes())
+        self.assertFalse((target / "agents/feishu/enabled").exists())
+        self.assertIn("Feishu agent", output.getvalue())
+
+    def test_agent_credential_in_state_rejects_backup_and_restarts_agent(self):
+        runtime, directory, calls, docker = self.agent_runtime("runtime", leaked='{"leak":"synthetic-feishu-app-value"}\n')
+        with self.assertRaisesRegex(admin.AdminError, "Operational credential"):
+            self.agent_backup(self.agent_host_context(runtime / "deploy"), docker)
+        self.assertEqual(calls[-1][-2:], ["start", "agent"])
+
+    def test_restore_rejects_running_agent_before_database_import(self):
+        runtime, directory, calls, docker = self.agent_runtime("runtime")
+        package = self.agent_backup(self.agent_host_context(runtime / "deploy"), docker)
+        target, _, _, _ = self.agent_runtime("busy")
+        destination = self.agent_host_context(target / "deploy")
+        admin.shutil.rmtree(target / "vault/.reliquary")
+        with mock.patch.object(admin.subprocess, "run") as restore:
+            with self.assertRaisesRegex(admin.AdminError, "Stop the Feishu agent"):
+                admin.restore(destination, package, argparse.Namespace(skip_models=True))
+        restore.assert_not_called()
+
     def test_verify_checks_host_directories_and_maps_the_host_manifest_for_container_cli(self):
         ctx = self.host_context()
         manifest = self.root / "package/snapshot.json"

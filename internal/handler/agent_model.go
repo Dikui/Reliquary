@@ -11,6 +11,11 @@ import (
 	"reliquary/internal/types"
 )
 
+// A full Pi transcript at the 128k-token default, with tool results capped at
+// 128 KiB each and encrypted reasoning, can exceed 2 MiB; MCP responses are
+// bounded at 8 MiB, so the transcript uses the same ceiling.
+const maxAgentRequestBytes = 8 * 1024 * 1024
+
 type AgentModelHandler struct{ service *service.AgentModelService }
 
 func NewAgentModelHandler(service *service.AgentModelService) *AgentModelHandler {
@@ -23,7 +28,7 @@ func (h *AgentModelHandler) Respond(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "api_key_required"}})
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 2*1024*1024))
+	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, maxAgentRequestBytes))
 	if err != nil || !json.Valid(body) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "invalid_request"}})
 		return

@@ -21,8 +21,8 @@ if (values.help) {
   RELIQUARY_API_URL       服务根地址，例如 http://127.0.0.1:8080
   RELIQUARY_API_KEY       完整 API Key
   RELIQUARY_LIBRARY_IDS   固定库 ID，逗号分隔
-  MODEL_API              默认 openai-codex-responses，使用 Codex 订阅
-                         或 openai-completions / openai-responses / anthropic-messages
+  MODEL_API              必填：openai-completions / openai-responses / anthropic-messages，
+                         开发者本机复用 Codex 登录时显式填 openai-codex-responses
   MODEL_NAME             订阅默认 gpt-5.6-sol，其他协议必填
   CODEX_AUTH_FILE        可选，本机 Codex auth.json 绝对路径，只读复用订阅
   MODEL_BASE_URL         其他协议的模型 API 根地址

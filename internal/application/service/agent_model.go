@@ -55,10 +55,15 @@ func (s *AgentModelService) Respond(ctx context.Context, id string, body []byte,
 	if err != nil {
 		return err
 	}
+	// Invalid requests must not consume the daily subscription allowance.
+	prepared, err := client.PrepareAgentRequest(body)
+	if err != nil {
+		return err
+	}
 	if _, err := s.policy.Reserve(ctx); err != nil {
 		return err
 	}
-	response, err := client.OpenAgentResponse(ctx, body)
+	response, err := client.OpenPreparedAgentResponse(ctx, prepared)
 	if err != nil {
 		return s.recordFailure(ctx, err)
 	}

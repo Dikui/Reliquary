@@ -53,3 +53,17 @@ func TestAgentModelRetainsToolsAndPausesOnQuota(t *testing.T) {
 	require.True(t, policy.Paused)
 	require.ErrorIs(t, relayAgentResponse(strings.NewReader("data: {\"type\":\"response.created\"}\n\n"), func([]byte) error { return nil }), io.ErrUnexpectedEOF)
 }
+
+// Customer installation: a request the agent endpoint rejects never spends the
+// subscription's daily allowance.
+func TestAgentModelRejectsInvalidRequestBeforeReservingQuota(t *testing.T) {
+	h := newChatGPTGenerationHarness(t, func(chatGPTGenerationRequest) (string, string) { return "", "" })
+	before, err := h.policy.Get(h.ctx)
+	require.NoError(t, err)
+	s := NewAgentModelService(h.models, h.models.chatGPT, h.policy)
+	body := []byte(`{"input":[{"role":"user","content":"test"}],"tools":[{"type":"web_search"}]}`)
+	require.ErrorContains(t, s.Respond(h.ctx, "chatgpt-generation", body, func([]byte) error { return nil }), "local function")
+	after, err := h.policy.Get(h.ctx)
+	require.NoError(t, err)
+	require.Equal(t, before.DailyUsed, after.DailyUsed)
+}

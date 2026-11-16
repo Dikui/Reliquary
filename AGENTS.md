@@ -18,7 +18,7 @@ Issues 和 specs 使用本地 Markdown，存放于 `.scratch/<feature-slug>/`。
 
 ### Local deployment
 
-客户要求从零安装或用 Agent 辅助部署时，先读取 `docs/agent-installation.md`，按依赖检查、客户模型、飞书配置和实际消息验收的顺序执行。
+客户要求从零安装或用 Agent 辅助部署时，先读取 `docs/agent-installation.md`，按依赖检查、资料库本体安装的顺序执行；客户需要飞书入口时，再做客户模型、飞书配置和实际消息验收。
 
 更新本机部署前，读取源码根目录的 `.deploy.env`，以 `RELIQUARY_DEPLOY_DIR` 定位运行目录；该文件不提交。不要将源码目录当成运行目录。目录结构与维护步骤见 `docs/local-deployment.md`。
 
@@ -46,3 +46,4 @@ Issues 和 specs 使用本地 Markdown，存放于 `.scratch/<feature-slug>/`。
 - 只检测重复，不检测冲突（2026-11-08，来源：Reliquary 资料自检讨论）。
 - 维护和恢复要求严格，不能丢信息；迁移和新环境重建集成到一个命令里；周备份，只保留 4 周（2026-11-08，来源：Reliquary 维护讨论）。
 - 不做多设备同步；暂时只在内网访问，不考虑手机端（2026-11-08，来源：Reliquary 部署讨论）。
+- 资料库本体只在内网；可选的对话入口（目前是飞书 Agent）可以出网，启用前须写明数据外流范围。入口代码放在 `agents/`，安装与资料库本体分开（2026-11-15，来源：飞书 Agent 方向讨论，见 ADR 0028）。

@@ -52,7 +52,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   }
   const modelId = managedSubscription ? required('MODEL_ID') : '';
   const apiURL = endpoint('RELIQUARY_API_URL');
-  const modelAPI = managedSubscription ? 'openai-responses' : env.MODEL_API?.trim() || 'openai-codex-responses';
+  // Codex reuse is a developer-only mode and must be named explicitly; a missing protocol never falls back to it.
+  const modelAPI = managedSubscription ? 'openai-responses' : required('MODEL_API');
   if (!['openai-completions', 'openai-responses', 'anthropic-messages', 'openai-codex-responses'].includes(modelAPI)) {
     throw new QueryError('invalid_config', 'Unsupported MODEL_API');
   }

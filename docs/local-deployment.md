@@ -42,16 +42,23 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 安装依次执行以下操作。
 
 1. 校验新的运行目录和未被占用的 Compose 项目名，生成随机数据库密码及加密密钥。
-2. 构建 Go 后端、Vue 网页和飞书 Agent。Docker 下载 Go、Node 和数据库基础镜像，`npm ci` 按锁文件下载 Pi Agent、Pi AI、Pi MCP、飞书 SDK 等依赖。宿主机无需安装 Go 或 Node。
+2. 构建 Go 后端和 Vue 网页。Docker 下载 Go、Node 和数据库基础镜像，宿主机无需安装 Go 或 Node。
 3. 启动 PostgreSQL、Redis、Neo4j、后端和网页，等待健康检查。数据库迁移只作用于本次安装的独立数据库。
-4. 打开本机网页。客户先创建资料库，再运行 `configure`，按提示选择模型并填写飞书应用配置。首次 ChatGPT 连接需要浏览器授权和模型选择。已有活跃 ChatGPT 模型可直接复用。
-5. 引导程序创建本机 Agent API Key，保存权限为 `0600` 的 `agent.env`，实际检查 Reliquary、模型工具调用和飞书应用身份。然后启动机器人，提示在目标群 @机器人发送验证消息。
+4. 打开本机网页，客户创建资料库。资料库本体到此安装完成。
+
+需要飞书对话入口时再运行 `configure`（见 [ADR 0028](adr/0028-optional-feishu-entry.md)）：
+
+1. 首次运行从安装时登记的源码构建飞书 Agent 镜像，`npm ci` 按锁文件下载 Pi Agent、Pi AI、Pi MCP、飞书 SDK 等依赖，并生成 `agents/feishu/` 运行配置。
+2. 按提示选择资料库、模型并填写飞书应用配置。首次 ChatGPT 连接需要浏览器授权和模型选择，已有活跃 ChatGPT 模型可直接复用。
+3. 引导程序创建本机 Agent API Key，保存权限为 `0600` 的 `agent.env`，实际检查 Reliquary、模型工具调用和飞书应用身份。然后启动机器人，提示在目标群 @机器人发送验证消息。
+
+启用后，群内问答经飞书服务器传输并保存在飞书；每轮对话上下文（问题、工具读到的资料片段、历史回复）发送给所选模型服务商。启用前须向使用者说明。
 
 支持 `openai-completions`、`openai-responses` 和 `anthropic-messages` API。填写客户自己的端点、模型名、密钥、上下文和输出上限。ChatGPT 模式复用 Reliquary 的账号加密存储、令牌续期和用量暂停策略，Agent 只持有本机 API Key。一个回答可能调用模型多次，每次计入订阅请求限额。客户独立授权后可以脱离开发者机器运行。密钥和账号令牌属于运行数据，仓库只保存模板。
 
 飞书需创建企业自建应用，启用机器人、长连接和 `im.message.receive_v1`，开通并发布所需权限，再加入指定群。`configure` 显示权限清单，并要求输入 App ID、App Secret、Tenant Key 和 Chat ID。使用本人现有租户即可。具体权限和群内操作见 [Agent 指南](../agents/feishu/README.md)。
 
-默认占用本机 80、8080 和 6379 端口。网页和后端可用 `--frontend-port`、`--app-port` 修改。需要并行安装时，给 `--project-name` 指定新名字，并通过 `--env-file` 提供不同的 `REDIS_PORT`。命令因下载或构建失败中断时，修正原因后重跑同一安装命令。基础服务已经就绪时，命令会提示继续 `configure`。
+默认占用本机 80、8080 和 6379 端口。网页和后端可用 `--frontend-port`、`--app-port` 修改。需要并行安装时，给 `--project-name` 指定新名字，并通过 `--env-file` 提供不同的 `REDIS_PORT`。命令因下载或构建失败中断时，修正原因后重跑同一安装命令。基础服务已经就绪时，重跑只提示可选的 `configure`。
 
 ### 运行与更新
 
@@ -64,7 +71,7 @@ python3 "$HOME/Project/Reliquary/scripts/agent-local.py" update --root "$HOME/Re
 
 `status` 显示连接状态及收发记录数。`stop` 同时清除自动恢复标记。更新从源码构建新 Agent 镜像，保留会话目录，启动失败时恢复原 Compose 镜像。更新基础服务沿用下文的升级流程。客户正式使用干净的发布提交安装时会自动登记基础服务源码，供已有维护工具使用。未提交源码安装适用于本地测试，正式使用前应从发布提交重建并登记。
 
-账号授权存于 PostgreSQL，加密密钥在 `deploy/.env`。Agent 的 SQLite 保存会话、任务、消息与确认关系，Pi 的 `data/sessions/` 保存实际模型对话。恢复需要保留数据库卷、`.env`、文件数据和完整 Agent 状态目录。复制状态前停止 Agent，避免遗漏 SQLite WAL 中的数据。迁移和镜像回退见 [Agent 指南](../agents/feishu/README.md#迁移旧状态)。已有 `reliquary-admin` 备份范围覆盖基础服务，Agent 状态需要单独纳入一致性备份，申请备份时明确这一范围。
+账号授权存于 PostgreSQL，加密密钥在 `deploy/.env`。Agent 的 SQLite 保存会话、任务、消息与确认关系，Pi 的 `data/sessions/` 保存实际模型对话。`./reliquary-admin backup` 在同一停机窗口内先停止 Agent、再暂停基础服务，把 `agents/feishu/data/`（不含 Pi 的 `auth.json` 和运行锁）连同数据库一起写入备份包的 `agent/`，结束后按 `enabled` 恢复运行。`agent.env` 中的模型密钥、飞书 App Secret 和 Agent API Key 不进入备份包，状态中若出现这些值，备份会被拒绝。`restore` 到标准运行目录时写回 `agents/feishu/data/`，不启动 Agent，检查清单提示运行 `configure` 重填凭据后再 `start`。恢复演练会检查 Agent SQLite 的完整性。未启用飞书入口的安装，备份与恢复行为不变。迁移和镜像回退见 [Agent 指南](../agents/feishu/README.md#迁移旧状态)。
 
 macOS 登录后自动恢复可按下节注册，已启用的 Agent 会随基础服务恢复。Linux 重启策略由 Docker 的 `restart: unless-stopped` 执行，Docker 服务需在开机时启动。仅休眠或关闭终端无需重新授权。
 

@@ -58,7 +58,7 @@ test('离线迁移保留消息与分支并要求待确认提议重新核验', as
   await writeFile(join(source, 'sessions/parent.jsonl'), parent);
   await writeFile(join(source, 'sessions/child.jsonl'), child);
   const config = loadConfig({ RELIQUARY_API_URL: endpoint + '/new', RELIQUARY_API_KEY: 'test',
-    RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: destination });
+    RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: destination, MODEL_API: 'openai-codex-responses' });
   const options = { source, destination, runtimeRoot: '/data', sourceEndpoint: endpoint, config, scope };
   try {
     assert.equal((await migrateState(options)).sessions, 2);

@@ -20,7 +20,7 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 - `im:message.group_at_msg:readonly` 接收群内 @ 消息。
 - `im:message:send_as_bot` 回复消息。
 - `im:message:readonly` 核对原消息和群。
-- `im:message.group_msg` 核对发送结果。
+- `im:message.group_msg` 核对发送结果。这是敏感权限，应用可读取所在群的全部消息，建议机器人只加入专用群。
 
 仅将指定群内 @ 机器人的文字交给模型。附件、Excel、解析器与库设置维护尚未接入。
 
@@ -63,7 +63,7 @@ docker compose --project-directory /srv/reliquary-feishu stop
 
 客户 ChatGPT 订阅使用 `MODEL_SOURCE=chatgpt` 和已在 Reliquary 中创建的 `MODEL_ID`。模型请求经本机 `/api/v1/agent/models/:model_id/responses` 转发，OAuth 令牌由后端加密保存和续期，Agent 通过本机 API Key 认证。订阅暂停或授权失效会返回可处理的错误码。模型账号设置中的现有订阅额度策略同时适用，工具循环中的每次模型请求都会计入请求数。首次客户授权由 Reliquary 网页引导。
 
-以下为已有 Codex 登录文件的兼容运行方式。
+以下为开发者本机复用 Codex 登录文件的兼容运行方式，不用于客户安装。`MODEL_API=openai-codex-responses` 必须显式填写；缺少 `MODEL_API` 时 Agent 拒绝启动，不会回落到 Codex 登录。
 
 使用本机 Codex 登录时，增加独立的 Compose 覆盖文件 `compose.codex.yaml`，并在 `.env` 写入宿主登录文件绝对路径 `CODEX_AUTH_SOURCE`。
 
@@ -111,7 +111,7 @@ node --use-env-proxy --env-file=/absolute/target.env dist/migrate.js \
 
 状态目录必须使用本地文件系统，并只允许一个 Agent 实例。`runtime-lock.sqlite` 由连接持有排他事务，进程退出自动释放。保留整个状态目录，包括 SQLite 的 WAL 文件、Pi `sessions/` 和 Pi 自行管理的 `auth.json`。不要只复制运行中的主数据库文件，也不要删除运行中的锁文件。
 
-备份独立于部署。需要备份时先取得本次授权，停止写入后保留一致的完整状态目录。不要将数据回滚与镜像回退混为一谈。已确认的货架业务变更需要单独的新提议处理。
+备份独立于部署。需要备份时先取得本次授权，使用运行目录的 `./reliquary-admin backup`：它会先停止 Agent，把状态目录（不含 `auth.json` 和运行锁）与基础服务数据写入同一备份包，结束后恢复运行；`agent.env` 中的凭据不进入备份包，恢复后用 `configure` 重填。不要将数据回滚与镜像回退混为一谈。已确认的货架业务变更需要单独的新提议处理。
 
 ## 恢复与排障
 
