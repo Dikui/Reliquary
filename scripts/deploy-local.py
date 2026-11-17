@@ -143,7 +143,8 @@ def update(source, directory, *, all_services, dry_run):
         admin.json_write(build, {"services": {name: {"image": references[name], "build": {"args": {
             "VERSION_ARG": version, "COMMIT_ID_ARG": head}}} for name in services}})
         subprocess.run(["docker", "compose", "--env-file", str(directory / ".env"),
-                        "-f", str(source / "docker-compose.yml"), "-f", str(build), "build", *services],
+                        "-f", str(source / "docker-compose.yml"), "-f", str(build), "build",
+                        *admin.build_proxy_args({**runtime_env, **os.environ}), *services],
                        cwd=source, env=ctx.env, check=True)
     updated = {"services": {name: {"image": references[name], "pull_policy": "never"} for name in SERVICES},
                "x-reliquary-revisions": {}}

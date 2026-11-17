@@ -339,6 +339,23 @@ def read_env(path):
     return values
 
 
+def build_proxy_args(env):
+    """Optional proxy for image builds, read from RELIQUARY_BUILD_PROXY.
+
+    Only Docker's predefined proxy build args are used: they reach RUN steps but
+    stay out of image history, runtime env and the layer cache key. Nothing is
+    inferred from the host's own proxy settings, which containers may not reach."""
+    proxy = (env.get("RELIQUARY_BUILD_PROXY") or "").strip()
+    if not proxy:
+        return []
+    no_proxy = (env.get("RELIQUARY_BUILD_NO_PROXY") or "").strip() or "localhost,127.0.0.1"
+    args = []
+    for name, value in (("HTTP_PROXY", proxy), ("HTTPS_PROXY", proxy), ("NO_PROXY", no_proxy)):
+        for key in (name, name.lower()):
+            args += ["--build-arg", f"{key}={value}"]
+    return args
+
+
 def sanitized_env(values):
     safe, required = {}, []
     for key, value in sorted(values.items()):
@@ -596,7 +613,7 @@ class Context:
             return True
         reference = "reliquary-maintenance-helper:" + secrets.token_hex(6)
         print("Preparing a maintenance helper for the frozen baseline; the running image and database structure stay unchanged.")
-        run(["docker", "build", "-f", "docker/Dockerfile.app",
+        run(["docker", "build", "-f", "docker/Dockerfile.app", *build_proxy_args(self.env),
              "--build-arg", "VERSION_ARG=" + (self.root / "VERSION").read_text().strip(), "-t", reference, "."], env=self.env, cwd=self.root, capture=False)
         self.env["RELIQUARY_ADMIN_HELPER_IMAGE"] = reference
         return True
@@ -2215,7 +2232,7 @@ def main(argv=None):
                 json_write(new_override, {"services": {ctx.app: {"image": "reliquary-app:" + tag}, "frontend": {"image": "reliquary-frontend:" + tag}}})
                 ctx.env["COMPOSE_FILE"] = ctx.env.get("COMPOSE_FILE", str(ctx.root / "docker-compose.yml")) + os.pathsep + str(new_override)
                 ctx.env["RELIQUARY_COMMIT"] = revision
-                ctx.compose("build", ctx.app, "frontend")
+                ctx.compose("build", *build_proxy_args(ctx.env), ctx.app, "frontend")
             ctx.env.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
             if path is None:
                 guard.enter_context(ctx.stopped("snapshot", args.timeout, keep_paused=True))

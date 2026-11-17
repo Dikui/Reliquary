@@ -60,6 +60,20 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 
 默认占用本机 80、8080 和 6379 端口。网页和后端可用 `--frontend-port`、`--app-port` 修改。需要并行安装时，给 `--project-name` 指定新名字，并通过 `--env-file` 提供不同的 `REDIS_PORT`。命令因下载或构建失败中断时，修正原因后重跑同一安装命令。基础服务已经就绪时，重跑只提示可选的 `configure`。
 
+### 构建代理
+
+构建镜像时，容器需要下载 Go 模块、系统包和 npm 依赖。宿主机代理工作在 TUN 或 fake-IP 模式时，容器内的 DNS 和 HTTPS 可能失败，例如 `lookup proxy.golang.org ... no such host`、`server gave HTTP response to HTTPS client`。此时在 `deploy/.env` 中填写一个容器可达的 HTTP 代理：
+
+```sh
+RELIQUARY_BUILD_PROXY=http://host.docker.internal:7897
+# 可选，默认 localhost,127.0.0.1
+RELIQUARY_BUILD_NO_PROXY=localhost,127.0.0.1
+```
+
+安装、按改动范围更新、`reliquary-admin upgrade` 和飞书 Agent 构建都会读取这两项。首次安装时 `deploy/.env` 尚未生成，可在命令前临时设置同名环境变量。进程环境变量优先于 `deploy/.env`。代理通过 Docker 预置的 `HTTP(S)_PROXY`/`NO_PROXY` 构建参数传入，只在构建阶段生效，不写入镜像历史和运行容器，也不影响构建缓存。留空时不传任何代理参数。
+
+脚本不读取宿主机自身的 `HTTP_PROXY`：宿主机能用的地址，容器未必能连通。`host.docker.internal` 在 macOS 的 OrbStack、Docker Desktop 上指向宿主机。Linux 原生 Docker 需填写桥接网络可达的地址，并让代理软件监听该地址。
+
 ### 运行与更新
 
 ```sh
