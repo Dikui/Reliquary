@@ -293,5 +293,127 @@ class LocalPiTests(unittest.TestCase):
                                secrets=['synthetic-key'])
 
 
+class LocalPiUpdateTests(unittest.TestCase):
+    """Ticket 03 (small/spec): pi-update refreshes code while preserving customer state.
+
+    Git, Docker builds and the Pi container check are faked; runtime files are real.
+    """
+
+    def runtime(self, temporary):
+        root = pi_runtime(temporary)
+        (root / 'logs').mkdir()
+        directory = root / 'agents/pi'
+        config = {'image': 'reliquary-pi:previous', 'workspace': str(root / 'workspace'),
+                  'network': 'custom-net', 'model': {'MODEL_NAME': 'kept-model'}}
+        agent.write_json(directory / 'config.json', config, private=True)
+        preserved = {
+            'agents/pi/pi.env': b'RELIQUARY_API_KEY=synthetic-reliquary-key\n',
+            'agents/pi/data/agent/auth.json': b'{"provider":{"type":"api_key","key":"synthetic-model-key"}}\n',
+            'agents/pi/data/agent/settings.json': b'{"defaultTools":["read"]}\n',
+            'agents/pi/data/agent/models.json': b'{"providers":{}}\n',
+            'agents/pi/data/agent/mcp.json': b'{"mcpServers":{}}\n',
+            'agents/pi/data/agent/sessions/--workspace--/kept.jsonl': b'{"type":"session","id":"kept"}\n',
+        }
+        for name, content in preserved.items():
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+            path.chmod(0o600)
+        agent_dir = directory / 'data/agent'
+        (agent_dir / 'skills/reliquary/workflows').mkdir(parents=True)
+        (agent_dir / 'skills/reliquary/workflows/obsolete.md').write_text('old workflow\n')
+        (agent_dir / 'APPEND_SYSTEM.md').write_text('old policy\n')
+        (root / 'scripts').mkdir()
+        (root / 'scripts/pi').write_text(agent.pi_launcher(root, config))
+        (root / 'scripts/pi').chmod(0o755)
+        return root, root.parent / 'source', preserved
+
+    def update(self, root, source, run):
+        with mock.patch.object(agent, '__file__', str(source / 'scripts/agent-local.py')), \
+             mock.patch.object(agent.subprocess, 'check_output', return_value='abc123def456'), \
+             mock.patch.object(agent.subprocess, 'run', side_effect=run) as commands, \
+             mock.patch('sys.argv', ['agent-local.py', 'pi-update', '--root', str(root)]), \
+             mock.patch('sys.stdout', new_callable=io.StringIO) as output, \
+             mock.patch('sys.stderr', new_callable=io.StringIO) as errors:
+            try:
+                agent.main()
+            finally:
+                self.output = output.getvalue()
+                self.errors = errors.getvalue()
+                self.commands = commands
+
+    def test_update_refreshes_image_and_guidance_but_preserves_sessions_and_credentials(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, preserved = self.runtime(temporary)
+            current = root.parent / 'current-source'
+            agent.shutil.copytree(source, current)
+            (current / 'VERSION').write_text('0.18.0\n')
+            (current / 'skills/reliquary/workflows/shelf-import.md').write_text('# 新导入流程\n')
+
+            def run(command, **_):
+                return agent.subprocess.CompletedProcess(command, 0, pi_events('测试库'), '')
+
+            self.update(root, current, run)
+            config = agent.json.loads((root / 'agents/pi/config.json').read_text())
+            self.assertTrue(config['image'].startswith('reliquary-pi:0.18.0-abc123def456-'))
+            self.assertEqual(config['model'], {'MODEL_NAME': 'kept-model'})
+            self.assertIn(config['image'], (root / 'scripts/pi').read_text())
+            self.assertNotIn('reliquary-pi:previous', (root / 'scripts/pi').read_text())
+            self.assertTrue((root / 'scripts/pi').stat().st_mode & 0o100)
+            guidance = root / 'agents/pi/data/agent'
+            self.assertEqual((guidance / 'skills/reliquary/workflows/shelf-import.md').read_text(), '# 新导入流程\n')
+            self.assertFalse((guidance / 'skills/reliquary/workflows/obsolete.md').exists())
+            self.assertFalse((guidance / 'skills/reliquary/embed.go').exists())
+            self.assertIn('只读', (guidance / 'APPEND_SYSTEM.md').read_text())
+            for name, content in preserved.items():
+                self.assertEqual((root / name).read_bytes(), content)
+                self.assertEqual((root / name).stat().st_mode & 0o777, 0o600)
+            build, check = [call.args[0] for call in self.commands.call_args_list]
+            self.assertEqual(build[:2], ['docker', 'build'])
+            self.assertEqual(build[-1], str(current / 'agents/pi'))
+            self.assertEqual(check[0], str(root / 'scripts/pi'))
+            self.assertIn('--no-session', check)
+
+    def test_failed_update_returns_nonzero_and_restores_previous_image(self):
+        for stage in ('build', 'check', 'tool'):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as temporary:
+                root, source, preserved = self.runtime(temporary)
+                config = root / 'agents/pi/config.json'
+                launcher = root / 'scripts/pi'
+                before_config, before_launcher = config.read_bytes(), launcher.read_bytes()
+
+                def run(command, **_):
+                    if command[:2] == ['docker', 'build']:
+                        if stage == 'build':
+                            raise agent.subprocess.CalledProcessError(1, command)
+                        return agent.subprocess.CompletedProcess(command, 0)
+                    self.assertNotEqual(agent.json.loads(config.read_text())['image'], 'reliquary-pi:previous')
+                    if stage == 'tool':
+                        return agent.subprocess.CompletedProcess(command, 0, pi_events('未调用工具', called=False), '')
+                    return agent.subprocess.CompletedProcess(command, 1, '', '模型服务不可用')
+
+                with self.assertRaises(SystemExit) as error:
+                    self.update(root, source, run)
+                self.assertEqual(error.exception.code, 1)
+                self.assertEqual(config.read_bytes(), before_config)
+                self.assertEqual(launcher.read_bytes(), before_launcher)
+                self.assertTrue(launcher.stat().st_mode & 0o100)
+                for name, content in preserved.items():
+                    self.assertEqual((root / name).read_bytes(), content)
+
+    def test_unconfigured_pi_requires_configuration_before_update(self):
+        for partial in (False, True):
+            with self.subTest(partial=partial), tempfile.TemporaryDirectory() as temporary:
+                root = pi_runtime(temporary)
+                (root / 'logs').mkdir()
+                if partial:
+                    agent.write_json(root / 'agents/pi/config.json', {'image': 'reliquary-pi:unfinished'}, private=True)
+                with self.assertRaises(SystemExit) as error:
+                    self.update(root, root.parent / 'source', None)
+                self.assertEqual(error.exception.code, 1)
+                self.assertIn('请先执行 pi-configure', self.errors)
+                self.commands.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

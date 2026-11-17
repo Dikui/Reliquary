@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure and operate the installed Feishu agent from its runtime directory."""
+"""Configure and operate the installed Feishu and local Pi entries."""
 import argparse
 import contextlib
 import fcntl
@@ -312,6 +312,9 @@ def operate(root, action):
 
 PI_PROVIDER = 'reliquary-model'
 PI_CHECK_TOOL = 'mcp__reliquary__list_libraries'
+PI_DATA_OUTFLOW_NOTICE = ('启用本地 Pi 后，每轮对话的完整上下文（问题、工具读到的资料片段、从工作文件夹读取的内容、历史回复）'
+                          '会发送给所选模型服务商；ChatGPT 订阅经 Reliquary 后端转发给 OpenAI。'
+                          '资料库正文、文件和数据库不会整体同步出去，模型上下文里只包含本轮工具实际读到的内容及对话历史。')
 PI_SYSTEM = """# 本地 Pi 入口约束
 
 - 你在容器中运行。可用工具只有内置 `read` 和 Reliquary MCP 工具：不能执行命令，不能创建、修改或删除本地文件。不要让用户放开这些限制，也不要借其他工具绕过。
@@ -417,7 +420,14 @@ def check_pi(launcher):
     return answer
 
 
-def configure_pi(root):
+def refresh_pi_guidance(source, agent_dir):
+    (agent_dir / 'APPEND_SYSTEM.md').write_text(PI_SYSTEM)
+    skill = agent_dir / 'skills/reliquary'
+    shutil.rmtree(skill, ignore_errors=True)
+    shutil.copytree(source / 'skills/reliquary', skill, ignore=shutil.ignore_patterns('*.go'))
+
+
+def configure_pi(root, *, show_notice=True):
     runtime = read_env(root / 'deploy/.env')
     base = 'http://127.0.0.1:' + runtime.get('APP_PORT', '8080')
     frontend = 'http://127.0.0.1:' + runtime.get('FRONTEND_PORT', '80')
@@ -425,8 +435,8 @@ def configure_pi(root):
     agent_dir = directory / 'data/agent'
     config = json.loads((directory / 'config.json').read_text()) if (directory / 'config.json').exists() else {}
     environment = read_env(directory / 'pi.env') if (directory / 'pi.env').exists() else {}
-    print('启用本地 Pi 后，每轮对话的上下文（问题、工具读到的资料片段、从工作文件夹读取的内容）会发送给所选模型服务商；'
-          'ChatGPT 订阅经 Reliquary 后端转发给 OpenAI。资料库正文和文件不会整体同步出去。')
+    if show_notice:
+        print(PI_DATA_OUTFLOW_NOTICE)
     source = source_checkout(root, 'pi')
     # Sessions hold library excerpts; the launcher runs Pi as the host user, so owner-only access suffices.
     for path in [directory, directory / 'data']:
@@ -478,10 +488,7 @@ def configure_pi(root):
         'exposure': 'direct', 'description': '本机 Reliquary 资料库'}}})
     write_json(agent_dir / 'models.json', {'providers': {PI_PROVIDER: provider}})
     write_json(agent_dir / 'auth.json', {PI_PROVIDER: credential}, private=True)
-    (agent_dir / 'APPEND_SYSTEM.md').write_text(PI_SYSTEM)
-    skill = agent_dir / 'skills/reliquary'
-    shutil.rmtree(skill, ignore_errors=True)
-    shutil.copytree(source / 'skills/reliquary', skill, ignore=shutil.ignore_patterns('*.go'))
+    refresh_pi_guidance(source, agent_dir)
 
     config.update(workspace=str(workspace), network=backend_network(root),
                   model={key: value for key, value in model.items() if key != 'MODEL_API_KEY'})
@@ -500,9 +507,43 @@ def configure_pi(root):
     print(answer or '（模型未返回文字）')
 
 
+def update_pi(root):
+    directory = root / 'agents/pi'
+    path = directory / 'config.json'
+    launcher = root / 'scripts/pi'
+    if not path.is_file():
+        raise ValueError('尚未配置本地 Pi，请先执行 pi-configure')
+    before = path.read_bytes()
+    config = json.loads(before)
+    if not all(config.get(key) for key in ('image', 'workspace', 'network')) or not all(
+            file.is_file() for file in (launcher, directory / 'pi.env', directory / 'data/agent/auth.json')):
+        raise ValueError('尚未配置本地 Pi，请先执行 pi-configure')
+    source = Path(__file__).resolve().parent.parent
+    if not (source / 'agents/pi/Dockerfile').is_file():
+        raise ValueError('请从仓库中的 scripts/agent-local.py 执行 pi-update --root 运行目录')
+    before_launcher = launcher.read_bytes()
+    before_mode = launcher.stat().st_mode & 0o777
+    print('从当前源码重建本地 Pi 镜像…', flush=True)
+    config['image'] = build_image(source, root, 'pi')
+    try:
+        refresh_pi_guidance(source, directory / 'data/agent')
+        write_json(path, config, private=True)
+        launcher.write_text(pi_launcher(root, config))
+        launcher.chmod(0o755)
+        print('检查将调用模型并消耗少量额度。', flush=True)
+        check_pi(launcher)
+    except BaseException:
+        write_private(path, before.decode())
+        launcher.write_bytes(before_launcher)
+        launcher.chmod(before_mode)
+        print('本地 Pi 更新未完成，已恢复原镜像。')
+        raise
+    print(f'本地 Pi 已更新。启动命令：{launcher}')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['configure', 'check', 'start', 'stop', 'status', 'update', 'pi-configure'])
+    parser.add_argument('action', choices=['configure', 'check', 'start', 'stop', 'status', 'update', 'pi-configure', 'pi-update'])
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parent.parent)
     args = parser.parse_args()
     try:
@@ -511,6 +552,8 @@ def main():
                 configure(args.root.resolve())
             elif args.action == 'pi-configure':
                 configure_pi(args.root.resolve())
+            elif args.action == 'pi-update':
+                update_pi(args.root.resolve())
             else:
                 operate(args.root.resolve(), args.action)
     except (ValueError, OSError, subprocess.CalledProcessError, EOFError) as error:
