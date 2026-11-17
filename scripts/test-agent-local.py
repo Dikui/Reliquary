@@ -253,6 +253,15 @@ class LocalPiTests(unittest.TestCase):
             self.assertEqual(auth[settings['defaultProvider']]['key'], 'synthetic-shared')
             self.assertIn('RELIQUARY_API_KEY=pi-fixture-key\n', (root / 'agents/pi/pi.env').read_text())
 
+    def test_developer_codex_model_of_feishu_is_not_offered_for_reuse(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            agent.write_env(root / 'agents/feishu/agent.env', {'MODEL_SOURCE': 'api', 'MODEL_API': 'openai-codex-responses'})
+            self.configure(root, ['1', 'openai-completions', 'https://model.example/v1', 'test-model', '', '', '', ''],
+                           [{'token': 'pi-fixture-key'}], (0, pi_events('测试库'), ''), secrets=['synthetic-key'])
+            models = agent.json.loads((root / 'agents/pi/data/agent/models.json').read_text())
+            self.assertEqual(models['providers'][agent.PI_PROVIDER]['baseUrl'], 'https://model.example/v1')
+
     def test_failed_check_keeps_configuration_and_reports_reason(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pi_runtime(temporary)

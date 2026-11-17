@@ -78,6 +78,7 @@ def choose(items, label):
 
 MODEL_KEYS = ['MODEL_SOURCE', 'MODEL_API', 'MODEL_ID', 'MODEL_BASE_URL', 'MODEL_NAME', 'MODEL_API_KEY',
               'MODEL_CONTEXT_WINDOW', 'MODEL_MAX_TOKENS']
+MODEL_APIS = ['openai-completions', 'openai-responses', 'anthropic-messages']
 
 
 def chatgpt_models(base):
@@ -103,8 +104,8 @@ def choose_model(base, frontend):
                     MODEL_CONTEXT_WINDOW=str(model.get('parameters', {}).get('context_window') or 128000),
                     MODEL_MAX_TOKENS=str(model.get('parameters', {}).get('max_output_tokens') or 8192))
     if source == '1':
-        protocol = input('协议 [openai-completions / openai-responses / anthropic-messages]：').strip()
-        if protocol not in ['openai-completions', 'openai-responses', 'anthropic-messages']:
+        protocol = input(f"协议 [{' / '.join(MODEL_APIS)}]：").strip()
+        if protocol not in MODEL_APIS:
             raise ValueError('不支持的模型协议')
         return dict(MODEL_SOURCE='api', MODEL_API=protocol,
                     MODEL_BASE_URL=input('模型 API 根地址：').strip(), MODEL_NAME=input('模型名称：').strip(),
@@ -438,7 +439,8 @@ def configure_pi(root):
 
     feishu = root / 'agents/feishu/agent.env'
     shared = read_env(feishu) if feishu.exists() else {}
-    if shared.get('MODEL_SOURCE') in ('api', 'chatgpt') and \
+    # Only the customer-facing protocols are shared; Feishu's developer-only Codex mode has no Pi equivalent.
+    if shared.get('MODEL_SOURCE') in ('api', 'chatgpt') and shared.get('MODEL_API') in MODEL_APIS and \
             input(f"复用飞书入口的模型 {shared.get('MODEL_NAME')}？[Y/n]：").strip().lower() in ('', 'y', 'yes'):
         model = {key: shared[key] for key in MODEL_KEYS if key in shared}
     else:
@@ -446,6 +448,8 @@ def configure_pi(root):
 
     default = config.get('workspace') or str(root / 'workspace')
     workspace = Path(input(f'Pi 可读取的工作文件夹（只读挂载）[{default}]：').strip() or default).expanduser().resolve()
+    if ',' in str(workspace) or ',' in str(directory):
+        raise ValueError('Docker 挂载路径不能包含逗号，请换一个工作文件夹或运行目录')
     workspace.mkdir(parents=True, exist_ok=True)
     previous = environment.get('HTTPS_PROXY', '')
     proxy = input(f"模型代理地址，需容器可访问{'，输入 - 改为直连' if previous else ''} [{previous or '留空为直连'}]：").strip() \
