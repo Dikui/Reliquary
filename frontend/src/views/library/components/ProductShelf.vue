@@ -35,7 +35,9 @@ const columns = computed(() => SHELF_LEVEL_KINDS.map((kind, level) => {
   const children = candidates.filter(node => parent?.startsWith('missing:') ? isUnassigned(node) : relations.value.some(edge => edge.child === node.id && edge.parent === parent))
   const items: Array<{ id: string; name: string; node?: Entity }> = children.map(node => ({ id: node.id, name: node.canonical_name, node }))
   const unassigned = candidates.filter(isUnassigned)
-  if (unassigned.length && !parent?.startsWith('missing:')) items.push({ id: `missing:${level}`, name: `${t('productShelf.unassigned')} (${unassigned.length})` })
+  // Until every parent's relations arrive, a node without a known parent may
+  // still have one; counting it as unassigned would be a false alarm.
+  if (!loading.value && unassigned.length && !parent?.startsWith('missing:')) items.push({ id: `missing:${level}`, name: `${t('productShelf.unassigned')} (${unassigned.length})` })
   return items
 }))
 function setPath(node: Entity) {

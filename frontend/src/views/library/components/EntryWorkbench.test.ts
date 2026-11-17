@@ -212,3 +212,12 @@ for (const kind of ['product_line', 'platform', 'product', 'part']) {
     assert.match(html, /href="\/platform\/entries\?libraries=library-a"/)
   })
 }
+
+// Regression: opening a product line from the status table briefly mounted the
+// shelf tree before the line itself loaded, and the tree reported every model
+// as unassigned. The workbench now waits on the requested node instead.
+test('货架节点链接在节点读取期间显示加载中而不是货架树', async () => {
+  const { html } = await renderWorkbench({ initialEntityId: 'shelf-line', libraries: [{ id: 'library-a', name: 'Shelf', entity_mode: 'managed', shelf_enabled: true }], api: { getEntity: () => new Promise(() => {}) }, scenario: async state => { await state.loadCatalog(); void state.selectInitialEntity('shelf-line') } })
+  assert.doesNotMatch(html, /data-relation-view="\.\/ProductShelf.vue"/)
+  assert.match(html, /role="status"[^>]*>加载货架/)
+})

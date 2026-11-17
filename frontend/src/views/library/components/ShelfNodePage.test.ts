@@ -179,3 +179,19 @@ test('部件认证地区显示配置名称且保留旧地区原文', async t => 
  const text=visibleText(descendants(root).find(n=>n.props.id==='node-certifications')!)
  assert.match(text,/客户区域/);assert.match(text,/Legacy original/);assert.doesNotMatch(text,/north/)
 })
+
+// Regression: a large line once showed nothing until every model page had been
+// evaluated. The node header and certifications now render first.
+test('型号分页未返回时先显示节点本身，型号到达后补齐', async t => {
+  let release!: (value: unknown) => void
+  const pending = new Promise(resolve => { release = resolve })
+  const { root } = await mountPage(t, { api: { queryShelf: () => pending } })
+  assert.match(visibleText(root), /产品原名/)
+  assert.match(visibleText(section(root, 'node-certifications')), /标准原文/)
+  assert.match(visibleText(section(root, 'models')), /正在加载型号，已显示 0 个/)
+  assert.doesNotMatch(visibleText(section(root, 'models')), /型号 model/)
+  release({ success: true, data: { items: [model()], total: 1, truncated: false } })
+  await new Promise<void>(resolve => setImmediate(resolve)); await settle()
+  assert.match(visibleText(section(root, 'models')), /型号 model/)
+  assert.doesNotMatch(visibleText(section(root, 'models')), /正在加载型号/)
+})

@@ -336,7 +336,7 @@ export default {
     resolveHint: 'Resolve each item. Save edits and identity decisions for validation before confirming changes.', returnedHint: 'Selected for return to the submitter. Save progress so they can read and correct it. Confirmation is blocked until corrected.', reload: 'Reload changeset', reloadHint: 'The revision changed. Preserve your edits before reloading. Changes will not be overwritten automatically.',
   },
   shelfNode: {
-    title: 'Node details', partTitle: 'Part details', models: 'Descendant models', usedBy: 'Models using this part', summary: 'Document checklist summary', files: 'Files at this node',
+    title: 'Node details', partTitle: 'Part details', models: 'Descendant models', usedBy: 'Models using this part', summary: 'Document checklist summary', files: 'Files at this node', modelsLoading: 'Loading models; {count} shown so far',
     ownCerts: 'Certifications at this node', ancestorCerts: 'From ancestors', gaps: 'Document gaps', gapCount: '{count} missing ({models} models)',
     overridden: 'Set separately', fixed: 'Fixed component', optional: 'Optional', alternatives: 'Available parts',
     noRequirement: 'No document requirement', noStage: 'Not set', notApplicable: 'Not applicable',

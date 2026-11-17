@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	"reliquary/internal/types"
 )
 
@@ -571,4 +573,27 @@ func TestShelfQueryFacetsCountMatchedModels(t *testing.T) {
 	for _, facet := range result.Facets.Composition {
 		require.Equal(t, int64(1), facet.Models)
 	}
+}
+
+// Regression: a full-detail query once reloaded every certification in the
+// library for each model it returned. One query now loads them once.
+func TestShelfQueryLoadsCertificationsOncePerRequest(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	configureCertificationStandards(f, &library)
+	operations := []types.ShelfOperation{}
+	for _, owner := range []string{"a", "platform"} {
+		operations = append(operations, types.ShelfOperation{ID: owner, Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Shared certificate " + owner, ShelfCertification: types.ShelfCertification{OwnerID: shelfNode(nodes, owner), Standard: "Customer spelling", CertificationObject: "Synthetic object", Region: "region_a"}}})
+	}
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: operations}, http.StatusCreated, nil)
+	loads := 0
+	require.NoError(t, f.db.Callback().Query().After("gorm:query").Register("count_certification_loads", func(db *gorm.DB) {
+		if strings.Contains(db.Statement.SQL.String(), "kind='certification' AND archived_at IS NULL") {
+			loads++
+		}
+	}))
+	t.Cleanup(func() { _ = f.db.Callback().Query().Remove("count_certification_loads") })
+	var result types.ShelfQueryResult
+	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/query", map[string]any{"detail": "full"}, http.StatusOK, &result)
+	require.Greater(t, len(result.Items), 1)
+	require.Equal(t, 1, loads)
 }

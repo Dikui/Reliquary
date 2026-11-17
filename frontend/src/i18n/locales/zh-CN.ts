@@ -336,7 +336,7 @@ export default {
     resolveHint: '请逐项处理冲突；修改和身份确认须先保存进度，校验通过后再确认写入。', returnedHint: '已选择退回提交方。保存进度后，提交方可读取并修正；修正前不能确认写入。', reload: '重新读取变更集', reloadHint: '修订已变化，请保留当前修改后重新读取，不会自动覆盖。',
   },
   shelfNode: {
-    title: '节点详情', partTitle: '部件详情', models: '下属型号', usedBy: '使用它的型号', summary: '资料清单汇总', files: '本层资料文件',
+    title: '节点详情', partTitle: '部件详情', models: '下属型号', usedBy: '使用它的型号', summary: '资料清单汇总', files: '本层资料文件', modelsLoading: '正在加载型号，已显示 {count} 个',
     ownCerts: '本层认证', ancestorCerts: '来自上层的认证', gaps: '资料缺口', gapCount: '缺 {count} 项（{models} 个型号）',
     overridden: '单独设置', fixed: '固定组成', optional: '选配', alternatives: '可选部件',
     noRequirement: '不对应资料要求', noStage: '未设置', notApplicable: '不适用',

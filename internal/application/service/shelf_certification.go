@@ -518,6 +518,24 @@ func (s *EntityService) shelfCertificationViews(ctx context.Context, library *ty
 	return result, nil
 }
 
+// cachedShelfCertificationViews reuses the request's certification views when a
+// read cache is installed; callers receive copies of the rows and must not
+// mutate shared attribute maps.
+func (s *EntityService) cachedShelfCertificationViews(ctx context.Context, library *types.Library, at time.Time) ([]types.ShelfCertificationView, error) {
+	cache, _ := ctx.Value(shelfChecklistCacheKey{}).(*shelfChecklistCache)
+	if cache != nil && cache.certifications != nil && cache.certifications.libraryID == library.ID && cache.certifications.at.Equal(at) {
+		return cache.certifications.rows, nil
+	}
+	rows, err := s.shelfCertificationViews(ctx, library, "", at)
+	if err != nil {
+		return nil, err
+	}
+	if cache != nil {
+		cache.certifications = &shelfCertificationCache{libraryID: library.ID, at: at, rows: rows}
+	}
+	return rows, nil
+}
+
 func (s *EntityService) shelfNodeCertifications(ctx context.Context, library *types.Library, entity *types.Entity, at time.Time, composition []types.ShelfComposition, combination map[string]string) ([]types.ShelfCertificationView, error) {
 	owners := map[string]string{entity.ID: "self"}
 	if entity.Kind == "model" {
@@ -551,7 +569,7 @@ func (s *EntityService) shelfNodeCertifications(ctx context.Context, library *ty
 			owners[id] = "ancestor"
 		}
 	}
-	rows, err := s.shelfCertificationViews(ctx, library, "", at)
+	rows, err := s.cachedShelfCertificationViews(ctx, library, at)
 	if err != nil {
 		return nil, err
 	}
