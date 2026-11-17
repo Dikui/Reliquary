@@ -68,7 +68,21 @@ cd Reliquary
 python3 scripts/install-local.py --install --root "$HOME/Reliquary"
 ```
 
-The installer builds images, creates a separate runtime directory and starts the library services.
+The installer builds images, creates a separate runtime directory and starts the library services. It then shows the data-outflow notice and asks whether to configure local Pi (default yes). Local Pi is the recommended agent entry; you can skip it. A skipped or non-interactive run prints the command to configure it later:
+
+```bash
+python3 "$HOME/Reliquary/scripts/agent-local.py" pi-configure
+```
+
+Choose your model API or an authorized ChatGPT model, a work folder (default `~/Reliquary/workspace`) and an optional proxy. Pi runs in Docker, so the host needs no Node installation. The work folder is mounted read-only at `/workspace`; tools are limited to built-in read, Reliquary MCP and two project upload tools. Excel imports must use an import plan and await review and confirmation. Configuration checks a real `list_libraries` call, then prints the launch command:
+
+```bash
+"$HOME/Reliquary/scripts/pi"
+"$HOME/Reliquary/scripts/pi" -c  # continue the last session
+```
+
+> [!IMPORTANT]
+> Before enabling local Pi, agree to send each turn's full context (questions, library excerpts read by tools, content read from the work folder and earlier replies) to your chosen model provider. ChatGPT subscription calls go through the Reliquary backend to OpenAI. Library bodies, files and the database are not synchronized in bulk. Local Pi sessions are not yet included in `reliquary-admin` backups. See [ADR 0029](docs/adr/0029-recommend-local-pi.md) and the [agent installation guide](docs/agent-installation.md).
 
 ### Optional: Feishu chat entry
 
@@ -96,7 +110,7 @@ Library data stays on this machine. Local browser access uses the existing local
    curl --fail http://127.0.0.1:8080/api/v1/libraries -H "Authorization: Bearer $KEY"
    ```
 
-3. Or point an MCP client at `http://127.0.0.1:8080/mcp` with the same key. Claude Code and Codex setup, plus the agent skill package, are in [skills/reliquary/SKILL.md](skills/reliquary/SKILL.md#连接本机-mcp).
+3. Or point an MCP client at `http://127.0.0.1:8080/mcp` with the same key. Local Pi is recommended; general clients remain supported. Claude Code and Codex setup, plus the agent skill package, are in [skills/reliquary/SKILL.md](skills/reliquary/SKILL.md#连接本机-mcp).
 
 Entry IDs are `entry_id` (lists: `entry_ids`) across HTTP and MCP; read bodies with `get_entry`. Start with the [external integration guide](docs/external-integration.md), then the [intake](docs/ingest-api.md), [search](docs/search-api.md) and [relations](docs/relations-api.md) references.
 
