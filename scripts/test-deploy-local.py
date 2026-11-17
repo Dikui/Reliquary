@@ -127,6 +127,12 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(deployer.deploy(source, directory), [])
         run.assert_not_called()
 
+    def test_optional_agent_entries_do_not_rebuild_library_services(self):
+        # Ticket local-pi-agent/01: each entry under agents/ has its own image and update command (ADR 0028).
+        changed = {'agents/pi/Dockerfile', 'agents/pi/package-lock.json', 'agents/feishu/main.ts', 'scripts/agent-local.py'}
+        self.assertEqual(deployer.affected(changed), set())
+        self.assertEqual(deployer.affected(changed | {'internal/handler/mcp.go'}), set(deployer.SERVICES))
+
     def test_migration_or_other_config_blocks_even_manual_full_build(self):
         temp, source, directory = self.fixture()
         self.addCleanup(temp.cleanup)
