@@ -38,7 +38,7 @@ internal/router/shelf_parsers_pg_test.go "base_url": server\.URL \+ "/v1", "api_
 frontend/src/components/ModelEditorDialog.vue ^[[:space:]]*<Input v-else v-model="formData\.api[K]ey" :aria-label="\$t\('model\.editor\.api[K]eyOptional'\)" :type="showApi[K]ey \? 'text' : 'pass[w]ord'"$
 ```
 
-以下限定规则覆盖飞书 Agent 的占位值、合成测试凭据及运行时变量引用，已逐项核验。规则同时限定文件和表达式。
+以下限定规则覆盖飞书 Agent 与本地 Pi 入口的占位值、合成测试凭据及运行时变量引用，已逐项核验。规则同时限定文件和表达式。
 
 ```safe-push-allow
 agents/feishu/config.ts ^[[:space:]]*api[K]ey: required\('RELIQUARY_API_[K]EY'\),$
@@ -54,7 +54,9 @@ agents/feishu/local.ts console\.(log|error)\(
 agents/feishu/main.ts console\.log\(
 agents/feishu/migrate.ts console\.log\(JSON\.stringify\(await migrateState
 agents/feishu/setup.ts console\.log\(JSON\.stringify\(\{ component:
-scripts/agent-local.py MODEL_API_[K]EY=getpass\.getpass\('模型 API Key：'\)|FEISHU_APP_[S]ECRET=getpass\.getpass\('飞书 App Secret：'\)|console\.log\(
-scripts/test-agent-local.py 'to[k]en': '(local-fixture-key|fixture-key)'|self\.assertIn\("MODEL_API_[K]EY='synthetic-
+scripts/agent-local.py \{'RELIQUARY_API_[K]EY': environment\['RELIQUARY_API_[K]EY'\], 'NO_PROXY'|return provider, \{'type': 'api_[k]ey', 'key': key\}|MODEL_API_[K]EY=getpass\.getpass\('模型 API Key：'\)|FEISHU_APP_[S]ECRET=getpass\.getpass\('飞书 App Secret：'\)|console\.log\(
+scripts/test-agent-local.py 'to[k]en': '(local-fixture-key|fixture-key|pi-fixture-key)'|RELIQUARY_API_[K]EY=(pi-fixture-key|synthetic-reliquary-key)|'api_[k]ey', 'key': 'pi-fixture-key'|"api_[k]ey","key":"synthetic-model-key"|'MODEL_API_[K]EY': 'synthetic-shared'|'RELIQUARY_API_[K]EY': 'feishu-key'|secrets=\[("synthetic-\$model'[k]ey"|'synthetic-[k]ey')\]|self\.assertIn\("MODEL_API_[K]EY='synthetic-
 scripts/test-reliquary-admin.py "FEISHU_APP_[S]ECRET": "synthetic-feishu-app-value"
+scripts/test-install-local.py "to[k]en":"fixture-key"|return_value='synthetic-model-[k]ey'
+agents/pi/reliquary-upload.test.ts process\.env\.RELIQUARY_API_[K]EY = savedKey;|RELIQUARY_API_[K]EY = "synthetic-pi-key"|Bearer synthetic-pi-key
 ```
