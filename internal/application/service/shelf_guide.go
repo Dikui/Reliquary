@@ -71,8 +71,8 @@ func (s *EntityService) ShelfGuide(ctx context.Context, libraryID, nodeID string
 			if entity.Kind == "product_line" {
 				result.Values.ProductLines = append(result.Values.ProductLines, entity)
 			} else if entity.Kind == "document_requirement" {
-				var requirement types.ShelfRequirement
-				if err := types.DecodeShelfValue(entity.Attributes["requirement"], &requirement); err != nil {
+				requirement, err := decodeShelfRequirement(entity)
+				if err != nil {
 					return err
 				}
 				summary := lists[requirement.ListName]
@@ -136,8 +136,8 @@ func (s *EntityService) ShelfGuide(ctx context.Context, libraryID, nodeID string
 }
 
 func shelfGuideRequirement(entity types.Entity) (types.ShelfGuideRequirement, error) {
-	var requirement types.ShelfRequirement
-	if err := types.DecodeShelfValue(entity.Attributes["requirement"], &requirement); err != nil {
+	requirement, err := decodeShelfRequirement(entity)
+	if err != nil {
 		return types.ShelfGuideRequirement{}, err
 	}
 	return types.ShelfGuideRequirement{ID: entity.ID, Name: entity.CanonicalName, ListName: requirement.ListName, NameZH: requirement.NameZH, NameEN: requirement.NameEN, DraftDueStage: requirement.DraftDueStage, FinalDueStage: requirement.FinalDueStage}, nil

@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sort"
 	"time"
 
+	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 )
 
@@ -16,6 +18,15 @@ type shelfChecklistCache struct {
 	libraryID string
 	at        time.Time
 	data      *shelfChecklistData
+	// certifications holds the library's certification views for one business
+	// time, so a multi-model read decodes them once rather than once per model.
+	certifications *shelfCertificationCache
+}
+
+type shelfCertificationCache struct {
+	libraryID string
+	at        time.Time
+	rows      []types.ShelfCertificationView
 }
 
 type shelfChecklistData struct {
@@ -23,9 +34,11 @@ type shelfChecklistData struct {
 	nodes        map[string]types.Entity
 	recorded     map[string]bool
 	requirements []types.Entity
-	edges        []types.Relation
-	bindings     []types.Relation
-	documents    []types.ShelfDocumentVersion
+	// records holds each active requirement's decoded metadata by ID.
+	records   map[string]types.ShelfRequirement
+	edges     []types.Relation
+	bindings  []types.Relation
+	documents []types.ShelfDocumentVersion
 }
 
 func (s *EntityService) loadShelfChecklist(ctx context.Context, l *types.Library, at time.Time) (*shelfChecklistData, error) {
@@ -69,6 +82,17 @@ func (s *EntityService) loadShelfChecklist(ctx context.Context, l *types.Library
 	}
 	if err := hydrateManagedEntityAttributes(ctx, s.db, pointers, time.Now()); err != nil {
 		return nil, err
+	}
+	d.records = map[string]types.ShelfRequirement{}
+	for _, requirement := range d.requirements {
+		if _, ok := requirement.Attributes["requirement"]; !ok {
+			continue
+		}
+		record, err := decodeShelfRequirement(requirement)
+		if err != nil {
+			return nil, err
+		}
+		d.records[requirement.ID] = record
 	}
 	if err := s.db.WithContext(ctx).Where("library_id=? AND space_id=? AND relation_type IN ('belongs_to','composed_of') AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", l.ID, l.SpaceID, at, at).Find(&d.edges).Error; err != nil {
 		return nil, err
@@ -161,11 +185,10 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 		if !applies {
 			continue
 		}
-		var record types.ShelfRequirement
-		if _, ok := r.Attributes["requirement"]; !ok {
-			continue
-		}
-		if types.DecodeShelfValue(r.Attributes["requirement"], &record) != nil {
+		// Requirements without metadata cannot be bound; unreadable metadata
+		// already failed the load instead of silently shortening the list.
+		record, ok := d.records[r.ID]
+		if !ok {
 			continue
 		}
 
@@ -516,4 +539,15 @@ func shelfSubtractBoxes(boxes []map[string][]string, covered map[string][]string
 		}
 	}
 	return result
+}
+
+// Writes reject malformed requirement metadata, but restored or directly edited
+// data may still carry it. Reads fail loudly and name the requirement rather
+// than dropping it from checklists.
+func decodeShelfRequirement(entity types.Entity) (types.ShelfRequirement, error) {
+	var record types.ShelfRequirement
+	if err := types.DecodeShelfValue(entity.Attributes["requirement"], &record); err != nil {
+		return record, apperrors.NewConflictError(fmt.Sprintf("document requirement %q (%s) has unreadable metadata: %v; correct it before reading checklists", entity.CanonicalName, entity.ID, err))
+	}
+	return record, nil
 }
