@@ -66,7 +66,7 @@ func ProductShelfRelations() []LibraryRelationType {
 	rules := []LibraryRelationType{
 		{Name: "belongs_to", Hierarchical: true, SubjectKinds: []string{"platform", "product", "model"}, ObjectKinds: []string{"product_line", "platform", "product"}},
 		{Name: "composed_of", SubjectKinds: []string{"model"}, ObjectKinds: []string{"part"}, Fields: []EntityFieldDefinition{{Key: "module_type", Name: "模块类型", Type: "text", Kinds: []string{}}}},
-		{Name: "applies_to", SubjectKinds: []string{"document_requirement"}, ObjectKinds: []string{"product_line"}},
+		{Name: "applies_to", SubjectKinds: []string{"document_requirement"}, ObjectKinds: []string{"product_line", "platform"}},
 		{Name: "has_certification", SubjectKinds: []string{"platform", "product", "model", "part"}, ObjectKinds: []string{"certification"}},
 		{Name: "has_document", SubjectKinds: []string{"platform", "product", "model", "part", "certification"}, ObjectKinds: []string{"document_file"}},
 		{Name: "fulfills", SubjectKinds: []string{"document_file"}, ObjectKinds: []string{"document_requirement"}},
@@ -148,9 +148,10 @@ func ValidateProductShelf(l *Library) error {
 					}
 				}
 				objectKindsMatch := slices.Equal(actual.ObjectKinds, rule.ObjectKinds)
-				// Existing shelves may retain the old schema without converting
-				// their data. Requirement writes still enforce product lines only.
-				if rule.Name == "applies_to" && slices.Equal(actual.ObjectKinds, []string{"product_line", "document_requirement"}) {
+				// Existing shelves may retain an older stored rule without
+				// converting their data. Requirement writes enforce the current
+				// product-line or platform targets regardless of the stored kinds.
+				if rule.Name == "applies_to" && (slices.Equal(actual.ObjectKinds, []string{"product_line"}) || slices.Equal(actual.ObjectKinds, []string{"product_line", "document_requirement"})) {
 					objectKindsMatch = true
 				}
 				found = actual.Enabled && actual.Hierarchical == rule.Hierarchical && slices.Equal(actual.SubjectKinds, rule.SubjectKinds) && objectKindsMatch

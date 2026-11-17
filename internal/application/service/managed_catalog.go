@@ -161,6 +161,11 @@ func validateManagedEndpoints(library *types.Library, rule types.LibraryRelation
 	if subject.ID == object.ID {
 		return apperrors.NewBadRequestError("an entity cannot relate to itself")
 	}
+	// Shelves keep older stored applies_to kinds without a data migration; the
+	// current requirement targets are fixed in code.
+	if library.ShelfEnabled && rule.Name == "applies_to" {
+		rule.ObjectKinds = shelfRequirementTargetKinds
+	}
 	if (len(rule.SubjectKinds) > 0 && !slices.Contains(rule.SubjectKinds, subject.Kind)) || (len(rule.ObjectKinds) > 0 && !slices.Contains(rule.ObjectKinds, object.Kind)) {
 		return apperrors.NewBadRequestError("the entity kinds do not match this relationship rule")
 	}
@@ -210,4 +215,11 @@ func validateUsedFieldDefinitions(before, after []types.EntityFieldDefinition, a
 		}
 	}
 	return nil
+}
+
+// Requirements apply to every model below a bound product line or platform.
+var shelfRequirementTargetKinds = []string{"product_line", "platform"}
+
+func isShelfRequirementTarget(kind string) bool {
+	return slices.Contains(shelfRequirementTargetKinds, kind)
 }

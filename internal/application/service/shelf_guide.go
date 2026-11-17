@@ -42,7 +42,7 @@ func (s *EntityService) ShelfGuide(ctx context.Context, libraryID, nodeID string
 			SaleStatuses: []string{"GA", "DEV", "Planning", "EOM", "待定"},
 		}
 		var entities []types.Entity
-		if err := reader.db.WithContext(ctx).Where("library_id=? AND space_id=? AND kind IN ('product_line','document_requirement') AND archived_at IS NULL AND merged_into_id=''", library.ID, library.SpaceID).Order("canonical_name,id").Find(&entities).Error; err != nil {
+		if err := reader.db.WithContext(ctx).Where("library_id=? AND space_id=? AND kind IN ('product_line','platform','document_requirement') AND archived_at IS NULL AND merged_into_id=''", library.ID, library.SpaceID).Order("canonical_name,id").Find(&entities).Error; err != nil {
 			return err
 		}
 		pointers := []*types.Entity{}
@@ -59,10 +59,10 @@ func (s *EntityService) ShelfGuide(ctx context.Context, libraryID, nodeID string
 		if err := reader.db.WithContext(ctx).Where("library_id=? AND space_id=? AND relation_type='applies_to' AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", library.ID, library.SpaceID, at, at).Find(&bindings).Error; err != nil {
 			return err
 		}
-		lines := map[string]types.Entity{}
+		targets := map[string]types.Entity{}
 		for _, entity := range entities {
-			if entity.Kind == "product_line" {
-				lines[entity.ID] = entity
+			if isShelfRequirementTarget(entity.Kind) {
+				targets[entity.ID] = entity
 			}
 		}
 		lists := map[string]*types.ShelfGuideRequirementList{}
@@ -70,32 +70,41 @@ func (s *EntityService) ShelfGuide(ctx context.Context, libraryID, nodeID string
 			entity.KindLabel = managedKindLabel(library, entity.Kind)
 			if entity.Kind == "product_line" {
 				result.Values.ProductLines = append(result.Values.ProductLines, entity)
-			} else {
+			} else if entity.Kind == "document_requirement" {
 				var requirement types.ShelfRequirement
 				if err := types.DecodeShelfValue(entity.Attributes["requirement"], &requirement); err != nil {
 					return err
 				}
 				summary := lists[requirement.ListName]
 				if summary == nil {
-					summary = &types.ShelfGuideRequirementList{Name: requirement.ListName, ProductLines: []types.ShelfGuideProductLine{}}
+					summary = &types.ShelfGuideRequirementList{Name: requirement.ListName, ProductLines: []types.ShelfGuideProductLine{}, Platforms: []types.ShelfGuideProductLine{}}
 					lists[requirement.ListName] = summary
 				}
 				summary.Total++
 				for _, binding := range bindings {
-					line, ok := lines[binding.ObjectID]
-					if binding.SubjectID == entity.ID && ok && !slices.ContainsFunc(summary.ProductLines, func(item types.ShelfGuideProductLine) bool { return item.ID == line.ID }) {
-						summary.ProductLines = append(summary.ProductLines, types.ShelfGuideProductLine{ID: line.ID, Name: line.CanonicalName})
+					target, ok := targets[binding.ObjectID]
+					if binding.SubjectID != entity.ID || !ok {
+						continue
+					}
+					list := &summary.ProductLines
+					if target.Kind == "platform" {
+						list = &summary.Platforms
+					}
+					if !slices.ContainsFunc(*list, func(item types.ShelfGuideProductLine) bool { return item.ID == target.ID }) {
+						*list = append(*list, types.ShelfGuideProductLine{ID: target.ID, Name: target.CanonicalName})
 					}
 				}
 			}
 		}
 		for _, summary := range lists {
-			slices.SortFunc(summary.ProductLines, func(a, b types.ShelfGuideProductLine) int {
+			byName := func(a, b types.ShelfGuideProductLine) int {
 				if n := cmp.Compare(a.Name, b.Name); n != 0 {
 					return n
 				}
 				return cmp.Compare(a.ID, b.ID)
-			})
+			}
+			slices.SortFunc(summary.ProductLines, byName)
+			slices.SortFunc(summary.Platforms, byName)
 			result.Values.RequirementLists = append(result.Values.RequirementLists, *summary)
 		}
 		slices.SortFunc(result.Values.RequirementLists, func(a, b types.ShelfGuideRequirementList) int { return cmp.Compare(a.Name, b.Name) })

@@ -353,7 +353,7 @@ func TestShelfGuideRequirementsFollowNodeChecklists(t *testing.T) {
 	}
 	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID}, &result)
 	require.Nil(t, result.Values.Requirements)
-	require.Equal(t, []types.ShelfGuideRequirementList{{Name: "Synthetic list", Total: 4, ProductLines: []types.ShelfGuideProductLine{{ID: otherLine.ID, Name: otherLine.CanonicalName}, {ID: shelfNode(n, "line"), Name: "Synthetic line"}}}}, result.Values.RequirementLists)
+	require.Equal(t, []types.ShelfGuideRequirementList{{Name: "Synthetic list", Total: 4, ProductLines: []types.ShelfGuideProductLine{{ID: otherLine.ID, Name: otherLine.CanonicalName}, {ID: shelfNode(n, "line"), Name: "Synthetic line"}}, Platforms: []types.ShelfGuideProductLine{}}}, result.Values.RequirementLists)
 	for _, key := range []string{"model", "single", "line", "platform", "product", "a"} {
 		mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, key)}, &result)
 		require.NotNil(t, result.Values.Requirements, key)

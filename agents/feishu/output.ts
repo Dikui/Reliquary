@@ -128,7 +128,7 @@ const shapes: Record<string, Shape> = {
     values: {
       kinds: ['kind'], fields: ['field'], product_lines: ['entity'], regions: ['option'], markets: ['option'],
       stages: ['option'], module_types: ['option'], standards: ['option'], sale_statuses: ['scalar'],
-      requirement_lists: [{ name: 'scalar', total: 'scalar', product_lines: [fields('id name')] }],
+      requirement_lists: [{ name: 'scalar', total: 'scalar', product_lines: [fields('id name')], platforms: [fields('id name')] }],
       requirements: { items: ['requirement'], ...fields('total truncated') },
     },
     gaps: {

@@ -38,8 +38,8 @@ func validateManagedRelation(tx *gorm.DB, library *types.Library, relation types
 		return err
 	}
 	if library.ShelfEnabled && relation.RelationType == "applies_to" {
-		if object.Kind != "product_line" {
-			return apperrors.NewBadRequestError("requirements may only apply to product lines")
+		if !isShelfRequirementTarget(object.Kind) {
+			return apperrors.NewBadRequestError("requirements may only apply to product lines or platforms")
 		}
 		if _, ok := subject.Attributes["requirement"]; !ok {
 			return apperrors.NewBadRequestError("uncertain: complete the requirement metadata before binding")

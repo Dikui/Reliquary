@@ -13,7 +13,7 @@ import ShelfImportPlanEditor from './ShelfImportPlanEditor.vue'
 
 const props = defineProps<{ library: LibraryCatalogItem }>()
 const { t, locale } = useI18n(), route = useRoute(), router = useRouter()
-const plans = ref<ShelfImportPlan[]>([]), batches = ref<ShelfReviewChangeset[]>([]), lines = ref<Entity[]>([])
+const plans = ref<ShelfImportPlan[]>([]), batches = ref<ShelfReviewChangeset[]>([]), lines = ref<Entity[]>([]), platforms = ref<Entity[]>([])
 const selected = ref(''), file = ref<File>(), fileDate = ref(''), picker = ref<HTMLInputElement>()
 const ready = ref(false), editorKey = ref(0), submitted = ref(false), formElement = ref<HTMLFormElement>()
 const loading = ref(false), busy = ref(false), dragging = ref(false), error = ref(''), fileError = ref(''), formError = ref('')
@@ -116,10 +116,10 @@ async function upload() {
   } catch (cause) { error.value = failure(cause, t('shelfImport.uploadFailed')) }
   finally { busy.value = false }
 }
-async function loadLines() {
+async function loadNodes(kind: 'product_line' | 'platform') {
   const result: Entity[] = []
   for (let offset = 0; ; offset += 100) {
-    const response = await listEntities({ library_id: props.library.id, kind: 'product_line', limit: 100, offset })
+    const response = await listEntities({ library_id: props.library.id, kind, limit: 100, offset })
     if (!response.success) throw new Error(t('shelfImport.loadFailed'))
     result.push(...response.data)
     if (response.data.length < 100) return result
@@ -128,10 +128,10 @@ async function loadLines() {
 async function load() {
   const current = ++generation; loading.value = true; ready.value = false; error.value = ''
   try {
-    const [planResult, batchResult, lineResult] = await Promise.all([listShelfImportPlans(props.library.id), listShelfImportBatches(props.library.id, page.value), loadLines()])
+    const [planResult, batchResult, lineResult, platformResult] = await Promise.all([listShelfImportPlans(props.library.id), listShelfImportBatches(props.library.id, page.value), loadNodes('product_line'), loadNodes('platform')])
     if (!planResult.success || !batchResult.success) throw new Error(t('shelfImport.loadFailed'))
     if (current !== generation) return
-    ready.value = true; plans.value = planResult.data; batches.value = batchResult.data.items; total.value = batchResult.data.total; lines.value = lineResult
+    ready.value = true; plans.value = planResult.data; batches.value = batchResult.data.items; total.value = batchResult.data.total; lines.value = lineResult; platforms.value = platformResult
     if (page.value > 1 && !batches.value.length) { await changePage(Math.max(1, Math.ceil(total.value / 20))); return }
     if (selected.value && !plans.value.some(plan => plan.key === selected.value)) selected.value = ''
   } catch (cause) { if (current === generation) error.value = failure(cause, t('shelfImport.loadFailed')) }
@@ -139,7 +139,7 @@ async function load() {
 }
 async function changePage(next: number) { page.value = next; await router.replace({ query: { ...route.query, import_page: String(next) } }); await load() }
 function beforeUnload(event: BeforeUnloadEvent) { if (dirty.value || busy.value) { event.preventDefault(); event.returnValue = '' } }
-watch(() => props.library.id, () => { generation++; plans.value = []; batches.value = []; lines.value = []; draft.value = undefined; file.value = undefined; selected.value = ''; void load() }, { immediate: true })
+watch(() => props.library.id, () => { generation++; plans.value = []; batches.value = []; lines.value = []; platforms.value = []; draft.value = undefined; file.value = undefined; selected.value = ''; void load() }, { immediate: true })
 onBeforeRouteLeave(allowLeave)
 onBeforeRouteUpdate((to, from) => to.query.libraries !== from.query.libraries || to.query.tab !== from.query.tab ? allowLeave() : true)
 if (typeof window !== 'undefined') window.addEventListener('beforeunload', beforeUnload)
@@ -173,7 +173,7 @@ onBeforeUnmount(() => { generation++; if (typeof window !== 'undefined') window.
       </fieldset>
       <div v-if="draft.revision === 0 && !suggestion" class="import-row"><Button :disabled="blocked || !file" :loading="busy" @click="suggest">{{ t('shelfImport.suggest') }}</Button><p class="import-hint">{{ t('shelfImport.suggestHint') }}</p></div>
       <div v-if="suggestion" class="suggestion-note"><strong>{{ t('shelfImport.suggestionPending') }}</strong><p v-for="(issue, index) in suggestionIssues" :key="index">{{ issue }}</p><label class="import-check"><Checkbox v-model="reviewed" :disabled="blocked" />{{ t('shelfImport.reviewed') }}</label></div>
-      <ShelfImportPlanEditor :key="editorKey" v-model="draft" :library="library" :lines="lines" :disabled="blocked" :submitted="submitted" @validity="editorValid = $event" />
+      <ShelfImportPlanEditor :key="editorKey" v-model="draft" :library="library" :lines="lines" :platforms="platforms" :disabled="blocked" :submitted="submitted" @validity="editorValid = $event" />
       <p v-if="formError" id="import-plan-error" role="alert">{{ formError }}</p>
       <footer class="import-row"><Button type="submit" variant="primary" :disabled="blocked || !editorValid || (!!suggestion && !reviewed)" :loading="busy">{{ t('shelfImport.save') }}</Button><Button :disabled="!canImport" @click="upload">{{ t('shelfImport.tryImport') }}</Button><span v-if="dirty" class="import-hint">{{ t('shelfImport.saveBeforeImport') }}</span></footer>
     </form>

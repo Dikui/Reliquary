@@ -42,7 +42,10 @@ type ShelfImportSheet struct {
 	Worksheet     string `json:"worksheet"`
 	Ignore        bool   `json:"ignore,omitempty"`
 	ProductLineID string `json:"product_line_id,omitempty"`
-	HeaderRows    int    `json:"header_rows"`
+	// ApplyToIDs lists the product lines or platforms an ATQ worksheet binds
+	// its requirements to. Older ATQ plans use ProductLineID alone.
+	ApplyToIDs []string `json:"apply_to_ids,omitempty"`
+	HeaderRows int      `json:"header_rows"`
 	// Range limits the table to a source region such as A3:F200. Transpose
 	// reads records from columns. Columns and header_rows then refer to the
 	// normalized sheet where each record is a row.
@@ -101,4 +104,16 @@ type ShelfImportTextInput struct {
 	ParentID       string               `json:"parent_id,omitempty"`
 	Source         OperationSource      `json:"source"`
 	ImportLocation *ShelfImportLocation `json:"import_location,omitempty"`
+}
+
+// RequirementTargets returns the product lines or platforms an ATQ worksheet
+// binds to: ApplyToIDs, or the single ProductLineID of older plans.
+func (s ShelfImportSheet) RequirementTargets() []string {
+	if len(s.ApplyToIDs) > 0 {
+		return s.ApplyToIDs
+	}
+	if s.ProductLineID != "" {
+		return []string{s.ProductLineID}
+	}
+	return nil
 }
