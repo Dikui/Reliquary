@@ -70,7 +70,7 @@ RELIQUARY_BUILD_PROXY=http://host.docker.internal:7897
 RELIQUARY_BUILD_NO_PROXY=localhost,127.0.0.1
 ```
 
-安装、按改动范围更新、`reliquary-admin upgrade` 和飞书 Agent 构建都会读取这两项。首次安装时 `deploy/.env` 尚未生成，可在命令前临时设置同名环境变量。进程环境变量优先于 `deploy/.env`。代理通过 Docker 预置的 `HTTP(S)_PROXY`/`NO_PROXY` 构建参数传入，只在构建阶段生效，不写入镜像历史和运行容器，也不影响构建缓存。留空时不传任何代理参数。
+安装、按改动范围更新、`reliquary-admin upgrade` 和飞书 Agent 构建都会读取这两项。首次安装时 `deploy/.env` 尚未生成，可在命令前临时设置同名环境变量。进程环境变量优先于 `deploy/.env`。代理通过 Docker 预置的 `HTTP(S)_PROXY`/`NO_PROXY` 构建参数传入，只在构建阶段生效，不写入镜像历史，也不影响构建缓存。app 容器通过 `env_file` 载入整个 `deploy/.env`，因此能看到 `RELIQUARY_BUILD_PROXY` 这个变量本身；后端不读取它，运行时网络只受 `HTTP(S)_PROXY` 影响，不会因此改走代理。留空时不传任何代理参数。
 
 脚本不读取宿主机自身的 `HTTP_PROXY`：宿主机能用的地址，容器未必能连通。`host.docker.internal` 在 macOS 的 OrbStack、Docker Desktop 上指向宿主机。Linux 原生 Docker 需填写桥接网络可达的地址，并让代理软件监听该地址。
 
