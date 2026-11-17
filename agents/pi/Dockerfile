@@ -4,5 +4,6 @@ ENV NODE_ENV=production HOME=/data PI_CODING_AGENT_DIR=/data/agent PI_SKIP_VERSI
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+COPY reliquary-upload.ts ./
 WORKDIR /workspace
 ENTRYPOINT ["node", "--use-env-proxy", "/app/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"]

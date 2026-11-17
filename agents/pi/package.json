@@ -5,6 +5,9 @@
   "engines": {
     "node": ">=24.5.0"
   },
+  "scripts": {
+    "test": "node --test"
+  },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.5.2"
   }

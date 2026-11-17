@@ -132,7 +132,7 @@ def pi_events(answer, called=True):
 
 
 class LocalPiTests(unittest.TestCase):
-    """Ticket local-pi-agent/01: pi-configure writes a read-only Pi; the API, Docker build and container check are faked."""
+    """Tickets 01/02: Pi keeps local files read-only; the API, Docker build and container check are faked."""
 
     def configure(self, root, answers, responses, check, secrets=()):
         """Run pi-configure with scripted input, API replies and the container check result."""
@@ -156,7 +156,7 @@ class LocalPiTests(unittest.TestCase):
                 self.output = output.getvalue()
         return api, runs
 
-    def test_customer_api_setup_limits_pi_to_read_and_reliquary_mcp(self):
+    def test_customer_api_setup_limits_pi_to_read_mcp_and_reliquary_uploads(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pi_runtime(temporary)
             api, runs = self.configure(
@@ -167,7 +167,8 @@ class LocalPiTests(unittest.TestCase):
             settings = agent.json.loads((agent_dir / 'settings.json').read_text())
             self.assertEqual(settings['defaultTools'], ['read'])
             self.assertEqual(sorted(settings['extensions']),
-                             ['-builtin:codemode', '-builtin:llama.cpp', '-builtin:tool-search'])
+                             ['-builtin:codemode', '-builtin:llama.cpp', '-builtin:tool-search',
+                              '/app/reliquary-upload.ts'])
             self.assertEqual(settings['packages'], [])
             self.assertEqual(settings['defaultProjectTrust'], 'never')
             mcp = agent.json.loads((agent_dir / 'mcp.json').read_text())
@@ -188,7 +189,12 @@ class LocalPiTests(unittest.TestCase):
                 self.assertEqual(secret.stat().st_mode & 0o777, 0o600)
             self.assertTrue((agent_dir / 'skills/reliquary/workflows/shelf-import.md').is_file())
             self.assertFalse((agent_dir / 'skills/reliquary/embed.go').exists())
-            self.assertIn('只读', (agent_dir / 'APPEND_SYSTEM.md').read_text())
+            system = (agent_dir / 'APPEND_SYSTEM.md').read_text()
+            self.assertIn('只读', system)
+            self.assertIn('reliquary_upload_workbook', system)
+            self.assertIn('reliquary_stage_attachment', system)
+            self.assertIn('add_document_version', system)
+            self.assertNotIn('没有上传工作文件夹文件的工具', system)
             api.assert_called_once_with('http://127.0.0.1:18080', '/space/api-keys', {'name': 'Reliquary Pi'})
             self.assertTrue((root / 'workspace').is_dir())
             launcher = root / 'scripts/pi'
@@ -221,6 +227,7 @@ class LocalPiTests(unittest.TestCase):
                    'parameters': {'context_window': 200000}}]], (0, pi_events('测试库'), ''))
             agent_dir = root / 'agents/pi/data/agent'
             settings = agent.json.loads((agent_dir / 'settings.json').read_text())
+            self.assertIn('/app/reliquary-upload.ts', settings['extensions'])
             provider = agent.json.loads((agent_dir / 'models.json').read_text())['providers'][settings['defaultProvider']]
             self.assertEqual(provider['baseUrl'], 'http://app:8080/api/v1/agent/models/chat%2Fmodel')
             self.assertEqual(provider['api'], 'openai-responses')
