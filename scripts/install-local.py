@@ -156,7 +156,8 @@ def install(root, env_file, project, app_port=None, frontend_port=None):
             'frontend': {'image': f'reliquary-ui:{tag}', 'build': {'dockerfile': 'Dockerfile.build', 'args': {'COMMIT_ID_ARG': revision}}},
         }}))
         subprocess.run(['docker', 'compose', '--env-file', str(deploy / '.env'), '-f', str(SOURCE / 'docker-compose.yml'),
-                        '-f', str(override), 'build', 'app', 'frontend'], cwd=SOURCE, check=True)
+                        '-f', str(override), 'build', *build_proxy_args({**values, **os.environ}), 'app', 'frontend'],
+                       cwd=SOURCE, check=True)
     config_path = deploy / 'docker-compose.yml'
     config = json.loads(config_path.read_text())
     config['services']['app']['image'] = f'reliquary-app:{tag}'
@@ -186,6 +187,27 @@ def install(root, env_file, project, app_port=None, frontend_port=None):
     print(f'基础服务已启动。请在网页配置资料库和模型：{settings}')
     webbrowser.open(settings)
     print(f'资料库本体安装完成。需要飞书对话入口时运行：python3 "{root / "scripts/agent-local.py"}" configure')
+
+
+def build_proxy_args(env):
+    """Optional proxy for image builds, read from RELIQUARY_BUILD_PROXY.
+
+    Only Docker's predefined proxy build args are used: they reach RUN steps but
+    stay out of image history, runtime env and the layer cache key. Nothing is
+    inferred from the host's own proxy settings, which containers may not reach.
+
+    Kept in step with reliquary_admin.build_proxy_args; this script runs before
+    the maintenance tool is installed.
+    """
+    proxy = (env.get('RELIQUARY_BUILD_PROXY') or '').strip()
+    if not proxy:
+        return []
+    no_proxy = (env.get('RELIQUARY_BUILD_NO_PROXY') or '').strip() or 'localhost,127.0.0.1'
+    args = []
+    for name, value in (('HTTP_PROXY', proxy), ('HTTPS_PROXY', proxy), ('NO_PROXY', no_proxy)):
+        for key in (name, name.lower()):
+            args += ['--build-arg', f'{key}={value}']
+    return args
 
 
 def deployment_values(path):

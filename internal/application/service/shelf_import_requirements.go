@@ -9,8 +9,8 @@ import (
 )
 
 func (b *importMapBuilder) requirementRow(mapping types.ShelfImportSheet, cells map[string]importCell) error {
-	if mapping.ProductLineID == "" || mapping.ModuleType != "" {
-		return fmt.Errorf("uncertain: ATQ worksheet requires a product line; module bindings are no longer supported")
+	if len(mapping.RequirementTargets()) == 0 || mapping.ModuleType != "" {
+		return fmt.Errorf("uncertain: ATQ worksheet requires product lines or platforms; module bindings are no longer supported")
 	}
 	if err := b.validateRecordCells(cells); err != nil {
 		return err
@@ -91,13 +91,16 @@ func (b *importMapBuilder) requirementRow(mapping types.ShelfImportSheet, cells 
 	} else {
 		b.append(types.ShelfOperation{Type: "update_entity", EntityID: id, Patch: &types.ManagedEntityPatch{Revision: existing.Revision, Attributes: &attrs}})
 	}
-	target := mapping.ProductLineID
-	var bindings []types.Relation
-	if err := b.service.db.WithContext(b.ctx).Where("library_id=? AND space_id=? AND subject_id=? AND object_id=? AND relation_type='applies_to' AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", b.library.ID, b.library.SpaceID, id, target, b.at, b.at).Find(&bindings).Error; err != nil {
-		return err
-	}
-	if len(bindings) == 0 {
-		b.append(types.ShelfOperation{Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: id, ObjectID: target, RelationType: "applies_to"}})
+	// Imports only add the confirmed bindings; removing an existing binding is a
+	// separate reviewed change.
+	for _, target := range mapping.RequirementTargets() {
+		var bindings []types.Relation
+		if err := b.service.db.WithContext(b.ctx).Where("library_id=? AND space_id=? AND subject_id=? AND object_id=? AND relation_type='applies_to' AND valid_from<=? AND (valid_to IS NULL OR valid_to>?)", b.library.ID, b.library.SpaceID, id, target, b.at, b.at).Find(&bindings).Error; err != nil {
+			return err
+		}
+		if len(bindings) == 0 {
+			b.append(types.ShelfOperation{Type: "save_relation", Relation: &types.ManagedRelationInput{SubjectID: id, ObjectID: target, RelationType: "applies_to"}})
+		}
 	}
 	b.seenRecordKeys["requirement-name:"+identity] = true
 	b.seenRecordKeys["requirement-id:"+id] = true

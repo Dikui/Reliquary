@@ -74,10 +74,33 @@ def source_checkout(root):
     raise ValueError('找不到含 agents/feishu 的源码目录，请从源码执行 scripts/agent-local.py configure --root 运行目录')
 
 
-def build_image(source):
+def build_proxy_args(env):
+    """Optional proxy for image builds, read from RELIQUARY_BUILD_PROXY.
+
+    Only Docker's predefined proxy build args are used: they reach RUN steps but
+    stay out of image history, runtime env and the layer cache key. Nothing is
+    inferred from the host's own proxy settings, which containers may not reach.
+
+    Kept in step with reliquary_admin.build_proxy_args; this script also runs
+    from the runtime directory without the maintenance module.
+    """
+    proxy = (env.get('RELIQUARY_BUILD_PROXY') or '').strip()
+    if not proxy:
+        return []
+    no_proxy = (env.get('RELIQUARY_BUILD_NO_PROXY') or '').strip() or 'localhost,127.0.0.1'
+    args = []
+    for name, value in (('HTTP_PROXY', proxy), ('HTTPS_PROXY', proxy), ('NO_PROXY', no_proxy)):
+        for key in (name, name.lower()):
+            args += ['--build-arg', f'{key}={value}']
+    return args
+
+
+def build_image(source, root):
     revision = subprocess.check_output(['git', '-C', str(source), 'rev-parse', '--short=12', 'HEAD'], text=True).strip()
     image = 'reliquary-feishu:' + (source / 'VERSION').read_text().strip() + '-' + revision + '-' + secrets.token_hex(3)
-    subprocess.run(['docker', 'build', '-t', image, str(source / 'agents/feishu')], check=True)
+    env_file = root / 'deploy/.env'
+    settings = {**(read_env(env_file) if env_file.is_file() else {}), **os.environ}
+    subprocess.run(['docker', 'build', *build_proxy_args(settings), '-t', image, str(source / 'agents/feishu')], check=True)
     return image
 
 
@@ -89,7 +112,7 @@ def install_agent(root):
     deploy = root / 'deploy'
     source = source_checkout(root)
     print('首次启用飞书入口：构建 Agent 镜像，自动下载 Pi Agent、Pi AI、Pi MCP 和飞书 SDK…', flush=True)
-    image = build_image(source)
+    image = build_image(source, root)
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     state = directory / 'data'
     state.mkdir(mode=0o700, exist_ok=True)
@@ -228,7 +251,7 @@ def operate(root, action):
             raise ValueError('请从仓库中的 scripts/agent-local.py 执行 update --root 运行目录')
         if not (directory / 'compose.yaml').exists():
             raise ValueError('尚未启用飞书入口，请先执行 configure')
-        image = build_image(source)
+        image = build_image(source, root)
         path = directory / 'compose.yaml'
         before = path.read_bytes()
         config = json.loads(before)

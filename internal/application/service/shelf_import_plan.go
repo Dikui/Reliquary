@@ -55,7 +55,7 @@ var shelfImportFields = map[string]ShelfImportFields{
 		ColumnKeys:      map[string]string{"market": "market"},
 		RequiredColumns: []string{"due_stages"},
 		RequiredOneOf:   [][]string{{"name", "name_zh", "name_en"}},
-		SheetFields:     map[string]string{"product_line_id": "required"},
+		SheetFields:     map[string]string{"apply_to_ids": "required"},
 	},
 }
 
@@ -173,6 +173,9 @@ func (s *EntityService) writeShelfImportPlan(ctx context.Context, draft *types.S
 			return nil, err
 		}
 		schema := shelfImportFields[input.FileKind]
+		if len(sheet.ApplyToIDs) > 0 && input.FileKind != "atq" {
+			return nil, apperrors.NewBadRequestError("apply_to_ids only applies to ATQ worksheets")
+		}
 		if schema.SheetFields["product_line_id"] == "required" && sheet.ProductLineID == "" {
 			return nil, apperrors.NewBadRequestError("worksheet requires a product_line_id")
 		}
@@ -269,11 +272,10 @@ func (s *EntityService) validateRecordImportSheet(ctx context.Context, library *
 		return apperrors.NewBadRequestError("report worksheet requires a confirmed completed progress spelling")
 	}
 	if kind == "atq" {
-		if sheet.ProductLineID == "" || sheet.ModuleType != "" {
-			return apperrors.NewBadRequestError("ATQ worksheet requires a product_line_id and does not support module_type")
+		if err := s.validateRequirementImportTargets(ctx, library, sheet); err != nil {
+			return err
 		}
-	}
-	if sheet.ProductLineID != "" {
+	} else if sheet.ProductLineID != "" {
 		line, err := s.shelfEntity(ctx, library.ID, sheet.ProductLineID)
 		if err != nil {
 			return err
@@ -320,5 +322,35 @@ func (s *EntityService) validateRecordImportSheet(ctx context.Context, library *
 		}
 	}
 
+	return nil
+}
+
+// ATQ worksheets bind every imported requirement to the same confirmed product
+// lines or platforms.
+func (s *EntityService) validateRequirementImportTargets(ctx context.Context, library *types.Library, sheet types.ShelfImportSheet) error {
+	if sheet.ModuleType != "" {
+		return apperrors.NewBadRequestError("ATQ worksheet does not support module_type")
+	}
+	if sheet.ProductLineID != "" && len(sheet.ApplyToIDs) > 0 {
+		return apperrors.NewBadRequestError("ATQ worksheet takes apply_to_ids or the older product_line_id, not both")
+	}
+	targets := sheet.RequirementTargets()
+	if len(targets) == 0 || len(targets) > 100 {
+		return apperrors.NewBadRequestError("ATQ worksheet requires 1 to 100 apply_to_ids")
+	}
+	seen := map[string]bool{}
+	for _, id := range targets {
+		if seen[id] {
+			return apperrors.NewBadRequestError("ATQ apply_to_ids must be distinct")
+		}
+		seen[id] = true
+		target, err := s.shelfEntity(ctx, library.ID, id)
+		if err != nil {
+			return err
+		}
+		if !isShelfRequirementTarget(target.Kind) || target.ArchivedAt != nil {
+			return apperrors.NewBadRequestError("ATQ apply_to_ids must name active product lines or platforms")
+		}
+	}
 	return nil
 }

@@ -1345,6 +1345,24 @@ with mock.patch('subprocess.run') as docker:
                 return {"ok": True}
         return FakeContext(self.root)
 
+    def test_build_proxy_args_are_opt_in_and_match_standalone_scripts(self):
+        self.assertEqual(admin.build_proxy_args({}), [])
+        self.assertEqual(admin.build_proxy_args({"RELIQUARY_BUILD_PROXY": "  "}), [])
+        args = admin.build_proxy_args({"RELIQUARY_BUILD_PROXY": "http://proxy:3128"})
+        pairs = dict(value.split("=", 1) for value in args[1::2])
+        self.assertEqual(args[::2], ["--build-arg"] * 6)
+        for key in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):
+            self.assertEqual(pairs[key], "http://proxy:3128")
+        self.assertEqual(pairs["NO_PROXY"], "localhost,127.0.0.1")
+        custom = {"RELIQUARY_BUILD_PROXY": "http://proxy:3128", "RELIQUARY_BUILD_NO_PROXY": "internal.example"}
+        self.assertIn("no_proxy=internal.example", admin.build_proxy_args(custom))
+        for name in ("install-local.py", "agent-local.py"):
+            spec = importlib.util.spec_from_file_location(name.replace("-", "_")[:-3], Path(admin.__file__).with_name(name))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            for env in ({}, {"RELIQUARY_BUILD_PROXY": "http://proxy:3128"}, custom):
+                self.assertEqual(module.build_proxy_args(env), admin.build_proxy_args(env), name)
+
     def test_export_sources_command_dispatches_to_safe_go_export(self):
         ctx = self.upgrade_context()
         with mock.patch.object(admin, "Context", return_value=ctx), contextlib.redirect_stdout(io.StringIO()):

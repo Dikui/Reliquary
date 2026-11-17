@@ -40,6 +40,9 @@ type ShelfGuideRequirementList struct {
 	Name         string                  `json:"name"`
 	Total        int64                   `json:"total"`
 	ProductLines []ShelfGuideProductLine `json:"product_lines"`
+	// Platforms lists platform bindings; their models inherit the list in
+	// addition to any product-line binding.
+	Platforms []ShelfGuideProductLine `json:"platforms"`
 }
 
 // ShelfGuideRequirement keeps only the fields needed to classify a file.

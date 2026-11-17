@@ -8,7 +8,7 @@ import type { Entity } from '@/api/entities'
 import type { ShelfImportPlanInput, ShelfImportSheet } from '@/api/shelf-import'
 
 const model = defineModel<ShelfImportPlanInput>({ required: true })
-const props = defineProps<{ library: LibraryCatalogItem; lines: Entity[]; disabled?: boolean; submitted?: boolean }>()
+const props = defineProps<{ library: LibraryCatalogItem; lines: Entity[]; platforms?: Entity[]; disabled?: boolean; submitted?: boolean }>()
 const emit = defineEmits<{ validity: [valid: boolean] }>()
 const { t } = useI18n()
 const commonFields = ['name', 'owner', 'standard', 'year', 'certification_object', 'cell_part', 'region', 'agency', 'progress', 'start_date', 'obtained_date', 'issued_date', 'validity', 'number', 'cloud_url', 'sample_description']
@@ -19,6 +19,9 @@ const fields = computed(() => ({
   overseas_sales: ['owner', 'standard', 'certification_object', 'cell_part', 'region', 'agency', 'progress', 'validity', 'number', 'cloud_url', 'sale_status', 'certification'],
   atq: ['name', 'name_zh', 'name_en', 'file_category', 'stage_label', 'due_stages', 'owner', 'priority', 'source_list', 'source_version', 'market'],
 })[model.value.file_kind])
+// Older ATQ plans named one product line; the editor keeps the same binding as an
+// explicit target list.
+if (model.value.file_kind === 'atq') for (const sheet of model.value.sheets) if (sheet.product_line_id && !sheet.apply_to_ids?.length) { sheet.apply_to_ids = [sheet.product_line_id]; delete sheet.product_line_id }
 const rules = reactive({
   checks: model.value.sheets.map(sheet => Object.entries(sheet.check_values || {}).map(([raw, value]) => ({ raw, value }))),
   statuses: Object.entries(model.value.status_values || {}).map(([raw, value]) => ({ raw, ...value })),
@@ -35,6 +38,11 @@ watch(rules, () => {
   model.value.deadlines = Object.fromEntries(rules.deadlines.map(({ raw, ...value }) => [raw, value]))
 })
 watch(duplicateRules, value => emit('validity', !value), { immediate: true })
+function toggleTarget(sheet: ShelfImportSheet, id: string, checked: boolean) {
+  const ids = (sheet.apply_to_ids || []).filter(value => value !== id)
+  if (checked) ids.push(id)
+  if (ids.length) sheet.apply_to_ids = ids; else delete sheet.apply_to_ids
+}
 function addSheet() { model.value.sheets.push({ worksheet: '', header_rows: 1, columns: [] }); rules.checks.push([]) }
 function options(sheet: ShelfImportSheet, field: string) {
   if (field === 'parameter') return (props.library.entity_schema?.fields || []).filter(value => !value.archived && value.product_line_ids?.includes(sheet.product_line_id || '') && ['text', 'number', 'boolean', 'date', 'select'].includes(value.type))
@@ -55,7 +63,11 @@ const usesKey = (field: string) => ['parameter', 'sale_status', 'market', 'certi
           <Field :label="t('shelfImport.headerRows')" :error="submitted && (!Number.isInteger(sheet.header_rows) || sheet.header_rows < 0 || sheet.header_rows > 100) ? t('shelfImport.planError') : undefined"><Input v-model.number="sheet.header_rows" type="number" min="0" max="100" :aria-label="`${t('shelfImport.headerRows')} ${index + 1}`" /></Field>
           <Field :label="t('shelfImport.range')" :error="submitted && sheet.range && !/^[A-Z]{1,3}[1-9][0-9]*:[A-Z]{1,3}[1-9][0-9]*$/.test(sheet.range) ? t('shelfImport.planError') : undefined"><Input :model-value="sheet.range || ''" :aria-label="`${t('shelfImport.range')} ${index + 1}`" @update:model-value="value => { if (value) sheet.range = String(value).toUpperCase(); else delete sheet.range }" /></Field>
           <label class="import-check" :title="t('shelfImport.transposeHint')"><Checkbox :model-value="!!sheet.transpose" @update:model-value="value => { if (value) sheet.transpose = true; else delete sheet.transpose }" />{{ t('shelfImport.transpose') }}</label>
-          <Field :label="t('shelfImport.productLine')"><Select v-model="sheet.product_line_id" :aria-label="`${t('shelfImport.productLine')} ${index + 1}`"><option value="">{{ t('shelfImport.unspecified') }}</option><option v-for="line in lines" :key="line.id" :value="line.id">{{ line.canonical_name }}</option></Select></Field>
+          <fieldset v-if="model.file_kind === 'atq'" class="import-targets" :aria-invalid="submitted && !sheet.apply_to_ids?.length || undefined"><legend>{{ t('shelfImport.appliesTo') }}</legend>
+            <template v-for="group in [{ label: t('shelfImport.productLine'), items: lines }, { label: t('shelfImport.platform'), items: platforms || [] }]" :key="group.label"><span class="import-target-group">{{ group.label }}</span><label v-for="node in group.items" :key="node.id" class="import-check"><Checkbox :model-value="!!sheet.apply_to_ids?.includes(node.id)" :aria-label="`${group.label} ${node.canonical_name} ${index + 1}`" @update:model-value="toggleTarget(sheet, node.id, $event)" />{{ node.canonical_name }}</label></template>
+            <p v-if="submitted && !sheet.apply_to_ids?.length" class="import-error">{{ t('shelfImport.planError') }}</p>
+          </fieldset>
+          <Field v-else :label="t('shelfImport.productLine')"><Select v-model="sheet.product_line_id" :aria-label="`${t('shelfImport.productLine')} ${index + 1}`"><option value="">{{ t('shelfImport.unspecified') }}</option><option v-for="line in lines" :key="line.id" :value="line.id">{{ line.canonical_name }}</option></Select></Field>
           <Field v-if="model.file_kind !== 'product_map' && model.file_kind !== 'atq'" :label="t('shelfImport.ownerKind')"><Select v-model="sheet.owner_kind" :aria-label="`${t('shelfImport.ownerKind')} ${index + 1}`"><option value="">{{ t('shelfImport.unspecified') }}</option><option v-for="kind in ['model', 'part', 'product', 'platform']" :key="kind" :value="kind">{{ t(`productShelf.kinds.${kind}`) }}</option></Select></Field>
           <Field v-if="model.file_kind === 'certification_report'" :label="t('shelfImport.module')"><Select v-model="sheet.module_type" :aria-label="`${t('shelfImport.module')} ${index + 1}`"><option value="">{{ t('shelfImport.unspecified') }}</option><option v-for="item in library.shelf_config?.module_types || []" :key="item.key" :value="item.key">{{ item.name }}</option></Select></Field>
           <Field v-if="['certification_report', 'overseas_sales'].includes(model.file_kind)" :label="t('shelfImport.completedSpelling')"><Input v-model="sheet.progress" :aria-label="`${t('shelfImport.completedSpelling')} ${index + 1}`" /></Field>
@@ -125,5 +137,8 @@ const usesKey = (field: string) => ['parameter', 'sale_status', 'market', 'certi
 table { border-collapse: collapse; width: 100%; min-width: 650px; }
 th, td { text-align: left; padding: var(--space-2); border-bottom: 1px solid var(--border); }
 th { font-size: var(--text-xs); } td:first-child { width: 110px; } td:last-child { width: 85px; }
+.import-targets { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); border: 0; padding: 0; margin: 0; flex-basis: 100%; }
+.import-targets legend { font-size: var(--text-sm); margin-bottom: var(--space-1); } .import-target-group { flex-basis: 100%; color: var(--muted); font-size: var(--text-xs); }
+.import-error { flex-basis: 100%; margin: 0; color: var(--danger); font-size: var(--text-sm); }
 h3 { margin: 0; font-size: var(--text-lg); } .import-hint { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 </style>

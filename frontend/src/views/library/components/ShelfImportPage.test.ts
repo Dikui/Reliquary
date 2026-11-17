@@ -26,7 +26,7 @@ async function mount(t: test.TestContext, overrides: Record<string, unknown> = {
       suggestShelfImportPlan: async (...args: any[]) => { suggestions.push(args); return { success: true, data: { id: 'suggestion', revision: 1, items: [{ id: 'suggested_plan', operation: { id: 'suggested_plan', type: 'save_import_plan', import_plan: { ...plan().definition, key: 'new_map', name: '模型方案', file_kind: 'product_map', revision: 0 }, issues: [{ type: 'uncertain', message: '请检查列含义' }] }, conflicts: [{ type: 'uncertain', message: '请检查列含义' }] }] } } },
       ...overrides,
     },
-    '@/api/entities': { listEntities: async () => ({ success: true, data: [{ id: 'line', canonical_name: '合成产品线', kind: 'product_line' }] }) },
+    '@/api/entities': { listEntities: async (query: any) => ({ success: true, data: query.kind === 'platform' ? [{ id: 'platform', canonical_name: '合成平台', kind: 'platform' }] : [{ id: 'line', canonical_name: '合成产品线', kind: 'product_line' }] }) },
     '@/api/shelf': { SALE_STATUSES: ['GA', 'DEV', 'Planning', 'EOM', '待定'] },
     '@/api/shelf-review': { confirmShelfChangeset: async (_: string, _id: string, value: any) => { writes.push(JSON.parse(JSON.stringify(value))); return { success: true, data: { status: 'confirmed' } } } },
     'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async (to: any) => { route.query = to.query } }), onBeforeRouteLeave() {}, onBeforeRouteUpdate() {} },
@@ -54,10 +54,14 @@ test('ATQ 方案编辑市场键和写法映射且没有部件绑定选项', asyn
  assert.doesNotMatch(visibleText(field(root,`${zh.shelfImport.configuredValue} 1.3`)),/合成区域/)
  assert.equal(descendants(root).some(n=>n.props['aria-label']==='部件类型 1'),false)
  await input(root,'市场原文 1','√');await input(root,'市场含义 1','optional')
+ descendants(root).find(n=>n.tag==='input'&&n.props['aria-label']==='产品平台 合成平台 1')!.props.onChange({target:{checked:true}});await settle()
  await savePlan(root)
  assert.deepEqual(writes[0].market_values,{'√':'optional'})
  assert.equal(writes[0].sheets[0].columns[2].key,'overseas')
  assert.equal(writes[0].sheets[0].columns[3].key,'overseas')
+ // ADR 0024: an older single product line becomes an explicit target list, and platforms can be added.
+ assert.deepEqual(writes[0].sheets[0].apply_to_ids,['line','platform'])
+ assert.equal('product_line_id' in writes[0].sheets[0],false)
 })
 
 // Small spec, task 19 / ADR 0023: HTTP mocks replace the import boundary, not page behavior.

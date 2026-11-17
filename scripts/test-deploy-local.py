@@ -172,5 +172,29 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn('up', run.call_args.args[0])
 
 
+    def test_build_proxy_comes_from_runtime_env_only_when_set(self):
+        for env_line, expected in (('', False), ('RELIQUARY_BUILD_PROXY=http://proxy.internal:3128\n', True)):
+            temp, source, directory = self.fixture()
+            self.addCleanup(temp.cleanup)
+            (source / 'VERSION').write_text('1')
+            (directory / '.env').write_text('COMPOSE_FILE=docker-compose.yml\n' + env_line)
+            with mock.patch.dict(os.environ, {}, clear=False), \
+                 mock.patch.object(deployer, 'git', side_effect=['', 'head']), \
+                 mock.patch.object(deployer.admin, 'Context', return_value=mock.Mock(env={})), \
+                 mock.patch.object(deployer.admin, 'runtime_images', return_value={
+                     name: {'id': name, 'reference': name, 'labels': {'org.opencontainers.image.revision': 'base'}}
+                     for name in deployer.SERVICES}), \
+                 mock.patch.object(deployer, 'checked_containers'), \
+                 mock.patch.object(deployer.admin, 'checked_runtime_source'), \
+                 mock.patch.object(deployer, 'changed_paths', return_value={'cmd/service/main.go'}), \
+                 mock.patch.object(deployer.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['docker'])) as run:
+                os.environ.pop('RELIQUARY_BUILD_PROXY', None)
+                with self.assertRaises(subprocess.CalledProcessError):
+                    deployer.deploy(source, directory)
+            build = run.call_args_list[0].args[0]
+            self.assertEqual(build[-1], 'app')
+            self.assertEqual('HTTPS_PROXY=http://proxy.internal:3128' in build, expected)
+            self.assertEqual('https_proxy=http://proxy.internal:3128' in build, expected)
+
 if __name__ == '__main__':
     unittest.main()

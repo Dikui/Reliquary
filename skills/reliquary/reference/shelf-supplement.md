@@ -4,7 +4,7 @@
 
 ## 资料要求与缺口
 
-不传 node_id 时，values.requirement_lists 只返回各所属清单的 name、活动要求 total 和绑定的 product_lines（id、name），不返回逐条要求。归类前须明确节点，再传 node_id 读取 values.requirements 的 items、total、truncated。型号只取自身清单要求，上层节点按下属型号涉及的要求 ID 去重，部件没有应交清单，返回空列表。每条要求仅含 id、name（原实体名）、list_name、中英文名 name_zh/name_en、初稿及终稿应交阶段 draft_due_stage/final_due_stage；不含完整属性，修改时先读取完整实体快照。
+不传 node_id 时，values.requirement_lists 只返回各所属清单的 name、活动要求 total，以及绑定的 product_lines 和 platforms（均为 id、name），不返回逐条要求。归类前须明确节点，再传 node_id 读取 values.requirements 的 items、total、truncated。型号只取自身清单要求，上层节点按下属型号涉及的要求 ID 去重，部件没有应交清单，返回空列表。每条要求仅含 id、name（原实体名）、list_name、中英文名 name_zh/name_en、初稿及终稿应交阶段 draft_due_stage/final_due_stage；不含完整属性，修改时先读取完整实体快照。
 
 节点 gaps.documents 列出 missing（缺）和 draft_only（只有初稿），gaps.no_file_documents 单独列出 no_file（无文件），不把无文件推断为已到期。两类资料缺口均保留原清单状态和选配条件，上层节点汇总下属型号。型号与产品名称都未设当前阶段时，型号 gaps.current_stage_unset=true，每条无文件缺口也带此提示，须请维护者补阶段。此时清单状态只有 has_file 和 no_file，gaps 不列只有初稿的项；需要区分初稿与终稿时，读 shelf_get 清单每行 document.stage。gaps.sale_statuses 是完全没有记录的区域，gaps.pending_changesets 是相关待确认批次。部件只返回相关待确认批次，其余缺口列表为空。
 
@@ -35,10 +35,10 @@
 | classify_document | entity_id、revision、classification（owner_id、requirement_ids、conditions；证书可给 certificate_number）；作用于同文件全部版本 |
 | select_document_version | entity_id、revision、version_id；选择本文件已有版本为当前 |
 | reparse_document | entity_id、revision、reparse.version_id、reparse.parser_key |
-| save_import_plan | import_plan.key、name、file_kind、revision（新建为 0）、sheets；每张表 worksheet、header_rows、columns，忽略表给 ignore=true；非忽略表按文件种类提供产品线或 owner_kind 及必需映射 |
+| save_import_plan | import_plan.key、name、file_kind、revision（新建为 0）、sheets；每张表 worksheet、header_rows、columns，忽略表给 ignore=true；非忽略表按文件种类提供产品线、适用目标或 owner_kind 及必需映射 |
 | import_notice | issues，类型为 cross_table_contradiction、unmapped_column 或 uncovered_content，仅记录导入核对提示；uncovered_content 只能 discard 或 defer |
 
-save_import_plan 的 file_kind 使用 product_map、certification_progress、certification_report、overseas_sales 或 atq。每个非忽略工作表的 columns 项必填 column（Excel 列字母）、field，区域、参数、市场等映射另给配置 key。product_map 需 product_line_id 及 platform、product、model 列；atq 需 product_line_id、名称列（name 或 name_zh 或 name_en）与 due_stages；认证进度及报告需 owner_kind、owner、standard、certification_object、region 列，报告另需明确完成进度 progress；overseas_sales 需 owner_kind、owner 及至少一种状态或认证核对列，不写认证事实。保存现有方案时传其 revision，未提供方案时不能猜映射。
+save_import_plan 的 file_kind 使用 product_map、certification_progress、certification_report、overseas_sales 或 atq。每个非忽略工作表的 columns 项必填 column（Excel 列字母）、field，区域、参数、市场等映射另给配置 key。product_map 需 product_line_id 及 platform、product、model 列；atq 需 apply_to_ids（适用的产品线或平台 ID 数组，按清单自身覆盖的范围选，只覆盖某平台时绑该平台而非其产品线）、名称列（name 或 name_zh 或 name_en）与 due_stages；认证进度及报告需 owner_kind、owner、standard、certification_object、region 列，报告另需明确完成进度 progress；overseas_sales 需 owner_kind、owner 及至少一种状态或认证核对列，不写认证事实。保存现有方案时传其 revision，未提供方案时不能猜映射。
 
 资料要求的完整 attributes.requirement 可记录 list_name、name_zh、name_en、file_category、stage_label、due_text、draft_due_stage、final_due_stage、markets、owner、priority、source_list、source_version。markets 的值只接受 required、optional、not_needed，键取本库 markets；应交阶段用本库 stages 的键。当前阶段 current_stage 记在产品名称，型号可覆盖，清空覆盖后沿用产品名称。设置时用 update_entity，patch.attributes 为读取到的完整属性快照加上 current_stage，值取本库 stages 的键；由用户选择，不推测。
 
@@ -70,6 +70,6 @@ requirement_ids 为本库活动资料要求 ID 数组，可明确关联多项，
 
 认证识别键为型号（或明确的所属部件、产品名称、平台）＋标准＋认证对象＋电芯部件＋地区。年份单列，标准使用库内键、规范名或明确别名；电芯等区分认证的差异须写入 cell_part_id 或 conditions，只写在名称或描述里时，新增与已有记录识别键和条件相同会被 uncertain 拦下；名称里出现所属型号组成中的部件名或别名，而该部件不在 cell_part_id 或 conditions 里，新增、改名或改身份时同样被拦下；导入行唯一匹配已有认证、却把非空的年份、机构或证书编号改成另一个值时为 uncertain，同一张证书须改用明确的 update_certification 提交，另一张证书须把差异写进识别字段或条件；通用 update_certification 的零条或多条匹配仍须提交方处理。认证进度和报告导入在零条匹配时生成 create_certification，以 new 反馈；一条匹配更新，多条仍为 uncertain，不合并。新增未映射 name 或名称单元格为空时，名称为“所属节点原名 / 标准规范名 / 认证对象原文”，有电芯部件再加“ / 电芯部件原名”，有地区再加“ / 地区名”（使用配置区域显示名）；映射 name 且非空时用原文。同名仍报冲突，不加后缀。
 
-资料要求按“所属清单＋名称”识别，list_name 必须明确；导入清单由方案键和工作表确定。applies_to 只绑定产品线，市场键取 markets，与可售区域 regions 独立。阶段按 stages 数组顺序，键保持身份，不推断业务含义。没有区域状态记录不等于待定。无法确定的身份、归属、字段含义和条件均退回提交方，不推断。
+资料要求按“所属清单＋名称”识别，list_name 必须明确；导入清单由方案键和工作表确定。applies_to 只绑定产品线或平台，型号适用其所属产品线和平台上的全部要求；市场键取 markets，与可售区域 regions 独立。阶段按 stages 数组顺序，键保持身份，不推断业务含义。没有区域状态记录不等于待定。无法确定的身份、归属、字段含义和条件均退回提交方，不推断。
 
 认证地区与可售状态共用 values.regions。每个区域返回 key、name 和可选 aliases，别名去首尾空白、不区分大小写，键、名称、别名唯一识别一个区域；用户可在货架设置的区域标签编辑并存库，不预置客户写法。create_certification、update_certification 的 region 只接受配置区域键或空，空表示不分地区且参与识别。认证进度、报告及海外核对的地区单元格按键、名称、别名解析为键，未知非空原文为 uncertain，details 保留原文，请提交方修正或加别名，不猜地理归属。shelf_query 的认证地区只用区域键筛选，显式空字符串查空地区，省略则不限；shelf_get 返回 region_name 供显示。没有客户生产数据，本次不迁移旧认证地区；旧的非配置键按原文显示，修改须改为配置键或空。更正时显式给 update_certification.entity_id 和 revision，并保持其他四个身份字段一致；新键已命中其他记录时仍阻塞。

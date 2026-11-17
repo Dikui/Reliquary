@@ -7,19 +7,20 @@ import { descendants, element, loadComponent, renderer, settle } from '../compon
 import { entryPresentationTestModules } from '../entryPresentationTestModules'
 // Small spec, task 20 / ADR 0024. Requirement editing preserves other attributes
 // and saves explicitly chosen applicability in the same atomic changeset.
-test('资料要求修改与产品线适用范围在同一变更集中确认',async t=>{
+test('资料要求修改与产品线、平台适用范围在同一变更集中确认',async t=>{
  const writes:any[]=[]
  const component=loadComponent(new URL('./ShelfRequirementEditor.vue',import.meta.url),{...entryPresentationTestModules,'@/api/shelf-files':{shelfWriteError:(_:unknown,f:string)=>f,writeShelf:async(_:string,ops:any)=>{writes.push(ops);return{success:true,data:{status:'confirmed'}}}},'@/api/relations':{listEntityRelations:async()=>({success:true,data:[]})},'@/components/ui/feedback':{confirm:()=>({result:Promise.resolve(true)})}})
- const app=renderer.createApp(component,{library:{id:'shelf',shelf_config:{stages:[{key:'last',name:'客户终期'}],regions:[{key:'jp',name:'可售区域'}],markets:[{key:'overseas',name:'资料市场'}],module_types:[{key:'module',name:'部件类别'}]}},entity:{id:'req',canonical_name:'原要求',revision:7,attributes:{custom:'保留',requirement:{list_name:'客户所属清单',final_due_stage:'last',source_list:'客户清单'}}},nodes:[{id:'line',kind:'product_line',canonical_name:'客户产品线'}]});app.use(createI18n({legacy:false,locale:'zh-CN',messages:{'zh-CN':zh,'en-US':en}}));const root=element('root');app.mount(root);t.after(()=>app.unmount());await settle()
- // Task 30: the market selector uses markets, and applicability only offers product lines.
+ const app=renderer.createApp(component,{library:{id:'shelf',shelf_config:{stages:[{key:'last',name:'客户终期'}],regions:[{key:'jp',name:'可售区域'}],markets:[{key:'overseas',name:'资料市场'}],module_types:[{key:'module',name:'部件类别'}]}},entity:{id:'req',canonical_name:'原要求',revision:7,attributes:{custom:'保留',requirement:{list_name:'客户所属清单',final_due_stage:'last',source_list:'客户清单'}}},nodes:[{id:'line',kind:'product_line',canonical_name:'客户产品线'},{id:'platform',kind:'platform',canonical_name:'客户平台'},{id:'part',kind:'part',canonical_name:'客户部件'}]});app.use(createI18n({legacy:false,locale:'zh-CN',messages:{'zh-CN':zh,'en-US':en}}));const root=element('root');app.mount(root);t.after(()=>app.unmount());await settle()
+ // Task 30: the market selector uses markets; applicability offers product lines and platforms only (ADR 0024).
  const market=descendants(root).find(n=>n.tag==='select'&&n.props.id==='market-overseas')!;assert.ok(market)
  assert.equal(descendants(root).some(n=>n.props.id==='market-jp'),false)
- assert.equal(descendants(root).filter(n=>n.tag==='input'&&n.props.type==='checkbox').length,1)
+ assert.equal(descendants(root).filter(n=>n.tag==='input'&&n.props.type==='checkbox').length,2)
  market.props.onChange({target:{value:'required'}});await settle()
  descendants(root).find(n=>n.tag==='input'&&n.props['aria-label']==='名称')!.props.onInput({target:{value:' 新要求原名 '}})
- const checkbox=descendants(root).find(n=>n.tag==='input'&&n.props.type==='checkbox')!;checkbox.props.onChange({target:{checked:true}});await settle()
+ for(const checkbox of descendants(root).filter(n=>n.tag==='input'&&n.props.type==='checkbox')){checkbox.props.onChange({target:{checked:true}});await settle()}
  descendants(root).find(n=>n.tag==='form')!.props.onSubmit({preventDefault(){}});await settle()
  assert.equal(writes[0][0].patch.attributes.requirement.list_name,'客户所属清单');assert.equal(writes[0][0].type,'update_entity');assert.equal(writes[0][0].patch.attributes.custom,'保留');assert.equal(writes[0][0].patch.name,' 新要求原名 ')
  assert.equal(writes[0][1].type,'save_relation');assert.equal(writes[0][1].relation.object_id,'line');assert.equal(writes[0][1].relation.subject_id,'req')
+ assert.equal(writes[0][2].type,'save_relation');assert.equal(writes[0][2].relation.object_id,'platform')
  assert.deepEqual(writes[0][0].patch.attributes.requirement.markets,{overseas:'required'})
 })

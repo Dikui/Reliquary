@@ -124,7 +124,7 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 		stageOwner = id
 	}
 	owners := map[string]int{id: 0}
-	line := ""
+	targets := map[string]bool{}
 	for _, e := range ancestors {
 		switch e.Kind {
 		case "product":
@@ -137,8 +137,9 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 			}
 		case "platform":
 			owners[e.ID] = 3
+			targets[e.ID] = true
 		case "product_line":
-			line = e.ID
+			targets[e.ID] = true
 		}
 	}
 	for _, edge := range d.edges {
@@ -153,7 +154,7 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 			if b.SubjectID != r.ID {
 				continue
 			}
-			if b.ObjectID == line {
+			if targets[b.ObjectID] {
 				applies = true
 			}
 		}
