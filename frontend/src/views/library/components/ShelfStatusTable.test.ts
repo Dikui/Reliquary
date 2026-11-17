@@ -15,8 +15,8 @@ const model = (id: string, parent: string, region: string): ShelfQueryItem => ({
 const library = { id: 'library-a', name: 'Test shelf', shelf_enabled: true, shelf_config: { regions: [{ key: 'north', name: 'North' }, { key: 'south', name: 'South' }], standards: [{ key: 'standard', name: 'Synthetic standard', aliases: [] }] }, entity_schema: { kinds: [], fields: [{ key: 'energy', name: 'Energy', type: 'number', product_line_ids: ['line-a'], unit: 'kWh', kinds: ['model'] }] } } as unknown as LibraryCatalogItem
 const success = (data: unknown) => Promise.resolve({ success: true, data })
 const tabs = defineComponent({ props: ['modelValue', 'items', 'label'], emits: ['update:modelValue'], setup: (props, { slots, emit }) => () => h('div', [h('nav', { 'aria-label': props.label }, props.items.map((item: any) => h('button', { role: 'tab', 'aria-selected': props.modelValue === item.value, onClick: () => emit('update:modelValue', item.value) }, item.label))), slots[props.modelValue]?.()]) })
-async function mountTable(t: test.TestContext, api: Record<string, unknown> = {}) {
-  const requests: any[] = [], navigations: any[] = []
+async function mountTable(t: test.TestContext, api: Record<string, unknown> = {}, query: Record<string, string> = {}) {
+  const requests: any[] = [], navigations: any[] = [], nodeReads: string[] = [], route = { query: { ...query } as Record<string, string> }
   const data: Record<string, ShelfNode> = { 'line-a': node('line-a', 'product_line'), 'line-b': node('line-b', 'product_line'), 'product-a': node('product-a', 'product', 'platform-a'), 'platform-a': node('platform-a', 'platform', 'line-a'), 'product-b': node('product-b', 'product', 'platform-b'), 'platform-b': node('platform-b', 'platform', 'line-b') }
   const modules = {
     ...entryPresentationTestModules, '@/utils/productShelf': { shelfConditionText },
@@ -24,15 +24,16 @@ async function mountTable(t: test.TestContext, api: Record<string, unknown> = {}
     '@/api/library': {}, '@/api/entities': { listEntities: () => success([entity('line-a', 'product_line'), entity('line-b', 'product_line')]) },
     '@/api/shelf': { SALE_STATUSES: ['GA', 'DEV', 'Planning', 'EOM', '待定'],
       queryShelf: (_: string, input: any) => { requests.push(JSON.parse(JSON.stringify(input))); return success({ items: input.ancestor_id === 'line-b' ? [model('model-b', 'product-b', 'south')] : [model('model-a', 'product-a', 'north')], total: 1, truncated: false, as_of: '2026-11-07T00:00:00Z' }) },
-      getShelfNode: (_: string, id: string) => success(data[id]), findShelf: () => success({ items: [], total: 0, truncated: false }), ...api },
-    'vue-router': { useRouter: () => ({ push(target: unknown) { navigations.push(target) } }) },
+      getShelfNode: (_: string, id: string) => { nodeReads.push(id); return success(data[id]) }, findShelf: () => success({ items: [], total: 0, truncated: false }), ...api },
+    '@/api/relations': { listEntityRelations: (id: string) => success([{ relation_type: 'belongs_to', relations: Object.values(data).filter(child => child.facts.some(fact => (fact.value as { object_id?: string }).object_id === id)).map(child => ({ relation_type: 'belongs_to', direction: 'incoming', peer: child.entity })) }]), ...(api.relations as object || {}) },
+    'vue-router': { useRoute: () => route, useRouter: () => ({ push(target: unknown) { navigations.push(target) }, replace: async (target: { query: Record<string, string> }) => { route.query = target.query } }) },
     './ShelfStatusEditor.vue': { __esModule: true, default: defineComponent({ props: ['models', 'region', 'bulk'], setup: props => () => h('section', { role: 'dialog' }, `Editor ${props.models?.[0]?.entity.id} ${props.region}`) }) },
     './ShelfStatusExport.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
   }
   const component = loadComponent(new URL('./ShelfStatusTable.vue', import.meta.url), modules)
   const app = renderer.createApp(component, { library }); app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } }))
   const root = element('root'); app.mount(root); t.after(() => app.unmount()); await settle(); await new Promise<void>(resolve => setImmediate(resolve)); await settle()
-  return { root, requests, navigations }
+  return { root, requests, navigations, nodeReads, route }
 }
 // Small spec, task 14: page tests use synthetic HTTP responses as the network boundary.
 test('product line tabs show their regions and expandable platform and product groups', async t => {
@@ -131,4 +132,26 @@ test('filtered empty results keep columns and a removable condition', async t =>
   assert.ok(descendants(root).some(node => node.tag === 'th' && visibleText(node) === 'North'))
   await click(descendants(root).find(node => node.tag === 'button' && node.props['aria-label'] === '移除筛选：任一区域 · EOM')!)
   assert.match(visibleText(root), /model-a/)
+})
+
+// Regression: a reload keeps the product line named in the address, and the
+// table names platforms and products from cheap hierarchy relations instead of
+// reading every ancestor's full node detail.
+test('the selected product line survives a reload through the address', async t => {
+  const { root, route, nodeReads } = await mountTable(t, {}, { tab: 'status', line: 'line-b' })
+  assert.match(visibleText(root), /model-b/); assert.doesNotMatch(visibleText(root), /model-a/)
+  assert.match(visibleText(root), /platform-b/); assert.match(visibleText(root), /product-b/)
+  assert.deepEqual(nodeReads, [])
+  await click(descendants(root).find(node => node.props.role === 'tab' && visibleText(node).includes('line-a'))!)
+  assert.deepEqual(route.query, { tab: 'status', line: 'line-a' })
+})
+test('an unknown line in the address falls back to the first line', async t => {
+  const { root, route } = await mountTable(t, {}, { line: 'missing' })
+  assert.match(visibleText(root), /model-a/)
+  assert.equal(route.query.line, 'line-a')
+})
+test('a product missing from the hierarchy is still named from its node detail', async t => {
+  const { root, nodeReads } = await mountTable(t, { relations: { listEntityRelations: () => success([]) } })
+  assert.match(visibleText(root), /platform-a/); assert.match(visibleText(root), /product-a/)
+  assert.deepEqual(nodeReads.sort(), ['platform-a', 'product-a'])
 })

@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { shelfConditionText } from '@/utils/productShelf'
 import ShelfStatusEditor from './ShelfStatusEditor.vue'
 import ShelfStatusExport from './ShelfStatusExport.vue'
 import { Button, EmptyState, ErrorState, Tabs } from '@/components/ui'
 import type { Entity } from '@/api/entities'
 import { listEntities } from '@/api/entities'
+import { listEntityRelations } from '@/api/relations'
 import type { LibraryCatalogItem } from '@/api/library'
 import { SALE_STATUSES, findShelf, getShelfNode, queryShelf, type ShelfNode, type ShelfQuery, type ShelfQueryItem, type ShelfResponse, type ShelfChangeset } from '@/api/shelf'
 
 const props = defineProps<{ library: LibraryCatalogItem }>()
-const { t } = useI18n(), router = useRouter()
+const { t } = useI18n(), route = useRoute(), router = useRouter()
 const lines = ref<Entity[]>([]), line = ref(''), rows = ref<ShelfQueryItem[]>([])
-const nodes = ref<Record<string, ShelfNode>>({}), counts = ref<Record<string, number>>({})
+// Platform and product names by ID, each with its parent ID, for grouping rows.
+const nodes = ref<Record<string, { name: string; parent: string }>>({}), counts = ref<Record<string, number>>({})
 const loading = ref(false), error = ref(''), total = ref(0)
 const collapsed = ref(new Set<string>())
 const selected = ref(new Set<string>()), editor = ref<{ models: ShelfQueryItem[]; region: string; bulk: boolean }>()
@@ -86,10 +88,10 @@ const groups = computed(() => {
   const platforms = new Map<string, { id: string; name: string; products: Map<string, { id: string; name: string; models: ShelfQueryItem[] }> }>()
   for (const row of rows.value) {
     const productID = parentID(row) || '', product = nodes.value[productID]
-    const platformID = product ? parentID(product) || '' : '', platform = nodes.value[platformID]
-    if (!platforms.has(platformID)) platforms.set(platformID, { id: platformID, name: platform?.entity.canonical_name || t('productShelf.unassigned'), products: new Map() })
+    const platformID = product?.parent || '', platform = nodes.value[platformID]
+    if (!platforms.has(platformID)) platforms.set(platformID, { id: platformID, name: platform?.name || t('productShelf.unassigned'), products: new Map() })
     const group = platforms.get(platformID)!
-    if (!group.products.has(productID)) group.products.set(productID, { id: productID, name: product?.entity.canonical_name || t('productShelf.unassigned'), models: [] })
+    if (!group.products.has(productID)) group.products.set(productID, { id: productID, name: product?.name || t('productShelf.unassigned'), models: [] })
     group.products.get(productID)!.models.push(row)
   }
   return [...platforms.values()].map(platform => ({ ...platform, products: [...platform.products.values()] }))
@@ -97,9 +99,27 @@ const groups = computed(() => {
 function toggle(id: string) { if (collapsed.value.has(id)) collapsed.value.delete(id); else collapsed.value.add(id) }
 function openNode(id: string) { if (id) void router.push({ path: '/platform/entities', query: { libraries: props.library.id, entity_id: id } }) }
 function unwrap<T>(response: ShelfResponse<T>): T { if (!response.success) throw new Error(response.message || t('workbench.requestFailed')); return response.data }
+// Platform and product names come from the line's hierarchy relations, which
+// are cheap to read and load alongside the model query. Full node details are
+// only a fallback for a product the hierarchy did not list.
+async function children(id: string) {
+  const response = await listEntityRelations(id)
+  if (!response.success) throw new Error(response.message || t('workbench.requestFailed'))
+  return response.data.flatMap(group => group.relations).filter(relation => relation.relation_type === 'belongs_to' && relation.direction === 'incoming').map(relation => relation.peer)
+}
+async function hierarchy(lineID: string) {
+  const result: Record<string, { name: string; parent: string }> = {}
+  await Promise.all((await children(lineID)).map(async platform => {
+    result[platform.id] = { name: platform.canonical_name, parent: lineID }
+    for (const product of await children(platform.id)) result[product.id] = { name: product.canonical_name, parent: platform.id }
+  }))
+  return result
+}
 async function load() {
   const current = ++generation; loading.value = true; error.value = ''; rows.value = []; selected.value.clear(); total.value = 0
   const libraryID = props.library.id, lineID = line.value
+  // A failed hierarchy read leaves the per-product fallback below to name groups.
+  const names = hierarchy(lineID).catch(() => ({}))
   try {
     const items: ShelfQueryItem[] = []
     const query: ShelfQuery = { ...applied.value, ancestor_id: lineID, detail: 'full', limit: 100, offset: 0 }
@@ -109,20 +129,21 @@ async function load() {
       if (current !== generation) return
       items.push(...page.items); count = page.total
       if (!page.items.length && items.length < count) throw new Error(t('shelfStatus.incomplete'))
+      if (!query.offset) { nodes.value = { ...nodes.value, ...await names }; if (current !== generation) return }
       query.offset = items.length; query.as_of = page.as_of
+      // Show each page as it arrives; later pages extend the same groups.
+      rows.value = [...items]; total.value = count
     } while (items.length < count)
-    const cache: Record<string, Promise<ShelfNode>> = {}
-    async function ancestors(node: ShelfNode, depth = 0): Promise<void> {
-      const id = parentID(node)
-      if (!id || depth >= 3) return
-      cache[id] ||= getShelfNode(libraryID, id, query.as_of).then(unwrap)
-      const parent = await cache[id]
+    const missing = [...new Set(items.map(item => parentID(item) || '').filter(id => id && !nodes.value[id]))]
+    await Promise.all(missing.map(async id => {
+      const product = unwrap(await getShelfNode(libraryID, id, query.as_of))
+      const platformID = parentID(product) || ''
+      const platform = platformID && !nodes.value[platformID] ? unwrap(await getShelfNode(libraryID, platformID, query.as_of)) : undefined
       if (current !== generation) return
-      nodes.value[id] = parent
-      await ancestors(parent, depth + 1)
-    }
-    await Promise.all(items.map(item => ancestors(item)))
-    if (current === generation) { rows.value = items; total.value = count; if (!Object.keys(applied.value).length) { counts.value[lineID] = count; regionKeys.value = [...new Set(items.flatMap(item => item.shelf?.sale_statuses?.map(status => status.region) || []))] } }
+      nodes.value[id] = { name: product.entity.canonical_name, parent: platformID }
+      if (platform) nodes.value[platformID] = { name: platform.entity.canonical_name, parent: lineID }
+    }))
+    if (current === generation && !Object.keys(applied.value).length) { counts.value[lineID] = count; regionKeys.value = [...new Set(items.flatMap(item => item.shelf?.sale_statuses?.map(status => status.region) || []))] }
   } catch (cause) { if (current === generation) error.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   finally { if (current === generation) loading.value = false }
 }
@@ -138,11 +159,13 @@ async function initialize() {
       items.push(...response.data)
       if (response.data.length < 100) break
     }
-    lines.value = items; line.value = items[0]?.id || ''
+    // Keep the line named in the address across reloads; fall back to the first.
+    const wanted = typeof route.query.line === 'string' ? route.query.line : ''
+    lines.value = items; line.value = items.find(item => item.id === wanted)?.id || items[0]?.id || ''
   } catch (cause) { error.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   finally { if (!line.value) loading.value = false }
 }
-watch(line, value => { collapsed.value.clear(); regionKeys.value = []; applied.value = {}; filterError.value = ''; filters.value = { status: '', region: '', field: '', min: '', max: '', standard: '', gaps: false }; if (value) void load() })
+watch(line, value => { if (value && route.query.line !== value) void router.replace({ query: { ...route.query, line: value } });  collapsed.value.clear(); regionKeys.value = []; applied.value = {}; filterError.value = ''; filters.value = { status: '', region: '', field: '', min: '', max: '', standard: '', gaps: false }; if (value) void load() })
 watch(() => props.library.id, initialize, { immediate: true })
 onBeforeUnmount(() => { disposed = true; generation++; searchGeneration++ })
 </script>
