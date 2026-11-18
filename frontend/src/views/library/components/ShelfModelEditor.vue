@@ -24,11 +24,11 @@ const title = computed(() => t(({ model: 'shelfModel.edit', stage: 'shelfModel.s
 const busy = ref(false), error = ref('')
 const parameterFields = computed(() => (props.library.entity_schema?.fields || []).filter(field => !field.archived && field.product_line_ids?.includes(props.lineId || '')))
 const fields = computed(() => (props.library.entity_schema?.fields || []).filter(field => !field.archived && (!field.kinds?.length || field.kinds.includes('model')) && !['current_stage', 'sale_statuses', 'parameter_values', 'combination_rules'].includes(field.key) && !field.product_line_ids?.length))
-const certification = ref<Record<string, string>>({ name: '', standard: '', certification_object: '', region: '', cell_part_id: '', year: '', agency: '', progress: '', start_date: '', obtained_date: '', issued_date: '', validity: '', number: '', cloud_url: '' })
+const certification = ref<Record<string, string>>({ name: '', standard: '', certification_object: '', region: '', cell_part_id: '', year: '', agency: '', progress: '', start_date: '', planned_date: '', obtained_date: '', issued_date: '', validity: '', number: '', cloud_url: '' })
 const conditions = ref<ShelfCondition[]>([])
 const composition = props.node.shelf?.composition || []
-const certLabels = computed(() => ({ agency: t('shelfModel.agency'), progress: t('shelfModel.progress'), start_date: t('shelfModel.start_date'), obtained_date: t('shelfModel.obtained_date'), issued_date: t('shelfModel.issued_date'), validity: t('shelfModel.validity'), number: t('shelfModel.number'), cloud_url: t('shelfModel.cloudLink') }))
-const certFields = ['agency', 'progress', 'start_date', 'obtained_date', 'issued_date', 'validity', 'number', 'cloud_url'] as const
+const certLabels = computed(() => ({ agency: t('shelfModel.agency'), progress: t('shelfModel.progress'), start_date: t('shelfModel.start_date'), planned_date: t('shelfModel.planned_date'), obtained_date: t('shelfModel.obtained_date'), issued_date: t('shelfModel.issued_date'), validity: t('shelfModel.validity'), number: t('shelfModel.number'), cloud_url: t('shelfModel.cloudLink') }))
+const certFields = ['agency', 'progress', 'start_date', 'planned_date', 'obtained_date', 'issued_date', 'validity', 'number', 'cloud_url'] as const
 const parts = ref<Entity[]>([]), relations = ref<EntityRelation[]>([]), loading = ref(false)
 const action = ref('add'), module = ref(''), part = ref('')
 const availableParts = computed(() => action.value === 'add' ? parts.value.filter(item => (!item.attributes?.module_type || item.attributes.module_type === module.value) && !relations.value.some(relation => relation.attributes?.module_type === module.value && relation.peer.id === item.id)).map(item => ({ id: item.id, name: item.canonical_name })) : relations.value.filter(item => item.attributes?.module_type === module.value).map(item => ({ id: item.id, name: item.peer.canonical_name })))

@@ -87,7 +87,7 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 	for _, dateField := range []struct {
 		field  string
 		target *string
-	}{{"start_date", &record.StartDate}, {"obtained_date", &record.ObtainedDate}, {"issued_date", &record.IssuedDate}} {
+	}{{"start_date", &record.StartDate}, {"planned_date", &record.PlannedDate}, {"obtained_date", &record.ObtainedDate}, {"issued_date", &record.IssuedDate}} {
 		field, target := dateField.field, dateField.target
 		if cell, ok := cells[field+":"]; ok {
 			*target = ""

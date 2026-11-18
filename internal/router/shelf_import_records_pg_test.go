@@ -61,8 +61,8 @@ func TestShelfImportCertificationProgressUsesIdentityAndFileDate(t *testing.T) {
 	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": "Original certificate", "owner_id": shelfNode(n, "model"), "standard": "standard_a", "certification_object": "Container", "region": "region_a", "progress": "Planning", "number": "KEEP-1"}}}}, http.StatusCreated, &seed)
 	var model types.EntityDetail
 	f.request(http.MethodGet, "/entities/"+shelfNode(n, "model"), nil, http.StatusOK, &model)
-	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "progress"}, {Column: "F", Field: "start_date"}}, nil)
-	data := importWorkbook(t, importRecordRow(3, model.Entity.CanonicalName, "Customer spelling", "Container", "region_a", " In progress ", "2026/10/02"), "")
+	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "progress"}, {Column: "F", Field: "start_date"}, {Column: "G", Field: "planned_date"}}, nil)
+	data := importWorkbook(t, importRecordRow(3, model.Entity.CanonicalName, "Customer spelling", "Container", "region_a", " In progress ", "2026/10/02", "2026/12/01"), "")
 	draft := importUpload(t, f, l.ID, "progress_20261028.xlsx", "", data, http.StatusCreated)
 	require.Equal(t, "update_certification", draft.Items[0].Operation.Type)
 	require.Equal(t, seed.Items[0].EntityID, draft.Items[0].EntityID)
@@ -76,6 +76,9 @@ func TestShelfImportCertificationProgressUsesIdentityAndFileDate(t *testing.T) {
 	require.Equal(t, " In progress ", record["progress"])
 	require.Equal(t, "KEEP-1", record["number"])
 	require.Equal(t, "2026-10-02", record["start_date"])
+	// A planned date stays apart from the obtained date until a certificate exists.
+	require.Equal(t, "2026-12-01", record["planned_date"])
+	require.NotContains(t, record, "obtained_date")
 	f.request(http.MethodGet, "/entities/"+seed.Items[0].EntityID+"?as_of=2026-10-27T00:00:00Z", nil, http.StatusOK, &before)
 	require.Equal(t, "Planning", before.Entity.Attributes["certification"].(map[string]any)["progress"])
 	var logs types.OperationLogPage

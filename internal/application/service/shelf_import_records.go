@@ -159,7 +159,7 @@ func (b *importMapBuilder) parseRecords(workbook *importWorkbookData) error {
 
 func (b *importMapBuilder) validateRecordCells(cells map[string]importCell) error {
 	for field, cell := range cells {
-		dateField := slices.Contains([]string{"start_date:", "obtained_date:", "issued_date:"}, field)
+		dateField := slices.Contains([]string{"start_date:", "planned_date:", "obtained_date:", "issued_date:"}, field)
 		if cell.Formula != nil || cell.Type == "e" || cell.FormattedNumber && !(dateField && cell.DateSerial) {
 			return fmt.Errorf("formula, error or formatted numeric cells require explicit values")
 		}
