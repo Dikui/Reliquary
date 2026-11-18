@@ -5,6 +5,7 @@ import { Store } from './store.js';
 import { Worker } from './worker.js';
 import { ShelfEditor } from './shelf.js';
 import { startHealth, type HealthState } from './health.js';
+import { refreshModelCatalog } from './pi.js';
 import type { Server } from 'node:http';
 
 if (process.argv.includes('--help')) {
@@ -16,6 +17,8 @@ if (process.argv.includes('--help')) {
   let worker: Worker | undefined;
   let transport: FeishuTransport | undefined;
   let timer: NodeJS.Timeout | undefined;
+  let catalogTimer: NodeJS.Timeout | undefined;
+  const catalogShutdown = new AbortController();
   let health: Server | undefined;
   let stopTimer: NodeJS.Timeout | undefined;
   let phase: HealthState['phase'] = 'starting';
@@ -63,6 +66,17 @@ if (process.argv.includes('--help')) {
         readyWorker.wake();
       });
       phase = 'running';
+      if (config.modelAPI === 'openai-codex-responses' && process.env.PI_OFFLINE === undefined) {
+        const refresh = () => {
+          void refreshModelCatalog(config, catalogShutdown.signal).then(() => {
+            log('model_catalog_refreshed');
+          }).catch(() => {
+            if (!catalogShutdown.signal.aborted) log('model_catalog_refresh_failed');
+          });
+        };
+        refresh();
+        catalogTimer = setInterval(refresh, 4 * 60 * 60 * 1000);
+      }
       timer = setInterval(() => { readyWorker.wake(); readyWorker.deliver(); }, 1000);
       worker.wake();
       worker.deliver();
@@ -74,6 +88,8 @@ if (process.argv.includes('--help')) {
   } finally {
     phase = 'stopping';
     if (timer) clearInterval(timer);
+    if (catalogTimer) clearInterval(catalogTimer);
+    catalogShutdown.abort();
     transport?.close();
     await worker?.close();
     await queries?.close();

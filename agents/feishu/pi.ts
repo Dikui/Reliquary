@@ -1,8 +1,9 @@
-import { chmod, mkdir, readFile, realpath } from 'node:fs/promises';
-import { basename, join, relative } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { chmod, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, relative } from 'node:path';
 import {
   createAssistantMessageEventStream, InMemoryCredentialStore, InMemoryModelsStore,
-  type AssistantMessage, type AssistantMessageEvent,
+  type AssistantMessage, type AssistantMessageEvent, type ModelsStoreEntry,
 } from '@earendil-works/pi-ai';
 import {
   createAgentSession, createExtensionRuntime, ModelRuntime, SessionManager, SettingsManager,
@@ -16,6 +17,14 @@ import { QueryTools } from './tools.js';
 
 const CONTEXT_TYPE = 'reliquary_query_context';
 const RUN_TYPE = 'reliquary_feishu_run';
+const CODEX_PROVIDER = 'openai-codex';
+// Pi 1.5.2 predates this entry: https://pi.dev/models/openai-codex/gpt-6-2-astra
+const CODEX_ASTRA = {
+  reasoning: true,
+  thinkingLevelMap: { off: null, minimal: 'low', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
+  cost: { input: 8, output: 40, cacheRead: 0.4, cacheWrite: 10 },
+  compat: { supportsOpenAIGrammarTools: true, supportsAdditionalTools: true, supportsToolSearch: true, supportsMidConvoSystemMessages: true },
+};
 
 function sessionContext(config: Config) {
   return { version: 1, endpoint: config.apiURL, libraries: [...config.libraries].sort() };
@@ -101,6 +110,53 @@ export async function loginCodex(dataDir: string, interaction: AuthInteraction) 
   } finally { await runtime.settleCredentialWrites(); }
 }
 
+function modelCatalogPath(config: Config) {
+  // Installation checks use temporary sessions with the installed authorization and catalog.
+  return join(dirname(config.authFile), 'model-catalog.json');
+}
+
+async function readModelCatalog(config: Config) {
+  const modelsStore = new InMemoryModelsStore();
+  if (config.modelAPI === 'openai-codex-responses') {
+    const cached: ModelsStoreEntry | undefined = await readFile(modelCatalogPath(config), 'utf8')
+      .then(text => JSON.parse(text)).catch(() => undefined);
+    if (Array.isArray(cached?.models)) await modelsStore.write(CODEX_PROVIDER, cached);
+  }
+  return modelsStore;
+}
+
+function createModelRuntime(config: Config, modelsStore: InMemoryModelsStore) {
+  return ModelRuntime.create({
+    credentials: config.codexAuthFile ? codexCredentialStore(config.codexAuthFile)
+      : config.modelAPI === 'openai-codex-responses' ? undefined : new InMemoryCredentialStore(),
+    authPath: config.authFile, modelsStore,
+    modelsPath: null, allowModelNetwork: false, refreshOnCreate: false,
+  });
+}
+
+export async function refreshModelCatalog(config: Config, shutdown: AbortSignal) {
+  const signal = AbortSignal.any([shutdown, AbortSignal.timeout(15_000)]);
+  const modelsStore = await readModelCatalog(config);
+  const previous = await modelsStore.read(CODEX_PROVIDER);
+  const runtime = await createModelRuntime(config, modelsStore);
+  const result = await runtime.refresh({ providers: [CODEX_PROVIDER], force: true, signal });
+  const updated = await modelsStore.read(CODEX_PROVIDER);
+  if (result.aborted || result.errors.size || !updated?.lastModified || !updated.models.length
+      || updated.lastModified < (previous?.lastModified ?? 0) || updated.checkedAt === previous?.checkedAt) {
+    throw new QueryError('model_catalog_refresh_failed', '模型目录刷新失败');
+  }
+
+  const path = modelCatalogPath(config);
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, JSON.stringify(updated), { flag: 'wx', mode: 0o600, signal });
+    signal.throwIfAborted();
+    await rename(temporary, path);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
+
 async function modelRuntime(config: Config, queries: QueryTools) {
   const subscription = config.modelAPI === 'openai-codex-responses';
   const authPath = config.authFile;
@@ -109,18 +165,15 @@ async function modelRuntime(config: Config, queries: QueryTools) {
     const credential = await readCodexCredential(config.codexAuthFile);
     queries.protectSecrets(credential.access);
   }
-  const runtime = await ModelRuntime.create({
-    credentials: config.codexAuthFile ? codexCredentialStore(config.codexAuthFile)
-      : subscription ? undefined : new InMemoryCredentialStore(), authPath,
-    modelsStore: new InMemoryModelsStore(),
-    modelsPath: null, allowModelNetwork: false, refreshOnCreate: false,
-  });
-  const provider = subscription ? 'openai-codex' : 'reliquary-demo';
+  const runtime = await createModelRuntime(config, await readModelCatalog(config));
+  if (subscription) await runtime.refresh({ providers: [CODEX_PROVIDER], allowNetwork: false });
+  const provider = subscription ? CODEX_PROVIDER : 'reliquary-demo';
   if (subscription && !config.codexAuthFile && readStoredCredential(provider, authPath)?.type !== 'oauth') {
     throw new QueryError('login_required', '请先使用 --login 登录 Codex 订阅');
   }
-  const known = runtime.getModel(provider, config.model);
-  if (subscription && !known) throw new QueryError('unknown_model', 'Pi 当前发布包没有该 Codex 模型，请选择其支持的模型');
+  const known = runtime.getModel(provider, config.model)
+    ?? (subscription && config.model === 'gpt-6.2-astra' ? CODEX_ASTRA : undefined);
+  if (subscription && !known) throw new QueryError('unknown_model', '当前模型目录没有该 Codex 模型，请检查模型名称或等待目录刷新');
   runtime.registerProvider(provider, {
     baseUrl: config.modelURL, api: config.modelAPI,
     models: [{
@@ -252,8 +305,8 @@ export class QueryAgent {
     const definitions = [...queries.definitions, ...(options.proposalTool ? [options.proposalTool] : []), ...(options.additionalTools ?? [])];
     const names = definitions.map(tool => tool.name);
     const { session } = await createAgentSession({
-      cwd, agentDir: dataDir, modelRuntime: runtime, model, thinkingLevel: 'off',
-      scopedModels: [{ model, thinkingLevel: 'off' }], sessionManager: manager,
+      cwd, agentDir: dataDir, modelRuntime: runtime, model, thinkingLevel: config.thinkingLevel,
+      scopedModels: [{ model, thinkingLevel: config.thinkingLevel }], sessionManager: manager,
       settingsManager: SettingsManager.inMemory({
         compaction: { enabled: false }, retry: { enabled: false }, cacheWarming: 'off',
         enableSkillCommands: false, images: { blockImages: true },

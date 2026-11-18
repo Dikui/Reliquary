@@ -63,6 +63,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const contextWindow = integer('MODEL_CONTEXT_WINDOW', subscription ? 128000 : undefined);
   const maxTokens = integer('MODEL_MAX_TOKENS', subscription ? 8192 : undefined);
   if (maxTokens >= contextWindow) throw new QueryError('invalid_config', 'MODEL_MAX_TOKENS must be less than MODEL_CONTEXT_WINDOW');
+  const configuredThinkingLevel = env.MODEL_THINKING_LEVEL?.trim() || 'off';
+  const thinkingLevel = (['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const)
+    .find(level => level === configuredThinkingLevel);
+  if (!thinkingLevel) throw new QueryError('invalid_config', 'Invalid MODEL_THINKING_LEVEL');
   return {
     apiURL,
     apiKey: required('RELIQUARY_API_KEY'),
@@ -73,6 +77,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     codexAuthFile,
     model: env.MODEL_NAME?.trim() || (subscription ? 'gpt-6.1-sol' : required('MODEL_NAME')),
     modelAPI: modelAPI as 'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'openai-codex-responses',
+    thinkingLevel,
     contextWindow,
     maxTokens,
     dataDir: loadDataDir(env),

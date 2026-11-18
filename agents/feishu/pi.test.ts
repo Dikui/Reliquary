@@ -7,13 +7,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { zstdDecompressSync } from 'node:zlib';
 import { loadConfig } from './config.js';
-import { QueryAgent } from './pi.js';
+import { QueryAgent, refreshModelCatalog } from './pi.js';
 import { connectQueryTools, TOOL_NAMES } from './tools.js';
 import { createRedactor } from './output.js';
 import { Store } from './store.js';
 import { Worker } from './worker.js';
 
-test('客户订阅模式由 Pi 直接调用模型并保留工具调用会话', async () => {
+test('客户订阅模式用 Astra high 调用模型并保留工具调用会话', async () => {
   const dataDir = await mkdtemp(join(tmpdir(), 'reliquary-customer-pi-'));
   const originalFetch = globalThis.fetch;
   const secrets = ['customer-local-key'];
@@ -36,7 +36,8 @@ test('客户订阅模式由 Pi 直接调用模型并保留工具调用会话', a
       assert.equal(request.headers.get('authorization'), `Bearer ${access}`);
       const bytes = Buffer.from(await request.arrayBuffer());
       const body = JSON.parse((request.headers.get('content-encoding') === 'zstd' ? zstdDecompressSync(bytes) : bytes).toString());
-      assert.equal(body.model, 'gpt-6.1-sol');
+      assert.equal(body.model, 'gpt-6.2-astra');
+      assert.equal(body.reasoning?.effort, 'high');
       assert.equal(body.store, false);
       assert.equal(body.stream, true);
       assert.equal(body.max_output_tokens, undefined);
@@ -54,7 +55,7 @@ test('客户订阅模式由 Pi 直接调用模型并保留工具调用会话', a
       return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'content-type': 'text/event-stream' } });
     } catch (error) { requestFailure = error; throw error; }
     };
-    const config = loadConfig({ MODEL_SOURCE: 'chatgpt', MODEL_ID: 'customer-model', MODEL_NAME: 'gpt-6.1-sol',
+    const config = loadConfig({ MODEL_SOURCE: 'chatgpt', MODEL_ID: 'customer-model', MODEL_NAME: 'gpt-6.2-astra', MODEL_THINKING_LEVEL: 'high',
       RELIQUARY_API_URL: 'http://localhost', RELIQUARY_API_KEY: 'customer-local-key', RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: dataDir });
     agent = await QueryAgent.open({ ...config, dataDir: join(dataDir, 'check') }, queries as never);
     const answer = await agent.ask('检查资料库').catch(error => { throw requestFailure ?? error; });
@@ -62,6 +63,53 @@ test('客户订阅模式由 Pi 直接调用模型并保留工具调用会话', a
     assert.equal(requests, 2);
     assert.doesNotMatch(await readFile(agent.session.sessionFile!, 'utf8'), /customer-local-key|customer-refresh|signature/);
   } finally { globalThis.fetch = originalFetch; await agent?.close(); await rm(dataDir, { recursive: true, force: true }); }
+});
+
+test('问答只读取模型目录缓存，后台刷新失败时保留上一次目录', async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'reliquary-pi-catalog-'));
+  const originalFetch = globalThis.fetch;
+  const provider = 'openai-codex';
+  const model = 'synthetic-catalog-model';
+  const config = loadConfig({ MODEL_SOURCE: 'chatgpt', MODEL_NAME: model,
+    RELIQUARY_API_URL: 'http://localhost', RELIQUARY_API_KEY: 'synthetic-api-key',
+    RELIQUARY_LIBRARY_IDS: 'library', AGENT_DATA_DIR: dataDir });
+  const queries = { instructions: '根据工具回答', definitions: [], redact: (text: string) => text, protectSecrets: () => {} };
+  const signal = new AbortController().signal;
+  let available = false;
+  let catalogRequests = 0;
+  try {
+    await writeFile(config.authFile, JSON.stringify({ [provider]: {
+      type: 'oauth', access: 'synthetic-access', refresh: 'synthetic-refresh', expires: Date.now() + 3600000,
+    } }), { mode: 0o600 });
+    globalThis.fetch = async input => {
+      catalogRequests++;
+      const url = new URL(input instanceof Request ? input.url : input);
+      assert.equal(url.origin + url.pathname, 'https://pi.dev/api/models/providers/openai-codex');
+      if (!available) return new Response(null, { status: 404 });
+      return Response.json({ models: [{ id: model, name: model, provider, api: 'openai-codex-responses',
+        baseUrl: config.modelURL, input: ['text'], reasoning: true, contextWindow: 128000, maxTokens: 8192,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] },
+      { headers: { 'last-modified': new Date(Date.now() + 60_000).toUTCString() } });
+    };
+    const verifyLocalModel = async (name: string) => {
+      const before = catalogRequests;
+      const agent = await QueryAgent.open({ ...config, model: name }, queries as never);
+      try {
+        assert.equal(agent.session.model?.id, name);
+        assert.equal(catalogRequests, before);
+      } finally { await agent.close(); }
+    };
+
+    await assert.rejects(refreshModelCatalog(config, signal), { code: 'model_catalog_refresh_failed' });
+    await verifyLocalModel('gpt-6.1-sol');
+    available = true;
+    await refreshModelCatalog(config, signal);
+    await verifyLocalModel(model);
+    available = false;
+    await assert.rejects(refreshModelCatalog(config, signal), { code: 'model_catalog_refresh_failed' });
+    await verifyLocalModel(model);
+    assert.equal(catalogRequests, 3);
+  } finally { globalThis.fetch = originalFetch; await rm(dataDir, { recursive: true, force: true }); }
 });
 
 // Synthetic HTTP model and MCP server verify the real SDK/transport lifecycle.

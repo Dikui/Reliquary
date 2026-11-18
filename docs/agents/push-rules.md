@@ -58,3 +58,12 @@ scripts/agent-local.py MODEL_API_[K]EY=getpass\.getpass\('模型 API Key：'\)|F
 scripts/test-agent-local.py 'to[k]en': '(local-fixture-key|fixture-key)'|self\.assertIn\("MODEL_API_[K]EY='synthetic-
 scripts/test-reliquary-admin.py "FEISHU_APP_[S]ECRET": "synthetic-feishu-app-value"
 ```
+
+以下规则仅匹配已核实的飞书测试桩、合成配置和随机确认口令生成代码。
+
+```safe-push-allow
+agents/feishu/feishu.test.ts ^[[:space:]]*const access[T]oken = [t]okenManager\.getTenantAccess[T]oken;$
+agents/feishu/feishu.test.ts ^[[:space:]]*finally \{ http\.defaults\.adapter = adapter; [t]okenManager\.getTenantAccess[T]oken = access[T]oken; \}$
+agents/feishu/shelf.test.ts ^[[:space:]]*const excel = attachmentTool\(\{ libraries: \['library'\], apiURL: 'http://fixture', [a]piKey: 'synthetic-key', timeoutMs: 1000 \} as any,$
+agents/feishu/shelf.ts ^[[:space:]]*[t]oken: randomBytes\(6\)\.toString\('hex'\)\.toUpperCase\(\), expires: Date\.now\(\) \+ 10 \* 60 \* 1000, fingerprint: '',$
+```
