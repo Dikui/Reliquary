@@ -184,7 +184,7 @@ func shelfOperationSchema() map[string]any {
 		"parameter_values": map[string]any{"type": "object", "description": "字段键到参数值数组，空数组移除该参数", "additionalProperties": map[string]any{"type": "array", "items": object(map[string]any{
 			"value": map[string]any{"description": "按配置字段类型提供值，数值也可为闭区间 {min,max}"}, "conditions": shelfConditionsSchema(),
 		}, "value")}},
-		"certification":   shelfPayloadSchema("认证完整字段：name、owner_id、standard、certification_object、cell_part_id、region、year、agency、progress、start_date、obtained_date、issued_date、validity、number、cloud_url、conditions；新增须给 name，region 为配置区域键或空（不分地区），日期为 YYYY-MM-DD；不猜所属节点"),
+		"certification":   shelfPayloadSchema("认证完整字段：name、owner_id、standard、certification_object、cell_part_id、region、year、agency、progress、start_date、planned_date（计划取证日期）、obtained_date（实际取证日期，未取证留空）、issued_date、validity、number、cloud_url、conditions；新增须给 name，region 为配置区域键或空（不分地区），日期为 YYYY-MM-DD；不猜所属节点"),
 		"document":        shelfPayloadSchema("资料版本：name、owner_id 或 unassigned=true、requirement_ids（多项资料要求 ID，兼容旧 requirement_id）、certificate_number、attachment_id 或 cloud_url、entry_id、version_label、stage(draft/final)、file_category、origin、occurred_at、conditions；归属须明确指定"),
 		"classification":  shelfPayloadSchema("classify_document 的完整归类：owner_id、requirement_ids、certificate_number、conditions；作用于同一文件全部版本"),
 		"version_id":      text("select_document_version 选择的本文件已有版本 ID"),

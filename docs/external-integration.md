@@ -19,6 +19,23 @@ Grok Bot、外部 Agent 与采集程序负责取得原文、将 PDF 或其他格
 
 ## 连接与认证
 
+### 推荐：本地 Pi
+
+本地 Pi 是推荐的 Agent 入口，安装资料库本体后默认引导配置，也可跳过，稍后运行：
+
+```sh
+python3 "$HOME/Reliquary/scripts/agent-local.py" pi-configure
+"$HOME/Reliquary/scripts/pi"
+```
+
+Pi 在 Docker 中运行，宿主机无需安装 Node；一个工作文件夹只读挂载到 `/workspace`，默认使用运行根目录的 `workspace/`。内置工具只有 read，MCP 只连接 Reliquary，另提供 `reliquary_upload_workbook` 和 `reliquary_stage_attachment`。工作簿上传使用已确认的 `plan_key` 生成待确认导入变更集；没有方案时传 `new_plan_key` 与 `file_kind` 请求待审核方案建议。原件暂存只返回附件 ID，再由 MCP 的 `shelf_submit` 提议资料版本归类。上传本身不确认货架变更，表格不得自行拆分成逐行写入。
+
+启用前须向客户说明并取得同意：每轮完整上下文（问题、工具读到的资料片段、工作文件夹中读到的内容、历史回复）会发送给所选模型服务商，ChatGPT 订阅经 Reliquary 后端转发给 OpenAI；资料库正文、文件和数据库不会整体同步出去。安装与只读验收见 [Agent 辅助安装指南](agent-installation.md)，启动、继续会话与更新见[本地部署](local-deployment.md#本地-pi-运行与更新)，决策与限制见 [ADR 0029](adr/0029-recommend-local-pi.md)。
+
+### 通用客户端与 HTTP
+
+Claude Code、Codex 和其他客户端仍可普通连接或用于只读查询。API Key 没有只读权限范围，客户端的工具限制由各客户端管理，Reliquary 无法约束其命令和文件工具。
+
 打开网页，在设置的 API 集成为每个工具创建独立 API Key，记录后端地址。后端只监听本机，工具须运行在同一台电脑上。HTTP 使用 `Authorization: Bearer <KEY>` 与 `Content-Type: application/json`。以下示例的 BASE 是后端地址，不含 `/api/v1`。
 
 ```sh

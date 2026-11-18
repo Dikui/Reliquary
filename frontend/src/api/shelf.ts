@@ -10,7 +10,7 @@ export interface ShelfCertification {
   standard_name: string
   region_name?: string
   origin: 'self' | 'component' | 'ancestor'
-  certification: { owner_id: string; standard: string; year?: number; certification_object: string; cell_part_id?: string; region: string; agency?: string; progress?: string; start_date?: string; obtained_date?: string; issued_date?: string; validity?: string; number?: string; cloud_url?: string; conditions: ShelfCondition[] | null }
+  certification: { owner_id: string; standard: string; year?: number; certification_object: string; cell_part_id?: string; region: string; agency?: string; progress?: string; start_date?: string; planned_date?: string; obtained_date?: string; issued_date?: string; validity?: string; number?: string; cloud_url?: string; conditions: ShelfCondition[] | null }
 }
 export interface ShelfDocumentVersion {
   id: string; file_id: string; owner_id?: string; is_current?: boolean; parser_key?: string; certificate_number?: string; origin?: string; created_at?: string; requirement_id?: string; requirement_ids?: string[]; attachment_id?: string; cloud_url?: string; entry_id?: string

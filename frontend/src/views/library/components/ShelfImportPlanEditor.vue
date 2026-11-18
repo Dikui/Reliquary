@@ -11,7 +11,7 @@ const model = defineModel<ShelfImportPlanInput>({ required: true })
 const props = defineProps<{ library: LibraryCatalogItem; lines: Entity[]; platforms?: Entity[]; disabled?: boolean; submitted?: boolean }>()
 const emit = defineEmits<{ validity: [valid: boolean] }>()
 const { t } = useI18n()
-const commonFields = ['name', 'owner', 'standard', 'year', 'certification_object', 'cell_part', 'region', 'agency', 'progress', 'start_date', 'obtained_date', 'issued_date', 'validity', 'number', 'cloud_url', 'sample_description']
+const commonFields = ['name', 'owner', 'standard', 'year', 'certification_object', 'cell_part', 'region', 'agency', 'progress', 'start_date', 'planned_date', 'obtained_date', 'issued_date', 'validity', 'number', 'cloud_url', 'sample_description']
 const fields = computed(() => ({
   product_map: ['platform', 'product', 'model', 'description', 'sale_status', 'parameter'],
   certification_progress: commonFields,

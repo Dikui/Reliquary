@@ -13,7 +13,7 @@ const props = defineProps<{ library: LibraryCatalogItem; nodeId: string }>()
 const { t } = useI18n()
 const node = ref<ShelfNode>(), models = ref<ShelfQueryItem[]>([]), ancestors = ref<Entity[]>([])
 const paths = ref<Record<string, Entity[]>>({}), identities = ref<Entity[]>([])
-const loading = ref(false), error = ref(''), saving = ref(false), saveError = ref(''), stageDraft = ref('')
+const loading = ref(false), modelsLoading = ref(false), error = ref(''), saving = ref(false), saveError = ref(''), stageDraft = ref('')
 let generation = 0
 const isPart = computed(() => node.value?.entity.kind === 'part')
 const sections = computed(() => isPart.value ? ['certifications', 'node-files'] : ['summary', 'node-files', 'certifications'])
@@ -63,7 +63,14 @@ async function load() {
       }
       return items
     }
-    const nextModels: ShelfQueryItem[] = []
+    // Show the node as soon as its own detail and path are known; models fill in
+    // page by page, since a large line can take many seconds to evaluate.
+    const nextAncestors = await path(result)
+    if (current !== generation) return
+    node.value = result; ancestors.value = nextAncestors; identities.value = [result.entity, ...nextAncestors]
+    stageDraft.value = String(result.entity.attributes?.current_stage || '')
+    loading.value = false; modelsLoading.value = !!result.recorded
+    const nextModels: ShelfQueryItem[] = [], nextPaths: Record<string, Entity[]> = {}
     if (result.recorded) {
       let total = 0
       do {
@@ -71,13 +78,15 @@ async function load() {
         if (current !== generation) return
         total = page.total
         if (!page.items.length && nextModels.length < total) throw new Error(t('shelfStatus.incomplete'))
+        if (result.entity.kind === 'part') {
+          for (const model of page.items) { nextPaths[model.entity.id] = await path(model); if (current !== generation) return }
+          paths.value = { ...nextPaths }
+        }
         nextModels.push(...page.items)
+        models.value = [...nextModels]
       } while (nextModels.length < total)
     }
-    const nextAncestors = await path(result), nextPaths: Record<string, Entity[]> = {}
-    if (result.entity.kind === 'part') {
-      for (const model of nextModels) { nextPaths[model.entity.id] = await path(model); if (current !== generation) return }
-    }
+    modelsLoading.value = false
     const parts = nextModels.flatMap(model => model.shelf?.composition?.flatMap(group => group.parts) || [])
     const known = new Map([result.entity, ...nextAncestors, ...Object.values(nextPaths).flat(), ...parts].map(entity => [entity.id, entity]))
     const conditions = [...(result.shelf?.certifications?.flatMap(row => [...(row.certification.conditions || []), ...(row.certification.cell_part_id ? [{ module_type: '', part_ids: [row.certification.cell_part_id] }] : [])]) || []), ...(result.shelf?.documents?.flatMap(row => row.document.conditions || []) || [])]
@@ -85,12 +94,9 @@ async function load() {
       if (!known.has(partID)) known.set(partID, (await read(partID)).entity)
       if (current !== generation) return
     }
-    if (current === generation) {
-      node.value = result; models.value = nextModels; ancestors.value = nextAncestors; paths.value = nextPaths; identities.value = [...known.values()]
-      stageDraft.value = String(result.entity.attributes?.current_stage || '')
-    }
+    identities.value = [...known.values()]
   } catch (cause) { if (current === generation) error.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
-  finally { if (current === generation) loading.value = false }
+  finally { if (current === generation) { loading.value = false; modelsLoading.value = false } }
 }
 async function changeStage(event: Event) {
   if (!node.value || saving.value) return
@@ -134,13 +140,14 @@ onBeforeUnmount(() => { generation++ })
             <div v-for="field in fields" :key="field.key"><dt>{{ field.name }}</dt><dd>{{ valueText(node.entity.attributes?.[field.key]) }} {{ node.entity.attributes?.[field.key] != null && node.entity.attributes?.[field.key] !== '' && field.unit ? field.unit : '' }}</dd></div>
           </template>
           <div v-if="node.entity.kind === 'product'"><dt><label for="node-stage">{{ t('shelfModel.currentStage') }}</label></dt><dd><select id="node-stage" :value="stageDraft" :disabled="saving" @change="changeStage"><option value="">{{ t('shelfNode.noStage') }}</option><option v-for="item in library.shelf_config?.stages" :key="item.key" :value="item.key">{{ item.name }}</option></select></dd></div>
-          <div><dt>{{ isPart ? t('shelfNode.usedBy') : t('shelfNode.models') }}</dt><dd>{{ t('shelfStatus.total', { count: models.length }) }}</dd></div>
-          <div v-if="!isPart"><dt>{{ t('shelfNode.gaps') }}</dt><dd>{{ t('shelfNode.gapCount', { count: gapCount, models: node.shelf?.checklist_summary?.models_with_gaps || 0 }) }}</dd></div>
+          <div><dt>{{ isPart ? t('shelfNode.usedBy') : t('shelfNode.models') }}</dt><dd>{{ modelsLoading ? t('common.loading') : t('shelfStatus.total', { count: models.length }) }}</dd></div>
+          <div v-if="!isPart"><dt>{{ t('shelfNode.gaps') }}</dt><dd>{{ modelsLoading ? t('common.loading') : t('shelfNode.gapCount', { count: gapCount, models: node.shelf?.checklist_summary?.models_with_gaps || 0 }) }}</dd></div>
           <div><dt>{{ t('shelfModel.sections.cert') }}</dt><dd>{{ t('shelfModel.certCount', { count: node.shelf?.certifications?.length || 0 }) }}</dd></div>
         </dl>
         <p v-if="saveError" role="alert">{{ saveError }}</p>
         <section id="models">
           <h2>{{ isPart ? t('shelfNode.usedBy') : t('shelfNode.models') }}</h2>
+          <p v-if="modelsLoading" role="status">{{ t('shelfNode.modelsLoading', { count: models.length }) }}</p>
           <div v-if="models.length" class="table-wrap"><table>
             <thead><tr><th>{{ t('productShelf.kinds.model') }}</th><th>{{ isPart ? t('productShelf.kinds.product_line') : t('shelfModel.sections.sale') }}</th><th>{{ isPart ? t('shelfModel.sections.composition') : t('shelfModel.currentStage') }}</th></tr></thead>
             <tbody><tr v-for="model in models" :key="model.entity.id">
@@ -154,15 +161,16 @@ onBeforeUnmount(() => { generation++ })
                 <td>{{ stage(model.shelf?.current_stage) }}<small v-if="model.shelf?.stage_owner_id">{{ model.shelf.stage_owner_id === model.entity.id ? t('shelfNode.overridden') : t('shelfModel.inheritedStage') }}</small></td>
               </template>
             </tr></tbody>
-          </table></div><p v-else>{{ t('productShelf.noRecords') }}</p>
+          </table></div><p v-else-if="!modelsLoading">{{ t('productShelf.noRecords') }}</p>
         </section>
         <template v-for="section in sections" :key="section">
         <section v-if="section === 'summary'" id="checklist-summary">
           <h2>{{ t('shelfNode.summary') }}</h2>
+          <p v-if="modelsLoading" role="status">{{ t('common.loading') }}</p>
           <div v-if="requirements.length" class="table-wrap matrix"><table>
             <thead><tr><th>{{ t('shelfModel.material') }}</th><th v-for="model in models" :key="model.entity.id"><a :href="href(model.entity.id)">{{ model.entity.canonical_name }}</a></th></tr></thead>
             <tbody><tr v-for="requirement in requirements" :key="requirement.id"><th scope="row">{{ requirementLabel(requirement) }}</th><td v-for="model in models" :key="model.entity.id"><a v-for="(row, index) in rowsFor(model, requirement.id)" :key="index" :href="`${href(model.entity.id)}#requirement-${encodeURIComponent(requirement.id)}`"><span class="doc" :class="row.status">{{ t(`shelfModel.status.${row.status}`) }}</span><small>{{ condition(row.conditions) }}</small><small v-if="row.ambiguous">{{ t('shelfModel.ambiguous') }}</small></a><span v-if="!rowsFor(model, requirement.id).length">{{ t('shelfNode.notApplicable') }}</span></td></tr></tbody>
-          </table></div><p v-else>{{ t('productShelf.noRecords') }}</p>
+          </table></div><p v-else-if="!modelsLoading">{{ t('productShelf.noRecords') }}</p>
         </section>
         <section v-if="section === 'node-files'" id="node-files">
           <h2>{{ t('shelfNode.files') }}</h2>

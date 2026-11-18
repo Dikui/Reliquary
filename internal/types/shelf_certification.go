@@ -15,21 +15,24 @@ type ShelfStandard struct {
 
 // Standard and nonempty Region use library-configured keys.
 type ShelfCertification struct {
-	OwnerID             string           `json:"owner_id"`
-	Standard            string           `json:"standard"`
-	Year                int              `json:"year,omitempty"`
-	CertificationObject string           `json:"certification_object"`
-	CellPartID          string           `json:"cell_part_id,omitempty"`
-	Region              string           `json:"region"`
-	Agency              string           `json:"agency,omitempty"`
-	Progress            string           `json:"progress,omitempty"`
-	StartDate           string           `json:"start_date,omitempty"`
-	ObtainedDate        string           `json:"obtained_date,omitempty"`
-	IssuedDate          string           `json:"issued_date,omitempty"`
-	Validity            string           `json:"validity,omitempty"`
-	Number              string           `json:"number,omitempty"`
-	CloudURL            string           `json:"cloud_url,omitempty"`
-	Conditions          []ShelfCondition `json:"conditions"`
+	OwnerID             string `json:"owner_id"`
+	Standard            string `json:"standard"`
+	Year                int    `json:"year,omitempty"`
+	CertificationObject string `json:"certification_object"`
+	CellPartID          string `json:"cell_part_id,omitempty"`
+	Region              string `json:"region"`
+	Agency              string `json:"agency,omitempty"`
+	Progress            string `json:"progress,omitempty"`
+	StartDate           string `json:"start_date,omitempty"`
+	// PlannedDate is the expected certification date; ObtainedDate is set
+	// only once the certificate has actually been obtained.
+	PlannedDate  string           `json:"planned_date,omitempty"`
+	ObtainedDate string           `json:"obtained_date,omitempty"`
+	IssuedDate   string           `json:"issued_date,omitempty"`
+	Validity     string           `json:"validity,omitempty"`
+	Number       string           `json:"number,omitempty"`
+	CloudURL     string           `json:"cloud_url,omitempty"`
+	Conditions   []ShelfCondition `json:"conditions"`
 }
 
 type ShelfCertificationInput struct {
@@ -64,7 +67,7 @@ func ValidateShelfCertification(value any) error {
 			return fmt.Errorf("certification text is too long")
 		}
 	}
-	for _, date := range []string{record.StartDate, record.ObtainedDate, record.IssuedDate} {
+	for _, date := range []string{record.StartDate, record.PlannedDate, record.ObtainedDate, record.IssuedDate} {
 		if date != "" {
 			if _, err := time.Parse("2006-01-02", date); err != nil {
 				return fmt.Errorf("certification dates must use YYYY-MM-DD")

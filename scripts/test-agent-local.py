@@ -1,5 +1,6 @@
 """Customer installation preserves private configuration and starts the selected model."""
 import importlib.util
+import io
 from pathlib import Path
 import tempfile
 import unittest
@@ -113,6 +114,325 @@ class AgentInstallationTests(unittest.TestCase):
             with mock.patch.object(agent.subprocess, 'run') as run:
                 agent.install_agent(root)
             run.assert_not_called()
+
+
+def pi_runtime(temporary):
+    """A runtime directory whose recorded source checkout carries the Pi entry and the skill package."""
+    # Resolved like the installer resolves paths (macOS temporary directories sit behind /private).
+    root, source = Path(temporary).resolve() / 'runtime', Path(temporary).resolve() / 'source'
+    (source / 'agents/pi').mkdir(parents=True)
+    (source / 'agents/pi/Dockerfile').write_text('FROM scratch\n')
+    (source / 'VERSION').write_text('0.17.0\n')
+    (source / 'skills/reliquary/workflows').mkdir(parents=True)
+    (source / 'skills/reliquary/SKILL.md').write_text('---\nname: reliquary\n---\n')
+    (source / 'skills/reliquary/workflows/shelf-import.md').write_text('# 导入\n')
+    (source / 'skills/reliquary/embed.go').write_text('package skills\n')
+    agent.write_env(root / 'deploy/.env', {'COMPOSE_PROJECT_NAME': 'customer', 'APP_PORT': '18080'})
+    (root / 'deploy/docker-compose.yml').write_text('{"networks":{"Reliquary-network":{"name":"custom-net"}}}')
+    (root / 'deploy/customer-install.json').write_text('{"status":"base_ready","source":"%s"}' % source)
+    return root
+
+
+def pi_events(answer, called=True):
+    events = [{'type': 'session', 'version': 3, 'id': 'check'}]
+    if called:
+        events += [{'type': 'tool_execution_start', 'toolCallId': 'c1', 'toolName': 'mcp__reliquary__list_libraries', 'args': {}},
+                   {'type': 'tool_execution_end', 'toolCallId': 'c1', 'toolName': 'mcp__reliquary__list_libraries',
+                    'result': {'content': [{'type': 'text', 'text': '[]'}]}, 'isError': False}]
+    events.append({'type': 'agent_end', 'willRetry': False, 'messages': [
+        {'role': 'assistant', 'content': [{'type': 'text', 'text': answer}]}]})
+    return ''.join(agent.json.dumps(event, ensure_ascii=False) + '\n' for event in events)
+
+
+class LocalPiTests(unittest.TestCase):
+    """Tickets 01/02: Pi keeps local files read-only; the API, Docker build and container check are faked."""
+
+    def configure(self, root, answers, responses, check, secrets=()):
+        """Run pi-configure with scripted input, API replies and the container check result."""
+        answers, runs = iter(answers), []
+
+        def run(command, **_):
+            runs.append(command)
+            if command[:2] == ['docker', 'build']:
+                return agent.subprocess.CompletedProcess(command, 0)
+            return agent.subprocess.CompletedProcess(command, *check)
+
+        with mock.patch('builtins.input', side_effect=lambda _: next(answers)), \
+             mock.patch.object(agent.getpass, 'getpass', side_effect=list(secrets)), \
+             mock.patch.object(agent, 'api', side_effect=responses) as api, \
+             mock.patch.object(agent.subprocess, 'check_output', return_value='abc123def456'), \
+             mock.patch.object(agent.subprocess, 'run', side_effect=run), \
+             mock.patch('sys.stdout', new_callable=io.StringIO) as output:
+            try:
+                agent.configure_pi(root)
+            finally:
+                self.output = output.getvalue()
+        return api, runs
+
+    def test_customer_api_setup_limits_pi_to_read_mcp_and_reliquary_uploads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            api, runs = self.configure(
+                root, ['1', 'openai-completions', 'https://model.example/v1', 'test-model', '', '', '', ''],
+                [{'token': 'pi-fixture-key'}], (0, pi_events('测试库'), ''), secrets=["synthetic-$model'key"])
+            directory = root / 'agents/pi'
+            agent_dir = directory / 'data/agent'
+            settings = agent.json.loads((agent_dir / 'settings.json').read_text())
+            self.assertEqual(settings['defaultTools'], ['read'])
+            self.assertEqual(sorted(settings['extensions']),
+                             ['-builtin:codemode', '-builtin:llama.cpp', '-builtin:tool-search',
+                              '/app/reliquary-upload.ts'])
+            self.assertEqual(settings['packages'], [])
+            self.assertEqual(settings['defaultProjectTrust'], 'never')
+            mcp = agent.json.loads((agent_dir / 'mcp.json').read_text())
+            self.assertEqual(list(mcp['mcpServers']), ['reliquary'])
+            self.assertEqual(mcp['mcpServers']['reliquary']['url'], 'http://app:8080/mcp')
+            self.assertEqual(mcp['mcpServers']['reliquary']['headers'], {'Authorization': 'Bearer ${RELIQUARY_API_KEY}'})
+            self.assertEqual(mcp['mcpServers']['reliquary']['exposure'], 'direct')
+            models = agent.json.loads((agent_dir / 'models.json').read_text())
+            provider = models['providers'][settings['defaultProvider']]
+            self.assertEqual((provider['baseUrl'], provider['api']), ('https://model.example/v1', 'openai-completions'))
+            self.assertEqual(provider['models'][0]['id'], settings['defaultModel'])
+            self.assertEqual(settings['defaultModel'], 'test-model')
+            auth = agent.json.loads((agent_dir / 'auth.json').read_text())
+            self.assertEqual(auth[settings['defaultProvider']], {'type': 'api_key', 'key': "synthetic-$model'key"})
+            self.assertNotIn('synthetic', (agent_dir / 'models.json').read_text())
+            self.assertIn('RELIQUARY_API_KEY=pi-fixture-key\n', (directory / 'pi.env').read_text())
+            for secret in [agent_dir / 'auth.json', directory / 'pi.env']:
+                self.assertEqual(secret.stat().st_mode & 0o777, 0o600)
+            self.assertTrue((agent_dir / 'skills/reliquary/workflows/shelf-import.md').is_file())
+            self.assertFalse((agent_dir / 'skills/reliquary/embed.go').exists())
+            system = (agent_dir / 'APPEND_SYSTEM.md').read_text()
+            self.assertIn('只读', system)
+            self.assertIn('reliquary_upload_workbook', system)
+            self.assertIn('reliquary_stage_attachment', system)
+            self.assertIn('add_document_version', system)
+            self.assertNotIn('没有上传工作文件夹文件的工具', system)
+            api.assert_called_once_with('http://127.0.0.1:18080', '/space/api-keys', {'name': 'Reliquary Pi'})
+            self.assertTrue((root / 'workspace').is_dir())
+            launcher = root / 'scripts/pi'
+            self.assertTrue(launcher.stat().st_mode & 0o100)
+            script = launcher.read_text()
+            self.assertIn('--network custom-net', script)
+            self.assertIn(f'source={root / "workspace"},target=/workspace,readonly', script)
+            self.assertIn(f'source={directory / "data"},target=/data ', script)
+            self.assertIn(f'--env-file {directory / "pi.env"}', script)
+            self.assertIn('reliquary-pi:0.17.0-abc123def456-', script)
+            self.assertEqual(runs[0][:2], ['docker', 'build'])
+            self.assertEqual(runs[0][-1], str(Path(temporary).resolve() / 'source/agents/pi'))
+            self.assertEqual(runs[1][0], str(launcher))
+            self.assertIn('--no-session', runs[1])
+            self.assertIn('测试库', self.output)
+
+    def test_reconfigure_with_subscription_keeps_key_sessions_and_image(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            self.configure(root, ['1', 'anthropic-messages', 'https://model.example', 'first-model', '', '', '', ''],
+                           [{'token': 'pi-fixture-key'}], (0, pi_events('测试库'), ''), secrets=['synthetic-key'])
+            session = root / 'agents/pi/data/agent/sessions/--workspace--/kept.jsonl'
+            session.parent.mkdir(parents=True)
+            session.write_text('{}\n')
+            launcher = (root / 'scripts/pi').read_text()
+            folder = Path(temporary).resolve() / 'customer-files'
+            api, runs = self.configure(
+                root, ['2', '1', str(folder), ''],
+                [[{'id': 'chat/model', 'name': 'gpt-test', 'source': 'chatgpt', 'status': 'active',
+                   'parameters': {'context_window': 200000}}]], (0, pi_events('测试库'), ''))
+            agent_dir = root / 'agents/pi/data/agent'
+            settings = agent.json.loads((agent_dir / 'settings.json').read_text())
+            self.assertIn('/app/reliquary-upload.ts', settings['extensions'])
+            provider = agent.json.loads((agent_dir / 'models.json').read_text())['providers'][settings['defaultProvider']]
+            self.assertEqual(provider['baseUrl'], 'http://app:8080/api/v1/agent/models/chat%2Fmodel')
+            self.assertEqual(provider['api'], 'openai-responses')
+            self.assertEqual(provider['models'][0]['contextWindow'], 200000)
+            self.assertEqual(settings['defaultModel'], 'gpt-test')
+            auth = agent.json.loads((agent_dir / 'auth.json').read_text())
+            self.assertEqual(auth, {settings['defaultProvider']: {'type': 'api_key', 'key': 'pi-fixture-key'}})
+            self.assertEqual([call.args[1] for call in api.call_args_list], ['/models'])
+            self.assertEqual(session.read_text(), '{}\n')
+            self.assertNotIn(['docker', 'build'], [command[:2] for command in runs])
+            self.assertTrue(folder.is_dir())
+            self.assertIn(f'source={folder},target=/workspace,readonly', (root / 'scripts/pi').read_text())
+            image = [part for part in launcher.split() if part.startswith('reliquary-pi:')]
+            self.assertTrue(image and image[0] in (root / 'scripts/pi').read_text())
+
+    def test_feishu_model_settings_can_be_reused(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            agent.write_env(root / 'agents/feishu/agent.env', {
+                'MODEL_SOURCE': 'api', 'MODEL_API': 'openai-responses', 'MODEL_BASE_URL': 'https://feishu-model.example/v1',
+                'MODEL_NAME': 'shared-model', 'MODEL_API_KEY': 'synthetic-shared', 'MODEL_CONTEXT_WINDOW': '64000',
+                'MODEL_MAX_TOKENS': '4096', 'FEISHU_APP_ID': 'app', 'RELIQUARY_API_KEY': 'feishu-key'})
+            self.configure(root, ['', '', ''], [{'token': 'pi-fixture-key'}], (0, pi_events('测试库'), ''))
+            agent_dir = root / 'agents/pi/data/agent'
+            settings = agent.json.loads((agent_dir / 'settings.json').read_text())
+            provider = agent.json.loads((agent_dir / 'models.json').read_text())['providers'][settings['defaultProvider']]
+            self.assertEqual(provider['baseUrl'], 'https://feishu-model.example/v1')
+            self.assertEqual(provider['models'][0]['maxTokens'], 4096)
+            auth = agent.json.loads((agent_dir / 'auth.json').read_text())
+            self.assertEqual(auth[settings['defaultProvider']]['key'], 'synthetic-shared')
+            self.assertIn('RELIQUARY_API_KEY=pi-fixture-key\n', (root / 'agents/pi/pi.env').read_text())
+
+    def test_developer_codex_model_of_feishu_is_not_offered_for_reuse(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            agent.write_env(root / 'agents/feishu/agent.env', {'MODEL_SOURCE': 'api', 'MODEL_API': 'openai-codex-responses'})
+            self.configure(root, ['1', 'openai-completions', 'https://model.example/v1', 'test-model', '', '', '', ''],
+                           [{'token': 'pi-fixture-key'}], (0, pi_events('测试库'), ''), secrets=['synthetic-key'])
+            models = agent.json.loads((root / 'agents/pi/data/agent/models.json').read_text())
+            self.assertEqual(models['providers'][agent.PI_PROVIDER]['baseUrl'], 'https://model.example/v1')
+
+    def test_failed_check_keeps_configuration_and_reports_reason(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            with self.assertRaisesRegex(ValueError, 'MCP 401 unauthorized'):
+                self.configure(root, ['1', 'openai-completions', 'https://model.example/v1', 'test-model', '', '', '', ''],
+                               [{'token': 'pi-fixture-key'}], (1, '', 'MCP 401 unauthorized\n'), secrets=['synthetic-key'])
+            self.assertTrue((root / 'scripts/pi').exists())
+            self.assertTrue((root / 'agents/pi/data/agent/mcp.json').exists())
+            self.assertIn('配置已保存', self.output)
+
+    def test_failed_model_call_is_reported_although_pi_exits_cleanly(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            failure = {'role': 'assistant', 'content': [], 'stopReason': 'error',
+                       'errorMessage': 'Connection error.: connect ECONNREFUSED'}
+            events = ''.join(agent.json.dumps(event) + '\n' for event in [
+                {'type': 'message_end', 'message': failure},
+                {'type': 'agent_end', 'messages': [failure], 'willRetry': False}])
+            with self.assertRaisesRegex(ValueError, 'ECONNREFUSED'):
+                self.configure(root, ['1', 'openai-completions', 'https://model.example/v1', 'test-model', '', '', '', ''],
+                               [{'token': 'pi-fixture-key'}], (0, events, ''), secrets=['synthetic-key'])
+
+    def test_check_requires_an_actual_list_libraries_call(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            with self.assertRaisesRegex(ValueError, 'list_libraries'):
+                self.configure(root, ['1', 'openai-completions', 'https://model.example/v1', 'test-model', '', '', '', ''],
+                               [{'token': 'pi-fixture-key'}], (0, pi_events('测试库', called=False), ''),
+                               secrets=['synthetic-key'])
+
+
+class LocalPiUpdateTests(unittest.TestCase):
+    """Ticket 03 (small/spec): pi-update refreshes code while preserving customer state.
+
+    Git, Docker builds and the Pi container check are faked; runtime files are real.
+    """
+
+    def runtime(self, temporary):
+        root = pi_runtime(temporary)
+        (root / 'logs').mkdir()
+        directory = root / 'agents/pi'
+        config = {'image': 'reliquary-pi:previous', 'workspace': str(root / 'workspace'),
+                  'network': 'custom-net', 'model': {'MODEL_NAME': 'kept-model'}}
+        agent.write_json(directory / 'config.json', config, private=True)
+        preserved = {
+            'agents/pi/pi.env': b'RELIQUARY_API_KEY=synthetic-reliquary-key\n',
+            'agents/pi/data/agent/auth.json': b'{"provider":{"type":"api_key","key":"synthetic-model-key"}}\n',
+            'agents/pi/data/agent/settings.json': b'{"defaultTools":["read"]}\n',
+            'agents/pi/data/agent/models.json': b'{"providers":{}}\n',
+            'agents/pi/data/agent/mcp.json': b'{"mcpServers":{}}\n',
+            'agents/pi/data/agent/sessions/--workspace--/kept.jsonl': b'{"type":"session","id":"kept"}\n',
+        }
+        for name, content in preserved.items():
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+            path.chmod(0o600)
+        agent_dir = directory / 'data/agent'
+        (agent_dir / 'skills/reliquary/workflows').mkdir(parents=True)
+        (agent_dir / 'skills/reliquary/workflows/obsolete.md').write_text('old workflow\n')
+        (agent_dir / 'APPEND_SYSTEM.md').write_text('old policy\n')
+        (root / 'scripts').mkdir()
+        (root / 'scripts/pi').write_text(agent.pi_launcher(root, config))
+        (root / 'scripts/pi').chmod(0o755)
+        return root, root.parent / 'source', preserved
+
+    def update(self, root, source, run):
+        with mock.patch.object(agent, '__file__', str(source / 'scripts/agent-local.py')), \
+             mock.patch.object(agent.subprocess, 'check_output', return_value='abc123def456'), \
+             mock.patch.object(agent.subprocess, 'run', side_effect=run) as commands, \
+             mock.patch('sys.argv', ['agent-local.py', 'pi-update', '--root', str(root)]), \
+             mock.patch('sys.stdout', new_callable=io.StringIO) as output, \
+             mock.patch('sys.stderr', new_callable=io.StringIO) as errors:
+            try:
+                agent.main()
+            finally:
+                self.output = output.getvalue()
+                self.errors = errors.getvalue()
+                self.commands = commands
+
+    def test_update_refreshes_image_and_guidance_but_preserves_sessions_and_credentials(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, preserved = self.runtime(temporary)
+            current = root.parent / 'current-source'
+            agent.shutil.copytree(source, current)
+            (current / 'VERSION').write_text('0.18.0\n')
+            (current / 'skills/reliquary/workflows/shelf-import.md').write_text('# 新导入流程\n')
+
+            def run(command, **_):
+                return agent.subprocess.CompletedProcess(command, 0, pi_events('测试库'), '')
+
+            self.update(root, current, run)
+            config = agent.json.loads((root / 'agents/pi/config.json').read_text())
+            self.assertTrue(config['image'].startswith('reliquary-pi:0.18.0-abc123def456-'))
+            self.assertEqual(config['model'], {'MODEL_NAME': 'kept-model'})
+            self.assertIn(config['image'], (root / 'scripts/pi').read_text())
+            self.assertNotIn('reliquary-pi:previous', (root / 'scripts/pi').read_text())
+            self.assertTrue((root / 'scripts/pi').stat().st_mode & 0o100)
+            guidance = root / 'agents/pi/data/agent'
+            self.assertEqual((guidance / 'skills/reliquary/workflows/shelf-import.md').read_text(), '# 新导入流程\n')
+            self.assertFalse((guidance / 'skills/reliquary/workflows/obsolete.md').exists())
+            self.assertFalse((guidance / 'skills/reliquary/embed.go').exists())
+            self.assertIn('只读', (guidance / 'APPEND_SYSTEM.md').read_text())
+            for name, content in preserved.items():
+                self.assertEqual((root / name).read_bytes(), content)
+                self.assertEqual((root / name).stat().st_mode & 0o777, 0o600)
+            build, check = [call.args[0] for call in self.commands.call_args_list]
+            self.assertEqual(build[:2], ['docker', 'build'])
+            self.assertEqual(build[-1], str(current / 'agents/pi'))
+            self.assertEqual(check[0], str(root / 'scripts/pi'))
+            self.assertIn('--no-session', check)
+
+    def test_failed_update_returns_nonzero_and_restores_previous_image(self):
+        for stage in ('build', 'check', 'tool'):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as temporary:
+                root, source, preserved = self.runtime(temporary)
+                config = root / 'agents/pi/config.json'
+                launcher = root / 'scripts/pi'
+                before_config, before_launcher = config.read_bytes(), launcher.read_bytes()
+
+                def run(command, **_):
+                    if command[:2] == ['docker', 'build']:
+                        if stage == 'build':
+                            raise agent.subprocess.CalledProcessError(1, command)
+                        return agent.subprocess.CompletedProcess(command, 0)
+                    self.assertNotEqual(agent.json.loads(config.read_text())['image'], 'reliquary-pi:previous')
+                    if stage == 'tool':
+                        return agent.subprocess.CompletedProcess(command, 0, pi_events('未调用工具', called=False), '')
+                    return agent.subprocess.CompletedProcess(command, 1, '', '模型服务不可用')
+
+                with self.assertRaises(SystemExit) as error:
+                    self.update(root, source, run)
+                self.assertEqual(error.exception.code, 1)
+                self.assertEqual(config.read_bytes(), before_config)
+                self.assertEqual(launcher.read_bytes(), before_launcher)
+                self.assertTrue(launcher.stat().st_mode & 0o100)
+                for name, content in preserved.items():
+                    self.assertEqual((root / name).read_bytes(), content)
+
+    def test_unconfigured_pi_requires_configuration_before_update(self):
+        for partial in (False, True):
+            with self.subTest(partial=partial), tempfile.TemporaryDirectory() as temporary:
+                root = pi_runtime(temporary)
+                (root / 'logs').mkdir()
+                if partial:
+                    agent.write_json(root / 'agents/pi/config.json', {'image': 'reliquary-pi:unfinished'}, private=True)
+                with self.assertRaises(SystemExit) as error:
+                    self.update(root, root.parent / 'source', None)
+                self.assertEqual(error.exception.code, 1)
+                self.assertIn('请先执行 pi-configure', self.errors)
+                self.commands.assert_not_called()
 
 
 if __name__ == '__main__':

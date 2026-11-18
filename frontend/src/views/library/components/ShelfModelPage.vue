@@ -289,7 +289,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
                     <td>{{ cert.certification.progress || t('shelfStatus.noRecord') }}</td>
                     <td>{{ cert.certification.agency || t('shelfStatus.noRecord') }}</td>
                     <td>
-                      <small v-for="key in (['start_date', 'obtained_date', 'issued_date'] as const)" :key="key">
+                      <small v-for="key in (['start_date', 'planned_date', 'obtained_date', 'issued_date'] as const)" :key="key">
                         <template v-if="cert.certification[key]">{{ t(`shelfModel.${key}`) }} {{ cert.certification[key] }}</template>
                       </small>
                     </td>

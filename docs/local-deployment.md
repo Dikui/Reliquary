@@ -6,9 +6,14 @@
 ~/Project/Reliquary/ Git 源码，仅更新、构建和登记发布源码时需要
 ~/Reliquary/
 ├── deploy/          .env、运行用 Compose、config/、维护工具
-├── scripts/         登录后启动脚本、agent-local.py
-├── agents/feishu/   compose.yaml、agent.env、enabled
-│   └── data/        Agent SQLite、Pi sessions/ 和本地运行状态
+├── scripts/         登录后启动脚本、agent-local.py、pi（Pi 配置时生成）
+├── agents/
+│   ├── pi/          config.json、pi.env（本地 Pi 配置时生成）
+│   │   └── data/agent/  settings.json、mcp.json、models.json、auth.json、
+│   │                    APPEND_SYSTEM.md、skills/reliquary/、sessions/
+│   └── feishu/      compose.yaml、agent.env、enabled（飞书配置时生成）
+│       └── data/    飞书 SQLite、Pi sessions/ 和本地运行状态
+├── workspace/       本地 Pi 默认工作文件夹，只读挂载到 /workspace
 ├── data/
 │   ├── vault/       Markdown 文件库
 │   └── files/       上传资源
@@ -26,7 +31,7 @@
 RELIQUARY_DEPLOY_DIR="$HOME/Reliquary/deploy"
 ```
 
-Docker 管理镜像、容器日志和 PostgreSQL、Neo4j 数据卷。Ollama 模型可供多个项目共用，继续由 Ollama 管理。macOS 的 LaunchAgent 文件仍安装在 `~/Library/LaunchAgents/`，引用本目录的脚本。启动无需保留打开的终端或 Codex 对话。
+Docker 管理镜像、容器日志和 PostgreSQL、Neo4j 数据卷。Ollama 模型可供多个项目共用，继续由 Ollama 管理。macOS 的 LaunchAgent 文件仍安装在 `~/Library/LaunchAgents/`，引用本目录的脚本。基础服务启动后无需保留打开的终端或 Codex 对话，本地 Pi 按需在终端启动。
 
 ## 客户全新安装
 
@@ -36,7 +41,6 @@ Docker 管理镜像、容器日志和 PostgreSQL、Neo4j 数据卷。Ollama 模�
 git clone https://github.com/Dikui/Reliquary.git
 cd Reliquary
 python3 scripts/install-local.py --install --root "$HOME/Reliquary"
-python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 ```
 
 安装依次执行以下操作。
@@ -45,6 +49,29 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 2. 构建 Go 后端和 Vue 网页。Docker 下载 Go、Node 和数据库基础镜像，宿主机无需安装 Go 或 Node。
 3. 启动 PostgreSQL、Redis、Neo4j、后端和网页，等待健康检查。数据库迁移只作用于本次安装的独立数据库。
 4. 打开本机网页，客户创建资料库。资料库本体到此安装完成。
+5. 显示本地 Pi 的数据外流说明，询问是否配置，默认选择是；可跳过。非交互运行或跳过时打印 `pi-configure` 命令。Pi 配置失败不影响已完成的本体安装。
+
+### 推荐：配置本地 Pi
+
+启用前向客户说明并取得同意：每轮完整上下文（问题、工具读到的资料片段、工作文件夹中读到的内容、历史回复）发送给所选模型服务商；ChatGPT 订阅经 Reliquary 后端转发给 OpenAI。资料库正文、文件和数据库不会整体同步出去。决策与已知限制见 [ADR 0029](adr/0029-recommend-local-pi.md)。
+
+安装时跳过后可单独运行；更换模型、工作文件夹或代理也使用同一命令：
+
+```sh
+python3 "$HOME/Reliquary/scripts/agent-local.py" pi-configure
+```
+
+首次配置从安装时登记的源码构建 Pi 镜像，宿主机无需安装 Node。若登记的源码已移动，从含 Pi 实现的源码仓库执行 `python3 scripts/agent-local.py pi-configure --root "$HOME/Reliquary"`。按提示选择客户 API 或已授权的 ChatGPT 模型、一个工作文件夹和容器可达的模型代理；已有飞书模型配置时可选择复用。
+
+默认工作文件夹为 `~/Reliquary/workspace`，以只读方式挂载到容器的 `/workspace`；Pi 自身状态另挂载到 `/data`。配置写入 `agents/pi/config.json`、`pi.env` 和 `data/agent/` 下的工具、MCP、模型、凭据、规则及技能文件，并生成启动器 `scripts/pi`。内置工具只有 read，MCP 只连接 Reliquary，另有工作簿上传和原件暂存工具。表格必须按导入方案上传、审核确认，不自行拆成逐行写入。
+
+向导会调用模型，要求实际成功调用 `list_libraries`，消耗少量额度。成功时显示“本地 Pi 已读到资料库”和回答；空库可通过。完整安装与只读会话验收见 [Agent 辅助安装指南](agent-installation.md#5-配置并验证本地-pi)。
+
+### 可选：飞书入口
+
+```sh
+python3 "$HOME/Reliquary/scripts/agent-local.py" configure
+```
 
 需要飞书对话入口时再运行 `configure`（见 [ADR 0028](adr/0028-optional-feishu-entry.md)）：
 
@@ -58,7 +85,7 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" configure
 
 飞书需创建企业自建应用，启用机器人、长连接和 `im.message.receive_v1`，开通并发布所需权限，再加入指定群。`configure` 显示权限清单，并要求输入 App ID、App Secret、Tenant Key 和 Chat ID。使用本人现有租户即可。具体权限和群内操作见 [Agent 指南](../agents/feishu/README.md)。
 
-默认占用本机 80、8080 和 6379 端口。网页和后端可用 `--frontend-port`、`--app-port` 修改。需要并行安装时，给 `--project-name` 指定新名字，并通过 `--env-file` 提供不同的 `REDIS_PORT`。命令因下载或构建失败中断时，修正原因后重跑同一安装命令。基础服务已经就绪时，重跑只提示可选的 `configure`。
+默认占用本机 80、8080 和 6379 端口。网页和后端可用 `--frontend-port`、`--app-port` 修改。需要并行安装时，给 `--project-name` 指定新名字，并通过 `--env-file` 提供不同的 `REDIS_PORT`。命令因下载或构建失败中断时，修正原因后重跑同一安装命令。基础服务已经就绪时，重跑仍会引导配置本地 Pi，并提示可选的飞书 `configure`。
 
 ### 构建代理
 
@@ -70,11 +97,25 @@ RELIQUARY_BUILD_PROXY=http://host.docker.internal:7897
 RELIQUARY_BUILD_NO_PROXY=localhost,127.0.0.1
 ```
 
-安装、按改动范围更新、`reliquary-admin upgrade` 和飞书 Agent 构建都会读取这两项。首次安装时 `deploy/.env` 尚未生成，可在命令前临时设置同名环境变量。进程环境变量优先于 `deploy/.env`。代理通过 Docker 预置的 `HTTP(S)_PROXY`/`NO_PROXY` 构建参数传入，只在构建阶段生效，不写入镜像历史，也不影响构建缓存。app 容器通过 `env_file` 载入整个 `deploy/.env`，因此能看到 `RELIQUARY_BUILD_PROXY` 这个变量本身；后端不读取它，运行时网络只受 `HTTP(S)_PROXY` 影响，不会因此改走代理。留空时不传任何代理参数。
+安装、按改动范围更新、`reliquary-admin upgrade` 和本地 Pi、飞书 Agent 构建都会读取这两项。首次安装时 `deploy/.env` 尚未生成，可在命令前临时设置同名环境变量。进程环境变量优先于 `deploy/.env`。代理通过 Docker 预置的 `HTTP(S)_PROXY`/`NO_PROXY` 构建参数传入，只在构建阶段生效，不写入镜像历史，也不影响构建缓存。app 容器通过 `env_file` 载入整个 `deploy/.env`，因此能看到 `RELIQUARY_BUILD_PROXY` 这个变量本身；后端不读取它，运行时网络只受 `HTTP(S)_PROXY` 影响，不会因此改走代理。留空时不传任何代理参数。
 
 脚本不读取宿主机自身的 `HTTP_PROXY`：宿主机能用的地址，容器未必能连通。`host.docker.internal` 在 macOS 的 OrbStack、Docker Desktop 上指向宿主机。Linux 原生 Docker 需填写桥接网络可达的地址，并让代理软件监听该地址。
 
-### 运行与更新
+### 本地 Pi 运行与更新
+
+```sh
+"$HOME/Reliquary/scripts/pi"
+"$HOME/Reliquary/scripts/pi" -c  # 继续上次会话
+python3 "$HOME/Project/Reliquary/scripts/agent-local.py" pi-update --root "$HOME/Reliquary"
+```
+
+`scripts/pi` 每次在 Docker 中启动终端会话，退出后容器删除，配置与会话保留在 `agents/pi/data/agent/`。把待处理文件放到选定的工作文件夹，在对话中使用 `/workspace` 下的路径。
+
+`pi-update` 必须从要发布的源码仓库执行，重建 Pi 镜像，刷新 `APPEND_SYSTEM.md` 与技能包副本，更新启动器，并再次实际检查 `list_libraries` 调用；保留模型凭据、工作文件夹和会话。先退出正在运行的 Pi，再更新并重新启动。检查失败时恢复原镜像配置与启动器；已刷新的规则与技能不会回退，也不撤销此前写入的业务数据。基础服务更新不替代该命令。
+
+`pi.env` 与 `auth.json` 含可用凭据，Pi 的 read 工具仍能读到容器内自己的凭据文件。`reliquary-admin` 暂不备份本地 Pi 的配置和会话，不能沿用下文飞书状态的恢复承诺；重新配置能恢复连接，不能恢复丢失的本地 Pi 会话。
+
+### 飞书运行与更新
 
 ```sh
 python3 "$HOME/Reliquary/scripts/agent-local.py" status

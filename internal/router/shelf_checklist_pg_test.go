@@ -326,3 +326,17 @@ func TestShelfChecklistCountsCertificationFiles(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, "missing", rows[0].(map[string]any)["status"])
 }
+
+// Regression: restored data once carried an unknown requirement field, and the
+// checklist silently dropped every such requirement. Reads now fail and name
+// the requirement so the data can be corrected.
+func TestShelfChecklistRejectsUnreadableRequirement(t *testing.T) {
+	f, l, n := checklistSetup(t)
+	r := checklistRequirement(t, f, l, "Malformed requirement", "", "final_due")
+	checklistBind(f, l, r, shelfNode(n, "line"))
+	require.Len(t, checklistRead(f, l, shelfNode(n, "model"))["checklist"], 1)
+	require.NoError(t, f.db.Exec(`UPDATE entity_attribute_versions SET attributes=jsonb_set(attributes,'{requirement,source_row}','2') WHERE entity_id=?`, r.ID).Error)
+	body := f.request(http.MethodGet, "/libraries/"+l.ID+"/shelf/nodes/"+shelfNode(n, "model"), nil, http.StatusConflict, nil)
+	require.Contains(t, string(body), "Malformed requirement")
+	require.Contains(t, string(body), "source_row")
+}

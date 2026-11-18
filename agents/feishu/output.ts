@@ -56,7 +56,7 @@ const shapes: Record<string, Shape> = {
     ...fields('id name list_name name_zh name_en file_category stage_label due_text draft_due_stage final_due_stage owner priority source_list source_version'),
     markets: 'scalarMap',
   },
-  certification: { ...fields('name owner_id standard year certification_object cell_part_id region agency progress start_date obtained_date issued_date validity number cloud_url'), conditions: ['condition'] },
+  certification: { ...fields('name owner_id standard year certification_object cell_part_id region agency progress start_date planned_date obtained_date issued_date validity number cloud_url'), conditions: ['condition'] },
   sale: { ...fields('region status planned_eom notes raw'), conditions: ['condition'] },
   parameter: { value: 'parameterValue', conditions: ['condition'] },
   relation: {

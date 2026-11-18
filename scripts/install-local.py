@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import plistlib
 import secrets
+import shlex
 import shutil
 import subprocess
 import sys
@@ -118,6 +119,28 @@ def install_autostart(root, ollama):
     print(f'Installed {agent}')
 
 
+def load_agent():
+    from importlib.util import module_from_spec, spec_from_file_location
+    spec = spec_from_file_location('agent_local', SOURCE / 'scripts/agent-local.py')
+    agent = module_from_spec(spec)
+    spec.loader.exec_module(agent)
+    return agent
+
+
+def offer_pi(root, agent):
+    print(agent.PI_DATA_OUTFLOW_NOTICE, flush=True)
+    command = shlex.join(['python3', str(root / 'scripts/agent-local.py'), 'pi-configure', '--root', str(root)])
+    if sys.stdin.isatty() and input('是否配置本地 Pi？[Y/n]：').strip().lower() in ('', 'y', 'yes'):
+        # The library itself is already installed; a Pi failure must not report the installation as failed.
+        try:
+            with agent.maintenance_lock(root):
+                agent.configure_pi(root, show_notice=False)
+        except (ValueError, OSError, subprocess.CalledProcessError, EOFError) as error:
+            print(f'本地 Pi 配置未完成：{error}\n资料库本体已安装。修正后运行：{command}')
+    else:
+        print(f'稍后配置本地 Pi 时运行：{command}')
+
+
 def install(root, env_file, project, app_port=None, frontend_port=None):
     """Resume first installation without overwriting any existing configuration."""
     for command in ('docker', 'git'):
@@ -138,7 +161,9 @@ def install(root, env_file, project, app_port=None, frontend_port=None):
     if values.get('COMPOSE_PROJECT_NAME') != project:
         raise ValueError('Existing installation has a different project name')
     if json.loads(marker.read_text()).get('status') == 'base_ready':
+        shutil.copy2(SOURCE / 'scripts/agent-local.py', root / 'scripts/agent-local.py')
         print(f'基础安装已完成。需要飞书对话入口时运行：python3 "{root / "scripts/agent-local.py"}" configure')
+        offer_pi(root, load_agent())
         return
     for key, port in [('APP_PORT', app_port), ('FRONTEND_PORT', frontend_port)]:
         if port is not None:
@@ -167,15 +192,12 @@ def install(root, env_file, project, app_port=None, frontend_port=None):
     # Keep the generated callbacks aligned with the customer-selected ports.
     values['CHATGPT_CALLBACK_URL'] = f"http://127.0.0.1:{values.get('APP_PORT', '8080')}/auth/callback"
     values['CHATGPT_SETTINGS_URL'] = f"http://127.0.0.1:{values.get('FRONTEND_PORT', '80')}/platform/settings?section=models"
-    from importlib.util import module_from_spec, spec_from_file_location
-    spec = spec_from_file_location('agent_local', SOURCE / 'scripts/agent-local.py')
-    agent = module_from_spec(spec)
-    spec.loader.exec_module(agent)
+    agent = load_agent()
     # ChatGPT sign-in needs these two hosts, as docs/personal-use.md (使用 ChatGPT 订阅) requires.
     hosts = [host for host in values.get('SSRF_WHITELIST', '').split(',') if host]
     values['SSRF_WHITELIST'] = ','.join(dict.fromkeys([*hosts, 'auth.openai.com', 'api.openai.com']))
     agent.write_env(deploy / '.env', values)
-    # The Feishu entry is optional; agent-local.py configure builds it from this source on first use.
+    # Optional entries are configured separately after the base installation succeeds.
     shutil.copy2(SOURCE / 'scripts/agent-local.py', root / 'scripts/agent-local.py')
     subprocess.run(['docker', 'compose', '--project-directory', str(deploy), 'up', '-d', '--no-build', '--pull', 'never', '--wait'], check=True)
     if not run('git', '-C', str(SOURCE), 'status', '--porcelain').strip():
@@ -187,6 +209,7 @@ def install(root, env_file, project, app_port=None, frontend_port=None):
     print(f'基础服务已启动。请在网页配置资料库和模型：{settings}')
     webbrowser.open(settings)
     print(f'资料库本体安装完成。需要飞书对话入口时运行：python3 "{root / "scripts/agent-local.py"}" configure')
+    offer_pi(root, agent)
 
 
 def build_proxy_args(env):
@@ -244,7 +267,7 @@ def main():
             install(root, args.env_file.expanduser().resolve() if args.env_file else None, args.project_name, args.app_port, args.frontend_port)
         else:
             prepare(root, args.env_file.expanduser().resolve() if args.env_file else None, args.project_name)
-    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+    except (ValueError, OSError, subprocess.CalledProcessError, EOFError) as error:
         parser.exit(1, f'Installation failed: {error}\n')
 
 

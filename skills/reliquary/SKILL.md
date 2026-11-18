@@ -9,7 +9,17 @@ metadata:
 
 开始使用前先完整读取 [rules.md](rules.md)。规则文件也是 MCP 握手中 instructions 的全文；按规则选库、检索、阅读、引用及确认写操作。
 
+## 推荐：本地 Pi
+
+本地 Pi 是推荐的 Agent 入口。资料库本体安装后默认引导配置，可跳过；安装与验收见仓库的 docs/agent-installation.md，启动、继续会话与更新见 docs/local-deployment.md。启用前说明并取得客户同意：每轮完整上下文（问题、工具读到的资料片段、工作文件夹中读到的内容、历史回复）发送给所选模型服务商，ChatGPT 订阅经 Reliquary 后端转发给 OpenAI；资料库正文、文件和数据库不会整体同步出去。
+
+Pi 在 Docker 内运行，宿主机无需安装 Node。一个工作文件夹以只读方式挂载到 /workspace，默认是运行根目录的 workspace/；Pi 自身的配置、凭据和会话另存于运行目录。内置工具只开放 read，MCP 只连接 Reliquary，另有项目提供的工作簿上传工具 reliquary_upload_workbook 和原件暂存工具 reliquary_stage_attachment；没有命令执行或本地文件修改工具。
+
+表格导入按 shelf-import 流程，使用工作簿上传工具和已确认的方案键；没有方案时提供新方案键和文件种类，请求待审核方案建议。不得自行拆表或逐行手写资料要求、认证。原件先暂存取得附件 ID，再用 `shelf_submit` 提议资料版本归类。上传、方案建议与暂存均不确认货架变更，须展示差异并按规则取得用户确认。流程中的 HTTP 文件上传由这两个工具完成；现有工具无法完成的步骤交用户在网页处理，不请求开放命令或文件写入工具。
+
 ## 连接本机 MCP
+
+通用客户端仍可按下列方式普通连接或用于只读查询。API Key 没有只读权限范围，客户端的工具限制由客户端管理。
 
 只连接与客户端位于同一台机器的 Reliquary 后端。默认端点为 `http://127.0.0.1:8080/mcp`；如本机后端端口不同，替换端口。不要配置局域网或公网后端。
 
@@ -51,8 +61,6 @@ url = "http://127.0.0.1:8080/mcp"
 bearer_token_env_var = "RELIQUARY_API_KEY"
 ```
 
-Codex 默认拦截带写入标记的 MCP 工具调用，在无人值守（`approval_policy="never"`）下连未确认的 `shelf_submit` 预览也会被拒。需要它维护货架时，在上述配置中加 `default_tools_approval_mode = "approve"`，或启动时传 `-c 'mcp_servers.reliquary.default_tools_approval_mode="approve"'`。这只放行工具调用；是否确认写入仍由 `confirmed` 与用户同意决定。
-
 参见 [Codex MCP 配置](https://developers.openai.com/codex/mcp/)。
 
 ### 关闭客户端联网
@@ -66,12 +74,12 @@ Reliquary 的全部功能只用本机资料，后端不联网检索。客户端�
 
 ### 只用 Reliquary 的专用工作区
 
-规则不限制客户端自身的文件和命令工具，因为 Reliquary 常与其他工作同时使用，Excel 导入也要读本地文件。需要销售问答只用 Reliquary 时，单独建一个专用工作区，在客户端配置中收紧，不靠规则文本：
+通用客户端自身的文件和命令工具不受 Reliquary 控制。需要只读问答工作区时，在客户端配置中收紧，不靠规则文本：
 
 - Claude Code：在该工作区的 `.claude/settings.json` 中，`permissions.deny` 加入 `Bash`、`Glob`、`Grep`、`Edit`、`Write`、`WebSearch`、`WebFetch`。不要放进开发项目。
 - Codex：在空目录中启动，用只读沙箱并关闭网页搜索。只读沙箱仍可运行命令，只能限制影响范围。
 
-该工作区不适合做 Excel 导入。
+需要 Excel 导入时使用本地 Pi 的工作簿上传工具。
 
 ## 按目标选工具
 
@@ -80,7 +88,7 @@ Reliquary 的全部功能只用本机资料，后端不联网检索。客户端�
 | 找资料 | `list_libraries` → `search` | 必须指定 `libraries`，按来源与可信度选库；资料正文问题每次重新检索，货架事实不必先检索 |
 | 问实体关系 | `graph_search` | 必须指定库；返回 `needs_selection` 时核对候选，用实体 ID 重试；截断或未同步时结论不完整 |
 | 查询产品货架 | `shelf_find` → `shelf_get` 或 `shelf_query` | 先读 shelf-expert 指南，同名且影响答案时先澄清；批量查询用默认 summary，只问数量取 total；注明条件、来源与时点，总数与截断 |
-| 维护产品货架 | `shelf_guide` → `shelf_submit` | 补充前先读本库规范；原件与 Excel 用 API Key 调 HTTP 上传，先保存差异与冲突，经用户同意后确认同一变更集；含义不确定项先选择 |
+| 维护产品货架 | `shelf_guide` → `shelf_submit` | 补充前先读本库规范；本地 Pi 用上传工具处理工作簿和原件，先保存差异与冲突，经用户同意后确认同一变更集；含义不确定项先选择 |
 | 片段不足，读原文 | `get_entry` | 按位置传 Unicode `offset`、`length`，用 `next_offset` 续读，引用资料 ID、标题路径和段落 |
 | 看关注的新动态 | `list_follows` → `follow_feed` | 只读已有关注，用 `next_cursor` 翻页；进入动态时间不同于发布时间，读取不更新查看时间 |
 | 查链接是否已收录 | `check_urls` | 指定 `library`，逐条检查状态；查重不代表获准覆盖，不用它查无链接的来源标识 |

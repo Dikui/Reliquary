@@ -68,7 +68,21 @@ cd Reliquary
 python3 scripts/install-local.py --install --root "$HOME/Reliquary"
 ```
 
-该命令构建镜像、创建独立运行目录并启动资料库本体。
+该命令构建镜像、创建独立运行目录并启动资料库本体，随后显示数据外流说明并询问是否配置本地 Pi，默认选择是。本地 Pi 是推荐的 Agent 入口，可以跳过。跳过或非交互运行时会打印稍后配置的命令：
+
+```bash
+python3 "$HOME/Reliquary/scripts/agent-local.py" pi-configure
+```
+
+按提示选择自己的模型 API 或已授权的 ChatGPT 模型、工作文件夹（默认 `~/Reliquary/workspace`）和可选代理。Pi 在 Docker 内运行，宿主机无需安装 Node。工作文件夹以只读方式挂载到 `/workspace`；工具只开放内置 read、Reliquary MCP 和项目的两个上传工具。Excel 导入必须走导入方案，并经审核确认。配置时会实际检查 `list_libraries` 调用，随后给出启动命令：
+
+```bash
+"$HOME/Reliquary/scripts/pi"
+"$HOME/Reliquary/scripts/pi" -c  # 继续上次会话
+```
+
+> [!IMPORTANT]
+> 启用本地 Pi 前，须同意将每轮完整上下文（问题、工具读到的资料片段、从工作文件夹读取的内容、历史回复）发送给所选模型服务商；ChatGPT 订阅经 Reliquary 后端转发给 OpenAI。资料库正文、文件和数据库不会整体同步出去。本地 Pi 会话暂未纳入 `reliquary-admin` 备份。见 [ADR 0029](docs/adr/0029-recommend-local-pi.md) 和 [Agent 辅助安装指南](docs/agent-installation.md)。
 
 ### 可选：飞书对话入口
 
@@ -96,7 +110,7 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" configure
    curl --fail http://127.0.0.1:8080/api/v1/libraries -H "Authorization: Bearer $KEY"
    ```
 
-3. 或将 MCP 客户端指向 `http://127.0.0.1:8080/mcp`，使用同一个 Key。Claude Code、Codex 的配置写法及 agent 技能包见 [skills/reliquary/SKILL.md](skills/reliquary/SKILL.md#连接本机-mcp)。
+3. 或将 MCP 客户端指向 `http://127.0.0.1:8080/mcp`，使用同一个 Key。推荐本地 Pi，通用客户端仍可接入。Claude Code、Codex 的配置写法及 agent 技能包见 [skills/reliquary/SKILL.md](skills/reliquary/SKILL.md#连接本机-mcp)。
 
 HTTP 与 MCP 中资料 ID 统一为 `entry_id`（列表为 `entry_ids`），全文读取使用 `get_entry`。从[外部接入总览](docs/external-integration.md)开始，再看[收录](docs/ingest-api.md)、[检索](docs/search-api.md)与[关系](docs/relations-api.md)接口。
 
