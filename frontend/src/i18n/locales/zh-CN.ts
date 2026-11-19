@@ -79,6 +79,8 @@ export default {
     regionAliasConflict: '区域键、名称和别名须唯一，请修改重复的写法。',
     allRegions: '不分地区',
     markets: '市场',
+    regionMarkets: '区域对应市场',
+    noMarket: '不对应',
     pendingStatus: '待定',
     "title": "货架设置",
     "modules": "部件类型",

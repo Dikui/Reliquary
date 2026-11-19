@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -9,6 +10,90 @@ import (
 	"reliquary/internal/types"
 )
 
+// Medium spec, shelf-checklist-markets task 02: region-market mappings survive
+// settings writes and reads without interpreting display names as keys.
+func TestShelfConfigRegionMarketsRoundTrip(t *testing.T) {
+	f, l, _ := checklistSetup(t)
+	data, err := json.Marshal(l.ShelfConfig)
+	require.NoError(t, err)
+	var config map[string]any
+	require.NoError(t, json.Unmarshal(data, &config))
+	config["regions"] = append(l.ShelfConfig.Regions, types.ShelfOption{Key: "region_b", Name: "Unmapped region"})
+	config["checklist_markets_by_region"] = map[string]string{"region_a": "market_a"}
+	f.request(http.MethodPut, "/libraries/"+l.ID, map[string]any{"shelf_config": config}, http.StatusOK, nil)
+	var saved map[string]any
+	f.request(http.MethodGet, "/libraries/"+l.ID, nil, http.StatusOK, &saved)
+	require.Equal(t, map[string]any{"region_a": "market_a"}, saved["shelf_config"].(map[string]any)["checklist_markets_by_region"])
+}
+
+// Medium regression, task 02: the DB seed represents a pre-upgrade library;
+// existing mappings are observed and edited only through HTTP.
+func TestShelfConfigReadsStoredRegionMarkets(t *testing.T) {
+	f, l, _ := checklistSetup(t)
+	require.NoError(t, f.db.Exec(`UPDATE libraries SET shelf_config=jsonb_set(shelf_config, '{checklist_markets_by_region}', '{"region_a":"market_a"}') WHERE id=?`, l.ID).Error)
+	f.request(http.MethodGet, "/libraries/"+l.ID, nil, http.StatusOK, &l)
+	require.Equal(t, map[string]string{"region_a": "market_a"}, l.ShelfConfig.ChecklistMarketsByRegion)
+	l.ShelfConfig.Markets[0].Name = " Renamed market "
+	var confirmed types.ShelfChangeset
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{{ID: "settings", Type: "configure_shelf", LibraryUpdatedAt: &l.UpdatedAt, Library: &types.LibraryPatch{ShelfConfig: &l.ShelfConfig}}}}, http.StatusCreated, &confirmed)
+	require.Equal(t, "confirmed", confirmed.Status)
+	f.request(http.MethodGet, "/libraries/"+l.ID, nil, http.StatusOK, &l)
+	require.Equal(t, map[string]string{"region_a": "market_a"}, l.ShelfConfig.ChecklistMarketsByRegion)
+	require.Equal(t, " Renamed market ", l.ShelfConfig.Markets[0].Name)
+	// Clearing the mapping is an explicit supported configuration change.
+	l.ShelfConfig.ChecklistMarketsByRegion = map[string]string{}
+	f.request(http.MethodPut, "/libraries/"+l.ID, map[string]any{"shelf_config": l.ShelfConfig}, http.StatusOK, nil)
+	var cleared types.Library
+	f.request(http.MethodGet, "/libraries/"+l.ID, nil, http.StatusOK, &cleared)
+	require.Empty(t, cleared.ShelfConfig.ChecklistMarketsByRegion)
+}
+
+// Medium spec, task 02: neither unknown keys nor display names are valid
+// region-market references; rejected updates leave the saved mapping intact.
+func TestShelfConfigRejectsUnknownRegionMarketMappings(t *testing.T) {
+	f, l, _ := checklistSetup(t)
+	l.ShelfConfig.ChecklistMarketsByRegion = map[string]string{"region_a": "market_a"}
+	f.request(http.MethodPut, "/libraries/"+l.ID, map[string]any{"shelf_config": l.ShelfConfig}, http.StatusOK, &l)
+	for _, sample := range []struct{ name, region, market, message string }{
+		{"unknown_region", "unknown", "market_a", "unknown region"},
+		{"unknown_market", "region_a", "unknown", "unknown market"},
+		{"region_name", "Region A", "market_a", "unknown region"},
+		{"market_name", "region_a", "Market A", "unknown market"},
+		{"empty_region", "", "market_a", "unknown region"},
+		{"empty_market", "region_a", "", "unknown market"},
+	} {
+		t.Run(sample.name, func(t *testing.T) {
+			fixture := *f
+			fixture.t = t
+			config := l.ShelfConfig
+			config.ChecklistMarketsByRegion = map[string]string{sample.region: sample.market}
+			body := fixture.request(http.MethodPut, "/libraries/"+l.ID, map[string]any{"shelf_config": config}, http.StatusBadRequest, nil)
+			require.Contains(t, string(body), "checklist_markets_by_region")
+			require.Contains(t, string(body), sample.message)
+			var saved types.Library
+			fixture.request(http.MethodGet, "/libraries/"+l.ID, nil, http.StatusOK, &saved)
+			require.Equal(t, map[string]string{"region_a": "market_a"}, saved.ShelfConfig.ChecklistMarketsByRegion)
+		})
+	}
+}
+
+// Medium spec, task 02: mapping references protect market deletion alongside
+// the existing requirement, history and import-plan reference rules.
+func TestShelfMarketsRetainRegionMappingReferences(t *testing.T) {
+	f, l, _ := checklistSetup(t)
+	l.ShelfConfig.ChecklistMarketsByRegion = map[string]string{"region_a": "market_a"}
+	f.request(http.MethodPut, "/libraries/"+l.ID, map[string]any{"shelf_config": l.ShelfConfig}, http.StatusOK, &l)
+	l.ShelfConfig.Markets = nil
+	body := f.request(http.MethodPut, "/libraries/"+l.ID, map[string]any{"shelf_config": l.ShelfConfig}, http.StatusBadRequest, nil)
+	require.Contains(t, string(body), "checklist_markets_by_region")
+	require.Contains(t, string(body), "market_a")
+	require.Contains(t, string(body), "region_a")
+	l.ShelfConfig.ChecklistMarketsByRegion = nil
+	f.request(http.MethodPut, "/libraries/"+l.ID, map[string]any{"shelf_config": l.ShelfConfig}, http.StatusOK, &l)
+	require.Empty(t, l.ShelfConfig.Markets)
+}
+
+// Medium spec, task 02: removing a configured region prunes only that mapping,
 // Medium spec, task 30: configured ATQ markets are independent of sale regions.
 func TestShelfMarketsAreIndependentOfSaleRegions(t *testing.T) {
 	f, l, _ := checklistSetup(t)

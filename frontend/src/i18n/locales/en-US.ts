@@ -79,6 +79,8 @@ export default {
     regionAliasConflict: 'Region keys, names and aliases must identify one region. Change the duplicate spelling.',
     allRegions: 'All regions',
     markets: 'Markets',
+    regionMarkets: 'Markets by region',
+    noMarket: 'No market',
     pendingStatus: 'Pending',
     "title": "Shelf settings",
     "modules": "Part types",

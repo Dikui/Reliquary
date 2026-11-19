@@ -209,9 +209,27 @@ agent 变更集中的含义不确定项可保存 `return_to_submitter` 决定。
 
 同一要求可以绑定多个产品线或平台；型号适用所属产品线与所属平台上全部活动要求的并集。部件没有应交资料清单，旧部件类型绑定保留原数据但不参与清单计算。未完成资料要求字段的实体不能新建适用关系。已有资料要求的完整字段不能清空以隐藏义务，须明确归档。清单更新使用已有变更集差异流程：新增项创建，修改项带修订号更新，消失项用 `missing_entity` 提议并由人选择 `retire` 后归档；也可明确使用 `archive_entity`。消失本身不归档、不删除文件，归档后所有型号按当前活动要求计算。
 
-市场列表通过 `configure_shelf` 修改 `shelf_config.markets`，值为 `{"key":"market_key","name":"原名"}`。可新增、改名、重排和删除未引用的市场；资料要求及其历史、已保存方案引用的市场键不能删除。
+市场列表通过 `configure_shelf` 修改 `shelf_config.markets`，值为 `{"key":"market_key","name":"原名"}`。可新增、改名、重排和删除未引用的市场；资料要求及其历史、已保存方案及区域对应表引用的市场键不能删除。
 
 产品名称与型号用 `attributes.current_stage` 保存配置阶段键，仍走 `update_entity` 并检查修订号。型号没有该字段时沿用产品名称；移除型号字段恢复继承。两层都未填写时只显示文件有无。完整属性快照及 `effective_at`、导入文件日期沿用现有时间线规则。
+
+### 区域对应市场
+
+`GET /api/v1/libraries/:id` 的 `shelf_config.checklist_markets_by_region` 返回区域键到市场键的对应表。通过 `configure_shelf` 的 `library.shelf_config` 保存，例如：
+
+```json
+{
+  "regions": [{"key":"region_a","name":"区域 A"},{"key":"region_b","name":"区域 B"}],
+  "markets": [{"key":"market_a","name":"市场 A"}],
+  "checklist_markets_by_region": {"region_a":"market_a"}
+}
+```
+
+提交完整货架配置时须同时保留其他配置字段，并提供读取到的 `library_updated_at`。对应表的键必须是 `regions[].key`，值必须是 `markets[].key`，不接受名称、别名或空字符串；未列入的区域不对应任何市场，选择“不对应”即移除该区域的对应项。未知区域或市场返回校验错误，变更集不写入；兼容的 `PUT /api/v1/libraries/:id` 设置写入同样校验并返回 HTTP 400。
+
+删除市场时，若提交后的对应表仍引用该市场则拒绝，错误说明对应表字段、区域键和市场键。区域键与以往一样只能追加、改名和重排，不能删除。
+
+已有库中保存的同名字段无需迁移即可读出和继续编辑。对应表为空时可省略该字段。
 
 ## 导入核对提示
 

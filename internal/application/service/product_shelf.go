@@ -1,6 +1,8 @@
 package service
 
 import (
+	"fmt"
+
 	"gorm.io/gorm"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
@@ -76,6 +78,11 @@ func validateRemovedShelfMarkets(tx *gorm.DB, before, after *types.Library) erro
 	for _, market := range before.ShelfConfig.Markets {
 		if shelfOptionExists(after.ShelfConfig.Markets, market.Key) {
 			continue
+		}
+		for region, key := range after.ShelfConfig.ChecklistMarketsByRegion {
+			if key == market.Key {
+				return apperrors.NewBadRequestError(fmt.Sprintf("market key %q is referenced by checklist_markets_by_region for region %q", market.Key, region))
+			}
 		}
 		var used bool
 		if err := tx.Raw(`SELECT EXISTS (

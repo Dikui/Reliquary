@@ -42,21 +42,77 @@ test('市场可新增并原样保存且区域不变', async t => {
 })
 // Small spec, task 20 / ADR 0023: saved settings use the library's revision;
 // configured names and keys survive editing without customer constants.
-async function mount(t:test.TestContext,nodes:any[]=[]){
+async function mount(t:test.TestContext,nodes:any[]=[],settings:{library?:any;saveError?:string;locale?:string}={}){
  const writes:any[]=[]
+ let savedLibrary=structuredClone(settings.library || library)
  const ui={...entryPresentationTestModules['@/components/ui'] as object,Tabs:defineComponent({props:['modelValue','items'],emits:['update:modelValue'],setup:(p,{slots,emit})=>()=>h('div',[h('nav',p.items.map((item:any)=>h('button',{onClick:()=>emit('update:modelValue',item.value)},item.label))),slots[p.modelValue]?.()])})}
  const component=loadComponent(new URL('./ShelfSettingsPage.vue',import.meta.url),{
  ...entryPresentationTestModules,'@/components/ui':ui,
  'vue-router':{onBeforeRouteLeave(){},onBeforeRouteUpdate(){}},
  '@/api/model': { listModels: async () => [] },
- '@/api/library':{getCatalogLibrary:async()=>({success:true,data:library})},
- '@/api/shelf-files':{shelfEntities:async()=>nodes,shelfWriteError:(_:unknown,f:string)=>f,configureShelf:async(...args:any[])=>{writes.push(args);return{success:true,data:{status:'confirmed'}}}},
+ '@/api/library':{getCatalogLibrary:async()=>({success:true,data:savedLibrary})},
+ '@/api/shelf-files':{shelfEntities:async()=>nodes,shelfWriteError:(cause:unknown,f:string)=>[f,(cause as Error).message].filter(Boolean).join(' · '),configureShelf:async(...args:any[])=>{writes.push(args);if(settings.saveError)throw new Error(settings.saveError);savedLibrary=JSON.parse(JSON.stringify({...savedLibrary,...args[2]}));return{success:true,data:{status:'confirmed'}}}},
  '@/components/ui/feedback':{confirm:()=>({result:Promise.resolve(true)})},
  './ShelfRequirementEditor.vue':{__esModule:true,default:defineComponent({setup:()=>()=>null})},
  './ShelfFieldEditor.vue':{__esModule:true,default:defineComponent({setup:()=>()=>null})},
  })
- const app=renderer.createApp(component,{library});app.use(createI18n({legacy:false,locale:'zh-CN',messages:{'zh-CN':zh,'en-US':en}}));const root=element('root');app.mount(root);t.after(()=>app.unmount());await settle();return{root,writes}
+ const app=renderer.createApp(component,{library:savedLibrary});app.use(createI18n({legacy:false,locale:settings.locale || 'zh-CN',messages:{'zh-CN':zh,'en-US':en}}));const root=element('root');app.mount(root);t.after(()=>app.unmount());await settle();return{root,writes}
 }
+
+// Small spec, shelf-checklist-markets task 02: UI edits preserve stored keys;
+// API mocks replace the HTTP boundary only.
+test('区域对应市场读出已有配置并保存选择和不对应',async t=>{
+ const savedLibrary=structuredClone(library)
+ savedLibrary.shelf_config.regions.push({key:'region_b',name:'另一区域'})
+ savedLibrary.shelf_config.markets=[{key:'domestic',name:'国内'},{key:'overseas',name:'海外'}]
+ savedLibrary.shelf_config.checklist_markets_by_region={region:'domestic'}
+ const {root,writes}=await mount(t,[],{library:savedLibrary})
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='区域')!)
+ assert.match(visibleText(root),/区域对应市场/)
+ const select=()=>descendants(root).find(n=>n.tag==='select'&&n.props.id==='checklist-market-region')!
+ const other=()=>descendants(root).find(n=>n.tag==='select'&&n.props.id==='checklist-market-region_b')!
+ assert.ok(select(),'每个区域应有一个市场下拉框')
+ assert.equal(select().props.value,'domestic')
+ assert.equal(other().props.value,'')
+ select().props.onChange({target:{value:'overseas'}});await settle()
+ other().props.onChange({target:{value:'domestic'}});await settle()
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='确认保存')!)
+ assert.deepEqual(writes[0][2].shelf_config.checklist_markets_by_region,{region:'overseas',region_b:'domestic'})
+ select().props.onChange({target:{value:''}});await settle()
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='确认保存')!)
+ assert.deepEqual(writes[1][2].shelf_config.checklist_markets_by_region,{region_b:'domestic'})
+})
+
+// Small spec, task 02: show the API validation reason and retain failed edits.
+test('删除被对应表引用的市场时展示校验错误并保留编辑',async t=>{
+ const savedLibrary=structuredClone(library)
+ savedLibrary.shelf_config.markets=[{key:'domestic',name:'国内'}]
+ savedLibrary.shelf_config.checklist_markets_by_region={region:'domestic'}
+ const message='market key domestic is referenced by checklist_markets_by_region for region region'
+ const {root,writes}=await mount(t,[],{library:savedLibrary,saveError:message})
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='市场')!)
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='移除')!)
+ await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='确认保存')!)
+ assert.match(visibleText(descendants(root).find(n=>n.props.role==='alert')!),/checklist_markets_by_region/)
+ assert.deepEqual(writes[0][2].shelf_config.checklist_markets_by_region,{region:'domestic'})
+ assert.deepEqual(writes[0][2].shelf_config.markets,[])
+ assert.equal(descendants(root).find(n=>n.tag==='button'&&visibleText(n)==='确认保存')!.props.disabled,false)
+})
+
+// Small spec, task 02: empty markets offer only the localized unmapped choice.
+test('没有市场时中英文每个区域只有不对应选项并保留长区域名',async t=>{
+ for(const [locale,label] of [['zh-CN','不对应'],['en-US','No market']]){
+  const savedLibrary=structuredClone(library)
+  savedLibrary.shelf_config.regions[0].name='A very long configured region name '.repeat(3)
+  const {root}=await mount(t,[],{library:savedLibrary,locale})
+  const regionsLabel=locale==='en-US'?'Regions':'区域'
+  await click(descendants(root).find(n=>n.tag==='button'&&visibleText(n)===regionsLabel)!)
+  const select=descendants(root).find(n=>n.tag==='select'&&n.props.id==='checklist-market-region')!
+  assert.ok(select)
+  assert.deepEqual(descendants(select).filter(n=>n.tag==='option').map(n=>({value:n.props.value,text:visibleText(n)})),[{value:'',text:label}])
+  assert.equal(descendants(root).find(n=>n.tag==='label'&&n.props.for==='checklist-market-region')?.text,savedLibrary.shelf_config.regions[0].name)
+ }
+})
 test('设置页改名原样保存，并携带库更新时间确认变更集',async t=>{
  const {root,writes}=await mount(t)
  assert.match(visibleText(root),/客户模块/)
