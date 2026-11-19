@@ -81,6 +81,9 @@ test('资料清单在中英文显示检查市场和可选标记', async t => {
     const docs = section(root, 'docs')
     assert.match(visibleText(docs), locale === 'zh-CN' ? /检查市场.*国内原名.*Overseas original/ : /Markets checked.*国内原名.*Overseas original/)
     assert.match(visibleText(section(root, 'requirement-missing')), locale === 'zh-CN' ? /可选/ : /Optional/)
+    // An optional item without a file is neither shown nor counted as missing.
+    assert.match(visibleText(docs), locale === 'zh-CN' ? /1\s*可选未交/ : /1\s*Optional, not delivered/)
+    assert.doesNotMatch(visibleText(docs), locale === 'zh-CN' ? /\d\s*缺/ : /\d\s*Missing/)
     assert.match(visibleText(docs), new RegExp('很长的资料名称'.repeat(30)))
   }
 })

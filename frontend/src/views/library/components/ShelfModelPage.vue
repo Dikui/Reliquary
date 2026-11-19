@@ -26,8 +26,10 @@ let generation = 0, historyGeneration = 0
 const detail = computed(() => node.value?.shelf)
 const optional = computed(() => detail.value?.composition.filter(group => group.optional) || [])
 const sections = ['composition', 'sale', 'cert', 'docs', 'params', 'files', 'history'] as const
-const statusKeys = ['missing', 'draft_only', 'delivered', 'not_due'] as const
-const counts = computed(() => statusKeys.map(status => ({ status, count: new Set((detail.value?.checklist || []).filter(row => row.status === status).map(row => row.requirement.id)).size })).filter(item => item.count))
+const statusKeys = ['missing', 'draft_only', 'delivered', 'not_due', 'optional_open'] as const
+// Optional requirements without a final file are listed but never shown as missing.
+const displayStatus = (row: { status: string; necessity?: string; gap: boolean }) => row.necessity === 'optional' && !row.gap && row.status !== 'delivered' ? 'optional_open' : row.status
+const counts = computed(() => statusKeys.map(status => ({ status, count: new Set((detail.value?.checklist || []).filter(row => displayStatus(row) === status).map(row => row.requirement.id)).size })).filter(item => item.count))
 const groups = computed(() => (['self', 'component', 'ancestor'] as const).map(origin => ({ origin, rows: (detail.value?.certifications || []).filter(row => row.origin === origin) })))
 const attributeFields = computed(() => (props.library.entity_schema?.fields || []).filter(field => !field.archived && !field.product_line_ids?.length && (!field.kinds?.length || field.kinds.includes('model')) && !['current_stage', 'sale_statuses', 'combination_rules'].includes(field.key)))
 const fields = computed(() => (props.library.entity_schema?.fields || []).filter(field => field.product_line_ids?.includes(ancestors.value.find(item => item.kind === 'product_line')?.id || '') && !field.archived))
@@ -330,7 +332,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
               <tbody>
                 <tr v-for="(row, index) in detail.checklist" :id="detail.checklist.findIndex(item => item.requirement.id === row.requirement.id) === index ? `requirement-${row.requirement.id}` : undefined" :key="`${row.requirement.id}-${index}`">
                   <td>
-                    <span class="doc" :class="row.status">{{ t(`shelfModel.status.${row.status}`) }}</span>
+                    <span class="doc" :class="displayStatus(row)">{{ t(`shelfModel.status.${displayStatus(row)}`) }}</span>
                     <Button v-if="['missing', 'draft_only'].includes(row.status)" variant="ghost" :disabled="editorLoading" @click="openEditor('document', row.requirement.id)">{{ t('shelfModel.attach') }}</Button>
                     <small v-if="row.ambiguous" role="status">{{ t('shelfModel.ambiguous') }}</small>
                   </td>
@@ -499,7 +501,7 @@ small { display: block; font-size: var(--text-xs); color: var(--muted); white-sp
 .st-DEV { background: var(--blue); color: var(--on-blue); }
 .st-Planning, .draft_only { background: var(--surface-soft); }
 .st-EOM { background: var(--muted); color: var(--bg); }
-.st-待定, .not_due { outline: 1px dashed var(--muted); outline-offset: -1px; }
+.st-待定, .not_due, .optional_open { outline: 1px dashed var(--muted); outline-offset: -1px; }
 .missing { background: var(--danger-soft); color: var(--danger); }
 .params { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 2px solid var(--rule); }
 .params > div { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--border); }

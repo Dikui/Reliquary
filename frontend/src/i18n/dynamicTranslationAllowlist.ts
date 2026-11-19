@@ -15,7 +15,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
       "`shelfModel.sections.${section}`",
       "`shelfModel.origins.${group.origin}`",
       "`shelfModel.${key}`",
-      "`shelfModel.status.${row.status}`",
+      "`shelfModel.status.${displayStatus(row)}`",
       "`shelfModel.${row.document.stage}`",
       "`shelfModel.origins.${file.origin}`",
       "`shelfModel.parse.${status}`"
