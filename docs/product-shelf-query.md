@@ -22,8 +22,8 @@ MCP 分别提供 `shelf_find`、`shelf_get`、`shelf_query`，均为只读工具
 
 `gaps` 的节点必须是本库产品线、平台、产品名称、型号或部件。型号及上层节点返回 model_count，以及四个独立的 `{items,total,truncated}` 列表：
 
-- documents：现有清单中的 missing 和 draft_only 行，保留 model_id、model_name、current_stage，以及原 requirement（含 ID、所属清单、初稿及终稿应交阶段）、条件、部分选配、所选版本和状态。未到期项不列入。
-- no_file_documents：现有清单中的 no_file（无文件）行，保留与 documents 相同的型号、要求、条件和状态字段，独立计数，不推断已经到期。每行 current_stage_unset=true 表示型号和产品名称均未设置当前阶段；未设阶段时清单状态只有 has_file 与 no_file，documents 不会出现 draft_only，初稿与终稿须按清单行 document.stage 区分；型号节点的 gaps 也会返回 current_stage_unset=true，提醒先补阶段。型号设置或从产品名称沿用阶段时不提示未设置。
+- documents：现有清单中 `gap=true` 的行，保留 model_id、model_name、current_stage、current_stage_unset，以及原 requirement（含 ID、所属清单、初稿及终稿应交阶段）、条件、部分选配、所选版本、状态和 gap。包括 missing，以及未设阶段时的 draft_only；设了阶段且终稿未到期的初稿不列入。
+- no_file_documents：为接口兼容保留，当前始终为空（items=[]、total=0、truncated=false）。未设阶段的缺和只有初稿均进入 documents，不再返回 no_file 或 has_file 状态。型号节点的 gaps 和各资料缺口行保留 current_stage_unset，表示型号和产品名称均未设置当前阶段；这不影响按缺口检查资料，无须先补阶段。
 - sale_statuses：本库 regions 中该型号完全没有记录的区域，包含型号和区域的键及原名；已有条件记录的区域不算整区无记录。
 - pending_changesets：涉及节点、下属型号或其共用上层、组成部件、当前要求、认证、文件的待确认变更集摘要（id、revision、source、updated_at），按变更集去重。明确的关系两端、候选、决定和适用条件引用也参与判断；库设置提议影响整个库。原操作和冲突可用变更集 HTTP GET 读取。
 
@@ -136,11 +136,11 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
 
 ## 资料清单与汇总
 
-get 与 query 返回的 `shelf` 包含型号的 `current_stage`、`stage_owner_id` 与 `checklist`。产品名称、平台和产品线返回 `checklist_summary`。普通实体详情也复用同一计算。
+get 与完整详情 query 返回的 `shelf` 包含型号的 `current_stage`、`stage_owner_id`、`checklist` 与 `has_gaps`。产品名称、平台和产品线返回 `checklist_summary`。普通实体详情也复用同一计算。
 
 型号应有项只取所属产品线的资料要求。部件类型不带出要求，部件没有自身应交资料清单，但部件上的文件仍可按原规则供型号共用。始终使用当前活动资料要求的最新有效字段与适用关系，不按型号创建日期固定旧清单。上层与组成关系、型号和产品名称阶段按 `as_of` 读取；资料版本按 `occurred_at <= as_of` 中最大的文件内顺序号读取。云盘链接与本机原件均能满足要求，解析状态不影响交付状态。
 
-每条清单项包含 `requirement`（身份、完整字段及来源清单版本）、`document`（选中的版本及来源与时间）、`document_name`（文件原名）、`has_file`、`owner_id`、`origin`、`origin_label`、`conditions`、`partial_options`、`status`、`status_label`。查找优先级为型号、部件、产品名称、平台。挂在认证记录上的文件按认证所属节点的层级计入，`owner_id` 仍为认证记录，并沿用认证的条件；认证带电芯部件时只对含该部件的型号生效，并作为部件条件参与清单。较近的初稿会遮住较远的终稿，旧版本不会代替当前初稿。部件文件隐含所属部件的组合条件。
+每条清单项包含 `requirement`（身份、完整字段及来源清单版本）、`document`（选中的版本及来源与时间）、`document_name`（文件原名）、`has_file`、`owner_id`、`origin`、`origin_label`、`conditions`、`partial_options`、`status`、`status_label` 和布尔 `gap`。查找优先级为型号、部件、产品名称、平台。挂在认证记录上的文件按认证所属节点的层级计入，`owner_id` 仍为认证记录，并沿用认证的条件；认证带电芯部件时只对含该部件的型号生效，并作为部件条件参与清单。较近的初稿会遮住较远的终稿，旧版本不会代替当前初稿。部件文件隐含所属部件的组合条件。
 
 型号的 `shelf.other_documents` 返回未对应资料要求的其他文件，范围为型号、组成部件、产品名称和平台，不包含其他型号或认证记录上的文件。每项含 `entity`（文件身份）、`document`（版本）、`owner`（所属节点身份）、`origin` 和 `conditions`。复用清单的同一业务时点版本选择，默认每个文件只返回当前版本；不同文件不互相遮盖。部件文件附加所属部件条件，按组合读取时只保留满足条件的文件。原件或云盘链接、客户版本号、文件类别与解析状态均来自版本记录。
 
@@ -156,11 +156,11 @@ get 与 query 返回的 `shelf` 包含型号的 `current_stage`、`stage_owner_i
 | 已到初稿应交阶段 | `missing` | 缺 |
 | 其余 | `not_due` | 未到期 |
 
-未填当前阶段时只返回 `has_file`（有文件）或 `no_file`（无文件），不判断到期。阶段名和顺序均取自库配置。未指定组合时，同一要求可以按不同组合分为多行，每行保留适用条件；选择组合后只保留适用行。多个同层部件文件同时适用时保留全部候选，并用 `ambiguous=true` 标识存在重叠，由提交方确认归属或条件，不按内部 ID 猜选一份。
+型号和产品名称均未填当前阶段时，所有资料均视为到期：有当前终稿返回 `delivered`（已交），只有初稿返回 `draft_only`（只有初稿），没有文件返回 `missing`（缺）。不再返回 `has_file` 或 `no_file` 状态，布尔 `has_file` 字段仍表示是否选中了文件。`gap` 是唯一的缺口判断：`missing` 为 true，未设阶段的 `draft_only` 为 true；设了阶段的 `draft_only`、`delivered` 和 `not_due` 为 false。阶段名和顺序均取自库配置。未指定组合时，同一要求可以按不同组合分为多行，每行保留适用条件；选择组合后只保留适用行。多个同层部件文件同时适用时保留全部候选，并用 `ambiguous=true` 标识存在重叠，由提交方确认归属或条件，不按内部 ID 猜选一份。
 
-`checklist_summary` 包含 `model_count`、`models_with_gaps`、按状态汇总的 `counts`，以及每个型号的 ID、当前阶段、状态计数与 `has_gaps`。仅汇总该业务时间已有记录的当前活动下属型号。计数以“型号、要求、状态”为单位，同状态的多组选配条件不重复计数；不同状态分别保留，避免隐去部分选配缺失。
+`checklist_summary` 包含 `model_count`、`models_with_gaps`、按状态汇总的 `counts`，以及每个型号的 ID、当前阶段、状态计数与 `has_gaps`。型号 `has_gaps` 与汇总中每个型号的 `has_gaps` 均由清单是否存在 `gap=true` 决定，`models_with_gaps` 统计这些型号。仅汇总该业务时间已有记录的当前活动下属型号。计数以“型号、要求、状态”为单位，同状态的多组选配条件不重复计数；不同状态分别保留，避免隐去部分选配缺失。
 
-query 可加 `{"document_gaps":true}` 筛选有 `missing` 项的型号。缺口条件与区域、参数、认证及组成筛选在数据库中求同一可行组合，保留分页前总数和部分选配标记。只有初稿、未到期与未填阶段的无文件不直接判作到期缺口；省略或传 `false` 不启用该筛选。
+query 可加 `{"document_gaps":true}` 筛选有 `gap=true` 清单项的型号。缺口条件与区域、参数、认证及组成筛选在数据库中求同一可行组合，保留分页前总数和部分选配标记。未设阶段的缺和只有初稿计入缺口；设了阶段且终稿未到期的初稿以及未到期项不计入；省略或传 `false` 不启用该筛选。
 
 ## 上层节点与部件详情
 

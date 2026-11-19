@@ -303,12 +303,15 @@ func (d *shelfChecklistData) documentScope(v *types.ShelfDocumentVersion, modelI
 	return record.OwnerID, conditions, true
 }
 
-func (d *shelfChecklistData) status(stage string, r types.ShelfRequirement, v *types.ShelfDocumentVersion) (string, string) {
+func (d *shelfChecklistData) status(stage string, r types.ShelfRequirement, v *types.ShelfDocumentVersion) (string, string, bool) {
+	if v != nil && v.Stage == "final" {
+		return "delivered", "已交", false
+	}
 	if stage == "" {
-		if v != nil {
-			return "has_file", "有文件"
+		if v != nil && v.Stage == "draft" {
+			return "draft_only", "只有初稿", true
 		}
-		return "no_file", "无文件"
+		return "missing", "缺", true
 	}
 	order := map[string]int{}
 	for i, s := range d.library.ShelfConfig.Stages {
@@ -319,23 +322,21 @@ func (d *shelfChecklistData) status(stage string, r types.ShelfRequirement, v *t
 		current, known := order[stage]
 		return key != "" && ok && known && current >= p
 	}
-	if v != nil && v.Stage == "final" {
-		return "delivered", "已交"
-	}
 	if due(r.FinalDueStage) {
-		return "missing", "缺"
+		return "missing", "缺", true
 	}
 	if v != nil && v.Stage == "draft" {
-		return "draft_only", "只有初稿"
+		return "draft_only", "只有初稿", false
 	}
 	if due(r.DraftDueStage) {
-		return "missing", "缺"
+		return "missing", "缺", true
 	}
-	return "not_due", "未到期"
+	return "not_due", "未到期", false
 }
 func (d *shelfChecklistData) apply(entity *types.Entity, result *types.ShelfModelDetail, combination map[string]string) {
 	if entity.Kind == "model" {
 		result.CurrentStage, result.StageOwnerID, result.Checklist = d.model(entity.ID, combination)
+		result.HasGaps = slices.ContainsFunc(result.Checklist, func(row types.ShelfChecklistItem) bool { return row.Gap })
 		result.OtherDocuments = d.otherDocuments(entity.ID, result.Composition, combination)
 		return
 	}
@@ -390,7 +391,7 @@ func (d *shelfChecklistData) apply(entity *types.Entity, result *types.ShelfMode
 				summary.Counts[r.Status]++
 				counted[key] = true
 			}
-			if r.Status == "missing" {
+			if r.Gap {
 				m.HasGaps = true
 			}
 		}
@@ -493,7 +494,7 @@ func (d *shelfChecklistData) row(r types.Entity, record types.ShelfRequirement, 
 			row.Origin, row.OriginLabel = "ancestor", "来自上层"
 		}
 	}
-	row.Status, row.StatusLabel = d.status(stage, record, v)
+	row.Status, row.StatusLabel, row.Gap = d.status(stage, record, v)
 	return row
 }
 

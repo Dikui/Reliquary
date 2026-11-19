@@ -27,7 +27,7 @@ const knownParts = computed(() => [{ module_type: '', optional: false, parts: id
 const condition = (value?: ShelfCondition[] | null) => shelfConditionText(value, props.library.shelf_config?.module_types, knownParts.value)
 const owner = (id: string) => identities.value.find(item => item.id === id)
 const requirements = computed(() => [...new Map(models.value.flatMap(model => model.shelf?.checklist || []).map(row => [row.requirement.id, row.requirement])).values()])
-const gapCount = computed(() => new Set(models.value.flatMap(model => model.shelf?.checklist || []).filter(row => row.status === 'missing').map(row => row.requirement.id)).size)
+const gapCount = computed(() => new Set(models.value.flatMap(model => model.shelf?.checklist || []).filter(row => row.gap).map(row => row.requirement.id)).size)
 const rowsFor = (model: ShelfQueryItem, id: string) => model.shelf?.checklist?.filter(row => row.requirement.id === id) || []
 const certGroups = computed(() => [
   { title: isPart.value ? t('shelfModel.sections.cert') : t('shelfNode.ownCerts'), rows: node.value?.shelf?.certifications?.filter(row => row.origin === 'self') || [] },

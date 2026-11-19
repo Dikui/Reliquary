@@ -22,10 +22,10 @@ const condition = [{ module_type: 'cell', part_ids: ['alpha'] }]
 const library = { id: 'library-a', name: 'Synthetic shelf', shelf_enabled: true, shelf_config: { module_types: [{ key: 'cell', name: '电芯' }], regions: [{ key: 'north', name: '北区' }, { key: 'south', name: '南区' }], stages: [{ key: 'review', name: '评审阶段' }], standards: [{ key: 'configured-standard', name: '自定标准', aliases: [] }] }, entity_schema: { kinds: [], fields: [{ key: 'energy', name: '能量', type: 'number', unit: 'kWh', product_line_ids: ['line'], kinds: ['model'] }] } }
 const doc = { id: 'version', file_id: 'file', owner_id: 'product', cloud_url: 'https://example.invalid/drawing', version_label: 'Customer V2', stage: 'final', parse_status: 'not_parsed', conditions: [] }
 const checklist = [
-  { requirement: { ...entity('drawing', 'document_requirement', '图纸'), attributes: { requirement: { name_en: 'Drawing', draft_due_stage: 'review', final_due_stage: 'review', stage_label: '原表阶段', due_text: '客户交期原文', owner: '负责人原名' } } }, status: 'delivered', has_file: true, document: doc, document_name: '客户图纸.pdf', origin: 'ancestor', owner_id: 'product', conditions: [] },
-  { requirement: entity('manual', 'document_requirement', '手册'), status: 'draft_only', has_file: true, document: { ...doc, id: 'draft', stage: 'draft' }, origin: 'self', owner_id: 'model', conditions: [] },
-  { requirement: entity('missing', 'document_requirement', '缺少的资料'), status: 'missing', has_file: false, conditions: condition },
-  { requirement: entity('later', 'document_requirement', '后续资料'), status: 'not_due', has_file: false, conditions: [] },
+  { requirement: { ...entity('drawing', 'document_requirement', '图纸'), attributes: { requirement: { name_en: 'Drawing', draft_due_stage: 'review', final_due_stage: 'review', stage_label: '原表阶段', due_text: '客户交期原文', owner: '负责人原名' } } }, status: 'delivered', gap: false, has_file: true, document: doc, document_name: '客户图纸.pdf', origin: 'ancestor', owner_id: 'product', conditions: [] },
+  { requirement: entity('manual', 'document_requirement', '手册'), status: 'draft_only', gap: false, has_file: true, document: { ...doc, id: 'draft', stage: 'draft' }, origin: 'self', owner_id: 'model', conditions: [] },
+  { requirement: entity('missing', 'document_requirement', '缺少的资料'), status: 'missing', gap: true, has_file: false, conditions: condition },
+  { requirement: entity('later', 'document_requirement', '后续资料'), status: 'not_due', gap: false, has_file: false, conditions: [] },
 ]
 const certs = [
   { entity: entity('cert-self', 'certification'), standard_name: '整机标准', origin: 'self', certification: { owner_id: 'model', year: 2026, certification_object: '整机', region: '北区', progress: '客户进度原文', agency: '独立机构', validity: '客户有效期原文', number: 'TEST-001', conditions: [] } },
@@ -67,6 +67,25 @@ async function mountPage(t: test.TestContext, options: { api?: Record<string, un
   return { root, requests, writes }
 }
 const section = (root: Element, id: string) => descendants(root).find(node => node.props.id === id)!
+
+// Small spec, shelf-checklist-markets task 01: unstaged checklist states keep
+// their delivery meaning in both locales, including the summary counts.
+test('未设阶段的清单在中英文中区分终稿初稿和缺失', async t => {
+  const value = data()
+  value.shelf.current_stage = ''; value.shelf.stage_owner_id = ''
+  value.shelf.checklist = structuredClone(checklist.slice(0, 3))
+  value.shelf.checklist[1].gap = true
+  for (const locale of ['zh-CN', 'en-US']) {
+    const { root } = await mountPage(t, { value, locale })
+    const docs = section(root, 'docs')
+    assert.match(visibleText(section(docs, 'requirement-drawing')), locale === 'zh-CN' ? /已交/ : /Delivered/)
+    assert.match(visibleText(section(docs, 'requirement-manual')), locale === 'zh-CN' ? /只有初稿/ : /Draft only/)
+    assert.match(visibleText(section(docs, 'requirement-missing')), locale === 'zh-CN' ? /缺/ : /Missing/)
+    assert.doesNotMatch(visibleText(docs), /有文件|无文件|Has file|No file|shelfModel\./)
+    const tally = descendants(docs).find(node => node.props.class === 'tally')!
+    assert.match(visibleText(tally), locale === 'zh-CN' ? /1 缺.*1 只有初稿.*1 已交/ : /1 Missing.*1 Draft only.*1 Delivered/)
+  }
+})
 
 // Small regression, task 26 / ADR 0023: each region displays its own evidence,
 // so a web edit cannot hide the source workbook of an untouched region.

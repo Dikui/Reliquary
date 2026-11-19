@@ -357,7 +357,7 @@ export default {
     import: '导入', web: '网页', changeset: '变更集',
     sections: { composition: '组成', sale: '可售状态', cert: '认证', docs: '资料清单', params: '参数', files: '其他文件', history: '操作历史' },
     origins: { self: '整机', component: '来自部件', ancestor: '来自上层' },
-    status: { missing: '缺', draft_only: '只有初稿', delivered: '已交', not_due: '未到期', has_file: '有文件', no_file: '无文件' },
+    status: { missing: '缺', draft_only: '只有初稿', delivered: '已交', not_due: '未到期' },
     parse: { not_parsed: '未解析', pending: '待解析', parsing: '解析中', completed: '已解析', retrying: '重试中', failed: '解析失败' },
   },
   shelfStatus: {

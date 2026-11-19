@@ -19,7 +19,7 @@ export interface ShelfDocumentVersion {
 }
 export interface ShelfRequirement { list_name?: string; name_zh?: string; name_en?: string; file_category?: string; stage_label?: string; due_text?: string; draft_due_stage?: string; final_due_stage?: string; owner?: string; priority?: string; source_list?: string; source_version?: string; markets?: Record<string, string> }
 export interface ShelfChecklistItem {
-  requirement: Entity; status: string; has_file: boolean; document?: ShelfDocumentVersion; document_name?: string; owner_id?: string
+  requirement: Entity; status: string; gap: boolean; has_file: boolean; document?: ShelfDocumentVersion; document_name?: string; owner_id?: string
   origin?: string; conditions: ShelfCondition[] | null; ambiguous?: boolean
 }
 export interface ShelfNodeDocument { entity: Entity; document: ShelfDocumentVersion; requirements?: Entity[]; requirement?: Entity }
@@ -38,6 +38,7 @@ export interface ShelfNode {
     stage_owner_id?: string
     certifications?: ShelfCertification[]
     checklist?: ShelfChecklistItem[]
+    has_gaps?: boolean
     parameters?: Record<string, { value: unknown; conditions: ShelfCondition[] | null }[]>
     other_documents?: ShelfOtherDocument[]
     documents?: ShelfNodeDocument[]

@@ -16,7 +16,7 @@ const product = { ...entity('product', 'product', '产品原名'), attributes: {
 const part = { ...entity('part', 'part', '部件原名'), aliases: [' 别名原文 '], attributes: { module_type: 'module', pack_model: 'Pack 原名' } }
 const req = entity('drawing', 'document_requirement', '客户图纸')
 const conditions = [{ module_type: 'module', part_ids: ['part'] }]
-const model = (id = 'model'): any => ({ entity: entity(id, 'model', `型号 ${id}`), recorded: true, as_of: '2026-11-07T12:00:00Z', facts: [{ field: 'belongs_to', value: { object_id: 'product' } }], partial_options: true, shelf: { current_stage: 'early', stage_owner_id: 'product', composition: [{ module_type: 'module', optional: true, parts: [part, entity('alternative', 'part', '另一个部件')] }], sale_statuses: [{ region: 'north', status: 'GA', planned_eom: true, notes: '原始备注', conditions }], checklist: [{ requirement: req, status: 'delivered', conditions }, { requirement: req, status: 'missing', conditions: [{ module_type: 'module', part_ids: ['alternative'] }] }] } })
+const model = (id = 'model'): any => ({ entity: entity(id, 'model', `型号 ${id}`), recorded: true, as_of: '2026-11-07T12:00:00Z', facts: [{ field: 'belongs_to', value: { object_id: 'product' } }], partial_options: true, shelf: { current_stage: 'early', stage_owner_id: 'product', composition: [{ module_type: 'module', optional: true, parts: [part, entity('alternative', 'part', '另一个部件')] }], sale_statuses: [{ region: 'north', status: 'GA', planned_eom: true, notes: '原始备注', conditions }], checklist: [{ requirement: req, status: 'delivered', gap: false, conditions }, { requirement: req, status: 'missing', gap: true, conditions: [{ module_type: 'module', part_ids: ['alternative'] }] }] } })
 const node = (isPart = false): any => ({ entity: isPart ? part : product, recorded: true, as_of: '2026-11-07T12:00:00Z', facts: isPart ? [] : [{ field: 'belongs_to', value: { object_id: 'platform' } }], shelf: { composition: [], sale_statuses: [], checklist: [], checklist_summary: { model_count: 1, models_with_gaps: 1, counts: { missing: 1 } }, certifications: [{ entity: entity('cert', 'certification'), standard_name: '标准原文', origin: isPart ? 'self' : 'ancestor', certification: { owner_id: isPart ? 'part' : 'platform', region: '认证地区', progress: '客户进度', agency: '客户机构', issued_date: '原表日期', validity: '长期原文', number: 'TEST-17', cloud_url: 'https://example.invalid/cert', conditions } }], documents: [{ entity: entity('file', 'document_file', '客户文件.pdf'), requirement: req, document: { id: 'version', file_id: 'file', version_label: ' 客户 V3 ', stage: 'draft', cloud_url: 'https://example.invalid/file', parse_status: 'not_parsed', conditions } }] } })
 const success = (data: unknown) => Promise.resolve({ success: true, data })
 async function mountPage(t: test.TestContext, options: { part?: boolean; locale?: string; api?: Record<string, unknown> } = {}) {
@@ -126,7 +126,7 @@ test('英文节点页翻译栏目并保留客户原名', async t => {
 // Small spec, task 30: even an old response cannot display part requirements.
 test('部件页不再显示资料清单', async t => {
   const value = node(true)
-  value.shelf.checklist = [{ requirement: { ...req, attributes: { requirement: { draft_due_stage: 'early', final_due_stage: 'late', due_text: '客户交期原文' } } }, status: 'no_file', conditions: [] }]
+  value.shelf.checklist = [{ requirement: { ...req, attributes: { requirement: { draft_due_stage: 'early', final_due_stage: 'late', due_text: '客户交期原文' } } }, status: 'missing', gap: true, conditions: [] }]
   const { root } = await mountPage(t, { part: true, api: { getShelfNode: () => success(value) } })
   assert.equal(section(root, 'part-checklist'), undefined)
   assert.ok(section(root, 'node-files'))
@@ -161,6 +161,17 @@ test('资料缺口按不同要求计数并保留受影响型号数量', async t 
     queryShelf: () => success({ items: [model('one'), model('two')], total: 2 }),
   } })
   assert.match(visibleText(root), /缺 1 项（2 个型号）/)
+})
+
+// Small spec, shelf-checklist-markets task 01: only the API gap flag counts,
+// including an unstaged draft and excluding a staged draft of another model.
+test('资料缺口计数使用清单 gap 字段并计入未设阶段的初稿', async t => {
+  const unstaged = model('unstaged'), staged = model('staged')
+  unstaged.shelf.current_stage = ''
+  unstaged.shelf.checklist = [{ requirement: req, status: 'draft_only', gap: true, conditions: [] }]
+  staged.shelf.checklist = [{ requirement: entity('other', 'document_requirement', '另一资料'), status: 'draft_only', gap: false, conditions: [] }]
+  const { root } = await mountPage(t, { api: { queryShelf: () => success({ items: [unstaged, staged], total: 2 }) } })
+  assert.match(visibleText(root), /缺 1 项（1 个型号）/)
 })
 
 // Small spec, task 30: certifications follow usage and precede attached files.

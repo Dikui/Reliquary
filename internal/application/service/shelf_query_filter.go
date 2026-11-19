@@ -260,7 +260,7 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 			}
 			_, _, rows := data.model(id, nil)
 			for _, r := range rows {
-				if r.Status == "missing" {
+				if r.Gap {
 					gaps = append(gaps, map[string]any{"model_id": id, "conditions": r.Conditions})
 				}
 			}

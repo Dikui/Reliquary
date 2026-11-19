@@ -357,7 +357,7 @@ export default {
     import: 'Import', web: 'Web', changeset: 'Changeset',
     sections: { composition: 'Composition', sale: 'Sale status', cert: 'Certifications', docs: 'Document checklist', params: 'Parameters', files: 'Other files', history: 'Operation history' },
     origins: { self: 'Model', component: 'From component', ancestor: 'From ancestor' },
-    status: { missing: 'Missing', draft_only: 'Draft only', delivered: 'Delivered', not_due: 'Not due', has_file: 'Has file', no_file: 'No file' },
+    status: { missing: 'Missing', draft_only: 'Draft only', delivered: 'Delivered', not_due: 'Not due' },
     parse: { not_parsed: 'Not parsed', pending: 'Pending', parsing: 'Parsing', completed: 'Parsed', retrying: 'Retrying', failed: 'Parsing failed' },
   },
   shelfStatus: {

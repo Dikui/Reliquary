@@ -40,8 +40,8 @@ func checklistRead(f *managedNamesFixture, l types.Library, id string) map[strin
 	return detail["shelf"].(map[string]any)
 }
 
-// Medium spec, task 08 / ADR 0024: the configured stage order drives the
-// four states; inherited stage and exact requirement metadata are observable.
+// Medium spec, task 08 and shelf-checklist-markets task 01 / ADR 0024: configured
+// stage order drives four states; only missing rows have a gap at a set stage.
 func TestShelfChecklistFourStates(t *testing.T) {
 	f, l, n := checklistSetup(t)
 	var product types.Entity
@@ -58,11 +58,17 @@ func TestShelfChecklistFourStates(t *testing.T) {
 	items := shelf["checklist"].([]any)
 	require.Len(t, items, 4)
 	states := map[string]string{}
+	gaps := map[string]bool{}
 	for _, raw := range items {
 		row := raw.(map[string]any)
-		states[row["requirement"].(map[string]any)["canonical_name"].(string)] = row["status"].(string)
+		name := row["requirement"].(map[string]any)["canonical_name"].(string)
+		states[name] = row["status"].(string)
+		gap, ok := row["gap"].(bool)
+		require.True(t, ok, "gap must be a boolean, including when false")
+		gaps[name] = gap
 	}
 	require.Equal(t, map[string]string{"Delivered": "delivered", "Draft": "draft_only", "Missing": "missing", "Later": "not_due"}, states)
+	require.Equal(t, map[string]bool{"Delivered": false, "Draft": false, "Missing": true, "Later": false}, gaps)
 	var detail types.EntityDetail
 	f.request(http.MethodGet, "/entities/"+product.ID, nil, http.StatusOK, &detail)
 	require.Equal(t, "draft_due", detail.Entity.Attributes["current_stage"])
@@ -160,33 +166,106 @@ func TestShelfChecklistConditionalGapsUseSameCombination(t *testing.T) {
 	require.EqualValues(t, 1, result.Total)
 }
 
-// Medium spec, task 08: unknown stages show presence only, and clearing the
-// override resumes inheritance. A replacement draft cannot reuse an old final.
+// Medium spec, shelf-checklist-markets task 01 / ADR 0024: unstaged models
+// require a current final; replacing it with a draft reopens the gap.
 func TestShelfChecklistUnstagedAndVersionReplacement(t *testing.T) {
 	f, l, n := checklistSetup(t)
 	r := checklistRequirement(t, f, l, "Presence requirement", "draft_due", "final_due")
 	checklistBind(f, l, r, shelfNode(n, "line"))
 	model := shelfNode(n, "model")
 	row := checklistRead(f, l, model)["checklist"].([]any)[0].(map[string]any)
-	require.Equal(t, "no_file", row["status"])
+	require.Equal(t, "missing", row["status"])
+	require.Equal(t, true, row["gap"])
 	checklistFile(f, l, model, r.ID, "final")
 	row = checklistRead(f, l, model)["checklist"].([]any)[0].(map[string]any)
-	require.Equal(t, "has_file", row["status"])
-	f.request(http.MethodPatch, "/entities/"+shelfNode(n, "product"), map[string]any{"revision": 1, "attributes": map[string]any{"current_stage": "final_due"}}, http.StatusOK, nil)
-	row = checklistRead(f, l, model)["checklist"].([]any)[0].(map[string]any)
 	require.Equal(t, "delivered", row["status"])
+	require.Equal(t, false, row["gap"])
 	checklistFile(f, l, model, r.ID, "draft")
 	row = checklistRead(f, l, model)["checklist"].([]any)[0].(map[string]any)
+	require.Equal(t, "draft_only", row["status"])
+	require.Equal(t, true, row["gap"])
+	f.request(http.MethodPatch, "/entities/"+shelfNode(n, "product"), map[string]any{"revision": 1, "attributes": map[string]any{"current_stage": "final_due"}}, http.StatusOK, nil)
+	row = checklistRead(f, l, model)["checklist"].([]any)[0].(map[string]any)
 	require.Equal(t, "missing", row["status"])
+	require.Equal(t, true, row["gap"])
 	require.EqualValues(t, 2, row["document"].(map[string]any)["ordinal"])
 	f.request(http.MethodPatch, "/entities/"+model, map[string]any{"revision": 1, "attributes": map[string]any{"current_stage": "early"}}, http.StatusOK, nil)
-	require.Equal(t, "draft_only", checklistRead(f, l, model)["checklist"].([]any)[0].(map[string]any)["status"])
+	row = checklistRead(f, l, model)["checklist"].([]any)[0].(map[string]any)
+	require.Equal(t, "draft_only", row["status"])
+	require.Equal(t, false, row["gap"])
 	f.request(http.MethodPatch, "/entities/"+model, map[string]any{"revision": 2, "attributes": map[string]any{}}, http.StatusOK, nil)
 	require.Equal(t, "final_due", checklistRead(f, l, model)["current_stage"])
 	var detail types.ShelfNodeDetail
 	f.request(http.MethodGet, "/libraries/"+l.ID+"/shelf/nodes/"+model+"?as_of=2000-01-01T00:00:00Z", nil, http.StatusOK, &detail)
 	require.False(t, detail.Recorded)
 	require.Nil(t, detail.Shelf)
+}
+
+// Medium spec, shelf-checklist-markets task 01: node details, ancestor summaries,
+// query filters and the guide's HTTP MCP response agree for all unstaged states.
+func TestShelfChecklistUnstagedGapsAgreeAcrossReads(t *testing.T) {
+	for _, test := range []struct {
+		status, label, file string
+		gap                 bool
+		modelsWithGaps      int
+	}{
+		{"missing", "缺", "", true, 1},
+		{"draft_only", "只有初稿", "draft", true, 1},
+		{"delivered", "已交", "final", false, 0},
+	} {
+		t.Run(test.status, func(t *testing.T) {
+			f, l, n := checklistSetup(t)
+			r := checklistRequirement(t, f, l, "Unstaged requirement", "draft_due", "final_due")
+			checklistBind(f, l, r, shelfNode(n, "line"))
+			model, single := shelfNode(n, "model"), shelfNode(n, "single")
+			checklistFile(f, l, single, r.ID, "final")
+			client := f.connect(t, "2025-11-25")
+			if test.file != "" {
+				checklistFile(f, l, model, r.ID, test.file)
+			}
+			shelf := checklistRead(f, l, model)
+			require.Empty(t, shelf["current_stage"])
+			require.Equal(t, test.gap, shelf["has_gaps"])
+			rows := shelf["checklist"].([]any)
+			require.Len(t, rows, 1)
+			row := rows[0].(map[string]any)
+			require.Equal(t, test.status, row["status"])
+			require.Equal(t, test.label, row["status_label"])
+			require.Equal(t, test.gap, row["gap"])
+			for _, key := range []string{"product", "platform", "line"} {
+				summary := checklistRead(f, l, shelfNode(n, key))["checklist_summary"].(map[string]any)
+				require.EqualValues(t, 2, summary["model_count"])
+				require.EqualValues(t, test.modelsWithGaps, summary["models_with_gaps"])
+				for _, raw := range summary["models"].([]any) {
+					item := raw.(map[string]any)
+					if item["model_id"] == model {
+						require.Equal(t, test.gap, item["has_gaps"])
+					}
+				}
+			}
+			var result types.ShelfQueryResult
+			f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/query", map[string]any{"document_gaps": true, "detail": "full"}, http.StatusOK, &result)
+			require.EqualValues(t, test.modelsWithGaps, result.Total)
+			if test.gap {
+				require.Len(t, result.Items, 1)
+				require.Equal(t, model, result.Items[0].Entity.ID)
+				require.True(t, result.Items[0].Shelf.HasGaps)
+				require.Len(t, result.Items[0].Shelf.Checklist, 1)
+				require.True(t, result.Items[0].Shelf.Checklist[0].Gap)
+			}
+			for _, key := range []string{"model", "product", "platform", "line"} {
+				var guide guideGapResult
+				mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, key)}, &guide)
+				require.Zero(t, guide.Gaps.NoFileDocuments.Total)
+				require.EqualValues(t, test.modelsWithGaps, guide.Gaps.Documents.Total)
+				for _, item := range guide.Gaps.Documents.Items {
+					require.Equal(t, model, item.ModelID)
+					require.Equal(t, test.status, item.Status)
+					require.True(t, item.Gap)
+				}
+			}
+		})
+	}
 }
 
 // Medium spec, task 08: invalid requirements and applicability are conflicts

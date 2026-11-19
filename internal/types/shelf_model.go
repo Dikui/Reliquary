@@ -22,6 +22,7 @@ type ShelfModelDetail struct {
 	CurrentStage     string                           `json:"current_stage,omitempty"`
 	StageOwnerID     string                           `json:"stage_owner_id,omitempty"`
 	Checklist        []ShelfChecklistItem             `json:"checklist"`
+	HasGaps          bool                             `json:"has_gaps"`
 	ChecklistSummary *ShelfChecklistSummary           `json:"checklist_summary,omitempty"`
 	Certifications   []ShelfCertificationView         `json:"certifications"`
 	Composition      []ShelfComposition               `json:"composition"`

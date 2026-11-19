@@ -26,7 +26,7 @@ let generation = 0, historyGeneration = 0
 const detail = computed(() => node.value?.shelf)
 const optional = computed(() => detail.value?.composition.filter(group => group.optional) || [])
 const sections = ['composition', 'sale', 'cert', 'docs', 'params', 'files', 'history'] as const
-const statusKeys = ['missing', 'draft_only', 'delivered', 'not_due', 'has_file', 'no_file'] as const
+const statusKeys = ['missing', 'draft_only', 'delivered', 'not_due'] as const
 const counts = computed(() => statusKeys.map(status => ({ status, count: new Set((detail.value?.checklist || []).filter(row => row.status === status).map(row => row.requirement.id)).size })).filter(item => item.count))
 const groups = computed(() => (['self', 'component', 'ancestor'] as const).map(origin => ({ origin, rows: (detail.value?.certifications || []).filter(row => row.origin === origin) })))
 const attributeFields = computed(() => (props.library.entity_schema?.fields || []).filter(field => !field.archived && !field.product_line_ids?.length && (!field.kinds?.length || field.kinds.includes('model')) && !['current_stage', 'sale_statuses', 'combination_rules'].includes(field.key)))
@@ -329,7 +329,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
                 <tr v-for="(row, index) in detail.checklist" :id="detail.checklist.findIndex(item => item.requirement.id === row.requirement.id) === index ? `requirement-${row.requirement.id}` : undefined" :key="`${row.requirement.id}-${index}`">
                   <td>
                     <span class="doc" :class="row.status">{{ t(`shelfModel.status.${row.status}`) }}</span>
-                    <Button v-if="['missing', 'no_file', 'draft_only'].includes(row.status)" variant="ghost" :disabled="editorLoading" @click="openEditor('document', row.requirement.id)">{{ t('shelfModel.attach') }}</Button>
+                    <Button v-if="['missing', 'draft_only'].includes(row.status)" variant="ghost" :disabled="editorLoading" @click="openEditor('document', row.requirement.id)">{{ t('shelfModel.attach') }}</Button>
                     <small v-if="row.ambiguous" role="status">{{ t('shelfModel.ambiguous') }}</small>
                   </td>
                   <td>{{ row.requirement.canonical_name }}
