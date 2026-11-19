@@ -64,14 +64,14 @@ description: 查询产品货架的型号、选配、区域状态、认证与资�
 
 ## 步骤
 
-维护货架设置时，通过 `configure_shelf` 保存区域到市场的 `checklist_markets_by_region`，只引用本库已配置的键；未列入的区域表示不对应。对应表仍引用的市场不能删除。
+维护货架设置时，通过 `configure_shelf` 保存区域到市场的 `checklist_markets_by_region`，只引用本库已配置的键；未列入的区域表示不对应。对应表仍引用的市场不能删除。对应表非空时，清单按业务时间快照与部件组合，将 GA、DEV、Planning 区域对应到 `checklist_markets`；EOM、待定与未对应区域不计入，未选组合时取任一条件下在售市场。只列任一检查市场上必需或可选的要求，多个市场取最强者，以 `necessity` 返回；无市场信息的要求照常列出且省略 necessity。`necessity=optional` 始终不算缺口。无在售市场时清单与市场列表为空，`checklist_skipped_reason=no_active_market` 表示跳过检查，仍计入型号总数。对应表为空时保留原清单，省略上述市场与必需性字段。报告缺口时说明检查市场、可选项与跳过原因，不把跳过检查说成资料齐全。
 
 1. 用 `list_libraries` 选择已开启货架的库，读取其类别、部件类型、区域、标准和阶段配置，不把客户专属值当成固定规则。参数筛选用的字段键在该库 entity_schema.fields 中，取 type 为 number 且带 product_line_ids 的字段键，不用显示名。
 2. 用 `shelf_find` 按名称、别名或代码找节点，查询文本放在参数 q 中。候选同时显示名称、类别和 ID。同名候选中只有一个类别具有问题所问的事实时（如区域状态只记在型号上），直接回答该候选，并列出其他同名节点；问单个节点的“状态”“能不能卖”时读区域可售状态，并说明 GA 不代表可销售；问阶段时才读当前阶段；选型或推荐中的“能卖”按“目标不清晰时的引导”处理；多个候选都可能是答案时先向用户澄清，不能默认选择第一个；分页时继续读取，不能把一页中的唯一候选当成全库唯一。
 3. 单节点问题用 `shelf_get`，按用户要求传业务时间 as_of 和部件组合 combination。未选组合时保留适用条件；只适用于部分选配的事实须明确说明。recorded=false 或早于最早记录时说“货架中没有记录”，不把当前值反推到过去。所问参数没有结构化字段或取值时，不能直接答“没有记录”：先看返回的 `entity.description`，再按第 5 步用 `shelf_node_ids` 检索正文；描述或正文有记载时，说明“结构化参数未记录”，再给出原文数值及来源位置；三处都没有才说“货架中没有记录”。
 4. 批量筛选或按部件、标准反查型号用 `shelf_query`，区域状态、参数、认证、组成等条件直接写进筛选参数，不先读出全部型号再自行筛选。区域写 `list_libraries` 货架配置中 regions 的 key（如 `jp`），不写显示名；任一区域满足时省略 region，不必逐个区域查询。计划退市用 `planned_eom=true`；问“没有记录”用 `no_record=true`（省略 region 时指所有区域都没有记录），它不能与 status 同用，也不等于待定。筛选条件写法示例：`{"sale_statuses":[{"region":"eu","status":"GA"}],"parameters":[{"field":"<字段键>","min":50}]}`，状态条件必须放在 sale_statuses 数组中。筛选须由同一可行组合满足。报告分页前总数 total、已返回数量与 truncated 是否截断。truncated=true 表示本次返回没有覆盖全部结果，非首页也为 true，不能据此判断还有下一页；offset 加本页条数小于 total 时继续翻页，翻页保持同一筛选和业务时间。说明 matching_conditions 的命中条件与 partial_options 标记，不把部分选配扩大到全部型号配置。数值参数按闭区间相交筛选：记录 `[9,54]` 会命中 `min=50`，只能说取值范围与条件相交，不能说保证达到 50；要求保证下限时，逐项核对返回值的 min，并报告未达到的条目。参数筛选只看结构化字段，描述或正文中的数值不会命中。按 min/max 筛选时读响应的 `parameter_missing`：某字段 models 大于 0，就把该参数换成 missing=true、其他条件不变重新筛选，按第 3 步逐个核对描述和正文，回答时分开报告“结构化参数确定符合”与“描述或正文记载符合”的型号，并说明还有几个查不到数值；为 0 时无需补查。
 
-   资料缺口用 `document_gaps=true` 时，筛选清单中有 `gap=true` 的型号，与型号 `has_gaps`、上层汇总和缺口指南一致。设了阶段时只有到期未交（missing）算缺口，终稿未到期的只有初稿（draft_only）不算；型号和产品名称都未设阶段时，所有资料视为到期，没有文件为缺（missing）、只有初稿为 draft_only，两者都算缺口，有当前终稿为已交（delivered）。不再返回 has_file 或 no_file 状态。用 `shelf_guide` 传 node_id 读 gaps.documents 列出缺口及适用条件；no_file_documents 为兼容保留的空列表，current_stage_unset 只说明未设置阶段，不影响检查。报告缺和只有初稿的数量，说明采用的阶段规则及部分选配范围，不把有初稿说成已交终稿。
+   资料缺口用 `document_gaps=true` 时，筛选清单中有 `gap=true` 的型号，与型号 `has_gaps`、上层汇总和缺口指南一致。排除可选项后，设了阶段时只有到期未交（missing）算缺口，终稿未到期的只有初稿（draft_only）不算；型号和产品名称都未设阶段时，所有资料视为到期，没有文件为缺（missing）、只有初稿为 draft_only，两者都算缺口，有当前终稿为已交（delivered）。不再返回 has_file 或 no_file 状态。用 `shelf_guide` 传 node_id 读 gaps.documents 列出缺口及适用条件；no_file_documents 为兼容保留的空列表，current_stage_unset 只说明未设置阶段，不影响检查。报告缺和只有初稿的数量，说明采用的阶段规则及部分选配范围，不把有初稿说成已交终稿。
 
    当前阶段可选；未设阶段也能检查资料，无须先补阶段。用户要求设置时，列出 `list_libraries` 中本库 stages 的名称供选择，阶段通常设在产品名称上，下属型号沿用，个别型号可覆盖。不按资料、状态或描述推测阶段。按第 7 步读取完整属性快照与 revision，通过变更集维护 current_stage，并经用户同意后确认。
 

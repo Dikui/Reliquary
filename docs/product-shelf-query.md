@@ -138,7 +138,11 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
 
 get 与完整详情 query 返回的 `shelf` 包含型号的 `current_stage`、`stage_owner_id`、`checklist` 与 `has_gaps`。产品名称、平台和产品线返回 `checklist_summary`。普通实体详情也复用同一计算。
 
-型号应有项只取所属产品线的资料要求。部件类型不带出要求，部件没有自身应交资料清单，但部件上的文件仍可按原规则供型号共用。始终使用当前活动资料要求的最新有效字段与适用关系，不按型号创建日期固定旧清单。上层与组成关系、型号和产品名称阶段按 `as_of` 读取；资料版本按 `occurred_at <= as_of` 中最大的文件内顺序号读取。云盘链接与本机原件均能满足要求，解析状态不影响交付状态。
+型号应有项先取所属产品线与所属平台上活动资料要求的并集，再按下述市场规则筛选。部件类型不带出要求，部件没有自身应交资料清单，但部件上的文件仍可按原规则供型号共用。始终使用当前活动资料要求的最新有效字段与适用关系，不按型号创建日期固定旧清单。上层与组成关系、型号和产品名称阶段按 `as_of` 读取；资料版本按 `occurred_at <= as_of` 中最大的文件内顺序号读取。云盘链接与本机原件均能满足要求，解析状态不影响交付状态。
+
+货架配置 `checklist_markets_by_region` 非空时，按 `as_of` 的型号可售状态快照，将 GA、DEV、Planning 的区域映射为去重且按键排序的 `checklist_markets`；EOM、待定及未配置对应的区域不计入。指定部件组合时只计入条件被组合满足的状态，未指定时任一条件下在售即可计入。对应表为空时不按市场筛选，省略 `checklist_markets`、`checklist_skipped_reason` 与每项 `necessity`，保持原清单行为。
+
+要求在任一检查市场上为 `required` 或 `optional` 才列入；`not_needed` 或未写不列入。同一要求在多个市场必需性不同时取最强者（必需 > 可选），每项以 `necessity` 返回。完全没有市场信息（`markets` 为空）的要求照常列入并省略 `necessity`。不自动按市场拆分同一要求。没有任何检查市场时，即使存在无市场信息的要求，`checklist` 与 `checklist_markets` 均返回空列表，`checklist_skipped_reason` 为 `no_active_market`，`has_gaps` 为 false；型号页说明“无在售区域，不检查资料”。
 
 每条清单项包含 `requirement`（身份、完整字段及来源清单版本）、`document`（选中的版本及来源与时间）、`document_name`（文件原名）、`has_file`、`owner_id`、`origin`、`origin_label`、`conditions`、`partial_options`、`status`、`status_label` 和布尔 `gap`。查找优先级为型号、部件、产品名称、平台。挂在认证记录上的文件按认证所属节点的层级计入，`owner_id` 仍为认证记录，并沿用认证的条件；认证带电芯部件时只对含该部件的型号生效，并作为部件条件参与清单。较近的初稿会遮住较远的终稿，旧版本不会代替当前初稿。部件文件隐含所属部件的组合条件。
 
@@ -156,11 +160,11 @@ get 与完整详情 query 返回的 `shelf` 包含型号的 `current_stage`、`s
 | 已到初稿应交阶段 | `missing` | 缺 |
 | 其余 | `not_due` | 未到期 |
 
-型号和产品名称均未填当前阶段时，所有资料均视为到期：有当前终稿返回 `delivered`（已交），只有初稿返回 `draft_only`（只有初稿），没有文件返回 `missing`（缺）。不再返回 `has_file` 或 `no_file` 状态，布尔 `has_file` 字段仍表示是否选中了文件。`gap` 是唯一的缺口判断：`missing` 为 true，未设阶段的 `draft_only` 为 true；设了阶段的 `draft_only`、`delivered` 和 `not_due` 为 false。阶段名和顺序均取自库配置。未指定组合时，同一要求可以按不同组合分为多行，每行保留适用条件；选择组合后只保留适用行。多个同层部件文件同时适用时保留全部候选，并用 `ambiguous=true` 标识存在重叠，由提交方确认归属或条件，不按内部 ID 猜选一份。
+型号和产品名称均未填当前阶段时，所有资料均视为到期：有当前终稿返回 `delivered`（已交），只有初稿返回 `draft_only`（只有初稿），没有文件返回 `missing`（缺）。不再返回 `has_file` 或 `no_file` 状态，布尔 `has_file` 字段仍表示是否选中了文件。`gap` 是唯一的缺口判断：`necessity=optional` 的项始终为 false；其他项的 `missing` 为 true，未设阶段的 `draft_only` 为 true；设了阶段的 `draft_only`、`delivered` 和 `not_due` 为 false。阶段名和顺序均取自库配置。未指定组合时，同一要求可以按不同组合分为多行，每行保留适用条件；选择组合后只保留适用行。多个同层部件文件同时适用时保留全部候选，并用 `ambiguous=true` 标识存在重叠，由提交方确认归属或条件，不按内部 ID 猜选一份。
 
-`checklist_summary` 包含 `model_count`、`models_with_gaps`、按状态汇总的 `counts`，以及每个型号的 ID、当前阶段、状态计数与 `has_gaps`。型号 `has_gaps` 与汇总中每个型号的 `has_gaps` 均由清单是否存在 `gap=true` 决定，`models_with_gaps` 统计这些型号。仅汇总该业务时间已有记录的当前活动下属型号。计数以“型号、要求、状态”为单位，同状态的多组选配条件不重复计数；不同状态分别保留，避免隐去部分选配缺失。
+`checklist_summary` 包含 `model_count`、`models_with_gaps`、按状态汇总的 `counts`，以及每个型号的 ID、当前阶段、状态计数与 `has_gaps`。型号 `has_gaps` 与汇总中每个型号的 `has_gaps` 均由清单是否存在 `gap=true` 决定，`models_with_gaps` 统计这些型号。仅汇总该业务时间已有记录的当前活动下属型号；因无在售市场而跳过检查的型号仍计入 `model_count`，不计入 `models_with_gaps`。计数以“型号、要求、状态”为单位，同状态的多组选配条件不重复计数；不同状态分别保留，避免隐去部分选配缺失。
 
-query 可加 `{"document_gaps":true}` 筛选有 `gap=true` 清单项的型号。缺口条件与区域、参数、认证及组成筛选在数据库中求同一可行组合，保留分页前总数和部分选配标记。未设阶段的缺和只有初稿计入缺口；设了阶段且终稿未到期的初稿以及未到期项不计入；省略或传 `false` 不启用该筛选。
+query 可加 `{"document_gaps":true}` 筛选有 `gap=true` 清单项的型号。缺口条件与区域、参数、认证及组成筛选在数据库中求同一可行组合，保留分页前总数和部分选配标记。可选项和无在售市场而跳过的型号不计入缺口；其余未设阶段的缺和只有初稿计入缺口；设了阶段且终稿未到期的初稿以及未到期项不计入；省略或传 `false` 不启用该筛选。
 
 ## 上层节点与部件详情
 

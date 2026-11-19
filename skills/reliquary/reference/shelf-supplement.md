@@ -6,7 +6,9 @@
 
 不传 node_id 时，values.requirement_lists 只返回各所属清单的 name、活动要求 total，以及绑定的 product_lines 和 platforms（均为 id、name），不返回逐条要求。归类前须明确节点，再传 node_id 读取 values.requirements 的 items、total、truncated。型号只取自身清单要求，上层节点按下属型号涉及的要求 ID 去重，部件没有应交清单，返回空列表。每条要求仅含 id、name（原实体名）、list_name、中英文名 name_zh/name_en、初稿及终稿应交阶段 draft_due_stage/final_due_stage；不含完整属性，修改时先读取完整实体快照。
 
-节点 gaps.documents 只列出清单中 gap=true 的资料行，与型号 has_gaps、上层汇总及 document_gaps 查询筛选一致：missing（缺）算缺口；draft_only（只有初稿）仅在型号和产品名称均未设阶段时算缺口，此时所有资料视为到期；有当前终稿为 delivered（已交）。设了阶段时，终稿未到期的初稿不算缺口。no_file_documents 为兼容保留的空列表，不再返回 has_file 或 no_file 状态。资料缺口保留原清单状态、gap 和选配条件，上层节点汇总下属型号。current_stage_unset 仅说明未设阶段，无须先补阶段。gaps.sale_statuses 是完全没有记录的区域，gaps.pending_changesets 是相关待确认批次。部件只返回相关待确认批次，其余缺口列表为空。
+配置 checklist_markets_by_region 时，型号清单按 as_of 快照与指定部件组合，从 GA、DEV、Planning 区域推导 checklist_markets，未指定组合时取任一条件下在售市场；EOM、待定及未对应区域不计入。仅列任一市场为 required 或 optional 的要求，多个市场取最强 necessity；markets 为空的要求照常列出且省略 necessity。无检查市场时清单为空并返回 checklist_skipped_reason=no_active_market，仍计入型号总数。对应表为空时不做市场筛选，不返回上述新增字段。
+
+节点 gaps.documents 只列出清单中 gap=true 的资料行，与型号 has_gaps、上层汇总及 document_gaps 查询筛选一致：necessity=optional 的项始终不算缺口；其余 missing（缺）算缺口；draft_only（只有初稿）仅在型号和产品名称均未设阶段时算缺口，此时所有资料视为到期；有当前终稿为 delivered（已交）。设了阶段时，终稿未到期的初稿不算缺口。no_file_documents 为兼容保留的空列表，不再返回 has_file 或 no_file 状态。资料缺口保留原清单状态、gap 和选配条件，上层节点汇总下属型号。current_stage_unset 仅说明未设阶段，无须先补阶段。gaps.sale_statuses 是完全没有记录的区域，gaps.pending_changesets 是相关待确认批次。部件只返回相关待确认批次，其余缺口列表为空。
 
 各缺口列表及节点资料要求分别先完整计数，再保留前 100 项；total 是截断前条数，truncated=true 时不得声称已列全。资料缺口按型号的清单条件行计数，values.requirements 按要求 ID 去重计数。可用 shelf_query 遍历型号、shelf_get 读完整清单，待确认批次用 HTTP 分页继续读取。
 

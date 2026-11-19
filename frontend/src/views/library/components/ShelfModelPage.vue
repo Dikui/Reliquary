@@ -45,6 +45,7 @@ const stageSource = computed(() => !detail.value?.current_stage ? 'unset' : deta
 const stagesConfigured = computed(() => !!props.library.shelf_config?.stages?.length)
 const conditionText = (conditions?: ShelfCondition[] | null) => shelfConditionText(conditions, props.library.shelf_config?.module_types, detail.value?.composition) || t('shelfModel.allConditions')
 const requirement = (entity: Entity) => (entity.attributes?.requirement || {}) as ShelfRequirement
+const marketName = (key: string) => props.library.shelf_config?.markets?.find(market => market.key === key)?.name || key
 const certConditions = (cert: ShelfCertification) => node.value?.facts.find(fact => fact.field === 'certification' && fact.entity_id === cert.entity.id)?.conditions || cert.certification.conditions
 const saleRegions = computed(() => (props.library.shelf_config?.regions || []).map(region => ({
   ...region,
@@ -307,6 +308,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
         </section>
         <section id="docs">
           <h2>{{ t('shelfModel.sections.docs') }}</h2>
+          <p v-if="detail?.checklist_markets?.length">{{ t('shelfModel.checklistMarkets') }}: {{ detail.checklist_markets.map(marketName).join(' · ') }}</p>
           <div class="tally">
             <span v-for="item in counts" :key="item.status">
               <b>{{ item.count }}</b> {{ t(`shelfModel.status.${item.status}`) }}
@@ -333,6 +335,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
                     <small v-if="row.ambiguous" role="status">{{ t('shelfModel.ambiguous') }}</small>
                   </td>
                   <td>{{ row.requirement.canonical_name }}
+                    <small v-if="row.necessity === 'optional'">{{ t('shelfModel.optionalRequirement') }}</small>
                     <small>{{ requirement(row.requirement).name_en }}</small>
                     <small>{{ requirement(row.requirement).file_category }}</small>
                     <small>{{ requirement(row.requirement).list_name }}</small>
@@ -361,7 +364,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
               </tbody>
             </table>
           </div>
-          <p v-else>{{ t('productShelf.noRecords') }}</p>
+          <p v-else>{{ t(detail?.checklist_skipped_reason === 'no_active_market' ? 'shelfModel.noActiveMarket' : 'productShelf.noRecords') }}</p>
         </section>
         <section id="params">
           <h2>{{ t('shelfModel.sections.params') }}</h2>

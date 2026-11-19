@@ -55,6 +55,7 @@ type ShelfChecklistItem struct {
 	Status         string                `json:"status"`
 	StatusLabel    string                `json:"status_label"`
 	Gap            bool                  `json:"gap"`
+	Necessity      string                `json:"necessity,omitempty"`
 	HasFile        bool                  `json:"has_file"`
 	Document       *ShelfDocumentVersion `json:"document,omitempty"`
 	OwnerID        string                `json:"owner_id,omitempty"`

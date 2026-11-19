@@ -35,10 +35,11 @@ type shelfChecklistData struct {
 	recorded     map[string]bool
 	requirements []types.Entity
 	// records holds each active requirement's decoded metadata by ID.
-	records   map[string]types.ShelfRequirement
-	edges     []types.Relation
-	bindings  []types.Relation
-	documents []types.ShelfDocumentVersion
+	records      map[string]types.ShelfRequirement
+	edges        []types.Relation
+	bindings     []types.Relation
+	documents    []types.ShelfDocumentVersion
+	saleStatuses map[string][]types.ShelfSaleStatus
 }
 
 func (s *EntityService) loadShelfChecklist(ctx context.Context, l *types.Library, at time.Time) (*shelfChecklistData, error) {
@@ -46,7 +47,7 @@ func (s *EntityService) loadShelfChecklist(ctx context.Context, l *types.Library
 	if cache != nil && cache.libraryID == l.ID && cache.at.Equal(at) {
 		return cache.data, nil
 	}
-	d := &shelfChecklistData{library: l, nodes: map[string]types.Entity{}, recorded: map[string]bool{}}
+	d := &shelfChecklistData{library: l, nodes: map[string]types.Entity{}, recorded: map[string]bool{}, saleStatuses: map[string][]types.ShelfSaleStatus{}}
 	var nodes []types.Entity
 	if err := s.db.WithContext(ctx).Where("library_id=? AND space_id=?", l.ID, l.SpaceID).Order("canonical_name,id").Find(&nodes).Error; err != nil {
 		return nil, err
@@ -69,6 +70,13 @@ func (s *EntityService) loadShelfChecklist(ctx context.Context, l *types.Library
 	for _, e := range nodes {
 		e.Attributes = snapshots[e.ID]
 		d.nodes[e.ID] = e
+		if raw, ok := e.Attributes["sale_statuses"]; ok && e.Kind == "model" && len(l.ShelfConfig.ChecklistMarketsByRegion) > 0 {
+			var statuses []types.ShelfSaleStatus
+			if err := types.DecodeShelfValue(raw, &statuses); err != nil {
+				return nil, fmt.Errorf("model %q has unreadable sale statuses: %w", e.CanonicalName, err)
+			}
+			d.saleStatuses[e.ID] = statuses
+		}
 	}
 	// Requirements always use the latest effective list, even for older models.
 	for i := range nodes {
@@ -172,6 +180,10 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 		}
 	}
 	rows := []types.ShelfChecklistItem{}
+	markets := d.checklistMarkets(id, combination)
+	if markets != nil && len(markets) == 0 {
+		return stage, stageOwner, rows
+	}
 	for _, r := range d.requirements {
 		applies := false
 		for _, b := range d.bindings {
@@ -190,6 +202,22 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 		record, ok := d.records[r.ID]
 		if !ok {
 			continue
+		}
+		necessity := ""
+		if markets != nil && len(record.Markets) > 0 {
+			for _, market := range markets {
+				switch record.Markets[market] {
+				case "required":
+					necessity = "required"
+				case "optional":
+					if necessity == "" {
+						necessity = "optional"
+					}
+				}
+			}
+			if necessity == "" {
+				continue
+			}
 		}
 
 		universe := d.domain(id)
@@ -240,7 +268,7 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 					if !ok {
 						continue
 					}
-					row := d.row(r, record, stage, v, rank, intersection, universe, combination)
+					row := d.row(r, record, necessity, stage, v, rank, intersection, universe, combination)
 					rows = append(rows, row)
 					covered = append(covered, intersection)
 				}
@@ -250,7 +278,7 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 			}
 		}
 		for _, box := range pending {
-			rows = append(rows, d.row(r, record, stage, nil, 4, box, universe, combination))
+			rows = append(rows, d.row(r, record, necessity, stage, nil, 4, box, universe, combination))
 		}
 
 	}
@@ -264,6 +292,26 @@ func (d *shelfChecklistData) model(id string, combination map[string]string) (st
 		}
 	}
 	return stage, stageOwner, rows
+}
+
+// A nil market list preserves libraries without a region mapping. An empty,
+// non-nil list means the model has no active mapped region at this business time.
+func (d *shelfChecklistData) checklistMarkets(id string, combination map[string]string) []string {
+	mapping := d.library.ShelfConfig.ChecklistMarketsByRegion
+	if len(mapping) == 0 {
+		return nil
+	}
+	markets := []string{}
+	for _, status := range d.saleStatuses[id] {
+		if !slices.Contains([]string{"GA", "DEV", "Planning"}, status.Status) || !shelfConditionsMatch(status.Conditions, combination) {
+			continue
+		}
+		if market := mapping[status.Region]; market != "" && !slices.Contains(markets, market) {
+			markets = append(markets, market)
+		}
+	}
+	sort.Strings(markets)
+	return markets
 }
 
 // documentScope returns the node whose checklist level a file counts at. A file
@@ -336,6 +384,10 @@ func (d *shelfChecklistData) status(stage string, r types.ShelfRequirement, v *t
 func (d *shelfChecklistData) apply(entity *types.Entity, result *types.ShelfModelDetail, combination map[string]string) {
 	if entity.Kind == "model" {
 		result.CurrentStage, result.StageOwnerID, result.Checklist = d.model(entity.ID, combination)
+		result.ChecklistMarkets = d.checklistMarkets(entity.ID, combination)
+		if result.ChecklistMarkets != nil && len(result.ChecklistMarkets) == 0 {
+			result.ChecklistSkippedReason = "no_active_market"
+		}
 		result.HasGaps = slices.ContainsFunc(result.Checklist, func(row types.ShelfChecklistItem) bool { return row.Gap })
 		result.OtherDocuments = d.otherDocuments(entity.ID, result.Composition, combination)
 		return
@@ -467,8 +519,8 @@ func (d *shelfChecklistData) domain(id string) map[string][]string {
 	}
 	return domain
 }
-func (d *shelfChecklistData) row(r types.Entity, record types.ShelfRequirement, stage string, v *types.ShelfDocumentVersion, rank int, box, universe map[string][]string, combination map[string]string) types.ShelfChecklistItem {
-	row := types.ShelfChecklistItem{Requirement: r, Conditions: []types.ShelfCondition{}, Document: v}
+func (d *shelfChecklistData) row(r types.Entity, record types.ShelfRequirement, necessity, stage string, v *types.ShelfDocumentVersion, rank int, box, universe map[string][]string, combination map[string]string) types.ShelfChecklistItem {
+	row := types.ShelfChecklistItem{Requirement: r, Necessity: necessity, Conditions: []types.ShelfCondition{}, Document: v}
 	keys := []string{}
 	for key := range box {
 		keys = append(keys, key)
@@ -495,6 +547,9 @@ func (d *shelfChecklistData) row(r types.Entity, record types.ShelfRequirement, 
 		}
 	}
 	row.Status, row.StatusLabel, row.Gap = d.status(stage, record, v)
+	if necessity == "optional" {
+		row.Gap = false
+	}
 	return row
 }
 

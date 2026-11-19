@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"testing"
@@ -38,6 +39,238 @@ func checklistRead(f *managedNamesFixture, l types.Library, id string) map[strin
 	var detail map[string]any
 	f.request(http.MethodGet, "/libraries/"+l.ID+"/shelf/nodes/"+id, nil, http.StatusOK, &detail)
 	return detail["shelf"].(map[string]any)
+}
+
+func checklistMarketSetup(t *testing.T) (*managedNamesFixture, types.Library, types.ShelfChangeset) {
+	t.Helper()
+	f, l, n := checklistSetup(t)
+	l.ShelfConfig.Regions = append(l.ShelfConfig.Regions, types.ShelfOption{Key: "gb", Name: "GB"}, types.ShelfOption{Key: "iec", Name: "IEC"}, types.ShelfOption{Key: "pending", Name: "Pending"})
+	l.ShelfConfig.Markets = append(l.ShelfConfig.Markets, types.ShelfOption{Key: "domestic", Name: "国内"}, types.ShelfOption{Key: "overseas", Name: "海外"})
+	l.ShelfConfig.ChecklistMarketsByRegion = map[string]string{"gb": "domestic", "iec": "overseas", "pending": "overseas"}
+	f.request(http.MethodPut, "/libraries/"+l.ID, map[string]any{"shelf_config": l.ShelfConfig}, http.StatusOK, &l)
+	return f, l, n
+}
+
+func checklistMarketRequirement(t *testing.T, f *managedNamesFixture, l types.Library, n types.ShelfChangeset, name string, markets map[string]string) types.Entity {
+	t.Helper()
+	var e types.Entity
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/entities", map[string]any{"name": name, "kind": "document_requirement", "attributes": map[string]any{"requirement": map[string]any{"list_name": "Synthetic markets", "final_due_stage": "final_due", "markets": markets}}}, http.StatusCreated, &e)
+	checklistBind(f, l, e, shelfNode(n, "line"))
+	return e
+}
+
+// Medium spec, shelf-checklist-markets task 03: active mapped regions select
+// requirements; the strongest necessity wins and optional rows never have gaps.
+func TestShelfChecklistMarketsSelectRequirements(t *testing.T) {
+	for _, test := range []struct {
+		name, gb, iec string
+		markets       []any
+		necessities   map[string]string
+	}{
+		{"domestic", "GA", "EOM", []any{"domestic"}, map[string]string{"Domestic": "required", "Optional": "optional", "Strongest": "optional", "Legacy": ""}},
+		{"both", "DEV", "Planning", []any{"domestic", "overseas"}, map[string]string{"Domestic": "required", "Overseas": "required", "Optional": "optional", "Strongest": "required", "Legacy": ""}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f, l, n := checklistMarketSetup(t)
+			for _, r := range []struct {
+				name    string
+				markets map[string]string
+			}{
+				{"Domestic", map[string]string{"domestic": "required"}},
+				{"Overseas", map[string]string{"overseas": "required"}},
+				{"Optional", map[string]string{"domestic": "optional"}},
+				{"Strongest", map[string]string{"domestic": "optional", "overseas": "required"}},
+				{"Not needed", map[string]string{"domestic": "not_needed", "overseas": "not_needed"}},
+				{"Other market", map[string]string{"market_a": "required"}},
+				{"Legacy", map[string]string{}},
+			} {
+				checklistMarketRequirement(t, f, l, n, r.name, r.markets)
+			}
+			model := shelfNode(n, "model")
+			f.request(http.MethodPatch, "/entities/"+model, map[string]any{"revision": 1, "attributes": map[string]any{"sale_statuses": []any{
+				map[string]any{"region": "gb", "status": test.gb, "planned_eom": true},
+				map[string]any{"region": "iec", "status": test.iec},
+				map[string]any{"region": "pending", "status": "待定"},
+				map[string]any{"region": "region_a", "status": "GA"},
+			}}}, http.StatusOK, nil)
+			shelf := checklistRead(f, l, model)
+			require.Equal(t, test.markets, shelf["checklist_markets"])
+			require.NotContains(t, shelf, "checklist_skipped_reason")
+			rows := shelf["checklist"].([]any)
+			require.Len(t, rows, len(test.necessities))
+			for _, raw := range rows {
+				row := raw.(map[string]any)
+				name := row["requirement"].(map[string]any)["canonical_name"].(string)
+				want, ok := test.necessities[name]
+				require.True(t, ok, "unexpected requirement %s", name)
+				if want == "" {
+					require.NotContains(t, row, "necessity")
+				} else {
+					require.Equal(t, want, row["necessity"], name)
+				}
+				require.Equal(t, "missing", row["status"])
+				require.Equal(t, want != "optional", row["gap"], name)
+			}
+		})
+	}
+}
+
+// Medium spec, shelf-checklist-markets task 03: optional rows and skipped
+// models have the same gap meaning through every public read surface.
+func TestShelfChecklistMarketsGapsAgreeAcrossReads(t *testing.T) {
+	for _, test := range []struct {
+		name, necessity, file, stage, sale, status string
+		gap                                        bool
+	}{
+		{"required", "required", "", "", "GA", "missing", true},
+		{"optional missing", "optional", "", "", "GA", "missing", false},
+		{"optional draft", "optional", "draft", "", "GA", "draft_only", false},
+		{"optional overdue", "optional", "draft", "final_due", "GA", "missing", false},
+		{"retired", "required", "", "", "EOM", "", false},
+		{"no statuses", "required", "", "", "", "", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f, l, n := checklistMarketSetup(t)
+			r := checklistMarketRequirement(t, f, l, n, "Market requirement", map[string]string{"domestic": test.necessity})
+			if test.status == "" {
+				checklistMarketRequirement(t, f, l, n, "Legacy requirement", map[string]string{})
+			}
+			model, single := shelfNode(n, "model"), shelfNode(n, "single")
+			for _, id := range []string{model, single} {
+				sale := "EOM"
+				if id == model {
+					sale = test.sale
+				}
+				attrs := map[string]any{}
+				if sale != "" {
+					attrs["sale_statuses"] = []any{map[string]any{"region": "gb", "status": sale}, map[string]any{"region": "iec", "status": "EOM"}, map[string]any{"region": "pending", "status": "待定"}, map[string]any{"region": "region_a", "status": "GA"}}
+				}
+				f.request(http.MethodPatch, "/entities/"+id, map[string]any{"revision": 1, "attributes": attrs}, http.StatusOK, nil)
+			}
+			if test.stage != "" {
+				f.request(http.MethodPatch, "/entities/"+shelfNode(n, "product"), map[string]any{"revision": 1, "attributes": map[string]any{"current_stage": test.stage}}, http.StatusOK, nil)
+			}
+			if test.file != "" {
+				checklistFile(f, l, model, r.ID, test.file)
+			}
+			shelf := checklistRead(f, l, model)
+			require.Equal(t, test.gap, shelf["has_gaps"])
+			rows := shelf["checklist"].([]any)
+			if test.status == "" {
+				require.Empty(t, rows)
+				require.Equal(t, []any{}, shelf["checklist_markets"])
+				require.Equal(t, "no_active_market", shelf["checklist_skipped_reason"])
+			} else {
+				require.Len(t, rows, 1)
+				row := rows[0].(map[string]any)
+				require.Equal(t, test.necessity, row["necessity"])
+				require.Equal(t, test.status, row["status"])
+				require.Equal(t, test.gap, row["gap"])
+			}
+			count := 0
+			if test.gap {
+				count = 1
+			}
+			for _, key := range []string{"product", "platform", "line"} {
+				summary := checklistRead(f, l, shelfNode(n, key))["checklist_summary"].(map[string]any)
+				require.EqualValues(t, 2, summary["model_count"])
+				require.EqualValues(t, count, summary["models_with_gaps"])
+			}
+			var result types.ShelfQueryResult
+			f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/query", map[string]any{"document_gaps": true, "detail": "full"}, http.StatusOK, &result)
+			require.EqualValues(t, count, result.Total)
+			if test.gap {
+				require.Equal(t, model, result.Items[0].Entity.ID)
+				require.Equal(t, "required", result.Items[0].Shelf.Checklist[0].Necessity)
+			}
+			client := f.connect(t, "2025-11-25")
+			for _, key := range []string{"model", "product", "platform", "line"} {
+				var guide guideGapResult
+				mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, key)}, &guide)
+				if key == "model" {
+					require.EqualValues(t, 1, guide.Gaps.ModelCount)
+				} else {
+					require.EqualValues(t, 2, guide.Gaps.ModelCount)
+				}
+				require.EqualValues(t, count, guide.Gaps.Documents.Total)
+				require.Zero(t, guide.Gaps.NoFileDocuments.Total)
+				if test.gap {
+					require.Equal(t, model, guide.Gaps.Documents.Items[0].ModelID)
+					require.True(t, guide.Gaps.Documents.Items[0].Gap)
+				}
+			}
+		})
+	}
+}
+
+// Medium spec, shelf-checklist-markets task 03: no mapping retains the full
+// checklist, even for retired models and optional/not-needed market metadata.
+func TestShelfChecklistMarketsUnconfiguredPreservesChecklist(t *testing.T) {
+	f, l, n := checklistSetup(t)
+	for _, value := range []string{"optional", "not_needed"} {
+		checklistMarketRequirement(t, f, l, n, value, map[string]string{"market_a": value})
+	}
+	f.request(http.MethodPatch, "/entities/"+shelfNode(n, "model"), map[string]any{"revision": 1, "attributes": map[string]any{"sale_statuses": []any{map[string]any{"region": "region_a", "status": "EOM"}}}}, http.StatusOK, nil)
+	shelf := checklistRead(f, l, shelfNode(n, "model"))
+	require.NotContains(t, shelf, "checklist_markets")
+	require.NotContains(t, shelf, "checklist_skipped_reason")
+	require.Equal(t, true, shelf["has_gaps"])
+	rows := shelf["checklist"].([]any)
+	require.Len(t, rows, 2)
+	for _, raw := range rows {
+		row := raw.(map[string]any)
+		require.NotContains(t, row, "necessity")
+		require.Equal(t, true, row["gap"])
+	}
+}
+
+// Medium spec, shelf-checklist-markets task 03: business time selects the sale
+// status snapshot, so retiring today does not remove yesterday's obligations.
+func TestShelfChecklistMarketsUseHistoricalSaleStatuses(t *testing.T) {
+	f, l, n := checklistMarketSetup(t)
+	checklistMarketRequirement(t, f, l, n, "Domestic", map[string]string{"domestic": "required"})
+	model := shelfNode(n, "model")
+	f.request(http.MethodPatch, "/entities/"+model, map[string]any{"revision": 1, "attributes": map[string]any{"sale_statuses": []any{map[string]any{"region": "gb", "status": "GA"}}}}, http.StatusOK, nil)
+	asOf := time.Now().UTC().Format(time.RFC3339Nano)
+	f.request(http.MethodPatch, "/entities/"+model, map[string]any{"revision": 2, "attributes": map[string]any{"sale_statuses": []any{map[string]any{"region": "gb", "status": "EOM"}}}}, http.StatusOK, nil)
+	require.Equal(t, "no_active_market", checklistRead(f, l, model)["checklist_skipped_reason"])
+	var detail map[string]any
+	f.request(http.MethodGet, "/libraries/"+l.ID+"/shelf/nodes/"+model+"?as_of="+url.QueryEscape(asOf), nil, http.StatusOK, &detail)
+	shelf := detail["shelf"].(map[string]any)
+	require.Equal(t, []any{"domestic"}, shelf["checklist_markets"])
+	require.Len(t, shelf["checklist"], 1)
+	require.Equal(t, true, shelf["has_gaps"])
+	var result types.ShelfQueryResult
+	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/query", map[string]any{"as_of": asOf, "document_gaps": true}, http.StatusOK, &result)
+	require.EqualValues(t, 1, result.Total)
+	require.Equal(t, model, result.Items[0].Entity.ID)
+}
+
+// Medium spec, shelf-checklist-markets task 03: the default view unions markets;
+// a selected combination admits only sale statuses satisfying all conditions.
+func TestShelfChecklistMarketsRespectCombination(t *testing.T) {
+	f, l, n := checklistMarketSetup(t)
+	checklistMarketRequirement(t, f, l, n, "Domestic", map[string]string{"domestic": "required"})
+	checklistMarketRequirement(t, f, l, n, "Overseas", map[string]string{"overseas": "required"})
+	model := shelfNode(n, "model")
+	f.request(http.MethodPatch, "/entities/"+model, map[string]any{"revision": 1, "attributes": map[string]any{"sale_statuses": []any{
+		map[string]any{"region": "gb", "status": "GA", "conditions": []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(n, "a")}}, {ModuleType: "module_b", PartIDs: []string{shelfNode(n, "fixed")}}}},
+		map[string]any{"region": "iec", "status": "DEV", "conditions": []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(n, "b")}}}},
+	}}}, http.StatusOK, nil)
+	shelf := checklistRead(f, l, model)
+	require.Equal(t, []any{"domestic", "overseas"}, shelf["checklist_markets"])
+	require.Len(t, shelf["checklist"], 2)
+	for _, test := range []struct{ part, market, name string }{{"a", "domestic", "Domestic"}, {"b", "overseas", "Overseas"}} {
+		combination, err := json.Marshal(map[string]string{"module_a": shelfNode(n, test.part)})
+		require.NoError(t, err)
+		var detail map[string]any
+		f.request(http.MethodGet, "/libraries/"+l.ID+"/shelf/nodes/"+model+"?combination="+url.QueryEscape(string(combination)), nil, http.StatusOK, &detail)
+		shelf = detail["shelf"].(map[string]any)
+		require.Equal(t, []any{test.market}, shelf["checklist_markets"])
+		rows := shelf["checklist"].([]any)
+		require.Len(t, rows, 1)
+		require.Equal(t, test.name, rows[0].(map[string]any)["requirement"].(map[string]any)["canonical_name"])
+	}
 }
 
 // Medium spec, task 08 and shelf-checklist-markets task 01 / ADR 0024: configured

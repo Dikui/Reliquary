@@ -68,6 +68,39 @@ async function mountPage(t: test.TestContext, options: { api?: Record<string, un
 }
 const section = (root: Element, id: string) => descendants(root).find(node => node.props.id === id)!
 
+// Small spec, shelf-checklist-markets task 03: use configured market names and
+// label optional requirements in each locale, including very long names.
+test('资料清单在中英文显示检查市场和可选标记', async t => {
+  const value = data()
+  value.shelf.checklist_markets = ['domestic', 'overseas']
+  value.shelf.checklist = [{ ...checklist[2], necessity: 'optional', gap: false,
+    requirement: entity('missing', 'document_requirement', '很长的资料名称'.repeat(30)) }]
+  const config = { ...library, shelf_config: { ...library.shelf_config, markets: [{ key: 'domestic', name: '国内原名' }, { key: 'overseas', name: 'Overseas original' }] } }
+  for (const locale of ['zh-CN', 'en-US']) {
+    const { root } = await mountPage(t, { value, config, locale })
+    const docs = section(root, 'docs')
+    assert.match(visibleText(docs), locale === 'zh-CN' ? /检查市场.*国内原名.*Overseas original/ : /Markets checked.*国内原名.*Overseas original/)
+    assert.match(visibleText(section(root, 'requirement-missing')), locale === 'zh-CN' ? /可选/ : /Optional/)
+    assert.match(visibleText(docs), new RegExp('很长的资料名称'.repeat(30)))
+  }
+})
+
+// Small spec, shelf-checklist-markets task 03: explain an intentionally skipped
+// checklist and leave the legacy empty state available without a market map.
+test('无在售市场的清单显示跳过原因，未配置市场时保留原空状态', async t => {
+  for (const locale of ['zh-CN', 'en-US']) {
+    const value = data(); value.shelf.checklist = []
+    value.shelf.checklist_markets = []; value.shelf.checklist_skipped_reason = 'no_active_market'
+    const { root } = await mountPage(t, { value, locale })
+    assert.match(visibleText(section(root, 'docs')), locale === 'zh-CN' ? /无在售区域，不检查资料/ : /No active sales regions; document checks skipped/)
+    delete value.shelf.checklist_markets; delete value.shelf.checklist_skipped_reason
+    const legacy = await mountPage(t, { value, locale })
+    const text = visibleText(section(legacy.root, 'docs'))
+    assert.doesNotMatch(text, /检查市场|Markets checked|无在售区域|No active sales regions/)
+    assert.match(text, locale === 'zh-CN' ? /暂无记录/ : /No records/)
+  }
+})
+
 // Small spec, shelf-checklist-markets task 01: unstaged checklist states keep
 // their delivery meaning in both locales, including the summary counts.
 test('未设阶段的清单在中英文中区分终稿初稿和缺失', async t => {

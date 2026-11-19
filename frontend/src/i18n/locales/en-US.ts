@@ -345,6 +345,7 @@ export default {
     noRequirement: 'No document requirement', noStage: 'Not set', notApplicable: 'Not applicable',
   },
   shelfModel: {
+    checklistMarkets: 'Markets checked', optionalRequirement: 'Optional', noActiveMarket: 'No active sales regions; document checks skipped',
     documentSource: 'Document source', existingFile: 'Choose existing file', existingHint: 'Confirmation moves this file and all its versions to this model. Originals and draft/final markers are preserved.',
     singleValue: 'Use one value', rangeValue: 'Use range', addValue: 'Add parameter value',
     compositionHint: 'Several parts of one part type become alternatives. Each confirmation adds or removes one part.', compositionAction: 'Action', addPart: 'Add part', removePart: 'Remove part',

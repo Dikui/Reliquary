@@ -345,6 +345,7 @@ export default {
     noRequirement: '不对应资料要求', noStage: '未设置', notApplicable: '不适用',
   },
   shelfModel: {
+    checklistMarkets: '检查市场', optionalRequirement: '可选', noActiveMarket: '无在售区域，不检查资料',
     documentSource: '文件来源', existingFile: '选择已有文件', existingHint: '确认后将此文件及其全部版本挂到本型号，保留原件和各版本的初稿或终稿标记。',
     singleValue: '改为单值', rangeValue: '改为区间', addValue: '添加参数值',
     compositionHint: '同一部件类型挂多个部件即为选配。每次确认添加或移除一个部件。', compositionAction: '操作', addPart: '添加部件', removePart: '移除部件',
