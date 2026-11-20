@@ -74,6 +74,8 @@ requirement_ids 为本库活动资料要求 ID 数组，可明确关联多项，
 
 认证状态 status 中，date_conflict 以进程本地当天为准，其余按 as_of 的本地日期判断。依次取首个命中：date_conflict（实际取证日期晚于今天）、obtained（实际取证日期不晚于 as_of 的本地日期，或未填实际日期且进度为已取证、已完成）、paused（进度含暂停）、delayed（计划取证日期早于 as_of 的本地日期）、not_started（进度为待启动、未启动）、in_progress（有进度、启动日期或计划取证日期）、unknown（其余）。shelf_query 可用 certification.status 筛选。
 
+`shelf_query` 带认证条件时用 `certification_total` 读取按实体 ID 去重的认证条数，`total` 为型号数，认证事实的 `value.standard_name` 为规范名。
+
 答复 delayed 时给出计划取证日期及 notes 中的延期说明（如有）；date_conflict 提示“实际取证日期晚于今天，需核对”。同一型号按相同 cell_part_id 与 conditions 汇总：有 date_conflict 先提示核对；全部 obtained 为已完成；有 delayed 为延期并逐项列出；其余为进行中。
 
 认证识别键为型号（或明确的所属部件、产品名称、平台）＋标准＋认证对象＋电芯部件＋地区。年份单列，标准使用库内键、规范名或明确别名；电芯等区分认证的差异须写入 cell_part_id 或 conditions，只写在名称或描述里时，新增与已有记录识别键和条件相同会被 uncertain 拦下；名称里出现所属型号组成中的部件名或别名，而该部件不在 cell_part_id 或 conditions 里，新增、改名或改身份时同样被拦下；导入行唯一匹配已有认证、却把非空的年份、机构或证书编号改成另一个值时为 uncertain，同一张证书须改用明确的 update_certification 提交，另一张证书须把差异写进识别字段或条件；通用 update_certification 的零条或多条匹配仍须提交方处理。认证进度和报告导入在零条匹配时生成 create_certification，以 new 反馈；一条匹配更新，多条仍为 uncertain，不合并。新增未映射 name 或名称单元格为空时，名称为“所属节点原名 / 标准规范名 / 认证对象原文”，有电芯部件再加“ / 电芯部件原名”，有地区再加“ / 地区名”（使用配置区域显示名）；映射 name 且非空时用原文。同名仍报冲突，不加后缀。

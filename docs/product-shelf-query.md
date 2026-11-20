@@ -106,7 +106,7 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
 }
 ```
 
-`detail` 控制每项详略，默认 `summary`，响应顶层 `detail` 回显本次取值。`summary` 每项只含 `entity`（保留名称、类别、代码、别名与 `description`，`attributes` 置空）、`current_stage`、`recorded`、`as_of`、`matching_conditions`、`partial_options`，以及本次筛选检查过的 `facts`：所筛区域的可售状态（未给区域时为全部区域）、所筛参数字段的取值、满足认证条件的认证；每条事实保留条件、来自部件或上层标记与来源证据。不返回 `shelf`，即资料清单、其他文件、组成、完整认证与参数表。`full` 每项返回与 `GET /shelf/nodes/:node_id` 相同的完整详情，体积随型号和资料数线性增长，只在确需逐项资料清单时少量使用。只要数量时传 `limit=1` 读 `total`。货架导出与节点缺口在服务内部读取完整详情，不受此参数影响。
+`detail` 控制每项详略，默认 `summary`，响应顶层 `detail` 回显本次取值。`summary` 每项只含 `entity`（保留名称、类别、代码、别名与 `description`，`attributes` 置空）、`current_stage`、`recorded`、`as_of`、`matching_conditions`、`partial_options`，以及本次筛选检查过的 `facts`：所筛区域的可售状态（未给区域时为全部区域）、所筛参数字段的取值、能与其他筛选在同一可行组合下命中的认证；每条事实保留条件、来自部件或上层标记与来源证据。不返回 `shelf`，即资料清单、其他文件、组成、完整认证与参数表。`full` 每项返回与 `GET /shelf/nodes/:node_id` 相同的完整详情，体积随型号和资料数线性增长，只在确需逐项资料清单时少量使用。货架导出与节点缺口在服务内部读取完整详情，不受此参数影响。
 
 `facets=true` 时响应另含 `facets`，在全部命中型号上统计，不受分页影响，用于追问模糊目标时给出选项与型号数：
 
@@ -131,13 +131,15 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
 
 响应包含 `items`、`total`、`truncated`、`as_of`。`total` 为分页前的型号数，不因同型号多条匹配认证而重复计数。每页默认 50 条，上限 100；`offset` 为非负数。只要本次返回的条目没有覆盖全部结果，`truncated` 就为 `true`，包括非第一页和越界空页。结果按当前型号名称与 ID 稳定排序。
 
+传入 `certification` 时，响应另含 `certification_total`，统计分页前能与其他筛选在同一可行组合下命中的认证记录数，按认证实体 ID 去重。多个型号共用的上层或部件认证只计一次。没有命中时返回 `0`，省略认证条件时省略该字段。只查数量可传 `limit=1`，型号数读 `total`，认证条数读 `certification_total`。逐条列出命中认证时，用 `summary` 按 `total` 翻页，读取 `facts` 中 `field=certification` 的记录，按 `entity_id` 去重并保留来源标记。
+
 每个结果按 `detail` 返回摘要或 get 的完整节点详情，两种都增加 `matching_conditions` 和型号级 `partial_options`。`matching_conditions` 的外层为“或”，每组内部为“且”，同一部件类型重复条件取交集。只有全部选配均能满足筛选时，型号级 `partial_options` 才为 `false`；多条认证分别覆盖不同选配，也可以合起来覆盖全部选配。`full` 仍保留其他事实及其条件，`summary` 只保留命中事实；引用命中原因时使用 `matching_conditions`。
 
 这三个接口只提供货架中已记录的事实。GA 不代表认证齐全或可直接销售。没有记录时应明确说明“货架中没有记录”。资料清单和汇总见下文；节点范围全文检索由对应检索接口提供。
 
 ## 认证状态
 
-认证视图的 `status` 使用进程本地时区。日期冲突以当天为准，其余状态按 `as_of` 的本地日期判断。认证事实在 `value.status` 返回同一状态，备注分别在视图的 `certification.notes` 和事实的 `value.notes` 返回。状态按顺序取首个命中：
+认证视图的 `status` 使用进程本地时区。日期冲突以当天为准，其余状态按 `as_of` 的本地日期判断。查询和节点详情的认证事实在 `value.status` 返回同一状态，在 `value.standard` 和 `value.standard_name` 分别返回标准键及认证视图使用的规范名。备注分别在视图的 `certification.notes` 和事实的 `value.notes` 返回。状态按顺序取首个命中：
 
 | status | 条件 |
 | --- | --- |

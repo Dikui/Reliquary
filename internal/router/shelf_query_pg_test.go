@@ -126,6 +126,7 @@ func TestShelfQueryParameterAndCompositionUseSameCombination(t *testing.T) {
 	require.Equal(t, map[string]int{"sale_statuses": 2, "energy": 2}, fields)
 	var raw map[string]any
 	f.request(http.MethodPost, path, input, http.StatusOK, &raw)
+	require.NotContains(t, raw, "certification_total")
 	item := raw["items"].([]any)[0].(map[string]any)
 	require.NotContains(t, item, "shelf")
 	input["detail"] = "full"
@@ -175,19 +176,25 @@ func TestShelfQueryCertificationsReverseLookupAndOrigins(t *testing.T) {
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: operations}, http.StatusCreated, nil)
 	path := "/libraries/" + library.ID + "/shelf/query"
 	var result types.ShelfQueryResult
-	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"standard": "Customer spelling"}}, http.StatusOK, &result)
+	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"standard": "Customer spelling"}, "facets": true}, http.StatusOK, &result)
 	require.EqualValues(t, 2, result.Total)
+	require.NotNil(t, result.CertificationTotal)
+	require.EqualValues(t, 3, *result.CertificationTotal, "the models share the platform and fixed component certifications")
+	require.NotNil(t, result.Facets)
+	require.NotEmpty(t, result.Facets.Certifications)
 	for _, item := range result.Items {
 		require.False(t, item.PartialOptions, "the fixed component certificate covers every option")
 	}
 	f.request(http.MethodPost, path, map[string]any{"detail": "full", "certification": map[string]any{"standard": "Customer spelling", "progress": "a", "region": "region_a"}}, http.StatusOK, &result)
 	require.EqualValues(t, 1, result.Total)
+	require.EqualValues(t, 1, *result.CertificationTotal)
 	require.True(t, result.Items[0].PartialOptions)
 	labels := map[string]string{}
 	for _, fact := range result.Items[0].Facts {
 		if fact.Field != "certification" {
 			continue
 		}
+		require.Equal(t, "Synthetic Standard", fact.Value.(map[string]any)["standard_name"])
 		labels[fact.Origin] = fact.OriginLabel
 		if fact.PartialOptions {
 			require.Equal(t, "component", fact.Origin)
@@ -206,8 +213,10 @@ func TestShelfQueryCertificationsReverseLookupAndOrigins(t *testing.T) {
 	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"progress": "a", "region": "Wrong country"}}, http.StatusBadRequest, nil)
 	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"progress": "a"}, "composition": []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(nodes, "b")}}}}, http.StatusOK, &result)
 	require.Zero(t, result.Total, "a component certificate cannot apply to another optional component")
-	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"standard": "Unknown standard"}}, http.StatusOK, &result)
-	require.Zero(t, result.Total)
+	var raw map[string]any
+	f.request(http.MethodPost, path, map[string]any{"certification": map[string]any{"standard": "Unknown standard"}}, http.StatusOK, &raw)
+	require.EqualValues(t, 0, raw["total"])
+	require.EqualValues(t, 0, raw["certification_total"])
 }
 
 func TestShelfQueryCertificationStatusFiltersBeforePagination(t *testing.T) {
@@ -236,17 +245,23 @@ func TestShelfQueryCertificationStatusFiltersBeforePagination(t *testing.T) {
 	var result types.ShelfQueryResult
 	mcpCall(t, client, "shelf_query", input, &result)
 	require.EqualValues(t, 2, result.Total)
+	require.NotNil(t, result.CertificationTotal)
+	require.EqualValues(t, 1, *result.CertificationTotal, "the delayed platform certification is shared")
 	require.True(t, result.Truncated)
 	require.Len(t, result.Items, 1)
 	require.Len(t, result.Items[0].Facts, 1)
 	fact := result.Items[0].Facts[0]
 	require.Equal(t, "certification", fact.Field)
 	require.Equal(t, "delayed", fact.Value.(map[string]any)["status"])
+	require.Equal(t, "Synthetic Standard", fact.Value.(map[string]any)["standard_name"])
 	require.Equal(t, notes, fact.Value.(map[string]any)["notes"])
 
 	input["offset"] = 2
+	result = types.ShelfQueryResult{}
 	mcpCall(t, client, "shelf_query", input, &result)
 	require.EqualValues(t, 2, result.Total)
+	require.NotNil(t, result.CertificationTotal)
+	require.EqualValues(t, 1, *result.CertificationTotal)
 	require.True(t, result.Truncated)
 	require.Empty(t, result.Items)
 
@@ -254,10 +269,13 @@ func TestShelfQueryCertificationStatusFiltersBeforePagination(t *testing.T) {
 	input["certification"] = map[string]any{"status": "delayed", "progress": "已完成"}
 	mcpCall(t, client, "shelf_query", input, &result)
 	require.Zero(t, result.Total)
+	require.NotNil(t, result.CertificationTotal)
+	require.Zero(t, *result.CertificationTotal)
 
 	input["certification"] = map[string]any{"status": "date_conflict"}
 	mcpCall(t, client, "shelf_query", input, &result)
 	require.EqualValues(t, 1, result.Total)
+	require.EqualValues(t, 1, *result.CertificationTotal)
 	require.False(t, result.Truncated)
 	require.Len(t, result.Items, 1)
 	require.Equal(t, shelfNode(nodes, "model"), result.Items[0].Entity.ID)
@@ -268,7 +286,9 @@ func TestShelfQueryCertificationStatusFiltersBeforePagination(t *testing.T) {
 	var detail types.ShelfNodeDetail
 	mcpCall(t, client, "shelf_get", map[string]any{"library_id": library.ID, "node_id": shelfNode(nodes, "model"), "as_of": asOf}, &detail)
 	require.Len(t, detail.Shelf.Certifications, 2)
+	standardNames := map[string]string{}
 	for _, cert := range detail.Shelf.Certifications {
+		standardNames[cert.Entity.ID] = cert.StandardName
 		if cert.Entity.ID == legacyID {
 			require.Equal(t, "date_conflict", cert.Status)
 		} else {
@@ -276,6 +296,13 @@ func TestShelfQueryCertificationStatusFiltersBeforePagination(t *testing.T) {
 			require.Equal(t, notes, cert.Certification.Notes)
 		}
 	}
+	factStandardNames := map[string]string{}
+	for _, fact := range detail.Facts {
+		if fact.Field == "certification" {
+			factStandardNames[fact.EntityID], _ = fact.Value.(map[string]any)["standard_name"].(string)
+		}
+	}
+	require.Equal(t, standardNames, factStandardNames)
 	f.request(http.MethodPost, path+"/query", map[string]any{"certification": map[string]any{"status": "invalid"}}, http.StatusBadRequest, nil)
 }
 
@@ -290,19 +317,30 @@ func TestShelfQueryCertificationCoverageIncludesAllOptions(t *testing.T) {
 	}
 	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: operations}, http.StatusCreated, nil)
 	var result types.ShelfQueryResult
-	f.request(http.MethodPost, "/libraries/"+library.ID+"/shelf/query", map[string]any{"certification": map[string]any{"standard": "standard_a", "progress": "Complete"}}, http.StatusOK, &result)
+	path := "/libraries/" + library.ID + "/shelf/query"
+	input := map[string]any{"certification": map[string]any{"standard": "standard_a", "progress": "Complete"}}
+	f.request(http.MethodPost, path, input, http.StatusOK, &result)
 	require.EqualValues(t, 1, result.Total)
+	require.NotNil(t, result.CertificationTotal)
+	require.EqualValues(t, 2, *result.CertificationTotal)
 	require.False(t, result.Items[0].PartialOptions)
+	require.Len(t, result.Items[0].Facts, 2)
 	for _, fact := range result.Items[0].Facts {
-		if fact.Field == "certification" {
-			require.True(t, fact.PartialOptions)
-			require.NotEmpty(t, fact.Conditions)
-		}
+		require.Equal(t, "certification", fact.Field)
+		require.True(t, fact.PartialOptions)
+		require.NotEmpty(t, fact.Conditions)
 	}
 	combination, _ := json.Marshal(map[string]string{"module_a": shelfNode(nodes, "a")})
 	var selected types.ShelfNodeDetail
 	f.request(http.MethodGet, "/libraries/"+library.ID+"/shelf/nodes/"+shelfNode(nodes, "model")+"?combination="+url.QueryEscape(string(combination)), nil, http.StatusOK, &selected)
 	require.Len(t, selected.Shelf.Certifications, 1)
+	input["composition"] = []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(nodes, "a")}}}
+	f.request(http.MethodPost, path, input, http.StatusOK, &result)
+	require.EqualValues(t, 1, result.Total)
+	require.EqualValues(t, 1, *result.CertificationTotal)
+	require.Len(t, result.Items[0].Facts, 1)
+	require.Equal(t, "certification", result.Items[0].Facts[0].Field)
+	require.Equal(t, selected.Shelf.Certifications[0].Entity.ID, result.Items[0].Facts[0].EntityID)
 	links := 0
 	for _, fact := range selected.Facts {
 		if fact.Field == "has_certification" {

@@ -124,7 +124,8 @@ func (s *EntityService) shelfGet(ctx context.Context, libraryID, id string, opti
 			if err := types.DecodeShelfValue(result.Entity.Attributes[field], &record); err != nil {
 				return nil, err
 			}
-			value := types.ShelfCertificationFactValue{ShelfCertification: record, Status: types.ShelfCertificationStatus(record, at, s.db.NowFunc())}
+			standard, _ := library.ShelfConfig.Standard(record.Standard)
+			value := types.ShelfCertificationFactValue{ShelfCertification: record, Status: types.ShelfCertificationStatus(record, at, s.db.NowFunc()), StandardName: standard.Name}
 			appendFact(result.Entity, field, value, record.Conditions, "self")
 		} else if result.Shelf != nil && field == "sale_statuses" {
 			for _, row := range result.Shelf.SaleStatuses {
@@ -158,7 +159,7 @@ func (s *EntityService) shelfGet(ctx context.Context, libraryID, id string, opti
 		for _, cert := range result.Shelf.Certifications {
 			certifications[cert.Entity.ID] = cert.Certification
 			conditions := shelfCertificationConditions(cert.Certification, composition)
-			value := types.ShelfCertificationFactValue{ShelfCertification: cert.Certification, Status: cert.Status}
+			value := types.ShelfCertificationFactValue{ShelfCertification: cert.Certification, Status: cert.Status, StandardName: cert.StandardName}
 			appendFact(cert.Entity, "certification", value, conditions, cert.Origin)
 		}
 	}

@@ -80,7 +80,11 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 		}, "library_id", "node_id"), func(ctx context.Context, in shelfGetInput) (any, error) {
 			return entities.ShelfGet(ctx, in.LibraryID, in.NodeID, types.ShelfReadOptions{AsOf: in.AsOf, Combination: in.Combination})
 		})
-	addTool(server, "shelf_query", mcp.ToolAnnotations{ReadOnlyHint: true}, "结构化筛选或按部件、认证标准反查型号，所有筛选须由同一可行组合满足。返回 items、分页前 total、truncated、as_of、detail；matching_conditions 外层为或，内层为且。truncated=true 表示本次未覆盖全部结果，非首页也为 true；offset 加本页条数小于 total 时才有下一页。默认 detail=summary，每项只含 entity（含 description，不含 attributes）、current_stage、本次筛选命中的 facts 及 matching_conditions、partial_options；只问数量时传 limit=1 读 total，要完整详情对选中型号用 shelf_get。目标模糊需要追问时传 facets=true 与 limit=1，按全部命中型号返回区域状态、部件、参数范围和认证的型号数，用作追问选项；计数不保证与其他条件在同一组合下成立，用户选定后重新筛选并以 total 为准。"+shelfExpertNotice+externalContentNotice,
+	addTool(server, "shelf_query", mcp.ToolAnnotations{ReadOnlyHint: true}, "结构化筛选或按部件、认证标准反查型号，所有筛选须由同一可行组合满足。返回 items、分页前型号数 total、truncated、as_of、detail。"+
+		"带 certification 条件时另返回 certification_total，按认证实体 ID 去重统计分页前命中全部筛选的认证，共用认证只计一次。只问数量时传 limit=1，型号数读 total，认证条数读 certification_total。"+
+		"matching_conditions 外层为或，内层为且。truncated=true 表示本次未覆盖全部结果，非首页也为 true；offset 加本页条数小于 total 时才有下一页。"+
+		"默认 detail=summary，每项只含 entity（含 description，不含 attributes）、current_stage、本次筛选命中的 facts 及 matching_conditions、partial_options。逐条列出认证时按 total 翻页，读取 field=certification 的事实，按 entity_id 去重，使用 value.standard_name 和 origin_label。要完整详情对选中型号用 shelf_get。"+
+		"目标模糊需要追问时传 facets=true 与 limit=1，按全部命中型号返回区域状态、部件、参数范围和认证的型号数，用作追问选项；计数不保证与其他条件在同一组合下成立，用户选定后重新筛选并以 total 为准。"+shelfExpertNotice+externalContentNotice,
 		object(map[string]any{
 			"library_id": text("已开启货架的库 ID，必填"), "ancestor_id": text("产品线、平台或产品名称 ID，限定其下属型号"),
 			"sale_statuses": map[string]any{"type": "array", "description": "区域状态筛选，各项取交集；每项至少给 region、status、planned_eom、no_record 之一", "items": object(map[string]any{

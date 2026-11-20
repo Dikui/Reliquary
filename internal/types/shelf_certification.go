@@ -50,10 +50,11 @@ type ShelfCertificationView struct {
 	Origin        string             `json:"origin"`
 }
 
-// ShelfCertificationFactValue adds the derived status to the flat value of a certification fact.
+// ShelfCertificationFactValue adds the derived status and standard name to a certification fact.
 type ShelfCertificationFactValue struct {
 	ShelfCertification
-	Status string `json:"status"`
+	Status       string `json:"status"`
+	StandardName string `json:"standard_name"`
 }
 
 const (

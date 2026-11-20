@@ -28,39 +28,39 @@ candidates AS (SELECT n.* FROM nodes n,vars x WHERE n.kind='model' AND n.archive
 parts AS MATERIALIZED (SELECT r.subject_id model_id,r.object_id part_id,r.attributes->>'module_type' module FROM edges r JOIN nodes n ON n.id=r.object_id AND n.kind='part' WHERE r.relation_type='composed_of'),
 filters AS (SELECT (ordinality-1)::int step,value FROM vars,jsonb_array_elements(filters) WITH ORDINALITY),
 facts AS (
- SELECT m.id model_id,f.step,coalesce(nullif(row->'conditions','null'::jsonb),'[]'::jsonb) conditions
+ SELECT m.id model_id,f.step,coalesce(nullif(row->'conditions','null'::jsonb),'[]'::jsonb) conditions,NULL::text certification_id
  FROM candidates m CROSS JOIN filters f CROSS JOIN LATERAL jsonb_array_elements(coalesce(m.attributes->'sale_statuses','[]'::jsonb)) row
  WHERE f.value->>'type'='status' AND (f.value->>'region'='' OR row->>'region'=f.value->>'region')
  AND (f.value->>'status'='' OR row->>'status'=f.value->>'status')
  AND (f.value->>'planned_eom' IS NULL OR coalesce((row->>'planned_eom')::boolean,false)=(f.value->>'planned_eom')::boolean)
  UNION ALL
- SELECT m.id,f.step,'[]'::jsonb FROM candidates m CROSS JOIN filters f
+ SELECT m.id,f.step,'[]'::jsonb,NULL FROM candidates m CROSS JOIN filters f
  WHERE f.value->>'type'='no_status' AND NOT EXISTS (
   SELECT 1 FROM jsonb_array_elements(coalesce(m.attributes->'sale_statuses','[]'::jsonb)) row
   WHERE f.value->>'region'='' OR row->>'region'=f.value->>'region')
  UNION ALL
- SELECT m.id,f.step,coalesce(nullif(row->'conditions','null'::jsonb),'[]'::jsonb)
+ SELECT m.id,f.step,coalesce(nullif(row->'conditions','null'::jsonb),'[]'::jsonb),NULL
  FROM candidates m CROSS JOIN filters f CROSS JOIN LATERAL jsonb_array_elements(coalesce(m.attributes->(f.value->>'field'),'[]'::jsonb)) row
  WHERE f.value->>'type'='parameter'
  AND (f.value->>'min' IS NULL OR (CASE WHEN jsonb_typeof(row->'value')='number' THEN (row->>'value')::numeric ELSE (row->'value'->>'max')::numeric END)>=(f.value->>'min')::numeric)
  AND (f.value->>'max' IS NULL OR (CASE WHEN jsonb_typeof(row->'value')='number' THEN (row->>'value')::numeric ELSE (row->'value'->>'min')::numeric END)<=(f.value->>'max')::numeric)
  UNION ALL
- SELECT m.id,f.step,'[]'::jsonb FROM candidates m CROSS JOIN filters f
+ SELECT m.id,f.step,'[]'::jsonb,NULL FROM candidates m CROSS JOIN filters f
  WHERE f.value->>'type'='parameter_missing' AND EXISTS (SELECT 1 FROM ancestors a WHERE a.model_id=m.id AND jsonb_exists(f.value->'lines',a.id))
  AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(m.attributes->(f.value->>'field'))='array' THEN m.attributes->(f.value->>'field') ELSE '[]'::jsonb END) row
   WHERE (CASE WHEN jsonb_typeof(row->'value')='number' THEN (row->>'value')::numeric ELSE (row->'value'->>'min')::numeric END) IS NOT NULL)
  UNION ALL
- SELECT m.id,f.step,jsonb_build_array(jsonb_build_object('module_type',f.value->>'module_type','part_ids',f.value->'part_ids')) FROM candidates m CROSS JOIN filters f WHERE f.value->>'type'='composition'
+ SELECT m.id,f.step,jsonb_build_array(jsonb_build_object('module_type',f.value->>'module_type','part_ids',f.value->'part_ids')),NULL FROM candidates m CROSS JOIN filters f WHERE f.value->>'type'='composition'
  UNION ALL
- SELECT p.model_id,f.step,jsonb_build_array(jsonb_build_object('module_type',p.module,'part_ids',jsonb_build_array(p.part_id))) FROM parts p CROSS JOIN filters f WHERE f.value->>'type'='part' AND p.part_id=f.value->>'part_id'
+ SELECT p.model_id,f.step,jsonb_build_array(jsonb_build_object('module_type',p.module,'part_ids',jsonb_build_array(p.part_id))),NULL FROM parts p CROSS JOIN filters f WHERE f.value->>'type'='part' AND p.part_id=f.value->>'part_id'
  UNION ALL
- SELECT m.id,f.step,gap->'conditions' FROM candidates m CROSS JOIN filters f CROSS JOIN LATERAL jsonb_array_elements(f.value->'gaps') gap
+ SELECT m.id,f.step,gap->'conditions',NULL FROM candidates m CROSS JOIN filters f CROSS JOIN LATERAL jsonb_array_elements(f.value->'gaps') gap
  WHERE f.value->>'type'='document_gap' AND gap->>'model_id'=m.id
  UNION ALL
  SELECT m.id,f.step,coalesce(nullif(c.attributes->'certification'->'conditions','null'::jsonb),'[]'::jsonb)||coalesce((
   SELECT jsonb_agg(jsonb_build_object('module_type',p.module,'part_ids',jsonb_build_array(p.part_id))) FROM parts p
   WHERE p.model_id=m.id AND p.part_id IN (c.attributes->'certification'->>'owner_id',c.attributes->'certification'->>'cell_part_id')
- ),'[]'::jsonb)
+ ),'[]'::jsonb),c.id::text
  FROM candidates m CROSS JOIN filters f JOIN nodes c ON c.kind='certification' AND c.archived_at IS NULL AND c.merged_into_id=''
  JOIN edges link ON link.relation_type='has_certification' AND link.subject_id=c.attributes->'certification'->>'owner_id' AND link.object_id=c.id
  WHERE f.value->>'type'='certification'
@@ -73,18 +73,26 @@ facts AS (
   OR EXISTS (SELECT 1 FROM parts p WHERE p.model_id=m.id AND p.part_id=c.attributes->'certification'->>'owner_id'))
  AND (coalesce(c.attributes->'certification'->>'cell_part_id','')='' OR EXISTS (SELECT 1 FROM parts p WHERE p.model_id=m.id AND p.part_id=c.attributes->'certification'->>'cell_part_id'))
 ),
-walk(model_id,step,conditions) AS (
- SELECT id,0,'[]'::jsonb FROM candidates
- UNION SELECT w.model_id,w.step+1,w.conditions||f.conditions FROM walk w JOIN facts f ON f.model_id=w.model_id AND f.step=w.step
+walk(model_id,step,conditions,certification_id) AS (
+ SELECT id,0,'[]'::jsonb,NULL::text FROM candidates
+ UNION SELECT w.model_id,w.step+1,w.conditions||f.conditions,coalesce(f.certification_id,w.certification_id) FROM walk w JOIN facts f ON f.model_id=w.model_id AND f.step=w.step
  WHERE NOT EXISTS (
   SELECT 1 FROM jsonb_array_elements(w.conditions||f.conditions) c WHERE NOT EXISTS (
    SELECT 1 FROM parts p WHERE p.model_id=w.model_id AND p.module=c->>'module_type' AND NOT EXISTS (
     SELECT 1 FROM jsonb_array_elements(w.conditions||f.conditions) d WHERE d->>'module_type'=p.module AND NOT jsonb_exists(d->'part_ids',p.part_id))))
 ),
-matched AS (SELECT w.model_id id,jsonb_agg(DISTINCT w.conditions) conditions FROM walk w,vars x WHERE w.step=jsonb_array_length(x.filters) GROUP BY w.model_id)
+completed AS (SELECT w.model_id,w.conditions,w.certification_id FROM walk w,vars x WHERE w.step=jsonb_array_length(x.filters)),
+matched AS (
+ SELECT model_id id,jsonb_agg(DISTINCT conditions) conditions,
+  array_agg(DISTINCT certification_id) FILTER (WHERE certification_id IS NOT NULL) certification_ids
+ FROM completed GROUP BY model_id)
 SELECT (SELECT count(*) FROM matched) total,coalesce((SELECT jsonb_agg(to_jsonb(page)) FROM (
- SELECT m.id,m.conditions FROM matched m JOIN candidates c ON c.id=m.id ORDER BY c.canonical_name,c.id LIMIT ? OFFSET ?
+ SELECT m.id,m.conditions,m.certification_ids FROM matched m JOIN candidates c ON c.id=m.id ORDER BY c.canonical_name,c.id LIMIT ? OFFSET ?
 ) page),'[]'::jsonb) items`
+
+// Count only certifications that participate in a feasible match, across all
+// models and before paging. Shared certification entities count once.
+const shelfQueryCertificationTotalSQL = `,(SELECT count(DISTINCT certification_id) FROM completed) certification_total`
 
 // shelfQueryFacetSQL extends the page select with counts over every matched
 // model. Its one argument lists the numeric shelf fields with their lines.
@@ -158,7 +166,6 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 	if input.Detail == types.ShelfQueryDetailSummary {
 		detailLevel = types.ShelfQueryDetailSummary
 	}
-	standardKey := ""
 	filters := []map[string]any{}
 	for _, status := range input.SaleStatuses {
 		if status.Region != "" && !slices.ContainsFunc(library.ShelfConfig.Regions, func(region types.ShelfOption) bool { return region.Key == status.Region }) {
@@ -220,6 +227,7 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 	if input.PartID != "" {
 		filters = append(filters, map[string]any{"type": "part", "part_id": input.PartID})
 	}
+	var certificationFilter map[string]any
 	if input.Certification != nil {
 		cert := input.Certification
 		if cert.Region != nil && *cert.Region != "" && !shelfOptionExists(library.ShelfConfig.Regions, *cert.Region) {
@@ -231,24 +239,23 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		if cert.Standard == "" && cert.Progress == nil && cert.Region == nil && cert.Status == "" {
 			return nil, apperrors.NewBadRequestError("certification filter requires a standard, progress, region or status")
 		}
-		filter := map[string]any{"type": "certification"}
+		certificationFilter = map[string]any{"type": "certification"}
 		if cert.Standard != "" {
 			standard, ok := library.ShelfConfig.Standard(cert.Standard)
 			if !ok {
-				result := &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, AsOf: at, Detail: detailLevel}
+				result := &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, CertificationTotal: new(int64), AsOf: at, Detail: detailLevel}
 				if input.Facets {
 					result.Facets = &types.ShelfQueryFacets{SaleStatuses: []types.ShelfStatusFacet{}, Composition: []types.ShelfCompositionFacet{}, Parameters: []types.ShelfParameterFacet{}, Certifications: []types.ShelfCertificationFacet{}}
 				}
 				return result, nil
 			}
-			filter["standard"] = standard.Key
-			standardKey = standard.Key
+			certificationFilter["standard"] = standard.Key
 		}
 		if cert.Progress != nil {
-			filter["progress"] = *cert.Progress
+			certificationFilter["progress"] = *cert.Progress
 		}
 		if cert.Region != nil {
-			filter["region"] = *cert.Region
+			certificationFilter["region"] = *cert.Region
 		}
 		if cert.Status != "" {
 			// Use the same derived statuses as the views. The SQL still applies
@@ -263,9 +270,8 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 					ids = append(ids, row.Entity.ID)
 				}
 			}
-			filter["status_ids"] = ids
+			certificationFilter["status_ids"] = ids
 		}
-		filters = append(filters, filter)
 	}
 	if input.DocumentGaps {
 		data, err := s.loadShelfChecklist(ctx, library, at)
@@ -286,19 +292,27 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		}
 		filters = append(filters, map[string]any{"type": "document_gap", "gaps": gaps})
 	}
+	// Carry distinct certification IDs only in the final step of the walk.
+	if certificationFilter != nil {
+		filters = append(filters, certificationFilter)
+	}
 	data, err := json.Marshal(filters)
 	if err != nil {
 		return nil, err
 	}
 	var row struct {
-		Total          int64
-		Items          types.JSON
-		SaleStatuses   types.JSON
-		Composition    types.JSON
-		Parameters     types.JSON
-		Certifications types.JSON
+		Total              int64
+		CertificationTotal *int64
+		Items              types.JSON
+		SaleStatuses       types.JSON
+		Composition        types.JSON
+		Parameters         types.JSON
+		Certifications     types.JSON
 	}
 	query, args := shelfQueryMatchSQL, []any{library.ID, library.SpaceID, at, string(data), input.AncestorID, limit, input.Offset}
+	if certificationFilter != nil {
+		query += shelfQueryCertificationTotalSQL
+	}
 	if input.Facets {
 		fields := []map[string]any{}
 		for _, field := range library.EntitySchema.Fields {
@@ -316,13 +330,14 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		return nil, err
 	}
 	var matches []struct {
-		ID         string
-		Conditions [][]types.ShelfCondition
+		ID               string
+		Conditions       [][]types.ShelfCondition
+		CertificationIDs []string `json:"certification_ids"`
 	}
 	if err := json.Unmarshal(row.Items, &matches); err != nil {
 		return nil, err
 	}
-	result := &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, Total: row.Total, AsOf: at, Detail: detailLevel}
+	result := &types.ShelfQueryResult{Items: []types.ShelfQueryItem{}, Total: row.Total, CertificationTotal: row.CertificationTotal, AsOf: at, Detail: detailLevel}
 	if input.Facets {
 		if result.Facets, err = shelfQueryFacets(library, row.SaleStatuses, row.Composition, row.Parameters, row.Certifications); err != nil {
 			return nil, err
@@ -336,7 +351,7 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		}
 		item := types.ShelfQueryItem{ShelfNodeDetail: *detail, MatchingConditions: match.Conditions, PartialOptions: shelfMatchesPartial(match.Conditions, detail.Shelf.Composition)}
 		if result.Detail == types.ShelfQueryDetailSummary {
-			item.ShelfNodeDetail, item.CurrentStage = shelfQuerySummary(detail, input, standardKey)
+			item.ShelfNodeDetail, item.CurrentStage = shelfQuerySummary(detail, input, match.CertificationIDs)
 		}
 		result.Items = append(result.Items, item)
 	}
@@ -401,12 +416,12 @@ func shelfQueryFacets(library *types.Library, statuses, composition, parameters,
 
 // shelfQuerySummary keeps identity, the description (which may record values
 // absent from structured fields) and only the facts that the filters examined.
-func shelfQuerySummary(detail *types.ShelfNodeDetail, input types.ShelfQueryRequest, standardKey string) (types.ShelfNodeDetail, string) {
+func shelfQuerySummary(detail *types.ShelfNodeDetail, input types.ShelfQueryRequest, certificationIDs []string) (types.ShelfNodeDetail, string) {
 	entity := detail.Entity
 	entity.Attributes, entity.AutoMatch = nil, nil
 	summary := types.ShelfNodeDetail{Entity: entity, AsOf: detail.AsOf, Recorded: detail.Recorded, Facts: []types.ShelfFact{}}
 	for _, fact := range detail.Facts {
-		if shelfQueryFactMatched(fact, input, standardKey) {
+		if shelfQueryFactMatched(fact, input, certificationIDs) {
 			summary.Facts = append(summary.Facts, fact)
 		}
 	}
@@ -417,7 +432,7 @@ func shelfQuerySummary(detail *types.ShelfNodeDetail, input types.ShelfQueryRequ
 	return summary, stage
 }
 
-func shelfQueryFactMatched(fact types.ShelfFact, input types.ShelfQueryRequest, standardKey string) bool {
+func shelfQueryFactMatched(fact types.ShelfFact, input types.ShelfQueryRequest, certificationIDs []string) bool {
 	switch value := fact.Value.(type) {
 	case types.ShelfSaleStatus:
 		if fact.Field != "sale_statuses" {
@@ -427,14 +442,7 @@ func shelfQueryFactMatched(fact types.ShelfFact, input types.ShelfQueryRequest, 
 			return filter.Region == "" || filter.Region == value.Region
 		})
 	case types.ShelfCertificationFactValue:
-		cert := input.Certification
-		if fact.Field != "certification" || cert == nil {
-			return false
-		}
-		return (standardKey == "" || value.Standard == standardKey) &&
-			(cert.Progress == nil || value.Progress == *cert.Progress) &&
-			(cert.Region == nil || value.Region == *cert.Region) &&
-			(cert.Status == "" || value.Status == cert.Status)
+		return fact.Field == "certification" && slices.Contains(certificationIDs, fact.EntityID)
 	}
 	return fact.Origin == "self" && slices.ContainsFunc(input.Parameters, func(filter types.ShelfParameterFilter) bool {
 		return filter.Field == fact.Field

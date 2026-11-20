@@ -93,6 +93,7 @@ func TestMCPSkillToolReferences(t *testing.T) {
 		approval_policy jp no_record planned_eom shelf_node_ids min detail document_gaps gap has_gaps facets parameter_missing
 		configure_shelf save_import_plan decisions origin file file_date plan_key overseas_sales checklist_markets_by_region
 		checklist_markets checklist_skipped_reason necessity
+		certification certification_total facts field entity_id standard_name origin_label summary
 		new modified uncertain suspected_same cross_kind_same_name disappeared unparseable
 		required_missing cross_table_contradiction revision_conflict unmapped_column defer keep retire
 		range transpose uncovered_content no_cell_part

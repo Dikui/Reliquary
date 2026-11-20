@@ -87,8 +87,10 @@ description: 查询产品货架的型号、选配、区域状态、认证与资�
 | 问题 | 读法 |
 |---|---|
 | 有多少个型号满足条件 | `shelf_query` 传 `limit=1`，报告 `total` |
+| 有多少条认证满足条件 | `shelf_query` 传 `certification` 条件与 `limit=1`，报告去重后的 `certification_total` |
 | 目标不清晰，需要引导 | `shelf_query` 传 `facets=true` 与 `limit=1`，按 facets 给出货架概况、选项与型号数 |
 | 列出满足条件的型号 | `shelf_query` 默认 summary，按 offset 加本页条数翻到 total |
+| 逐条列出满足条件的认证 | `shelf_query` 传 `certification` 条件，默认 summary，按 `total` 翻页读取 `facts` 中 `field=certification` 的事实，按 `entity_id` 去重，使用 `value.standard_name`，按 `origin_label` 标出来自上层或部件的记录 |
 | 单个型号的完整情况 | `shelf_get` |
 | 多个型号的资料清单或完整认证 | 先用 summary 缩小范围，再对选中型号逐个 `shelf_get`；确需批量时才传 `detail=full`，并减小 `limit` |
 
