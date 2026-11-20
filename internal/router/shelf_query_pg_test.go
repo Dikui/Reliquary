@@ -210,6 +210,75 @@ func TestShelfQueryCertificationsReverseLookupAndOrigins(t *testing.T) {
 	require.Zero(t, result.Total)
 }
 
+func TestShelfQueryCertificationStatusFiltersBeforePagination(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	configureCertificationStandards(f, &library)
+	planned := time.Now()
+	asOf := planned.AddDate(0, 0, 1)
+	const notes = "实验室重新排期"
+	operations := []types.ShelfOperation{
+		{ID: "delayed", Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Delayed certificate", ShelfCertification: types.ShelfCertification{
+			OwnerID: shelfNode(nodes, "platform"), Standard: "standard_a", CertificationObject: "Container",
+			Progress: "进行中", PlannedDate: planned.Format(time.DateOnly), Notes: notes,
+		}}},
+		{ID: "legacy", Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Legacy certificate", ShelfCertification: types.ShelfCertification{
+			OwnerID: shelfNode(nodes, "model"), Standard: "standard_a", CertificationObject: "Container", Progress: "已完成",
+		}}},
+	}
+	path := "/libraries/" + library.ID + "/shelf"
+	var saved types.ShelfChangeset
+	f.request(http.MethodPost, path+"/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: operations}, http.StatusCreated, &saved)
+	legacyID := shelfNode(saved, "legacy")
+	setLegacyCertificationField(t, f, legacyID, "obtained_date", asOf.AddDate(1, 0, 0).Format(time.DateOnly))
+
+	client := f.connect(t, "2025-11-25")
+	input := map[string]any{"library_id": library.ID, "as_of": asOf, "certification": map[string]any{"status": "delayed"}, "limit": 1}
+	var result types.ShelfQueryResult
+	mcpCall(t, client, "shelf_query", input, &result)
+	require.EqualValues(t, 2, result.Total)
+	require.True(t, result.Truncated)
+	require.Len(t, result.Items, 1)
+	require.Len(t, result.Items[0].Facts, 1)
+	fact := result.Items[0].Facts[0]
+	require.Equal(t, "certification", fact.Field)
+	require.Equal(t, "delayed", fact.Value.(map[string]any)["status"])
+	require.Equal(t, notes, fact.Value.(map[string]any)["notes"])
+
+	input["offset"] = 2
+	mcpCall(t, client, "shelf_query", input, &result)
+	require.EqualValues(t, 2, result.Total)
+	require.True(t, result.Truncated)
+	require.Empty(t, result.Items)
+
+	input["offset"] = 0
+	input["certification"] = map[string]any{"status": "delayed", "progress": "已完成"}
+	mcpCall(t, client, "shelf_query", input, &result)
+	require.Zero(t, result.Total)
+
+	input["certification"] = map[string]any{"status": "date_conflict"}
+	mcpCall(t, client, "shelf_query", input, &result)
+	require.EqualValues(t, 1, result.Total)
+	require.False(t, result.Truncated)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, shelfNode(nodes, "model"), result.Items[0].Entity.ID)
+	require.Len(t, result.Items[0].Facts, 1)
+	require.Equal(t, legacyID, result.Items[0].Facts[0].EntityID)
+	require.Equal(t, "date_conflict", result.Items[0].Facts[0].Value.(map[string]any)["status"])
+
+	var detail types.ShelfNodeDetail
+	mcpCall(t, client, "shelf_get", map[string]any{"library_id": library.ID, "node_id": shelfNode(nodes, "model"), "as_of": asOf}, &detail)
+	require.Len(t, detail.Shelf.Certifications, 2)
+	for _, cert := range detail.Shelf.Certifications {
+		if cert.Entity.ID == legacyID {
+			require.Equal(t, "date_conflict", cert.Status)
+		} else {
+			require.Equal(t, "delayed", cert.Status)
+			require.Equal(t, notes, cert.Certification.Notes)
+		}
+	}
+	f.request(http.MethodPost, path+"/query", map[string]any{"certification": map[string]any{"status": "invalid"}}, http.StatusBadRequest, nil)
+}
+
 // Medium spec, task 06: several conditional records can collectively cover
 // every option; a conditional cell key must still narrow a model certificate.
 func TestShelfQueryCertificationCoverageIncludesAllOptions(t *testing.T) {

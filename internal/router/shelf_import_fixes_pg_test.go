@@ -120,7 +120,7 @@ func TestShelfGuideListsImportFieldsByFileKind(t *testing.T) {
 	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID}, &guide)
 	require.Len(t, guide.ImportFields, 5)
 	report := guide.ImportFields["certification_report"]
-	require.Equal(t, []string{"name", "owner", "standard", "year", "certification_object", "cell_part", "region", "agency", "progress", "start_date", "planned_date", "obtained_date", "issued_date", "validity", "number", "cloud_url", "sample_description", "model", "pack_model", "cluster_model", "container_model"}, report.Columns)
+	require.Equal(t, []string{"name", "owner", "standard", "year", "certification_object", "cell_part", "region", "agency", "progress", "notes", "start_date", "planned_date", "obtained_date", "issued_date", "validity", "number", "cloud_url", "sample_description", "model", "pack_model", "cluster_model", "container_model"}, report.Columns)
 	require.Equal(t, []string{"owner", "standard", "certification_object", "region"}, report.RequiredColumns)
 	require.Equal(t, "required", report.SheetFields["owner_kind"])
 	require.Equal(t, "required", report.SheetFields["progress"])

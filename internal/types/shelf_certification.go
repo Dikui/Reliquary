@@ -23,6 +23,7 @@ type ShelfCertification struct {
 	Region              string `json:"region"`
 	Agency              string `json:"agency,omitempty"`
 	Progress            string `json:"progress,omitempty"`
+	Notes               string `json:"notes,omitempty"`
 	StartDate           string `json:"start_date,omitempty"`
 	// PlannedDate is the expected certification date; ObtainedDate is set
 	// only once the certificate has actually been obtained.
@@ -43,9 +44,57 @@ type ShelfCertificationInput struct {
 type ShelfCertificationView struct {
 	Entity        Entity             `json:"entity"`
 	Certification ShelfCertification `json:"certification"`
+	Status        string             `json:"status"`
 	StandardName  string             `json:"standard_name"`
 	RegionName    string             `json:"region_name"`
 	Origin        string             `json:"origin"`
+}
+
+// ShelfCertificationFactValue adds the derived status to the flat value of a certification fact.
+type ShelfCertificationFactValue struct {
+	ShelfCertification
+	Status string `json:"status"`
+}
+
+const (
+	ShelfCertificationDateConflict = "date_conflict"
+	ShelfCertificationObtained     = "obtained"
+	ShelfCertificationPaused       = "paused"
+	ShelfCertificationDelayed      = "delayed"
+	ShelfCertificationNotStarted   = "not_started"
+	ShelfCertificationInProgress   = "in_progress"
+	ShelfCertificationUnknown      = "unknown"
+)
+
+func ShelfCertificationStatuses() []string {
+	return []string{
+		ShelfCertificationDateConflict, ShelfCertificationObtained, ShelfCertificationPaused,
+		ShelfCertificationDelayed, ShelfCertificationNotStarted, ShelfCertificationInProgress, ShelfCertificationUnknown,
+	}
+}
+
+// ShelfCertificationStatus uses local calendar dates. A future actual date is
+// a conflict as of today, while completion and delay are evaluated as of the query.
+func ShelfCertificationStatus(record ShelfCertification, asOf, today time.Time) string {
+	asOfDate := asOf.Local().Format(time.DateOnly)
+	obtainedByAsOf := record.ObtainedDate != "" && record.ObtainedDate <= asOfDate
+	completedWithoutDate := record.ObtainedDate == "" && (record.Progress == "已取证" || record.Progress == "已完成")
+	switch {
+	case record.ObtainedDate > today.Local().Format(time.DateOnly):
+		return ShelfCertificationDateConflict
+	case obtainedByAsOf || completedWithoutDate:
+		return ShelfCertificationObtained
+	case strings.Contains(record.Progress, "暂停"):
+		return ShelfCertificationPaused
+	case record.PlannedDate != "" && record.PlannedDate < asOfDate:
+		return ShelfCertificationDelayed
+	case record.Progress == "待启动" || record.Progress == "未启动":
+		return ShelfCertificationNotStarted
+	case record.Progress != "" || record.StartDate != "" || record.PlannedDate != "":
+		return ShelfCertificationInProgress
+	default:
+		return ShelfCertificationUnknown
+	}
 }
 
 func ValidateShelfCertification(value any) error {
@@ -62,7 +111,7 @@ func ValidateShelfCertification(value any) error {
 	if record.Year < 0 || record.Year > 9999 {
 		return fmt.Errorf("invalid certification year")
 	}
-	for _, value := range []string{record.OwnerID, record.Standard, record.CertificationObject, record.CellPartID, record.Region, record.Agency, record.Progress, record.Validity, record.Number, record.CloudURL} {
+	for _, value := range []string{record.OwnerID, record.Standard, record.CertificationObject, record.CellPartID, record.Region, record.Agency, record.Progress, record.Notes, record.Validity, record.Number, record.CloudURL} {
 		if len([]rune(value)) > 20000 {
 			return fmt.Errorf("certification text is too long")
 		}

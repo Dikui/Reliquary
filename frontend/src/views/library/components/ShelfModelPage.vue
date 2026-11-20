@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Button, EmptyState, ErrorState } from '@/components/ui'
+import { Button, EmptyState, ErrorState, StatusSquare } from '@/components/ui'
 import { entityHistory, type Entity } from '@/api/entities'
 import { OPERATION_TYPES, type OperationLog, type OperationLogsData } from '@/api/operation-logs'
 import { getShelfNode, type ShelfNode, type ShelfCondition, type ShelfCertification, type ShelfRequirement, type ShelfDocumentVersion, type ShelfSaleStatus } from '@/api/shelf'
@@ -9,12 +9,15 @@ import type { LibraryCatalogItem } from '@/api/library'
 import { shelfConditionText } from '@/utils/productShelf'
 import { formatDateTime } from '@/utils/dateTime'
 import { safeExternalUrl } from '@/utils/externalUrl'
+import { groupCertifications, summarizeCertificationProgress } from '@/utils/shelfCertification'
 
+import ShelfCertificationStatus from './ShelfCertificationStatus.vue'
 import ShelfDocumentEditor from './ShelfDocumentEditor.vue'
 import ShelfModelEditor from './ShelfModelEditor.vue'
 import ManagedAttributes from './ManagedAttributes.vue'
 
 const initialRequirement = ref('')
+const editingCertification = ref<ShelfCertification>()
 const editor = ref(''), editingNode = ref<ShelfNode>(), editorLoading = ref(false), editorError = ref('')
 let editorGeneration = 0
 const props = defineProps<{ library: LibraryCatalogItem; nodeId: string }>()
@@ -30,7 +33,10 @@ const statusKeys = ['missing', 'draft_only', 'delivered', 'not_due', 'optional_o
 // Optional requirements without a final file are listed but never shown as missing.
 const displayStatus = (row: { status: string; necessity?: string; gap: boolean }) => row.necessity === 'optional' && !row.gap && row.status !== 'delivered' ? 'optional_open' : row.status
 const counts = computed(() => statusKeys.map(status => ({ status, count: new Set((detail.value?.checklist || []).filter(row => displayStatus(row) === status).map(row => row.requirement.id)).size })).filter(item => item.count))
-const groups = computed(() => (['self', 'component', 'ancestor'] as const).map(origin => ({ origin, rows: (detail.value?.certifications || []).filter(row => row.origin === origin) })))
+const certGroups = computed(() => groupCertifications(detail.value?.certifications ?? []).map(group => ({
+  ...group,
+  progress: summarizeCertificationProgress(group.rows),
+})))
 const attributeFields = computed(() => (props.library.entity_schema?.fields || []).filter(field => !field.archived && !field.product_line_ids?.length && (!field.kinds?.length || field.kinds.includes('model')) && !['current_stage', 'sale_statuses', 'combination_rules'].includes(field.key)))
 const fields = computed(() => (props.library.entity_schema?.fields || []).filter(field => field.product_line_ids?.includes(ancestors.value.find(item => item.kind === 'product_line')?.id || '') && !field.archived))
 const href = (id: string) => `/platform/entities?${new URLSearchParams({ libraries: props.library.id, entity_id: id })}`
@@ -100,13 +106,21 @@ async function load() {
   } catch (cause) { if (current === generation) error.value = (cause as { message?: string } | undefined)?.message || t('workbench.requestFailed') }
   finally { if (current === generation) loading.value = false }
 }
-async function openEditor(mode: string, requirementID = '') {
+async function openEditor(mode: string, itemID = '') {
   const current = ++editorGeneration
   editorLoading.value = true; editorError.value = ''
   try {
     // Combination reads filter attributes. Edits always capture the full snapshot.
     const result = unwrap(await getShelfNode(props.library.id, props.nodeId))
-    if (current === editorGeneration) { editingNode.value = result; initialRequirement.value = requirementID; editor.value = mode }
+    if (current !== editorGeneration) return
+    const record = mode === 'certification' && itemID
+      ? result.shelf?.certifications?.find(cert => cert.entity.id === itemID && cert.certification.owner_id === result.entity.id)
+      : undefined
+    if (mode === 'certification' && itemID && !record) throw new Error(t('productShelf.noRecords'))
+    editingCertification.value = record
+    editingNode.value = result
+    initialRequirement.value = mode === 'document' ? itemID : ''
+    editor.value = mode
   } catch (cause) { if (current === editorGeneration) editorError.value = (cause as Error).message || t('workbench.requestFailed') }
   finally { if (current === editorGeneration) editorLoading.value = false }
 }
@@ -273,37 +287,48 @@ onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
                   <th>{{ t('shelfModel.number') }}</th>
                 </tr>
               </thead>
-              <template v-for="group in groups" :key="group.origin">
-                <tbody v-if="group.rows.length">
-                  <tr class="group">
-                    <th colspan="8" scope="rowgroup">{{ t(`shelfModel.origins.${group.origin}`) }}</th>
-                  </tr>
-                  <tr v-for="cert in group.rows" :key="cert.entity.id">
-                    <td>
-                      <a :href="href(cert.entity.id)">{{ cert.standard_name }}{{ cert.certification.year ? ` ${cert.certification.year}` : '' }}</a>
-                      <small v-if="cert.entity.description">{{ cert.entity.description }}</small>
-                    </td>
-                    <td>{{ cert.certification.certification_object }}</td>
-                    <td>
-                      <span v-if="group.origin !== 'self'">{{ ownerText(cert.certification.owner_id) }}</span>
-                      <small>{{ cert.region_name ?? library.shelf_config?.regions?.find(region => region.key === cert.certification.region)?.name ?? cert.certification.region }}</small>
-                      <small v-if="!selected" class="condition">{{ conditionText(certConditions(cert)) }}</small>
-                    </td>
-                    <td>{{ cert.certification.progress || t('shelfStatus.noRecord') }}</td>
-                    <td>{{ cert.certification.agency || t('shelfStatus.noRecord') }}</td>
-                    <td>
-                      <small v-for="key in (['start_date', 'planned_date', 'obtained_date', 'issued_date'] as const)" :key="key">
-                        <template v-if="cert.certification[key]">{{ t(`shelfModel.${key}`) }} {{ cert.certification[key] }}</template>
-                      </small>
-                    </td>
-                    <td>{{ cert.certification.validity || t('shelfStatus.noRecord') }}</td>
-                    <td>
-                      <a v-if="safeExternalUrl(cert.certification.cloud_url)" :href="safeExternalUrl(cert.certification.cloud_url)" target="_blank" rel="noopener noreferrer">{{ cert.certification.number || t('shelfModel.cloudLink') }}</a>
-                      <span v-else>{{ cert.certification.number || t('shelfStatus.noRecord') }}</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </template>
+              <tbody v-for="group in certGroups" :key="group.key">
+                <tr class="group">
+                  <th colspan="8" scope="rowgroup">
+                    <div class="rq-model-actions">
+                      <span>{{ t('shelfModel.certCellConfiguration', { name: owner(group.cellPartId)?.canonical_name || group.cellPartId || t('shelfModel.certNoCellPart') }) }}</span>
+                      <StatusSquare v-if="group.progress.status === 'completed'" status="success" :label="t('shelfModel.certGroupCompleted')" />
+                      <StatusSquare v-else-if="group.progress.status === 'delayed'" status="warning" :label="t('shelfModel.certGroupDelayed', { count: group.progress.delayedCount })" />
+                      <StatusSquare v-else-if="group.progress.status === 'date_conflict'" status="warning" :label="t('shelfModel.certGroupDateConflict')" />
+                      <StatusSquare v-else :label="t('shelfModel.certStatus.in_progress')" />
+                    </div>
+                    <small v-if="!selected && group.conditions?.length">{{ conditionText(group.conditions) }}</small>
+                  </th>
+                </tr>
+                <tr v-for="cert in group.rows" :key="cert.entity.id">
+                  <td>
+                    <small>{{ t(`shelfModel.origins.${cert.origin}`) }}</small>
+                    <a :href="href(cert.entity.id)">{{ cert.standard_name }}{{ cert.certification.year ? ` ${cert.certification.year}` : '' }}</a>
+                    <small v-if="cert.entity.description">{{ cert.entity.description }}</small>
+                    <Button v-if="cert.certification.owner_id === nodeId" variant="ghost" :disabled="editorLoading" :aria-label="`${t('shelfModel.editCertification')} · ${cert.entity.canonical_name}`" @click="openEditor('certification', cert.entity.id)">{{ t('shelfModel.editCertification') }}</Button>
+                  </td>
+                  <td>{{ cert.certification.certification_object }}</td>
+                  <td>
+                    <span v-if="cert.origin !== 'self'">{{ ownerText(cert.certification.owner_id) }}</span>
+                    <small>{{ cert.region_name ?? library.shelf_config?.regions?.find(region => region.key === cert.certification.region)?.name ?? cert.certification.region }}</small>
+                    <small v-if="!selected && conditionText(certConditions(cert)) !== conditionText(group.conditions)" class="condition">{{ conditionText(certConditions(cert)) }}</small>
+                  </td>
+                  <td><ShelfCertificationStatus :status="cert.status" :progress="cert.certification.progress" /></td>
+                  <td>{{ cert.certification.agency || t('shelfStatus.noRecord') }}</td>
+                  <td>
+                    <template v-for="key in (['start_date', 'planned_date', 'obtained_date', 'issued_date'] as const)" :key="key">
+                      <small v-if="cert.certification[key]">{{ t(`shelfModel.${key}`) }} {{ cert.certification[key] }}</small>
+                    </template>
+                    <small v-if="cert.status === 'date_conflict'">{{ t('shelfModel.obtainedDateConflict') }}</small>
+                    <small v-if="cert.certification.notes?.trim()" class="cert-notes"><strong>{{ t('shelfModel.notes') }}</strong> {{ cert.certification.notes }}</small>
+                  </td>
+                  <td>{{ cert.certification.validity || t('shelfStatus.noRecord') }}</td>
+                  <td>
+                    <a v-if="safeExternalUrl(cert.certification.cloud_url)" :href="safeExternalUrl(cert.certification.cloud_url)" target="_blank" rel="noopener noreferrer">{{ cert.certification.number || t('shelfModel.cloudLink') }}</a>
+                    <span v-else>{{ cert.certification.number || t('shelfStatus.noRecord') }}</span>
+                  </td>
+                </tr>
+              </tbody>
             </table>
           </div>
           <p v-else>{{ t('productShelf.noRecords') }}</p>
@@ -448,7 +473,7 @@ onBeforeUnmount(() => { generation++; historyGeneration++; editorGeneration++ })
       </div>
     </section>
     <ShelfDocumentEditor v-if="editingNode && editor === 'document'" :key="`${library.id}-${nodeId}-document`" :library="library" :target-node="editingNode" :initial-requirement-id="initialRequirement" @close="editor = ''" @saved="saved" />
-    <ShelfModelEditor v-if="editingNode && editor && editor !== 'document'" :key="`${library.id}-${nodeId}-${editor}`" :library="library" :node="editingNode" :mode="editor" :line-id="ancestors.find(item => item.kind === 'product_line')?.id" @close="editor = ''" @saved="saved" />
+    <ShelfModelEditor v-if="editingNode && editor && editor !== 'document'" :key="`${library.id}-${nodeId}-${editor}`" :library="library" :node="editingNode" :mode="editor" :line-id="ancestors.find(item => item.kind === 'product_line')?.id" :editing-certification="editingCertification" @close="editor = ''" @saved="saved" />
   </article>
 </template>
 
@@ -492,6 +517,7 @@ thead th { position: sticky; top: 0; z-index: 1; background: var(--bg); font-siz
 .chosen td { background: var(--surface-soft); }
 small { display: block; font-size: var(--text-xs); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .condition { margin-top: 4px; }
+.cert-notes { max-inline-size: 32ch; margin-top: var(--space-1); }
 .regions { display: flex; border-top: 2px solid var(--rule); overflow-x: auto; }
 .regions > div { flex: 1; min-width: 110px; padding: 8px 12px 8px 0; }
 .sale-record { display: grid; gap: 4px; padding-block: 8px; font-size: var(--text-xs); }

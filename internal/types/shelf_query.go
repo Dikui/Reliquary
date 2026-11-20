@@ -65,6 +65,7 @@ type ShelfCertificationFilter struct {
 	Standard string  `json:"standard,omitempty"`
 	Progress *string `json:"progress,omitempty"`
 	Region   *string `json:"region,omitempty"`
+	Status   string  `json:"status,omitempty"`
 }
 
 // Query detail levels. Summary keeps identity, description and the facts hit by

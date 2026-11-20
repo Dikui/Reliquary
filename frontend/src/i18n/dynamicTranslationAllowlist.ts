@@ -6,6 +6,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
   { file: 'views/library/components/ShelfReviewPage.vue', expressions: ['`shelfReview.sources.${set.source.type}`', '`shelfReview.groups.${group.type}`', '`shelfReview.actions.${action}`', '`shelfReview.conflictMessages.${known.key}`', '`shelfReview.coverageReasons.${shelfCoverageFeedback(item)?.reason}`'], reason: 'Sources, conflict groups, decisions, known conflict messages and coverage reasons use fixed changeset vocabularies; unknown coverage reasons are checked with te and shown as raw text.' },
   { file: 'views/library/components/ShelfReviewValue.vue', expressions: ['`shelfReview.fields.${props.name}`'], reason: 'Known payload labels are checked with te before translation; configured fields retain their library labels.' },
   { file: 'views/library/components/ShelfNodePage.vue', expressions: ['`productShelf.kinds.${entity.kind}`', '`shelfModel.status.${row.status}`'], reason: 'Shelf node kinds and checklist statuses are fixed API vocabularies.' },
+  { file: 'views/library/components/ShelfCertificationStatus.vue', expressions: ['labelKey.value'], reason: 'Certification status keys come from the fixed API status map and default to unknown.' },
   {
     "file": "views/library/components/ShelfModelPage.vue",
     "expressions": [
@@ -13,7 +14,7 @@ export const DYNAMIC_TRANSLATION_ALLOWLIST = [
       "`operationLogs.types.${item.operation_type}`",
       "`shelfModel.status.${item.status}`",
       "`shelfModel.sections.${section}`",
-      "`shelfModel.origins.${group.origin}`",
+      "`shelfModel.origins.${cert.origin}`",
       "`shelfModel.${key}`",
       "`shelfModel.status.${displayStatus(row)}`",
       "`shelfModel.${row.document.stage}`",

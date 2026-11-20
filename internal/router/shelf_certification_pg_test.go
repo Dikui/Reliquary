@@ -50,8 +50,40 @@ func TestShelfCertificationConfirmedCreateAndProgressUpdate(t *testing.T) {
 	require.Equal(t, "Completed", detail.Entity.Attributes["certification"].(map[string]any)["progress"])
 }
 
-// setLegacyCertificationField simulates data saved before duplicate identities
-// were rejected.
+func TestShelfCertificationChangesetsRejectFutureObtainedDate(t *testing.T) {
+	f, library, nodes := shelfModelSetup(t)
+	configureCertificationStandards(f, &library)
+	path := "/libraries/" + library.ID + "/shelf/changesets"
+	record := &types.ShelfCertificationInput{Name: "Synthetic certificate", ShelfCertification: types.ShelfCertification{
+		OwnerID: shelfNode(nodes, "model"), Standard: "standard_a", CertificationObject: "Container",
+	}}
+	input := types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: []types.ShelfOperation{{
+		Type: "create_certification", Certification: record,
+	}}}
+	const message = "实际取证日期不能晚于今天，未取证请填写 planned_date"
+	future := time.Now().AddDate(1, 0, 0).Format(time.DateOnly)
+	record.ObtainedDate = future
+	response := f.request(http.MethodPost, path, input, http.StatusConflict, nil)
+	require.Contains(t, string(response), message)
+
+	record.ObtainedDate, record.PlannedDate = "", future
+	var saved types.ShelfChangeset
+	f.request(http.MethodPost, path, input, http.StatusCreated, &saved)
+	input.Operations[0].Type = "update_certification"
+	input.Operations[0].Revision = 1
+	record.ObtainedDate = future
+	response = f.request(http.MethodPost, path, input, http.StatusConflict, nil)
+	require.Contains(t, string(response), message)
+
+	var entity types.EntityDetail
+	f.request(http.MethodGet, "/entities/"+saved.Items[0].EntityID, nil, http.StatusOK, &entity)
+	require.EqualValues(t, 1, entity.Entity.Revision)
+	stored := entity.Entity.Attributes["certification"].(map[string]any)
+	require.Equal(t, future, stored["planned_date"])
+	require.NotContains(t, stored, "obtained_date")
+}
+
+// setLegacyCertificationField simulates data saved before current write rules.
 func setLegacyCertificationField(t *testing.T, f *managedNamesFixture, id, field, value string) {
 	t.Helper()
 	raw, _ := json.Marshal(value)

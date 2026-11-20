@@ -91,7 +91,11 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 			})},
 			"parameters":  map[string]any{"type": "array", "description": "结构化数值参数筛选，各项取交集。按闭区间相交匹配：记录 [9,54] 会命中 min=50，不代表保证达到 50，须核对返回值；只匹配结构化参数，描述和正文中的数值不参与筛选。按 min/max 筛选时响应带 parameter_missing：满足其他筛选但该字段无结构化取值、因而未计入结果的型号数", "items": object(map[string]any{"field": text("本库参数字段键"), "min": map[string]any{"type": "number"}, "max": map[string]any{"type": "number"}, "missing": boolean("true 查该字段所属产品线内没有结构化取值的型号（即 facets 的 missing），不能与 min、max 同用；这些型号的数值可能写在描述或正文中")}, "field")},
 			"composition": shelfConditionsSchema(), "part_id": text("反查使用此部件的型号"),
-			"certification": object(map[string]any{"standard": text("标准配置键、规范名或明确别名"), "progress": text("进度原文"), "region": text("配置区域键，空字符串筛选不分地区的认证，省略则不限地区")}),
+			"certification": object(map[string]any{
+				"standard": text("标准配置键、规范名或明确别名"), "progress": text("进度原文"),
+				"region": text("配置区域键，空字符串筛选不分地区的认证，省略则不限地区"),
+				"status": enum("认证状态。date_conflict 按本地当天判断，其余状态按 as_of 的本地日期判断", types.ShelfCertificationStatuses()...),
+			}),
 			"document_gaps": boolean("只查有资料缺口（清单行 gap=true）的型号，默认 false；未设阶段时缺文件和只有初稿都算缺口，设了阶段时只算已到期未交；0 条不等于资料齐全"), "as_of": text("业务时间，RFC3339，省略为当前时间"),
 			"detail": enum("返回详略，默认 summary；full 返回每个型号的完整详情，体积大，仅在确需逐项资料清单时少量使用", "summary", "full"),
 			"facets": boolean("true 时额外返回 facets：在全部命中型号上统计 sale_statuses（区域、状态、型号数、只对部分选配成立的型号数）、composition（部件及型号数）、parameters（有结构化值的型号数、缺失数、最小值与最大值）、certifications（标准、进度、区域及型号数）；默认 false"),
@@ -184,7 +188,7 @@ func shelfOperationSchema() map[string]any {
 		"parameter_values": map[string]any{"type": "object", "description": "字段键到参数值数组，空数组移除该参数", "additionalProperties": map[string]any{"type": "array", "items": object(map[string]any{
 			"value": map[string]any{"description": "按配置字段类型提供值，数值也可为闭区间 {min,max}"}, "conditions": shelfConditionsSchema(),
 		}, "value")}},
-		"certification":   shelfPayloadSchema("认证完整字段：name、owner_id、standard、certification_object、cell_part_id、region、year、agency、progress、start_date、planned_date（计划取证日期）、obtained_date（实际取证日期，未取证留空）、issued_date、validity、number、cloud_url、conditions；新增须给 name，region 为配置区域键或空（不分地区），日期为 YYYY-MM-DD；不猜所属节点"),
+		"certification":   shelfPayloadSchema("认证完整字段：name、owner_id、standard、certification_object、cell_part_id、region、year、agency、progress、notes（备注，最多 20000 字）、start_date、planned_date（计划取证日期）、obtained_date（实际取证日期，不得晚于今天，未取证留空）、issued_date、validity、number、cloud_url、conditions；新增须给 name，region 为配置区域键或空（不分地区），日期为 YYYY-MM-DD；不猜所属节点"),
 		"document":        shelfPayloadSchema("资料版本：name、owner_id 或 unassigned=true、requirement_ids（多项资料要求 ID，兼容旧 requirement_id）、certificate_number、attachment_id 或 cloud_url、entry_id、version_label、stage(draft/final)、file_category、origin、occurred_at、conditions；归属须明确指定"),
 		"classification":  shelfPayloadSchema("classify_document 的完整归类：owner_id、requirement_ids、certificate_number、conditions；作用于同一文件全部版本"),
 		"version_id":      text("select_document_version 选择的本文件已有版本 ID"),

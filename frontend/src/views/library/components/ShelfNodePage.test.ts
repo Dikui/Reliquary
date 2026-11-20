@@ -5,6 +5,7 @@ import { createI18n } from 'vue-i18n'
 import zh from '../../../i18n/locales/zh-CN'
 import en from '../../../i18n/locales/en-US'
 import * as shelfText from '../../../utils/productShelf'
+import * as shelfCertification from '../../../utils/shelfCertification'
 import * as externalUrl from '../../../utils/externalUrl'
 import { click, descendants, element, loadComponent, renderer, settle, visibleText, type Element } from '../componentTestHarness'
 import { entryPresentationTestModules } from '../entryPresentationTestModules'
@@ -21,9 +22,11 @@ const node = (isPart = false): any => ({ entity: isPart ? part : product, record
 const success = (data: unknown) => Promise.resolve({ success: true, data })
 async function mountPage(t: test.TestContext, options: { part?: boolean; locale?: string; api?: Record<string, unknown> } = {}) {
   const requests: any[] = [], submissions: any[] = []
+  const statusModules = { ...entryPresentationTestModules, '@/utils/shelfCertification': shelfCertification }
   // API responses replace HTTP; the actual page, semantic tables and controls render.
   const component = loadComponent(new URL('./ShelfNodePage.vue', import.meta.url), {
     ...entryPresentationTestModules, '@/utils/productShelf': shelfText, '@/utils/externalUrl': externalUrl,
+    './ShelfCertificationStatus.vue': { __esModule: true, default: loadComponent(new URL('./ShelfCertificationStatus.vue', import.meta.url), statusModules) },
     '@/api/shelf': {
       getShelfNode: (_: string, id: string, asOf?: string) => { requests.push({ id, asOf }); return success(id === 'platform' ? { entity: parent, facts: [{ field: 'belongs_to', value: { object_id: 'line' } }] } : id === 'line' ? { entity: entity('line', 'product_line', '产品线原名'), facts: [] } : id === 'product' && options.part ? node() : node(!!options.part)) },
       queryShelf: (_: string, input: object) => {
@@ -60,7 +63,14 @@ test('部件页显示使用型号和组成角色，保留别名及附属属性',
   assert.match(visibleText(section(root, 'models')), /型号 model.*产品线原名.*客户模块.*选配.*另一个部件.*型号 fixed.*固定组成/)
   assert.ok(requests.some(item => item.part_id === 'part' && item.detail === 'full'))
   assert.doesNotMatch(visibleText(root), /当前阶段|可售状态|资料缺口/)
-  assert.match(visibleText(section(root, 'node-certifications')), /认证地区.*标准原文.*客户进度.*客户机构.*原表日期.*长期原文.*TEST-17/)
+  assert.match(visibleText(section(root, 'node-certifications')), /认证地区.*标准原文.*未记录.*客户进度.*客户机构.*原表日期.*长期原文.*TEST-17/)
+})
+
+test('节点的认证进度徽标在英文界面显示已取证状态', async t => {
+  const value = node(true)
+  value.shelf.certifications[0].status = 'obtained'
+  const { root } = await mountPage(t, { part: true, locale: 'en-US', api: { getShelfNode: () => success(value) } })
+  assert.match(visibleText(section(root, 'node-certifications')), /Obtained.*客户进度/)
 })
 
 // Small spec, task 17 / ADR 0024: shared files keep requirements, versions and safe original links.

@@ -103,7 +103,7 @@ func (s *EntityService) shelfGet(ctx context.Context, libraryID, id string, opti
 		}
 		region := ""
 		regionName := ""
-		if record, ok := value.(types.ShelfCertification); ok && field == "certification" {
+		if record, ok := value.(types.ShelfCertificationFactValue); ok && field == "certification" {
 			regionName = library.ShelfConfig.RegionName(record.Region)
 		}
 		if status, ok := value.(types.ShelfSaleStatus); ok && field == "sale_statuses" {
@@ -124,7 +124,8 @@ func (s *EntityService) shelfGet(ctx context.Context, libraryID, id string, opti
 			if err := types.DecodeShelfValue(result.Entity.Attributes[field], &record); err != nil {
 				return nil, err
 			}
-			appendFact(result.Entity, field, record, record.Conditions, "self")
+			value := types.ShelfCertificationFactValue{ShelfCertification: record, Status: types.ShelfCertificationStatus(record, at, s.db.NowFunc())}
+			appendFact(result.Entity, field, value, record.Conditions, "self")
 		} else if result.Shelf != nil && field == "sale_statuses" {
 			for _, row := range result.Shelf.SaleStatuses {
 				appendFact(result.Entity, field, row, row.Conditions, "self")
@@ -157,7 +158,8 @@ func (s *EntityService) shelfGet(ctx context.Context, libraryID, id string, opti
 		for _, cert := range result.Shelf.Certifications {
 			certifications[cert.Entity.ID] = cert.Certification
 			conditions := shelfCertificationConditions(cert.Certification, composition)
-			appendFact(cert.Entity, "certification", cert.Certification, conditions, cert.Origin)
+			value := types.ShelfCertificationFactValue{ShelfCertification: cert.Certification, Status: cert.Status}
+			appendFact(cert.Entity, "certification", value, conditions, cert.Origin)
 		}
 	}
 	// Relationships are facts too, with their own effective interval and source.

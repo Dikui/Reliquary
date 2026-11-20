@@ -15,6 +15,7 @@ import type { Entity } from '../../../api/entities'
 import { loadComponent } from '../componentTestHarness'
 import { entryPresentationTestModules } from '../entryPresentationTestModules'
 import * as shelfText from '../../../utils/productShelf'
+import * as shelfCertification from '../../../utils/shelfCertification'
 import * as dates from '../../../utils/dateTime'
 import * as externalUrl from '../../../utils/externalUrl'
 const require = createRequire(import.meta.url), filename = 'EntryWorkbench.vue'
@@ -52,9 +53,11 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
     '@/stores/follows': { useFollowStore: () => ({ refreshAfterTargetChange: async () => {} }) },
     '@/components/FollowToggle.vue': { __esModule: true, default: defineComponent({ setup: () => () => null }) },
     './MergeSuggestions.vue': { __esModule: true, default: defineComponent({ setup: () => () => h('div', { class: 'merge-suggestions-test' }, i18n.global.t('mergeSuggestions.title')) }) } }
+  const shelfModules: Record<string, unknown> = { ...entryPresentationTestModules, '@/utils/shelfCertification': shelfCertification }
+  shelfModules['./ShelfCertificationStatus.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfCertificationStatus.vue', import.meta.url), shelfModules) }
   // Task 16: render the actual model page; only its HTTP boundaries are synthetic.
   modules['./ShelfModelPage.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfModelPage.vue', import.meta.url), {
-    ...entryPresentationTestModules, '@/utils/productShelf': shelfText, '@/utils/dateTime': dates, '@/utils/externalUrl': externalUrl,
+    ...shelfModules, '@/utils/productShelf': shelfText, '@/utils/dateTime': dates, '@/utils/externalUrl': externalUrl,
     // No recorded snapshot renders these editors; their behavior is covered by model-page tests.
     ...Object.fromEntries(['./ShelfModelEditor.vue', './ShelfDocumentEditor.vue', './ManagedAttributes.vue'].map(name => [name, { __esModule: true, default: defineComponent({ setup: () => () => null }) }])),
     'vue-i18n': { useI18n: () => i18n.global },
@@ -62,7 +65,7 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
     '@/api/shelf': { getShelfNode: () => envelope({ entity, facts: [], recorded: false }) },
   }) }
   modules['./ShelfNodePage.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfNodePage.vue', import.meta.url), {
-    ...entryPresentationTestModules, '@/utils/productShelf': shelfText, '@/utils/externalUrl': externalUrl,
+    ...shelfModules, '@/utils/productShelf': shelfText, '@/utils/externalUrl': externalUrl,
     'vue-i18n': { useI18n: () => i18n.global },
     '@/api/shelf': { getShelfNode: () => envelope({ entity, facts: [], recorded: false }) },
   }) }

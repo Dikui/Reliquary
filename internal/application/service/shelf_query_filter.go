@@ -67,6 +67,7 @@ facts AS (
  AND (NOT jsonb_exists(f.value,'standard') OR c.attributes->'certification'->>'standard'=f.value->>'standard')
  AND (NOT jsonb_exists(f.value,'progress') OR coalesce(c.attributes->'certification'->>'progress','')=f.value->>'progress')
  AND (NOT jsonb_exists(f.value,'region') OR c.attributes->'certification'->>'region'=f.value->>'region')
+ AND (NOT jsonb_exists(f.value,'status_ids') OR jsonb_exists(f.value->'status_ids',c.id))
  AND (c.attributes->'certification'->>'owner_id'=m.id
   OR EXISTS (SELECT 1 FROM ancestors a JOIN nodes n ON n.id=a.id AND n.kind IN ('product','platform') WHERE a.model_id=m.id AND a.id=c.attributes->'certification'->>'owner_id')
   OR EXISTS (SELECT 1 FROM parts p WHERE p.model_id=m.id AND p.part_id=c.attributes->'certification'->>'owner_id'))
@@ -224,8 +225,11 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		if cert.Region != nil && *cert.Region != "" && !shelfOptionExists(library.ShelfConfig.Regions, *cert.Region) {
 			return nil, apperrors.NewBadRequestError("certification region filter requires a configured region key or an explicit empty string")
 		}
-		if cert.Standard == "" && cert.Progress == nil && cert.Region == nil {
-			return nil, apperrors.NewBadRequestError("certification filter requires a standard, progress or region")
+		if cert.Status != "" && !slices.Contains(types.ShelfCertificationStatuses(), cert.Status) {
+			return nil, apperrors.NewBadRequestError("unknown certification status")
+		}
+		if cert.Standard == "" && cert.Progress == nil && cert.Region == nil && cert.Status == "" {
+			return nil, apperrors.NewBadRequestError("certification filter requires a standard, progress, region or status")
 		}
 		filter := map[string]any{"type": "certification"}
 		if cert.Standard != "" {
@@ -245,6 +249,21 @@ func (s *EntityService) shelfQuery(ctx context.Context, libraryID string, input 
 		}
 		if cert.Region != nil {
 			filter["region"] = *cert.Region
+		}
+		if cert.Status != "" {
+			// Use the same derived statuses as the views. The SQL still applies
+			// ownership, option combinations and the other filters before paging.
+			rows, err := s.cachedShelfCertificationViews(ctx, library, at)
+			if err != nil {
+				return nil, err
+			}
+			ids := []string{}
+			for _, row := range rows {
+				if row.Status == cert.Status {
+					ids = append(ids, row.Entity.ID)
+				}
+			}
+			filter["status_ids"] = ids
 		}
 		filters = append(filters, filter)
 	}
@@ -407,14 +426,15 @@ func shelfQueryFactMatched(fact types.ShelfFact, input types.ShelfQueryRequest, 
 		return slices.ContainsFunc(input.SaleStatuses, func(filter types.ShelfStatusFilter) bool {
 			return filter.Region == "" || filter.Region == value.Region
 		})
-	case types.ShelfCertification:
+	case types.ShelfCertificationFactValue:
 		cert := input.Certification
 		if fact.Field != "certification" || cert == nil {
 			return false
 		}
 		return (standardKey == "" || value.Standard == standardKey) &&
 			(cert.Progress == nil || value.Progress == *cert.Progress) &&
-			(cert.Region == nil || value.Region == *cert.Region)
+			(cert.Region == nil || value.Region == *cert.Region) &&
+			(cert.Status == "" || value.Status == cert.Status)
 	}
 	return fact.Origin == "self" && slices.ContainsFunc(input.Parameters, func(filter types.ShelfParameterFilter) bool {
 		return filter.Field == fact.Field

@@ -34,12 +34,12 @@ var shelfImportFields = map[string]ShelfImportFields{
 		SheetFields:     map[string]string{"product_line_id": "required"},
 	},
 	"certification_progress": {
-		Columns:         []string{"name", "owner", "standard", "year", "certification_object", "cell_part", "region", "agency", "progress", "start_date", "planned_date", "obtained_date", "issued_date", "validity", "number", "cloud_url", "sample_description"},
+		Columns:         []string{"name", "owner", "standard", "year", "certification_object", "cell_part", "region", "agency", "progress", "notes", "start_date", "planned_date", "obtained_date", "issued_date", "validity", "number", "cloud_url", "sample_description"},
 		RequiredColumns: []string{"owner", "standard", "certification_object", "region"},
 		SheetFields:     map[string]string{"owner_kind": "required", "product_line_id": "optional", "no_cell_part": "required_without_cell_part"},
 	},
 	"certification_report": {
-		Columns:         []string{"name", "owner", "standard", "year", "certification_object", "cell_part", "region", "agency", "progress", "start_date", "planned_date", "obtained_date", "issued_date", "validity", "number", "cloud_url", "sample_description", "model", "pack_model", "cluster_model", "container_model"},
+		Columns:         []string{"name", "owner", "standard", "year", "certification_object", "cell_part", "region", "agency", "progress", "notes", "start_date", "planned_date", "obtained_date", "issued_date", "validity", "number", "cloud_url", "sample_description", "model", "pack_model", "cluster_model", "container_model"},
 		RequiredColumns: []string{"owner", "standard", "certification_object", "region"},
 		SheetFields:     map[string]string{"owner_kind": "required", "product_line_id": "optional", "progress": "required", "module_type": "required_with_cell_part", "no_cell_part": "required_without_cell_part"},
 	},

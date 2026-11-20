@@ -61,8 +61,9 @@ func TestShelfImportCertificationProgressUsesIdentityAndFileDate(t *testing.T) {
 	f.request(http.MethodPost, "/libraries/"+l.ID+"/shelf/changesets", map[string]any{"source": map[string]any{"type": "web"}, "confirmed": true, "operations": []any{map[string]any{"id": "cert", "type": "create_certification", "effective_at": "2026-10-01T00:00:00Z", "certification": map[string]any{"name": "Original certificate", "owner_id": shelfNode(n, "model"), "standard": "standard_a", "certification_object": "Container", "region": "region_a", "progress": "Planning", "number": "KEEP-1"}}}}, http.StatusCreated, &seed)
 	var model types.EntityDetail
 	f.request(http.MethodGet, "/entities/"+shelfNode(n, "model"), nil, http.StatusOK, &model)
-	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "progress"}, {Column: "F", Field: "start_date"}, {Column: "G", Field: "planned_date"}}, nil)
-	data := importWorkbook(t, importRecordRow(3, model.Entity.CanonicalName, "Customer spelling", "Container", "region_a", " In progress ", "2026/10/02", "2026/12/01"), "")
+	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "progress"}, {Column: "F", Field: "start_date"}, {Column: "G", Field: "planned_date"}, {Column: "H", Field: "notes"}}, nil)
+	const notes = " 实验室排期延后 "
+	data := importWorkbook(t, importRecordRow(3, model.Entity.CanonicalName, "Customer spelling", "Container", "region_a", " In progress ", "2026/10/02", "2026/12/01", notes), "")
 	draft := importUpload(t, f, l.ID, "progress_20261028.xlsx", "", data, http.StatusCreated)
 	require.Equal(t, "update_certification", draft.Items[0].Operation.Type)
 	require.Equal(t, seed.Items[0].EntityID, draft.Items[0].EntityID)
@@ -79,6 +80,13 @@ func TestShelfImportCertificationProgressUsesIdentityAndFileDate(t *testing.T) {
 	// A planned date stays apart from the obtained date until a certificate exists.
 	require.Equal(t, "2026-12-01", record["planned_date"])
 	require.NotContains(t, record, "obtained_date")
+	require.Equal(t, notes, record["notes"])
+	require.NotContains(t, record, "status")
+	var views []types.ShelfCertificationView
+	f.request(http.MethodGet, "/libraries/"+l.ID+"/shelf/certifications?as_of=2026-12-03T12:00:00Z", nil, http.StatusOK, &views)
+	require.Len(t, views, 1)
+	require.Equal(t, "delayed", views[0].Status)
+	require.Equal(t, notes, views[0].Certification.Notes)
 	f.request(http.MethodGet, "/entities/"+seed.Items[0].EntityID+"?as_of=2026-10-27T00:00:00Z", nil, http.StatusOK, &before)
 	require.Equal(t, "Planning", before.Entity.Attributes["certification"].(map[string]any)["progress"])
 	var logs types.OperationLogPage
@@ -106,13 +114,31 @@ func TestShelfImportCertificationInvalidDatesAndKeysNeedReview(t *testing.T) {
 	}
 }
 
+func TestShelfImportCertificationFutureObtainedDateOnlyBlocksItsRow(t *testing.T) {
+	f, l, _ := shelfModelSetup(t)
+	configureCertificationStandards(f, &l)
+	importRecordPlan(f, l, "certification_progress", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "obtained_date"}}, nil)
+	future := time.Now().AddDate(1, 0, 0).Format(time.DateOnly)
+	// The same key can be used by a later valid row when the first row is rejected.
+	rows := importRecordRow(3, "Synthetic model", "standard_a", "BMS", "region_a", future) +
+		importRecordRow(4, "Synthetic model", "standard_a", "BMS", "region_a", "")
+	draft := importUpload(t, f, l.ID, "progress_20261028.xlsx", "", importWorkbook(t, rows, ""), http.StatusCreated)
+	require.Len(t, draft.Items, 2)
+	conflict := draft.Items[0].Conflicts[0]
+	require.Equal(t, "uncertain", conflict.Type)
+	require.Contains(t, conflict.Message, "实际取证日期不能晚于今天，未取证请填写 planned_date")
+	require.Equal(t, future, conflict.Details.(map[string]any)["E3"])
+	require.Equal(t, "create_certification", draft.Items[1].Operation.Type)
+	require.Equal(t, "new", draft.Items[1].Conflicts[0].Type)
+}
+
 // Medium spec, task 12: report imports propose parts, attributes and explicit
 // model composition; new certifications are proposed for explicit confirmation.
 func TestShelfImportCertificationReportProposesPartAndComposition(t *testing.T) {
 	f, l, n := shelfModelSetup(t)
 	configureCertificationStandards(f, &l)
-	importRecordPlan(f, l, "certification_report", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "cell_part"}, {Column: "F", Field: "pack_model"}, {Column: "G", Field: "cluster_model"}, {Column: "H", Field: "number"}, {Column: "I", Field: "issued_date"}, {Column: "J", Field: "validity"}, {Column: "K", Field: "cloud_url"}}, map[string]any{"module_type": "module_a", "progress": "已完成"})
-	data := importWorkbook(t, importRecordRow(3, "Synthetic model", "Customer spelling", "Container", "region_a", " New cell ", " Pack original ", "Cluster original", "SYN-REPORT-1", "2026年10月20日", " Five years ", "https://example.com/report"), "")
+	importRecordPlan(f, l, "certification_report", []types.ShelfImportColumn{{Column: "A", Field: "owner"}, {Column: "B", Field: "standard"}, {Column: "C", Field: "certification_object"}, {Column: "D", Field: "region"}, {Column: "E", Field: "cell_part"}, {Column: "F", Field: "pack_model"}, {Column: "G", Field: "cluster_model"}, {Column: "H", Field: "number"}, {Column: "I", Field: "issued_date"}, {Column: "J", Field: "validity"}, {Column: "K", Field: "cloud_url"}, {Column: "L", Field: "notes"}}, map[string]any{"module_type": "module_a", "progress": "已完成"})
+	data := importWorkbook(t, importRecordRow(3, "Synthetic model", "Customer spelling", "Container", "region_a", " New cell ", " Pack original ", "Cluster original", "SYN-REPORT-1", "2026年10月20日", " Five years ", "https://example.com/report", "Certificate remarks"), "")
 	draft := importUpload(t, f, l.ID, "report_20261028.xlsx", "", data, http.StatusCreated)
 	require.Len(t, draft.Items, 3)
 	require.Equal(t, "new", draft.Items[2].Conflicts[0].Type)
@@ -131,12 +157,15 @@ func TestShelfImportCertificationReportProposesPartAndComposition(t *testing.T) 
 	require.Equal(t, "已完成", record["progress"])
 	require.Equal(t, "SYN-REPORT-1", record["number"])
 	require.Equal(t, "2026-10-20", record["issued_date"])
+	require.Equal(t, "Certificate remarks", record["notes"])
 	require.Equal(t, " Five years ", record["validity"])
 	require.Equal(t, "https://example.com/report", record["cloud_url"])
 	require.Equal(t, part.Entity.ID, record["cell_part_id"])
 	var model types.EntityDetail
 	f.request(http.MethodGet, "/entities/"+shelfNode(n, "model"), nil, http.StatusOK, &model)
 	require.Len(t, model.Shelf.Composition[0].Parts, 3)
+	require.Len(t, model.Shelf.Certifications, 1)
+	require.Equal(t, "obtained", model.Shelf.Certifications[0].Status)
 }
 
 // Medium spec, task 12: overseas lists only report contradictions. Accepting

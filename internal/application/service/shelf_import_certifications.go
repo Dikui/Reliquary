@@ -79,7 +79,7 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 		}
 		record.Progress = mapping.Progress
 	}
-	for field, target := range map[string]*string{"progress": &record.Progress, "agency": &record.Agency, "validity": &record.Validity, "number": &record.Number, "cloud_url": &record.CloudURL} {
+	for field, target := range map[string]*string{"progress": &record.Progress, "notes": &record.Notes, "agency": &record.Agency, "validity": &record.Validity, "number": &record.Number, "cloud_url": &record.CloudURL} {
 		if cell, ok := cells[field+":"]; ok {
 			*target = cell.Value
 		}
@@ -100,6 +100,9 @@ func (b *importMapBuilder) certificationRow(mapping types.ShelfImportSheet, cell
 			}
 			*target = value
 		}
+	}
+	if err := b.service.checkShelfCertificationObtainedDate(record.ObtainedDate); err != nil {
+		return err
 	}
 	if cell, ok := cells["year:"]; ok {
 		record.Year = 0
