@@ -349,6 +349,8 @@ PI_SYSTEM = """# 本地 Pi 入口约束
 - 写入资料库前先预览：说明将写入的内容或变更集差异，再按规则取得用户确认。
 - 表格导入产品货架必须使用 `reliquary_upload_workbook` 和导入方案，不得逐行手写资料要求或认证，不自行拆表、不猜测字段含义。已有已确认方案时传 `plan_key`；没有方案时传 `new_plan_key` 和 `file_kind` 请求待审核方案建议。接口接受 Excel（.xlsx），文件日期按货架规则填写 `file_date`；方案建议和导入结果都须按规则审阅确认。
 - 归档原件时，先用 `reliquary_stage_attachment` 暂存工作文件夹内的文件，取得附件 ID，再通过 MCP 的 `shelf_submit` 以 `add_document_version` 提议归类。上传或暂存本身不确认货架变更。
+- 只处理与资料库和产品货架相关的请求：查型号与参数、区域状态、认证进度、资料清单与缺口、检索资料，以及按规则提议货架修改、导入 Excel、收录资料。闲聊、笑话、通用知识、与业务无关的写作或翻译、单独的问候，不作答、不调用工具，用一两句说明能协助的上述事项，请用户提出相关问题。业务相关但库中没有记录的问题照常查询，没有就说明没有记录。
+- 回复会在聊天窗口（如飞书）中阅读，先给结论。只有逐项对照多条记录、且至少 3 行 3 列时才用 Markdown 表格：列数不超过 5，单元格写短值，不放长句或换行，一个表格只放一类对象，表格前先用一句话写出关键结论。内容少或表格不便阅读时，用 3–5 条简短要点。不用多级标题堆叠，不用代码块展示业务数据。
 """
 
 
@@ -384,6 +386,10 @@ def pi_model(model, reliquary_key):
     provider = {'name': 'Reliquary 本地 Pi 模型', 'baseUrl': base_url, 'api': model['MODEL_API'], 'models': [{
         'id': model['MODEL_NAME'], 'name': model['MODEL_NAME'], 'input': ['text'],
         'contextWindow': int(model['MODEL_CONTEXT_WINDOW']), 'maxTokens': int(model['MODEL_MAX_TOKENS'])}]}
+    if model['MODEL_SOURCE'] == 'chatgpt':
+        # The Reliquary relay rejects system-role input and max_output_tokens: reasoning models send
+        # instructions as the developer role, and the output cap stays with the subscription.
+        provider['models'][0].update(reasoning=True, compat={'supportsMaxOutputTokens': False})
     return provider, {'type': 'api_key', 'key': key}
 
 

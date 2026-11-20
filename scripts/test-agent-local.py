@@ -208,6 +208,8 @@ class LocalPiTests(unittest.TestCase):
             self.assertIn('reliquary_stage_attachment', system)
             self.assertIn('add_document_version', system)
             self.assertNotIn('没有上传工作文件夹文件的工具', system)
+            self.assertIn('闲聊、笑话、通用知识', system)
+            self.assertIn('至少 3 行 3 列时才用 Markdown 表格', system)
             api.assert_called_once_with('http://127.0.0.1:18080', '/space/api-keys', {'name': 'Reliquary Pi'})
             self.assertTrue((root / 'workspace').is_dir())
             launcher = root / 'scripts/pi'
@@ -245,6 +247,9 @@ class LocalPiTests(unittest.TestCase):
             self.assertEqual(provider['baseUrl'], 'http://app:8080/api/v1/agent/models/chat%2Fmodel')
             self.assertEqual(provider['api'], 'openai-responses')
             self.assertEqual(provider['models'][0]['contextWindow'], 200000)
+            # The relay accepts developer-role instructions only and no max_output_tokens.
+            self.assertTrue(provider['models'][0]['reasoning'])
+            self.assertEqual(provider['models'][0]['compat'], {'supportsMaxOutputTokens': False})
             self.assertEqual(settings['defaultModel'], 'gpt-test')
             auth = agent.json.loads((agent_dir / 'auth.json').read_text())
             self.assertEqual(auth, {settings['defaultProvider']: {'type': 'api_key', 'key': 'pi-fixture-key'}})
