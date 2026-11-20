@@ -17,7 +17,7 @@ import (
 func TestMCPGuideWorkflows(t *testing.T) {
 	f := newMCPFixture(t)
 	client := f.connect(t, "2025-11-25")
-	names := []string{"compare", "entity-profile", "ingest", "review-check", "shelf-expert", "shelf-import", "topic-brief", "write-report"}
+	names := []string{"compare", "entity-profile", "ingest", "review-check", "shelf-expert", "shelf-import", "shelf-onboard", "topic-brief", "write-report"}
 	call := func(t *testing.T, arguments any) *mcp.CallToolResult {
 		t.Helper()
 		result, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: "reliquary_guide", Arguments: arguments})

@@ -131,6 +131,7 @@ Reliquary 的全部功能只用本机资料，后端不联网检索。客户端�
 | review-check | 核对已有自检问题与原文，只报告结论 | [资料自检复核](workflows/review-check.md) |
 | shelf-expert | 查询货架事实、条件、来源与时点，经用户确认维护货架 | [货架专家](workflows/shelf-expert.md) |
 | shelf-import | 用客户 Excel 初始化或补充产品货架，按类汇总冲突并经确认写入 | [货架导入](workflows/shelf-import.md) |
+| shelf-onboard | 新产品上架：一次问齐信息，在一个变更集里建层级、状态与认证清单，确认后报告资料清单 | [新产品上架](workflows/shelf-onboard.md) |
 
 ## 参考文件索引
 
