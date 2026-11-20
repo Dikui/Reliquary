@@ -1406,6 +1406,14 @@ with mock.patch('subprocess.run') as docker:
         backup.assert_not_called()
         self.assertEqual(ctx.calls, [("stopped", "snapshot", 300, True), ("export-sources",), ("migrate",)])
 
+    def test_retrying_a_pending_upgrade_reuses_the_existing_pause(self):
+        ctx = admin.Context(self.root, {"RELIQUARY_ADMIN_DIRECT": "1", "RELIQUARY_ADMIN_OFFLINE": "1"})
+        with mock.patch.object(ctx, "ensure_legacy_helper", return_value=False), \
+             mock.patch.object(ctx, "cli_json", return_value={"paused": True}) as command:
+            with ctx.stopped("snapshot", 300, keep_paused=True, reuse_pause=True):
+                self.assertEqual(command.call_args_list, [mock.call("status"), mock.call("flush")])
+        self.assertEqual(command.call_args_list, [mock.call("status"), mock.call("flush")])
+
     def old_backup_restore_context(self, legacy=False):
         package = self.root / "package"
         package.mkdir()
@@ -1669,7 +1677,8 @@ class IKB20DrillTests(unittest.TestCase):
             database = "reliquary_drill_0123456789abcdef"
             def run(argv, **kwargs):
                 return b"healthy" if argv[1] == "inspect" else b""
-            with mock.patch.object(admin, "run", side_effect=run) as command:
+            # The command and port probe are simulated so this test needs no Docker or sockets.
+            with mock.patch.object(admin, "run", side_effect=run) as command, mock.patch.object(admin.socket, "socket"):
                 with admin.drill_runtime(ctx, root / "temporary", root / "backup", database) as (invoke, expected):
                     invoke("queue-replay")
                 self.assertTrue(any(call.args[0][:3] == ["docker", "rm", "-f"] for call in command.call_args_list))

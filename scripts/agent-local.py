@@ -287,6 +287,16 @@ def maintenance_lock(root):
         yield
 
 
+def feishu_configured(root):
+    directory = root / 'agents/feishu'
+    env = directory / 'agent.env'
+    if not (directory / 'compose.yaml').is_file() or not env.is_file():
+        return False
+    values = read_env(env)
+    return all(values.get(key) for key in ('RELIQUARY_API_KEY', 'MODEL_SOURCE', 'FEISHU_APP_ID',
+                                            'FEISHU_APP_SECRET', 'FEISHU_TENANT_KEY', 'FEISHU_CHAT_ID'))
+
+
 def operate(root, action):
     directory = root / 'agents/feishu'
     if action == 'login':
@@ -319,13 +329,14 @@ def operate(root, action):
         if not (directory / 'enabled').exists():
             # A stopped agent stays stopped; the next start uses the new image.
             print('Agent 已停止，新镜像将在下次 start 时使用。')
-            return
+            return False
         try:
             subprocess.run(compose(root, 'up', '-d', '--no-build', '--pull', 'never', '--wait'), check=True)
         except BaseException:
             path.write_bytes(before)
             subprocess.run(compose(root, 'up', '-d', '--no-build', '--pull', 'never', '--wait'), check=True)
             raise
+        return True
     elif action == 'status':
         subprocess.run(compose(root, 'ps'), check=True)
         subprocess.run(compose(root, 'exec', '-T', 'agent', 'node', '--input-type=module', '-e',
@@ -541,38 +552,102 @@ def configure_pi(root, *, show_notice=True):
     print(answer or '（模型未返回文字）')
 
 
+def pi_configured(root):
+    directory = root / 'agents/pi'
+    path = directory / 'config.json'
+    if not all(file.is_file() for file in (path, root / 'scripts/pi', directory / 'pi.env')):
+        return False
+    config = json.loads(path.read_text())
+    return all(config.get(key) for key in ('image', 'workspace', 'network'))
+
+
+def pi_model_updates(directory, config):
+    agent_dir = directory / 'data/agent'
+    auth_path = agent_dir / 'auth.json'
+    models_path = agent_dir / 'models.json'
+    credentials = []
+    try:
+        reliquary_key = read_env(directory / 'pi.env').get('RELIQUARY_API_KEY')
+        if reliquary_key:
+            credentials.append(reliquary_key)
+        auth = json.loads(auth_path.read_text()) if auth_path.is_file() else {}
+        old_credential = auth.get(PI_PROVIDER, {})
+        old_key = old_credential.get('key')
+        if isinstance(old_key, str) and old_key:
+            credentials.append(old_key)
+        model = dict(config['model'])
+        source = model['MODEL_SOURCE']
+        if source == 'chatgpt':
+            if not model.get('MODEL_ID') or not reliquary_key:
+                raise ValueError()
+        elif source == 'api':
+            if not model.get('MODEL_BASE_URL') or old_credential.get('type') != 'api_key' or not isinstance(old_key, str) or not old_key:
+                raise ValueError()
+            model['MODEL_API_KEY'] = old_key
+        else:
+            raise ValueError()
+        if not model.get('MODEL_NAME') or model.get('MODEL_API') not in MODEL_APIS or any(
+                int(model[key]) <= 0 for key in ('MODEL_CONTEXT_WINDOW', 'MODEL_MAX_TOKENS')):
+            raise ValueError()
+        provider, credential = pi_model(model, reliquary_key)
+        models = json.loads(models_path.read_text()) if models_path.is_file() else {}
+        models['providers'] = {**models.get('providers', {}), PI_PROVIDER: provider}
+    except (AttributeError, KeyError, TypeError, ValueError):
+        print('本地 Pi 模型配置缺少有效字段或凭据，已保留原模型文件。请执行 pi-configure 刷新模型配置。')
+        return {}, credentials
+    updates = {models_path: models}
+    if source == 'chatgpt' and credential != old_credential:
+        updates[auth_path] = {**auth, PI_PROVIDER: credential}
+    return updates, credentials
+
+
 def update_pi(root):
     directory = root / 'agents/pi'
     path = directory / 'config.json'
     launcher = root / 'scripts/pi'
-    if not path.is_file():
+    if not pi_configured(root):
         raise ValueError('尚未配置本地 Pi，请先执行 pi-configure')
     before = path.read_bytes()
     config = json.loads(before)
-    if not all(config.get(key) for key in ('image', 'workspace', 'network')) or not all(
-            file.is_file() for file in (launcher, directory / 'pi.env', directory / 'data/agent/auth.json')):
-        raise ValueError('尚未配置本地 Pi，请先执行 pi-configure')
     source = Path(__file__).resolve().parent.parent
     if not (source / 'agents/pi/Dockerfile').is_file():
         raise ValueError('请从仓库中的 scripts/agent-local.py 执行 pi-update --root 运行目录')
     before_launcher = launcher.read_bytes()
     before_mode = launcher.stat().st_mode & 0o777
+    updates, credentials = pi_model_updates(directory, config)
+    before_models = {file: (file.read_bytes(), file.stat().st_mode & 0o777) if file.is_file() else None
+                     for file in updates}
     print('从当前源码重建本地 Pi 镜像…', flush=True)
     config['image'] = build_image(source, root, 'pi')
     try:
         refresh_pi_guidance(source, directory / 'data/agent')
+        for file, value in updates.items():
+            write_json(file, value, private=True)
         write_json(path, config, private=True)
         launcher.write_text(pi_launcher(root, config))
         launcher.chmod(0o755)
         print('检查将调用模型并消耗少量额度。', flush=True)
         check_pi(launcher)
-    except BaseException:
+    except BaseException as error:
         write_private(path, before.decode())
         launcher.write_bytes(before_launcher)
         launcher.chmod(before_mode)
+        for file, previous in before_models.items():
+            if previous is None:
+                file.unlink(missing_ok=True)
+            else:
+                contents, mode = previous
+                write_private(file, contents.decode())
+                file.chmod(mode)
         print('本地 Pi 更新未完成，已恢复原镜像。')
+        if isinstance(error, ValueError):
+            diagnostic = str(error)
+            for secret in sorted(credentials, key=len, reverse=True):
+                diagnostic = diagnostic.replace(secret, '[redacted]')
+            raise ValueError(diagnostic) from None
         raise
     print(f'本地 Pi 已更新。启动命令：{launcher}')
+    return True
 
 
 def main():

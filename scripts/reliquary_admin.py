@@ -41,6 +41,21 @@ class AdminError(RuntimeError):
     pass
 
 
+LOCAL_IMAGES = ".maintenance-schedule/local-deploy.images.json"
+PENDING_UPGRADE = ".maintenance-schedule/local-upgrade.pending.json"
+
+
+@contextlib.contextmanager
+def startup_lock(directory, *, wait=False):
+    import fcntl
+    with (directory.parent / "logs/startup.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise AdminError("Startup, backup or another deployment is active; retry after it finishes") from error
+        yield
+
+
 # The optional Feishu entry (ADR 0028) lives beside deploy/ in the runtime root.
 # Its state shares the backup's stopped window; credentials never enter packages.
 AGENT_PACKAGE_DIRECTORY = "agent"
@@ -471,6 +486,8 @@ def sanitize_env_example(source, destination):
 
 
 class Context:
+    startup_locked = False
+
     def __init__(self, root=ROOT, overrides=None):
         self.root = Path(root)
         self.database_only = True
@@ -683,13 +700,11 @@ class Context:
                  "-ec", 'if id appuser >/dev/null 2>&1; then chown -R appuser:appuser "$1"; fi', "sh", path])
 
     @contextlib.contextmanager
-    def stopped(self, mode, timeout, keep_paused=False, automatic=False, destination=None):
+    def stopped(self, mode, timeout, keep_paused=False, automatic=False, destination=None, *, reuse_pause=False):
         with contextlib.ExitStack() as guards:
-            if (self.root.parent / "scripts/startup.py").is_file():
-                import fcntl
+            if not self.startup_locked and (self.root.parent / "scripts/startup.py").is_file():
                 # Share the installed recovery task's lock until writers are restored.
-                lock = guards.enter_context((self.root.parent / "logs/startup.lock").open("a"))
-                fcntl.flock(lock, fcntl.LOCK_EX)
+                guards.enter_context(startup_lock(self.root, wait=True))
             legacy = self.ensure_legacy_helper()
             if self.direct or self.local_server:
                 hooks = (self.env.get("RELIQUARY_ADMIN_STOP_COMMAND"), self.env.get("RELIQUARY_ADMIN_START_COMMAND"))
@@ -706,7 +721,7 @@ class Context:
             try:
                 if legacy:
                     print("Baseline maintenance: stopping the legacy application before flushing and exporting; in-flight tasks remain in PostgreSQL.")
-                else:
+                elif not reuse_pause or not self.cli_json("status").get("paused"):
                     self.cli_json("pause", "--mode", mode, "--timeout", f"{timeout}s", "--reason", "automatic:backup" if automatic else "manual:" + mode)
                 paused = True
                 if was_running:
@@ -1715,6 +1730,216 @@ def verify_upgrade(ctx, package):
         ctx.cli_json("verify", "--manifest", argument, "--vectors", "--allow-operation-log-append", overrides=overrides)
 
 
+def clean_revision(source):
+    if run(["git", "status", "--porcelain"], cwd=source).strip():
+        raise AdminError("Commit source changes before deploying; images must match their Git revision")
+    return run(["git", "rev-parse", "HEAD"], cwd=source).decode().strip()
+
+
+def customer_source(directory, source=None):
+    marker = directory / "customer-install.json"
+    if not marker.is_file():
+        raise AdminError(f"Customer installation record is missing: {marker}")
+    record = json.loads(marker.read_text())
+    if record.get("status") != "base_ready" or not record.get("source"):
+        raise AdminError(f"Customer installation is incomplete or has no registered source: {marker}")
+    registered = Path(record["source"]).expanduser().resolve()
+    if source is not None and registered != source.resolve():
+        raise AdminError(f"Source checkout differs from {marker}; run the update from {registered} "
+                         f"(current checkout: {source})")
+    if not registered.is_dir():
+        raise AdminError(f"Registered source checkout does not exist: {registered}; check {marker}")
+    return registered
+
+
+def validate_installed_directory(source, directory):
+    if not (directory / ".env").is_file() or not (directory / "docker-compose.yml").is_file():
+        raise AdminError("An installed deployment with .env and docker-compose.yml is required")
+    if directory.resolve().is_relative_to(source.resolve()):
+        raise AdminError("The deployment directory must be outside the source checkout")
+
+
+def installed_context(directory):
+    runtime_env = read_env(directory / ".env")
+    ctx = Context(directory, runtime_env)
+    for key in tuple(ctx.env):
+        if key.startswith("COMPOSE_") and key not in runtime_env:
+            del ctx.env[key]
+    ctx.env["COMPOSE_FILE"] = runtime_env.get("COMPOSE_FILE") or str(directory / "docker-compose.yml")
+    return ctx
+
+
+def build_service_images(ctx, source, revision, services, *, container_frontend):
+    version = (source / "VERSION").read_text().strip()
+    tag = f"{version}-{revision[:12]}-{secrets.token_hex(3)}"
+    builds = {name: {"image": ("reliquary-ui:" if name == "frontend" else "reliquary-app:") + tag,
+                     "build": {"args": {"VERSION_ARG": version, "COMMIT_ID_ARG": revision}}} for name in services}
+    if container_frontend and "frontend" in builds:
+        builds["frontend"]["build"]["dockerfile"] = "Dockerfile.build"
+    with tempfile.TemporaryDirectory(prefix="reliquary-build-") as temp:
+        build = Path(temp) / "images.json"
+        json_write(build, {"services": builds})
+        subprocess.run(["docker", "compose", "--env-file", str(ctx.root / ".env"),
+                        "-f", str(source / "docker-compose.yml"), "-f", str(build), "build",
+                        *build_proxy_args({**read_env(ctx.root / ".env"), **os.environ}), *services],
+                       cwd=source, env=ctx.env, check=True)
+    return {name: spec["image"] for name, spec in builds.items()}
+
+
+def image_override(references, revisions, *, require_app_label=False):
+    override = {"services": {name: {"image": ref, "pull_policy": "never"} for name, ref in references.items()},
+                "x-reliquary-revisions": {}}
+    override["services"]["app"]["environment"] = {"AUTO_MIGRATE": "false"}
+    for name, ref in references.items():
+        info = json.loads(run(["docker", "image", "inspect", ref]))[0]
+        if name == "app" and require_app_label:
+            labels = info.get("Config", {}).get("Labels") or {}
+            if labels.get("org.opencontainers.image.revision") != revisions[name]:
+                raise AdminError("Built app image does not identify the selected source commit")
+        override["x-reliquary-revisions"][name] = {"commit": revisions[name], "id": info["Id"]}
+    return override
+
+
+def compose_with_images(ctx, override):
+    generated = {(ctx.root / path).resolve() for path in (LOCAL_IMAGES, ".maintenance-schedule/upgrade.images.json")}
+    files = ctx.env["COMPOSE_FILE"].split(os.pathsep)
+    return os.pathsep.join([*(name for name in files if name and (ctx.root / name).resolve() not in generated),
+                            str(override)])
+
+
+def start_application_services(ctx, services):
+    subprocess.run(["docker", "compose", "up", "-d", "--no-deps", "--no-build", "--pull", "never",
+                    "--wait", "--wait-timeout", "120", *services], cwd=ctx.root, env=ctx.env, check=True)
+    if "app" in services and "frontend" not in services:
+        # Nginx resolves the app hostname at startup; replacement may change its IP.
+        ctx.compose("exec", "-T", "frontend", "nginx", "-s", "reload")
+    ctx.compose("exec", "-T", "frontend", "sh", "-ec",
+                "for attempt in 1 2 3 4 5; do wget -q -T 5 -O /dev/null http://127.0.0.1/health "
+                "&& exit 0; sleep 1; done; exit 1")
+
+
+def refresh_maintenance_tools(ctx, source):
+    for name in ("reliquary-admin", "VERSION", "scripts/reliquary_admin.py"):
+        shutil.copy2(source / name, ctx.root / name)
+
+
+def upgrade(ctx, args, *, switch_image=None, activate=None, retry=False):
+    path = None
+    if args.backup:
+        options = argparse.Namespace(directory=None, timeout=args.timeout, keep_paused=True, include_worktree=args.include_worktree, with_images=True, upgrade=True)
+        path = backup(ctx, options)
+    guard = contextlib.ExitStack()
+    try:
+        if switch_image is None and not ctx.direct and not ctx.local_server:
+            revision = run(["git", "rev-parse", "--short=12", "HEAD"], cwd=ctx.root).decode().strip()
+            tag = revision + "-upgrade-" + secrets.token_hex(6)
+            new_override = ctx.root / ".maintenance-schedule/upgrade.images.json"
+            json_write(new_override, {"services": {ctx.app: {"image": "reliquary-app:" + tag}, "frontend": {"image": "reliquary-frontend:" + tag}}})
+            ctx.env["COMPOSE_FILE"] = ctx.env.get("COMPOSE_FILE", str(ctx.root / "docker-compose.yml")) + os.pathsep + str(new_override)
+            ctx.env["RELIQUARY_COMMIT"] = revision
+            ctx.compose("build", *build_proxy_args(ctx.env), ctx.app, "frontend")
+        if switch_image is None:
+            ctx.env.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
+        if path is None:
+            options = {"reuse_pause": True} if retry else {}
+            guard.enter_context(ctx.stopped("snapshot", args.timeout, keep_paused=True, **options))
+        if switch_image is not None:
+            switch_image()
+            ctx.env.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
+        ctx.cli_json("export-sources")
+        ctx.cli_json("migrate")
+        if not ctx.cli_json("status").get("paused"):
+            ctx.cli_json("pause", "--mode", "snapshot", "--timeout", str(args.timeout) + "s", "--reason", "manual:upgrade")
+        ctx.cli_json("flush")
+        if path is None:
+            ctx.cli_json("verify")
+        else:
+            verify_upgrade(ctx, path)
+        if activate is not None:
+            activate()
+        elif not ctx.direct and not ctx.local_server:
+            config = json.loads(ctx.compose("config", "--format", "json"))
+            new_images = {}
+            for service, spec in config["services"].items():
+                info = json.loads(run(["docker", "image", "inspect", spec["image"]]))[0]
+                new_images[service] = {"reference": spec["image"], "id": info["Id"]}
+            with tempfile.TemporaryDirectory(prefix=".capture-", dir=ctx.root / ".maintenance-schedule") as temp:
+                code = source_copy(ctx, Path(temp), True)
+                remember_runtime(ctx, Path(temp) / "source", code, new_images)
+            persisted = read_env(ctx.root / ".env")
+            persisted.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
+            persisted.update(COMPOSE_FILE=ctx.env["COMPOSE_FILE"], RELIQUARY_COMMIT=revision)
+            write_env(ctx.root / ".env", persisted)
+            ctx.compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "120")
+        ctx.cli_json("resume")
+        if path is None:
+            print("Upgrade verified. No pre-upgrade backup was created.")
+        else:
+            print(f"Upgrade verified. Rollback uses the complete pre-upgrade backup: {path}; restore into an empty environment. Database down migration is not a rollback.")
+    except BaseException:
+        if path is None:
+            print("Upgrade failed without a pre-upgrade backup; inspect the migration state before resuming. Data recovery requires a separately retained backup.", file=sys.stderr)
+        else:
+            print(f"Upgrade failed; environment remains paused. Restore pre-upgrade backup into a fresh environment: {path}", file=sys.stderr)
+        raise
+    finally:
+        guard.close()
+
+
+def upgrade_installed(ctx, args, source, revision):
+    """Build from the registered checkout and migrate using the new app image."""
+    if ctx.direct or ctx.local_server or ctx.app != "app":
+        raise AdminError("Customer upgrades require a Compose deployment with the app service")
+    if args.include_worktree:
+        raise AdminError("Customer upgrades require committed source; omit --include-worktree")
+    pending = ctx.root / PENDING_UPGRADE
+    retry = pending.is_file()
+    if retry and args.backup:
+        raise AdminError("An upgrade is pending; inspect the database before retrying without --backup. "
+                         "A new backup would not capture the pre-upgrade state.")
+    services = ["app", "frontend"]
+    refs = build_service_images(ctx, source, revision, services, container_frontend=True)
+    override = image_override(refs, dict.fromkeys(services, revision), require_app_label=True)
+    canonical = ctx.root / LOCAL_IMAGES
+    final_compose = compose_with_images(ctx, canonical)
+    startup = ctx.root.parent / "scripts/startup.py"
+    if startup.is_file():
+        shutil.copy2(source / "scripts/startup-local.py", startup)
+
+    with tempfile.TemporaryDirectory(prefix="reliquary-upgrade-") as temp:
+        staged = Path(temp) / "images.json"
+        json_write(staged, override)
+        staged_compose = compose_with_images(ctx, staged)
+        if retry:
+            # The old maintenance binary may no longer understand the database.
+            ctx.env["COMPOSE_FILE"] = staged_compose
+
+        def switch_image():
+            json_write(pending, {"commit": revision})
+            ctx.env["COMPOSE_FILE"] = staged_compose
+
+        def activate():
+            start_application_services(ctx, services)
+            images = runtime_images(ctx)
+            for service in services:
+                container = ctx.compose("ps", "--quiet", service).decode().strip()
+                expected_id = override["x-reliquary-revisions"][service]["id"]
+                if not container or images[service]["id"] != expected_id or \
+                        json.loads(run(["docker", "inspect", container]))[0]["Image"] != expected_id:
+                    raise AdminError(f"{service} did not start the built image")
+            record_runtime(ctx, source)
+            refresh_maintenance_tools(ctx, source)
+            json_write(canonical, override)
+            persisted = read_env(ctx.root / ".env")
+            persisted.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
+            write_env(ctx.root / ".env", {**persisted, "COMPOSE_FILE": final_compose})
+            ctx.env["COMPOSE_FILE"] = final_compose
+
+        upgrade(ctx, args, switch_image=switch_image, activate=activate, retry=retry)
+    pending.unlink()
+    return services
+
+
 def request_json(url, body=None, timeout=30):
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
@@ -2182,6 +2407,15 @@ def parser():
 
 def main(argv=None):
     args = parser().parse_args(argv)
+    if args.command == "upgrade" and (ROOT / "customer-install.json").is_file():
+        source = customer_source(ROOT)
+        validate_installed_directory(source, ROOT)
+        revision = clean_revision(source)
+        with startup_lock(ROOT):
+            ctx = installed_context(ROOT)
+            ctx.startup_locked = True
+            upgrade_installed(ctx, args, source, revision)
+        return 0
     ctx = Context()
     if args.command == "check-deployment":
         checked = ctx.check_host_directories(args.backup_directory)
@@ -2219,59 +2453,7 @@ def main(argv=None):
     elif args.command == "rebuild":
         rebuild(ctx, args)
     elif args.command == "upgrade":
-        path = None
-        if args.backup:
-            options = argparse.Namespace(directory=None, timeout=args.timeout, keep_paused=True, include_worktree=args.include_worktree, with_images=True, upgrade=True)
-            path = backup(ctx, options)
-        guard = contextlib.ExitStack()
-        try:
-            if not ctx.direct and not ctx.local_server:
-                revision = run(["git", "rev-parse", "--short=12", "HEAD"], cwd=ctx.root).decode().strip()
-                tag = revision + "-upgrade-" + secrets.token_hex(6)
-                new_override = ctx.root / ".maintenance-schedule/upgrade.images.json"
-                json_write(new_override, {"services": {ctx.app: {"image": "reliquary-app:" + tag}, "frontend": {"image": "reliquary-frontend:" + tag}}})
-                ctx.env["COMPOSE_FILE"] = ctx.env.get("COMPOSE_FILE", str(ctx.root / "docker-compose.yml")) + os.pathsep + str(new_override)
-                ctx.env["RELIQUARY_COMMIT"] = revision
-                ctx.compose("build", *build_proxy_args(ctx.env), ctx.app, "frontend")
-            ctx.env.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
-            if path is None:
-                guard.enter_context(ctx.stopped("snapshot", args.timeout, keep_paused=True))
-            ctx.cli_json("export-sources")
-            ctx.cli_json("migrate")
-            if not ctx.cli_json("status").get("paused"):
-                ctx.cli_json("pause", "--mode", "snapshot", "--timeout", str(args.timeout) + "s", "--reason", "manual:upgrade")
-            ctx.cli_json("flush")
-            if path is None:
-                ctx.cli_json("verify")
-            else:
-                verify_upgrade(ctx, path)
-            if not ctx.direct and not ctx.local_server:
-                config = json.loads(ctx.compose("config", "--format", "json"))
-                new_images = {}
-                for service, spec in config["services"].items():
-                    info = json.loads(run(["docker", "image", "inspect", spec["image"]]))[0]
-                    new_images[service] = {"reference": spec["image"], "id": info["Id"]}
-                with tempfile.TemporaryDirectory(prefix=".capture-", dir=ctx.root / ".maintenance-schedule") as temp:
-                    code = source_copy(ctx, Path(temp), True)
-                    remember_runtime(ctx, Path(temp) / "source", code, new_images)
-                persisted = read_env(ctx.root / ".env")
-                persisted.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
-                persisted.update(COMPOSE_FILE=ctx.env["COMPOSE_FILE"], RELIQUARY_COMMIT=revision)
-                write_env(ctx.root / ".env", persisted)
-                ctx.compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "120")
-            ctx.cli_json("resume")
-            if path is None:
-                print("Upgrade verified. No pre-upgrade backup was created.")
-            else:
-                print(f"Upgrade verified. Rollback uses the complete pre-upgrade backup: {path}; restore into an empty environment. Database down migration is not a rollback.")
-        except BaseException:
-            if path is None:
-                print("Upgrade failed without a pre-upgrade backup; inspect the migration state before resuming. Data recovery requires a separately retained backup.", file=sys.stderr)
-            else:
-                print(f"Upgrade failed; environment remains paused. Restore pre-upgrade backup into a fresh environment: {path}", file=sys.stderr)
-            raise
-        finally:
-            guard.close()
+        upgrade(ctx, args)
     elif args.command == "setup-models":
         if not setup_models(ctx, args):
             return 3

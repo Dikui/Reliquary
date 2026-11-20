@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Prepare a local runtime, or build and start a customer installation with --install."""
+"""Prepare a local runtime, install a new deployment, or update an existing one."""
 import argparse
+from importlib.util import module_from_spec, spec_from_file_location
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 import webbrowser
+
+import reliquary_admin as admin
 
 SOURCE = Path(__file__).resolve().parent.parent
 LABEL = 'com.reliquary.autostart'
@@ -119,12 +122,15 @@ def install_autostart(root, ollama):
     print(f'Installed {agent}')
 
 
+def load_script(name):
+    spec = spec_from_file_location(name.replace('-', '_'), SOURCE / 'scripts' / (name + '.py'))
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def load_agent():
-    from importlib.util import module_from_spec, spec_from_file_location
-    spec = spec_from_file_location('agent_local', SOURCE / 'scripts/agent-local.py')
-    agent = module_from_spec(spec)
-    spec.loader.exec_module(agent)
-    return agent
+    return load_script('agent-local')
 
 
 def offer_pi(root, agent):
@@ -212,6 +218,60 @@ def install(root, env_file, project, app_port=None, frontend_port=None):
     offer_pi(root, agent)
 
 
+def update(root, *, backup=False):
+    head = admin.clean_revision(SOURCE)
+    deployer = load_script('deploy-local')
+    branch = deployer.git(SOURCE, 'branch', '--show-current') or 'detached HEAD'
+    print(f'源码分支 {branch}，提交 {head}，版本 {(SOURCE / "VERSION").read_text().strip()}', flush=True)
+    directory = root / 'deploy'
+    admin.validate_installed_directory(SOURCE, directory)
+    admin.customer_source(directory, SOURCE)
+    results = dict.fromkeys(('基础服务', '数据库迁移', '本次备份', '本地 Pi', '飞书'), '未执行')
+    failures = []
+    try:
+        with admin.startup_lock(directory):
+            plan = deployer.plan_update(SOURCE, directory, head)
+            if plan.migrations:
+                results['数据库迁移'] = '升级未完成，请检查升级日志'
+                if backup:
+                    results['本次备份'] = '已请求，结果见升级日志'
+                options = argparse.Namespace(timeout=300, backup=backup, include_worktree=False)
+                plan.ctx.startup_locked = True
+                services = admin.upgrade_installed(plan.ctx, options, SOURCE, head)
+                results['数据库迁移'] = '已执行并验证'
+                if backup:
+                    results['本次备份'] = '已创建并校验'
+            else:
+                services = deployer.apply_update(SOURCE, directory, plan, container_frontend=True)
+                results['数据库迁移'] = '无变更'
+                if backup:
+                    results['本次备份'] = '无数据库升级，已跳过'
+            results['基础服务'] = ', '.join(services) + ' 已更新，健康检查通过' if services else '无需重建'
+
+            agent = load_agent()
+            shutil.copy2(SOURCE / 'scripts/agent-local.py', root / 'scripts/agent-local.py')
+            for label, configured, refresh in (
+                ('本地 Pi', agent.pi_configured, lambda: agent.update_pi(root)),
+                ('飞书', agent.feishu_configured, lambda: agent.operate(root, 'update')),
+            ):
+                try:
+                    if not configured(root):
+                        results[label] = '未配置，已跳过'
+                    elif refresh():
+                        results[label] = '已更新，检查通过'
+                    else:
+                        results[label] = '已更新，保持停用，启动后检查'
+                except (ValueError, OSError, subprocess.CalledProcessError) as error:
+                    results[label] = f'更新失败（{error}）'
+                    failures.append(label)
+    finally:
+        print('更新汇总', flush=True)
+        for label, result in results.items():
+            print(f'- {label}：{result}')
+    if failures:
+        raise admin.AdminError('请修正入口更新错误后重试：' + '、'.join(failures))
+
+
 def build_proxy_args(env):
     """Optional proxy for image builds, read from RELIQUARY_BUILD_PROXY.
 
@@ -253,22 +313,30 @@ def main():
     parser.add_argument('--root', type=Path, required=True)
     parser.add_argument('--env-file', type=Path, help='Preserve credentials from an existing .env')
     parser.add_argument('--project-name', default='reliquary', help='Keep the old name when reusing database volumes')
-    parser.add_argument('--install-autostart', action='store_true', help='Only register an already prepared deployment')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--install-autostart', action='store_true', help='Only register an already prepared deployment')
     parser.add_argument('--ollama', action='store_true', help='Also restore the local Ollama desktop app')
-    parser.add_argument('--install', action='store_true', help='Build all dependencies and start a new customer installation')
+    mode.add_argument('--install', action='store_true', help='Build all dependencies and start a new customer installation')
+    mode.add_argument('--update', action='store_true', help='Update an existing customer installation from this checkout')
+    parser.add_argument('--backup', action='store_true', help='With --update, back up before a database upgrade')
     parser.add_argument('--app-port', type=int, help='Backend port for a new customer installation')
     parser.add_argument('--frontend-port', type=int, help='Web port for a new customer installation')
     args = parser.parse_args()
+    if args.backup and not args.update:
+        parser.error('--backup requires --update')
     root = args.root.expanduser().resolve()
     try:
-        if args.install_autostart:
+        if args.update:
+            update(root, backup=args.backup)
+        elif args.install_autostart:
             install_autostart(root, args.ollama)
         elif args.install:
             install(root, args.env_file.expanduser().resolve() if args.env_file else None, args.project_name, args.app_port, args.frontend_port)
         else:
             prepare(root, args.env_file.expanduser().resolve() if args.env_file else None, args.project_name)
-    except (ValueError, OSError, subprocess.CalledProcessError, EOFError) as error:
-        parser.exit(1, f'Installation failed: {error}\n')
+    except (admin.AdminError, ValueError, OSError, subprocess.CalledProcessError, EOFError) as error:
+        action = 'Update' if args.update else 'Installation'
+        parser.exit(1, f'{action} failed: {error}\n')
 
 
 if __name__ == '__main__':

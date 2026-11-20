@@ -25,7 +25,7 @@
 
 新安装会生成 `logs/diagnostics`，通过 `RELIQUARY_DIAGNOSTICS_DIR` 挂载到 `/data/diagnostics`。已有运行环境采用新版 Compose 时，确认该变量指向实际运行根目录的 `logs/diagnostics`。故障材料保留 7 天、容量上限 512 MiB，独立于 vault、上传资源和业务备份；备份恢复不会带回原机器的故障材料。[配置与生命周期](logging.md#接收故障日志与故障包)说明了过期和容量淘汰规则。
 
-在源码仓库的本机文件 `.deploy.env` 中记录部署位置，后续更新部署前先读取该文件。它不提交到 Git，也不保存运行凭据：
+单独使用 `deploy-local.py` 时，在源码仓库的本机文件 `.deploy.env` 中记录部署位置，并在更新前核对。它不提交到 Git，也不保存运行凭据：
 
 ```sh
 RELIQUARY_DEPLOY_DIR="$HOME/Reliquary/deploy"
@@ -111,7 +111,7 @@ python3 "$HOME/Project/Reliquary/scripts/agent-local.py" pi-update --root "$HOME
 
 `scripts/pi` 每次在 Docker 中启动终端会话，退出后容器删除，配置与会话保留在 `agents/pi/data/agent/`。把待处理文件放到选定的工作文件夹，在对话中使用 `/workspace` 下的路径。
 
-`pi-update` 必须从要发布的源码仓库执行，重建 Pi 镜像，刷新 `APPEND_SYSTEM.md` 与技能包副本，更新启动器，并再次实际检查 `list_libraries` 调用；保留模型凭据、工作文件夹和会话。先退出正在运行的 Pi，再更新并重新启动。检查失败时恢复原镜像配置与启动器；已刷新的规则与技能不会回退，也不撤销此前写入的业务数据。基础服务更新不替代该命令。
+`pi-update` 必须从要发布的源码仓库执行。先退出正在运行的 Pi。命令重建镜像，刷新 `APPEND_SYSTEM.md`、技能包、启动器和 `models.json` 中的 Reliquary provider，再实际检查 `list_libraries` 调用。ChatGPT 使用 `pi.env` 中的 Reliquary API Key，客户 API 密钥继续存于 `auth.json`。字段或凭据不足时保留原模型文件，并提示运行 `pi-configure`。检查失败时恢复原镜像配置、启动器及本次改写的模型和凭据文件，已刷新的规则与技能继续生效。单独运行 `deploy-local.py` 时需另行更新 Pi。
 
 `pi.env` 与 `auth.json` 含可用凭据，Pi 的 read 工具仍能读到容器内自己的凭据文件。`reliquary-admin` 暂不备份本地 Pi 的配置和会话，不能沿用下文飞书状态的恢复承诺；重新配置能恢复连接，不能恢复丢失的本地 Pi 会话。
 
@@ -179,13 +179,30 @@ macOS 登录后自动恢复可按下节注册，已启用的 Agent 会随基础�
 
 生成后，将原文件库和上传目录分别移入 `data/vault`、`data/files`，核对文件内容，再从 `deploy/` 启动。已有备份设置也应改为新的 `backups/`。新启动任务验证成功后，归档旧任务，避免同时运行两个恢复任务。脚本拒绝覆盖已有 `deploy/`，不会自动迁移已有资料或重置数据库。
 
+## 已有安装更新
+
+适用于通过 `install-local.py --install` 完成的客户安装。退出正在运行的本地 Pi，在安装时登记的源码工作副本中执行以下命令。
+
+```sh
+git pull
+python3 scripts/install-local.py --update --root "$HOME/Reliquary"
+```
+
+更新命令非交互，使用当前分支已提交的源码，输出分支、提交和版本。无迁移时按改动范围更新前后端。有迁移时先从源码构建两者，再暂停写入、导出旧采集记录、执行并验证迁移，检查新容器并登记镜像对应的提交和源码，然后恢复写入。两条路径都在 Docker 内构建网页。基础服务完成后更新已配置的 Pi 和飞书。Pi 会试调用模型，启用中的飞书会等容器就绪，已停用的飞书会在下次启动时应用新镜像。
+
+默认不备份，必要迁移照常执行。明确需要本次升级前恢复点时，在命令末尾加 `--backup`，只在走数据库升级时创建并校验完整备份。月度计划独立执行。
+
+源码有未提交改动、登记路径不符、后端基准不可确认，或 `config/`（除 `prompt_templates/`）、`docker-compose.yml`、`.env.example` 有变化时，命令会停止。先核对现场配置和新版模板，再按下文手动发布流程处理。组合了模板变化和迁移的发布也须先核对配置。
+
+普通部署或入口检查失败时，按输出确认回退结果，修正原因后可重跑更新。迁移、验证或切换中断并提示有待完成的升级时，保持现场，先检查容器日志和数据库迁移状态。确认可继续后，从源码执行 `RELIQUARY_ADMIN_ROOT="$HOME/Reliquary/deploy" ./reliquary-admin upgrade`，成功后再执行一键更新以补齐入口。需要退回时按[升级与失败退回](personal-use.md#升级与失败退回)从已有备份恢复到空环境。未做本次备份时，最近恢复点之后的数据可能丢失。
+
 ## 日常维护与升级
 
 所有运行操作都在 `deploy/` 执行，例如 `docker compose ps`、`docker compose logs --tail 100 app` 和 `./reliquary-admin backup`。备份命令的具体恢复范围见[个人使用指南](personal-use.md)。同一硬盘的备份仍需另行复制到外置盘或其他设备。
 
 部署与备份独立执行：
 
-- 代码更新、全量构建与数据库升级默认不创建备份。代码更新按下文“按改动范围更新”执行；数据库变更仍使用显式升级流程，不跳过必要迁移。
+- 代码更新、全量构建与数据库升级默认不创建备份。客户安装可使用上文的一键更新，单独部署基础服务按下文“按改动范围更新”执行。
 - 清库、删除数据卷、覆盖存储或大规模不可逆改写前，按是否需要恢复操作前状态决定是否单独备份。需要时先获得本次备份授权并校验备份；不能把部署或迁移请求当作备份授权。
 
 月度备份和恢复演练按独立计划执行，不与每次部署绑定。当前本机约定为北京时间每月 1 日 03:00 备份、13:00 恢复演练；计划配置和宿主机调度任务必须分别安装，保存配置不代表任务已注册。没有本次操作前的备份时，恢复只能使用已有的恢复点，可能丢失该恢复点之后的数据。
@@ -198,9 +215,9 @@ cd ~/Reliquary/deploy
 docker compose stop
 ```
 
-恢复时用 `launchctl bootstrap` 加载同一 plist。手动发布时，先按上述约定判断是否需要完整备份，再更新源码并构建新版本镜像；核对新版 Compose 模板与运行配置的差异，再调整 `deploy/.env` 镜像标签并启动。每次手动发布后，从运行目录执行 `./reliquary-admin record-runtime --source /源码仓库的绝对路径`，登记新镜像对应的源码材料。安装脚本不自动覆盖现有配置，也不提供自动升级。
+恢复时用 `launchctl bootstrap` 加载同一 plist。手动发布时，先按上述约定判断是否需要完整备份，再更新源码并构建新版本镜像。核对新版 Compose 模板与运行配置的差异，手动同步所需配置。有迁移时，在启动新版本前按[显式升级流程](personal-use.md#升级与失败退回)执行。仅手动切换镜像的发布可调整镜像引用并启动，随后从运行目录执行 `./reliquary-admin record-runtime --source /源码仓库的绝对路径` 登记源码材料。
 
-已有安装需先将新版 `scripts/reliquary_admin.py` 复制到 `deploy/scripts/`，再执行一次 `record-runtime`。备份会在暂停任务和停服前检查源码材料的完整性、镜像是否存在，以及登记的镜像 ID 是否与当前应用一致；检查失败时提示修复，不进入停服步骤。
+旧部署缺少源码登记且需要使用备份时，可将新版 `scripts/reliquary_admin.py` 复制到 `deploy/scripts/`，再执行一次 `record-runtime`。备份会在暂停任务和停服前检查源码材料的完整性、镜像是否存在，以及登记的镜像 ID 是否与当前应用一致；检查失败时提示修复，不进入停服步骤。
 
 ### 按改动范围更新
 

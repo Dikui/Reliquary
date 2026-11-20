@@ -1,6 +1,7 @@
 """Customer installation preserves private configuration and starts the selected model."""
 import importlib.util
 import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -367,6 +368,21 @@ class LocalPiUpdateTests(unittest.TestCase):
                 self.errors = errors.getvalue()
                 self.commands = commands
 
+    def saved_model(self, root, source):
+        config_path = root / 'agents/pi/config.json'
+        config = json.loads(config_path.read_text())
+        model = {'MODEL_SOURCE': source, 'MODEL_API': 'openai-responses', 'MODEL_NAME': 'saved-model',
+                 'MODEL_CONTEXT_WINDOW': '128000', 'MODEL_MAX_TOKENS': '4096'}
+        if source == 'chatgpt':
+            model['MODEL_ID'] = 'subscription/model'
+        else:
+            model['MODEL_BASE_URL'] = 'https://model.example/v1'
+        config['model'] = model
+        agent.write_json(config_path, config, private=True)
+        auth_path = root / 'agents/pi/data/agent/auth.json'
+        agent.write_json(auth_path, {agent.PI_PROVIDER: {'type': 'api_key', 'key': 'synthetic-model-key'},
+                                     'other-provider': {'type': 'api_key', 'key': 'other-key'}}, private=True)
+
     def test_update_refreshes_image_and_guidance_but_preserves_sessions_and_credentials(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, source, preserved = self.runtime(temporary)
@@ -398,6 +414,74 @@ class LocalPiUpdateTests(unittest.TestCase):
             self.assertEqual(build[-1], str(current / 'agents/pi'))
             self.assertEqual(check[0], str(root / 'scripts/pi'))
             self.assertIn('--no-session', check)
+            self.assertIn('已保留原模型文件。请执行 pi-configure', self.output)
+
+    def test_update_refreshes_chatgpt_compatibility_and_uses_the_key_from_pi_env(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, _ = self.runtime(temporary)
+            self.saved_model(root, 'chatgpt')
+            agent_dir = root / 'agents/pi/data/agent'
+            self.update(root, source, lambda cmd, **_: agent.subprocess.CompletedProcess(cmd, 0, pi_events('测试库'), ''))
+            provider = json.loads((agent_dir / 'models.json').read_text())['providers'][agent.PI_PROVIDER]
+            self.assertEqual(provider['baseUrl'], 'http://app:8080/api/v1/agent/models/subscription%2Fmodel')
+            self.assertTrue(provider['models'][0]['reasoning'])
+            self.assertFalse(provider['models'][0]['compat']['supportsMaxOutputTokens'])
+            auth = json.loads((agent_dir / 'auth.json').read_text())
+            self.assertEqual(auth[agent.PI_PROVIDER]['key'], 'synthetic-reliquary-key')
+            self.assertEqual(auth['other-provider']['key'], 'other-key')
+            self.assertNotIn('synthetic-reliquary-key', (agent_dir / 'models.json').read_text())
+            self.assertNotIn('synthetic-reliquary-key', self.output + self.errors)
+
+    def test_update_refreshes_api_model_without_rewriting_its_credentials(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, _ = self.runtime(temporary)
+            self.saved_model(root, 'api')
+            agent_dir = root / 'agents/pi/data/agent'
+            models = agent_dir / 'models.json'
+            models.write_text('{"providers":{"other-provider":{"models":[]}}}')
+            auth = agent_dir / 'auth.json'
+            before = auth.read_bytes()
+            self.update(root, source, lambda cmd, **_: agent.subprocess.CompletedProcess(cmd, 0, pi_events('测试库'), ''))
+            providers = json.loads(models.read_text())['providers']
+            self.assertIn('other-provider', providers)
+            provider = providers[agent.PI_PROVIDER]
+            self.assertEqual(provider['baseUrl'], 'https://model.example/v1')
+            self.assertEqual(provider['models'][0]['id'], 'saved-model')
+            self.assertEqual(provider['models'][0]['maxTokens'], 4096)
+            self.assertNotIn('compat', provider['models'][0])
+            self.assertEqual(auth.read_bytes(), before)
+            self.assertNotIn('synthetic-model-key', models.read_text() + self.output + self.errors)
+
+    def test_missing_model_credential_keeps_existing_files_and_suggests_reconfiguration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, preserved = self.runtime(temporary)
+            self.saved_model(root, 'api')
+            auth = root / 'agents/pi/data/agent/auth.json'
+            auth.write_text('{"other-provider":{}}')
+            self.update(root, source, lambda cmd, **_: agent.subprocess.CompletedProcess(cmd, 0, pi_events('测试库'), ''))
+            model_path = 'agents/pi/data/agent/models.json'
+            self.assertEqual((root / model_path).read_bytes(), preserved[model_path])
+            self.assertEqual(auth.read_text(), '{"other-provider":{}}')
+            self.assertIn('请执行 pi-configure 刷新模型配置', self.output)
+
+    def test_failed_check_restores_regenerated_model_and_credentials_and_redacts_keys(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, _ = self.runtime(temporary)
+            self.saved_model(root, 'chatgpt')
+            directory = root / 'agents/pi/data/agent'
+            files = [directory / name for name in ('models.json', 'auth.json')]
+            before = [path.read_bytes() for path in files]
+
+            def run(command, **_):
+                if command[:2] == ['docker', 'build']:
+                    return agent.subprocess.CompletedProcess(command, 0)
+                self.assertTrue(all(path.read_bytes() != old for path, old in zip(files, before)))
+                return agent.subprocess.CompletedProcess(command, 1, '', 'bad synthetic-reliquary-key synthetic-model-key')
+
+            with self.assertRaises(SystemExit):
+                self.update(root, source, run)
+            self.assertEqual([path.read_bytes() for path in files], before)
+            self.assertIn('bad [redacted] [redacted]', self.errors)
 
     def test_failed_update_returns_nonzero_and_restores_previous_image(self):
         for stage in ('build', 'check', 'tool'):
