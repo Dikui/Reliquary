@@ -51,7 +51,7 @@ func maintenanceDatabase() (*gorm.DB, string, error) {
 	query.Set("sslmode", "disable")
 	query.Set("connect_timeout", "10")
 	u.RawQuery = query.Encode()
-	db, err := gorm.Open(postgres.Open(u.String()), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	db, err := database.MaintenancePool.Open(postgres.Open(u.String()), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	return db, u.String(), err
 }
 

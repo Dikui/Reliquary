@@ -14,6 +14,7 @@ import (
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
+	"reliquary/internal/database"
 	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
@@ -25,7 +26,7 @@ func RebuildVault(ctx context.Context) (*service.VaultRebuildResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := initDatabase(cfg)
+	db, err := openDatabase(database.MaintenancePool)
 	if err != nil {
 		return nil, err
 	}
