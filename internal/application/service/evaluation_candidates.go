@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 	"reliquary/internal/config"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
 )
@@ -111,7 +112,7 @@ func (s *EvaluationService) GenerateCandidates(ctx context.Context, setID string
 		}
 		candidates = append(candidates, types.EvaluationQuestion{ID: uuid.NewString(), SpaceID: set.SpaceID, SetID: setID, Method: "ordinary", Request: types.EntrySearchRequest{Libraries: validation.Request.Libraries, Query: g.Query}, Source: "ai", Status: "pending", Revision: 1, Answers: g.Answers, SuggestedResults: []types.RankedEntry{}})
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		for i := range candidates {
 			if err := saveEvaluationQuestion(ctx, tx, &candidates[i], false); err != nil {
 				return err

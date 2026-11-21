@@ -10,6 +10,7 @@ import (
 	"time"
 
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/embedding"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
@@ -203,15 +204,17 @@ func (r *EmbeddingRebuilder) Continue(ctx context.Context, spaceID uint64, runID
 }
 
 func (r *EmbeddingRebuilder) Pause(ctx context.Context, spaceID uint64, runID string) error {
-	result := r.db.WithContext(ctx).Model(&types.EmbeddingRebuildRun{}).Where("space_id=? AND id=? AND status IN ('pending','running')", spaceID, runID).
-		Updates(map[string]any{"status": "paused", "attempt_id": "", "lease_until": nil})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return apperrors.NewBadRequestError("embedding rebuild is not pending or running")
-	}
-	return nil
+	return maintenanceops.BusinessWriteTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		result := tx.Model(&types.EmbeddingRebuildRun{}).Where("space_id=? AND id=? AND status IN ('pending','running')", spaceID, runID).
+			Updates(map[string]any{"status": "paused", "attempt_id": "", "lease_until": nil})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return apperrors.NewBadRequestError("embedding rebuild is not pending or running")
+		}
+		return nil
+	})
 }
 
 func (r *EmbeddingRebuilder) Enqueue(ctx context.Context, run *types.EmbeddingRebuildRun) error {
@@ -573,7 +576,7 @@ func (r *EmbeddingRebuilder) StartAndEnqueue(ctx context.Context, spaceID uint64
 	if !ok {
 		return nil, errors.New("embedding task queue must support PostgreSQL transactions")
 	}
-	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		copy := *r
 		profiles := *r.profiles
 		copy.db, profiles.db = tx, tx
@@ -595,7 +598,7 @@ func (r *EmbeddingRebuilder) ContinueAndEnqueue(ctx context.Context, spaceID uin
 	if !ok {
 		return errors.New("embedding task queue must support PostgreSQL transactions")
 	}
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return maintenanceops.BusinessWriteTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		copy := *r
 		profiles := *r.profiles
 		copy.db, profiles.db = tx, tx

@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/graph"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -212,7 +213,7 @@ func (s *EntityService) DeleteRelationAt(ctx context.Context, id string, version
 	if !ok {
 		return werrors.NewUnauthorizedError("authenticated editor required")
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		row, err := graph.DeleteRelationTx(tx, spaceID, id, actor.StorageID())
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return werrors.NewNotFoundError("relation not found")
@@ -235,7 +236,7 @@ func (s *EntityService) MergeRelationTypes(ctx context.Context, libraryID, from,
 	if from == "" || to == "" || from == to || len([]rune(from)) > 100 || len([]rune(to)) > 100 {
 		return werrors.NewBadRequestError("two distinct relation types required")
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		var library types.Library
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, libraryID).Take(&library).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			return werrors.NewNotFoundError("library not found")

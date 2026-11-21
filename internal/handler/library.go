@@ -130,8 +130,8 @@ func (h *LibraryHandler) GetLibrary(c *gin.Context) {
 // UpdateLibraryRequest defines the request body structure for updating a library
 type UpdateLibraryRequest struct {
 	Color       *int                   `json:"color"`
-	Name        string                 `json:"name"        binding:"required"`
-	Description string                 `json:"description"`
+	Name        *string                `json:"name"`
+	Description *string                `json:"description"`
 	Template    *string                `json:"template"`
 	Directory   *string                `json:"directory"`
 	SystemRole  *string                `json:"system_role"`
@@ -145,7 +145,7 @@ func (h *LibraryHandler) UpdateLibrary(c *gin.Context) {
 	logger.Info(ctx, "Start updating library")
 
 	// Validate and get the library
-	_, id, _, err := h.validateAndGetLibrary(c)
+	current, id, _, err := h.validateAndGetLibrary(c)
 	if err != nil {
 		c.Error(err)
 		return
@@ -153,9 +153,8 @@ func (h *LibraryHandler) UpdateLibrary(c *gin.Context) {
 
 	// Parse request body
 	var req UpdateLibraryRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error(ctx, "Failed to parse request parameters", err)
-		c.Error(apperrors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
+	if err := decodeLibraryRequest(c, &req); err != nil {
+		c.Error(err)
 		return
 	}
 	if req.Template != nil || req.Directory != nil || req.SystemRole != nil {
@@ -174,12 +173,24 @@ func (h *LibraryHandler) UpdateLibrary(c *gin.Context) {
 		}
 		req.Config.Color = req.Color
 	}
+	var name, description string
+	if req.Name == nil && req.Config != nil && req.Config.ModelTiers != nil {
+		name, description = current.Name, current.Description
+	} else if req.Name == nil || *req.Name == "" {
+		c.Error(apperrors.NewBadRequestError("name is required"))
+		return
+	} else {
+		name = *req.Name
+	}
+	if req.Description != nil {
+		description = *req.Description
+	}
 
 	logger.Infof(ctx, "Updating library, ID: %s, name: %s",
-		secutils.SanitizeForLog(id), secutils.SanitizeForLog(req.Name))
+		secutils.SanitizeForLog(id), secutils.SanitizeForLog(name))
 
 	// Update the library
-	library, err := h.service.UpdateLibrary(ctx, id, req.Name, req.Description, req.Config)
+	library, err := h.service.UpdateLibrary(ctx, id, name, description, req.Config)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
 		if appErr, ok := apperrors.IsAppError(err); ok {

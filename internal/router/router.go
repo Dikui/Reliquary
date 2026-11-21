@@ -115,7 +115,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// 认证中间件
 	r.Use(middleware.Auth(params.SpaceService, params.UserService, params.APIKeyService))
 	if params.MaintenanceHandler != nil {
-		r.Use(params.MaintenanceHandler.CollectionGate)
+		r.Use(maintenanceWriteGate(params.MaintenanceHandler))
 	}
 	if params.MCPHandler != nil {
 		r.Any("/mcp", gin.WrapH(params.MCPHandler))

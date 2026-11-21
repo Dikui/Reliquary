@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -74,6 +75,12 @@ func (s *EntityService) SetEntryEntityLink(ctx context.Context, entryID, entityI
 		return apperrors.NewUnauthorizedError("entity editor required")
 	}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Changeset application and parser publication already own their transaction.
+		if _, internal := ctx.Value(shelfWriteContextKey{}).(shelfWriteContext); !internal {
+			if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
+				return err
+			}
+		}
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}

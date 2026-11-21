@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -63,7 +64,7 @@ func (s *EntityService) ImportShelfWorkbook(ctx context.Context, libraryID, plan
 		return nil, apperrors.NewBadRequestError(err.Error())
 	}
 	var result *types.ShelfChangeset
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, types.MustSpaceIDFromContext(ctx)); err != nil {
 			return err
 		}

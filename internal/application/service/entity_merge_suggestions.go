@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -73,7 +74,7 @@ func (s *EntityService) DecideMergeSuggestion(ctx context.Context, suggestionID 
 		return nil, werrors.NewUnauthorizedError("authenticated merge suggestion editor required")
 	}
 	var item types.EntityMergeSuggestion
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}

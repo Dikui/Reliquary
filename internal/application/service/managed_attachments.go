@@ -15,6 +15,7 @@ import (
 	"reliquary/internal/application/repository"
 	fileService "reliquary/internal/application/service/file"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -61,7 +62,7 @@ func (s *EntityService) UploadEntityAttachment(ctx context.Context, libraryID, n
 	}
 	row := &types.EntityAttachment{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: libraryID, Name: name, MimeType: http.DetectContentType(data), Size: int64(len(data)), CreatedAt: time.Now()}
 	var stored []string
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
@@ -121,7 +122,7 @@ func (s *EntityService) DeleteEntityAttachment(ctx context.Context, id string) e
 	if s.files == nil {
 		return apperrors.NewBadRequestError("file storage is unavailable")
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}

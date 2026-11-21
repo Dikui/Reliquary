@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/chat"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
@@ -99,7 +100,7 @@ func (s *TopicService) RetryBackfill(ctx context.Context, topicID string) (*type
 	if err != nil {
 		return nil, err
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		var topic types.Topic
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, topicID).First(&topic).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {

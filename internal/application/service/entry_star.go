@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -21,6 +22,9 @@ func (s *entryService) SetStarred(ctx context.Context, id string, starred bool) 
 	}
 	var article types.Entry
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
+			return err
+		}
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, id).First(&article).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return werrors.NewNotFoundError("article not found")

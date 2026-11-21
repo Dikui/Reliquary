@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"reliquary/internal/application/graph"
 	"reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -44,7 +46,7 @@ func (s *libraryService) CreateLibrary(ctx context.Context, request types.Create
 	if err := types.ValidateLibrary(library); err != nil {
 		return nil, apperrors.NewBadRequestError(err.Error())
 	}
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpaceShared(tx, library.SpaceID); err != nil {
 			return err
 		}
@@ -73,35 +75,34 @@ func libraryWriteError(err error) error {
 }
 
 func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch types.LibraryPatch) (*types.Library, error) {
-	if patch.PromptOverrides != nil {
-		if err := types.ValidateLibraryPromptOverrides(*patch.PromptOverrides); err != nil {
-			return nil, apperrors.NewBadRequestError(err.Error())
-		}
-	}
-	if patch.Color != nil {
-		if err := types.ValidateLibraryColor(*patch.Color); err != nil {
-			return nil, apperrors.NewBadRequestError(err.Error())
-		}
-	}
-	if patch.Template != nil || patch.Directory != nil || patch.SystemRole != nil {
-		return nil, apperrors.NewBadRequestError("template, directory and system_role are immutable")
-	}
-	if patch.ReviewCriteria != nil || patch.SourceEvidenceRule != nil {
-		return nil, apperrors.NewBadRequestError("review_criteria and source_evidence_rule are no longer configurable")
-	}
 	var result *types.Library
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Shelf metadata also enters a changeset. Take the writer barrier before
-		// the library row lock so nested confirmation never upgrades a shared lock.
-		if err := lockEntitySpace(tx, types.MustSpaceIDFromContext(ctx)); err != nil {
+		state, err := maintenanceops.WriteStateTx(ctx, tx)
+		if err != nil {
 			return err
 		}
-		var locked types.Library
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", id, types.MustSpaceIDFromContext(ctx)).First(&locked).Error; err != nil {
+		spaceID := types.MustSpaceIDFromContext(ctx)
+		if state.Paused {
+			if patch.ModelTiers == nil || !reflect.DeepEqual(patch, types.LibraryPatch{ModelTiers: patch.ModelTiers}) {
+				return libraryWritePaused(state, patch.ModelTiers != nil)
+			}
+			library, err := lockedLibrarySettings(ctx, tx, id, spaceID)
+			if err != nil {
+				return err
+			}
+			result, err = savePausedLibraryModels(ctx, tx, library, *patch.ModelTiers, false)
+			return err
+		}
+		if err := validateLibraryPatch(patch); err != nil {
+			return err
+		}
+		// Shelf metadata also enters a changeset. Take the writer barrier before
+		// the library row lock so nested confirmation never upgrades a shared lock.
+		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
 		repo := repository.NewLibraryRepository(tx)
-		library, err := repo.GetLibraryByID(ctx, id)
+		library, err := lockedLibrarySettings(ctx, tx, id, spaceID)
 		if err != nil {
 			return err
 		}
@@ -218,8 +219,28 @@ func (s *libraryService) ConfigureLibrary(ctx context.Context, id string, patch 
 	return result, err
 }
 
+func validateLibraryPatch(patch types.LibraryPatch) error {
+	if patch.PromptOverrides != nil {
+		if err := types.ValidateLibraryPromptOverrides(*patch.PromptOverrides); err != nil {
+			return apperrors.NewBadRequestError(err.Error())
+		}
+	}
+	if patch.Color != nil {
+		if err := types.ValidateLibraryColor(*patch.Color); err != nil {
+			return apperrors.NewBadRequestError(err.Error())
+		}
+	}
+	if patch.Template != nil || patch.Directory != nil || patch.SystemRole != nil {
+		return apperrors.NewBadRequestError("template, directory and system_role are immutable")
+	}
+	if patch.ReviewCriteria != nil || patch.SourceEvidenceRule != nil {
+		return apperrors.NewBadRequestError("review_criteria and source_evidence_rule are no longer configurable")
+	}
+	return nil
+}
+
 func (s *libraryService) DeleteLibrary(ctx context.Context, id string) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		spaceID := types.MustSpaceIDFromContext(ctx)
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err

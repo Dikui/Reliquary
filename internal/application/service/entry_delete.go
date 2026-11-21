@@ -139,7 +139,9 @@ func collectEntryDeleteWarning(ctx context.Context, err error) {
 // DeleteEntry deletes a entry entry and all related resources
 func (s *entryService) DeleteEntry(ctx context.Context, id string) error {
 	return s.withTaskObject(ctx, id, func(held context.Context) error {
-		return s.deleteEntry(held, id)
+		return s.withInteractiveEntryWrite(held, func(ctx context.Context) error {
+			return s.deleteEntry(ctx, id)
+		})
 	})
 }
 func (s *entryService) deleteEntry(ctx context.Context, id string) error {
@@ -364,7 +366,9 @@ func (s *entryService) DeleteEntryList(ctx context.Context, ids []string) error 
 	var lockNext func(context.Context, int) error
 	lockNext = func(held context.Context, n int) error {
 		if n == len(ordered) {
-			return s.deleteEntryList(held, ids)
+			return s.withInteractiveEntryWrite(held, func(ctx context.Context) error {
+				return s.deleteEntryList(ctx, ids)
+			})
 		}
 		return s.withTaskObject(held, ordered[n], func(next context.Context) error { return lockNext(next, n+1) })
 	}

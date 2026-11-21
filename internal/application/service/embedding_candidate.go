@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
@@ -186,7 +187,7 @@ func (r *EmbeddingRebuilder) prepareCandidateItem(ctx context.Context, run *type
 // SwitchCandidate publishes all channels in one transaction. Readers holding a
 // shared space lock finish on the old set before this transaction can publish.
 func (r *EmbeddingRebuilder) SwitchCandidate(ctx context.Context, spaceID uint64, runID string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return maintenanceops.BusinessWriteTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		var space types.Space
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=?", spaceID).First(&space).Error; err != nil {
 			return err
@@ -290,7 +291,7 @@ func (r *EmbeddingRebuilder) SwitchCandidate(ctx context.Context, spaceID uint64
 	})
 }
 func (r *EmbeddingRebuilder) DeleteOldVectors(ctx context.Context, spaceID uint64, runID string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return maintenanceops.BusinessWriteTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		var run types.EmbeddingRebuildRun
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND space_id=?", runID, spaceID).First(&run).Error; err != nil {
 			return err
@@ -304,12 +305,14 @@ func (r *EmbeddingRebuilder) DeleteOldVectors(ctx context.Context, spaceID uint6
 
 // CancelCandidate fences queued and in-flight attempts before a fresh snapshot.
 func (r *EmbeddingRebuilder) CancelCandidate(ctx context.Context, spaceID uint64, runID string) error {
-	result := r.db.WithContext(ctx).Model(&types.EmbeddingRebuildRun{}).Where("id=? AND space_id=? AND candidate=true AND switched_at IS NULL AND status IN ('pending','running','paused')", runID, spaceID).Updates(map[string]any{"status": "cancelled", "attempt_id": "", "lease_until": nil})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return apperrors.NewBadRequestError("candidate is not pending, running or paused")
-	}
-	return nil
+	return maintenanceops.BusinessWriteTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		result := tx.Model(&types.EmbeddingRebuildRun{}).Where("id=? AND space_id=? AND candidate=true AND switched_at IS NULL AND status IN ('pending','running','paused')", runID, spaceID).Updates(map[string]any{"status": "cancelled", "attempt_id": "", "lease_until": nil})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return apperrors.NewBadRequestError("candidate is not pending, running or paused")
+		}
+		return nil
+	})
 }

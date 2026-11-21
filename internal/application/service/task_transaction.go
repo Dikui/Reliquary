@@ -28,6 +28,21 @@ type transactionTaskEnqueuer struct {
 
 type entryBatchChildKey struct{}
 
+// CheckBusinessWrite is the MCP admission check. The mutation still checks the
+// same state inside its write transaction.
+func (s *entryService) CheckBusinessWrite(ctx context.Context) error {
+	return maintenanceops.CheckBusinessWrite(ctx, s.db)
+}
+
+func (s *entryService) withInteractiveEntryWrite(ctx context.Context, write func(context.Context) error) error {
+	_, bound := s.task.(*transactionTaskEnqueuer)
+	_, running := taskqueue.GetTaskID(ctx)
+	if s.db == nil || bound || running {
+		return write(ctx)
+	}
+	return maintenanceops.WithBusinessWrite(ctx, s.db, write)
+}
+
 func (q *transactionTaskEnqueuer) Enqueue(task *taskqueue.Task, opts ...taskqueue.Option) (*taskqueue.TaskInfo, error) {
 	info, err := q.queue.EnqueueTx(q.ctx, q.tx, task, opts...)
 	if err == nil && task.Type() == types.TypeManualProcess {

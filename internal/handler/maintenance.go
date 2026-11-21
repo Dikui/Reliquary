@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"context"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -15,25 +15,30 @@ type MaintenanceHandler struct{ db *gorm.DB }
 
 func NewMaintenanceHandler(db *gorm.DB) *MaintenanceHandler { return &MaintenanceHandler{db: db} }
 
-// CollectionGate rejects intake before multipart uploads or JSON bodies are read.
-// The service transaction repeats this check under the collection advisory lock.
-func (h *MaintenanceHandler) CollectionGate(c *gin.Context) {
-	path := c.FullPath()
-	intake := c.Request.Method == http.MethodPost && strings.HasPrefix(path, "/api/v1/ingest") && path != "/api/v1/ingest/check"
-	if intake {
-		state, err := maintenanceops.Status(c.Request.Context(), h.db)
-		if err != nil {
-			c.Error(err)
-			c.Abort()
-			return
-		}
-		if state.Paused {
-			c.Error(apperrors.NewServiceUnavailableError("Collection is paused for maintenance. Retry after maintenance completes."))
-			c.Abort()
-			return
-		}
+// BusinessWriteGate rejects writes before multipart uploads or JSON bodies are read.
+// The service transaction repeats the check under the maintenance advisory lock.
+func (h *MaintenanceHandler) BusinessWriteGate(c *gin.Context) {
+	if err := maintenanceops.CheckBusinessWrite(c.Request.Context(), h.db); err != nil {
+		c.Error(err)
+		c.Abort()
+		return
 	}
 	c.Next()
+}
+
+// BusinessWriteOperation also protects handler-owned queue operations, which
+// can combine multiple commits with entry service calls.
+func (h *MaintenanceHandler) BusinessWriteOperation(c *gin.Context) {
+	request := c.Request
+	if err := maintenanceops.WithBusinessWrite(request.Context(), h.db, func(ctx context.Context) error {
+		c.Request = request.WithContext(ctx)
+		defer func() { c.Request = request }()
+		c.Next()
+		return nil
+	}); err != nil {
+		c.Error(err)
+		c.Abort()
+	}
 }
 
 func (h *MaintenanceHandler) Status(c *gin.Context) {
