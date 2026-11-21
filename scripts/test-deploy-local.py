@@ -1,6 +1,6 @@
 """Exercise local deployment selection and rollback without Docker or npm."""
 import importlib.util
-from contextlib import nullcontext, redirect_stdout
+from contextlib import contextmanager, nullcontext, redirect_stdout
 import io
 import json
 import os
@@ -135,25 +135,111 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(deployer.affected(changed), set())
         self.assertEqual(deployer.affected(changed | {'internal/handler/mcp.go'}), set(deployer.SERVICES))
 
+    @contextmanager
+    def deployed_changes(self, paths):
+        # Simulate the deployed images and their source diffs without Docker or Git.
+        with mock.patch.object(deployer.admin, 'clean_revision', return_value='head'), \
+             mock.patch.object(deployer.admin.Context, 'compose'), \
+             mock.patch.object(deployer.admin, 'runtime_images', return_value={
+                 name: {'id': name, 'reference': name, 'labels': {'org.opencontainers.image.revision': 'base'}}
+                 for name in deployer.SERVICES}), \
+             mock.patch.object(deployer, 'checked_containers'), \
+             mock.patch.object(deployer, 'changed_paths', return_value=paths), \
+             mock.patch.object(deployer, 'revision_file', return_value=b''):
+            yield
+
     def test_migration_or_other_config_blocks_even_manual_full_build(self):
         temp, source, directory = self.fixture()
         self.addCleanup(temp.cleanup)
+        (source / '.env.example').write_text('FEATURE=on\n')
+        before = (directory / '.env').read_bytes()
         for changed, error in [({'migrations/001.sql'}, 'Database migrations changed'),
-                               ({'config/config.yaml'}, 'Runtime configuration changed'),
+                               ({'.env.example', 'migrations/001.sql'}, 'Database migrations changed'),
+                               ({'.env.example', 'config/config.yaml'}, 'Runtime configuration changed'),
                                ({'migrations/001.sql', 'docker-compose.yml'}, 'Runtime configuration changed'),
-                               ({'.env.example'}, 'Runtime configuration changed')]:
+                               ({'.env.example', 'docker-compose.yml'}, 'Runtime configuration changed')]:
             with self.subTest(changed=changed), \
-                 mock.patch.object(deployer.admin, 'clean_revision', return_value='head'), \
-                 mock.patch.object(deployer.admin, 'Context'), \
-                 mock.patch.object(deployer.admin, 'runtime_images', return_value={
-                     name: {'id': name, 'reference': name, 'labels': {'org.opencontainers.image.revision': 'base'}}
-                     for name in deployer.SERVICES}), \
-                 mock.patch.object(deployer, 'checked_containers'), \
-                 mock.patch.object(deployer, 'changed_paths', return_value=changed | {'config/prompt_templates/processing.yaml'}), \
-                 mock.patch.object(deployer.subprocess, 'run') as run:
-                with self.assertRaisesRegex(deployer.admin.AdminError, error):
-                    deployer.deploy(source, directory, all_services=True)
+                 self.deployed_changes(changed | {'config/prompt_templates/processing.yaml'}), \
+                 mock.patch.object(deployer.subprocess, 'run') as run, \
+                 self.assertRaisesRegex(deployer.admin.AdminError, error):
+                deployer.deploy(source, directory, all_services=True)
+            self.assertEqual((directory / '.env').read_bytes(), before)
             run.assert_not_called()
+
+    def test_env_template_default_is_reported_and_added_before_deploying(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        (source / '.env.example').write_text('FEATURE=on\n')
+        env = directory / '.env'
+
+        def apply(_source, _directory, plan, **_kwargs):
+            self.assertEqual(deployer.admin.read_env(env)['FEATURE'], 'on')
+            self.assertEqual(plan.ctx.env['FEATURE'], 'on')
+            return plan.services
+
+        with self.deployed_changes({'.env.example'}), \
+             mock.patch.object(deployer, 'apply_update', side_effect=apply), \
+             redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(deployer.deploy(source, directory), ['app', 'frontend'])
+        self.assertEqual(deployer.admin.read_env(env)['FEATURE'], 'on')
+        self.assertIn('FEATURE 将补入模板默认值', output.getvalue())
+
+    def test_env_template_default_is_only_previewed_in_dry_run(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        (source / '.env.example').write_text('FEATURE=on\n')
+        env = directory / '.env'
+        before = env.read_bytes()
+        with self.deployed_changes({'.env.example'}), \
+             mock.patch.object(deployer.subprocess, 'run') as run, \
+             redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(deployer.deploy(source, directory, dry_run=True), ['app', 'frontend'])
+        self.assertEqual(env.read_bytes(), before)
+        self.assertFalse((directory / '.maintenance-schedule').exists())
+        self.assertIn('FEATURE 将补入模板默认值', output.getvalue())
+        run.assert_not_called()
+
+    def test_env_template_external_credential_blocks_deployment(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        (source / '.env.example').write_text('FEATURE=on\nREMOTE_API_KEY=\n')
+        env = directory / '.env'
+        before = env.read_bytes()
+        with self.deployed_changes({'.env.example'}), \
+             mock.patch.object(deployer, 'apply_update') as apply, \
+             self.assertRaisesRegex(deployer.admin.AdminError, r'REMOTE_API_KEY.*deploy/\.env'):
+            deployer.deploy(source, directory)
+        self.assertEqual(env.read_bytes(), before)
+        apply.assert_not_called()
+
+    def test_failed_deploy_restores_original_env_before_restarting_services(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        (source / '.env.example').write_text('FEATURE=on\n')
+        env = directory / '.env'
+        env.chmod(0o640)
+        before = env.read_bytes()
+        started_with = []
+
+        def start(_ctx, _services):
+            started_with.append(env.read_bytes())
+            if len(started_with) == 1:
+                raise deployer.admin.AdminError('app failed')
+
+        with self.deployed_changes({'.env.example'}), \
+             mock.patch.object(deployer.subprocess, 'run'), \
+             mock.patch.object(deployer.admin, 'build_service_images', return_value={}), \
+             mock.patch.object(deployer.admin, 'image_override', return_value={}), \
+             mock.patch.object(deployer.admin, 'start_application_services', side_effect=start), \
+             mock.patch.object(deployer.admin, 'record_runtime'), \
+             redirect_stdout(io.StringIO()), \
+             self.assertRaisesRegex(deployer.admin.AdminError, 'app failed'):
+            deployer.deploy(source, directory)
+        first_start, restored_start = started_with
+        self.assertIn(b'FEATURE="on"', first_start)
+        self.assertEqual(restored_start, before)
+        self.assertEqual(env.read_bytes(), before)
+        self.assertEqual(env.stat().st_mode & 0o777, 0o640)
 
     def config_plan(self, directory, *paths):
         ctx = mock.Mock(env={'COMPOSE_FILE': 'docker-compose.yml'})

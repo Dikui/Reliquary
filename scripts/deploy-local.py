@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Update an existing local deployment, selecting services from their deployed commits."""
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import json
 import os
 from pathlib import Path
@@ -82,7 +82,15 @@ def deploy(source, directory, *, all_services=False, dry_run=False):
 def update(source, directory, *, all_services, dry_run):
     head = admin.clean_revision(source)
     plan = plan_update(source, directory, head, all_services=all_services, dry_run=dry_run)
-    return apply_update(source, directory, plan, all_services=all_services, dry_run=dry_run)
+    summary = []
+    config_update = nullcontext()
+    if plan.runtime_changes and not plan.migrations:
+        config_update = runtime_update(source, directory, plan, None, summary, dry_run=dry_run)
+    with config_update as rollback:
+        for result in summary:
+            print(f"- 运行配置：{result}", flush=True)
+        return apply_update(source, directory, plan, all_services=all_services, dry_run=dry_run,
+                            rollback_runtime=rollback)
 
 
 def plan_update(source, directory, head, *, all_services=False, dry_run=False, customer=False, ctx=None, images=None):
@@ -108,7 +116,7 @@ def plan_update(source, directory, head, *, all_services=False, dry_run=False, c
     runtime_changes = {name for name in app_changes if
                        (name.startswith("config/") and not name.startswith("config/prompt_templates/"))
                        or name in {"docker-compose.yml", ".env.example"}}
-    if runtime_changes and not customer:
+    if not customer and runtime_changes - {".env.example"}:
         raise admin.AdminError("Runtime configuration changed; review and sync it using docs/local-deployment.md before a manual release")
     selected = set(SERVICES) if all_services or differences["frontend"] is None else {
         service for service in SERVICES if service in affected(differences[service])}
@@ -245,9 +253,9 @@ def regenerate_compose(live, desired, previous, env, render):
 
 
 @contextmanager
-def runtime_update(source, directory, plan, render_compose, summary):
+def runtime_update(source, directory, plan, render_compose, summary, *, dry_run=False):
     changes = plan_config_files(source, directory, plan, render_compose, summary)
-    if not changes:
+    if dry_run or not changes:
         yield None
         return
     backup_root = directory / ".maintenance-schedule"
