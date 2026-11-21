@@ -8,6 +8,7 @@ import (
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
+	"reliquary/internal/database"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 )
@@ -19,7 +20,7 @@ func Reembed(ctx context.Context, action, runID string, progress func(*types.Emb
 	if err != nil {
 		return nil, err
 	}
-	db, err := initDatabase(cfg)
+	db, err := openDatabase(database.MaintenancePool)
 	if err != nil {
 		return nil, err
 	}

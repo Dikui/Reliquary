@@ -272,16 +272,11 @@ func registerModelConcurrencyLimiter(ss interfaces.SystemSettingService) {
 		"[ModelLimiter] background model concurrency governed per-model, limit=%d (in process)", limit)
 }
 
-// initDatabase initializes database connection
-// Creates and configures database connection based on environment configuration
-// Supports multiple database backends (PostgreSQL)
-// Parameters:
-//   - cfg: Application configuration
-//
-// Returns:
-//   - Configured database connection
-//   - Error if connection fails
 func initDatabase(_ *config.Config) (*gorm.DB, error) {
+	return openDatabase(database.ApplicationPool)
+}
+
+func openDatabase(role database.PoolRole) (_ *gorm.DB, err error) {
 	driver := strings.TrimSpace(os.Getenv("DB_DRIVER"))
 	if driver != "" && driver != "postgres" {
 		return nil, fmt.Errorf("unsupported database driver: %s", driver)
@@ -291,7 +286,7 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 		os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_USER"),
 		os.Getenv("DB_PASSWORD"), os.Getenv("DB_NAME"),
 	)
-	db, err := gorm.Open(postgres.Open(gormDSN), &gorm.Config{
+	db, err := role.Open(postgres.Open(gormDSN), &gorm.Config{
 		NowFunc: func() time.Time { return time.Now().UTC() },
 		// Bound values can contain submitted content. Keep SQL diagnostics without copying those values into shared logs.
 		Logger: gormlogger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), gormlogger.Config{
@@ -301,6 +296,12 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err != nil {
+			pool, _ := db.DB()
+			_ = pool.Close()
+		}
+	}()
 	if os.Getenv("AUTO_MIGRATE") != "false" {
 		migrateDSN := fmt.Sprintf(
 			"postgres://%s:%s@%s:%s/%s?sslmode=disable&options=-c%%20app.skip_embedding=false",
@@ -321,12 +322,6 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 	if err := service.EnsurePersonalSpace(context.Background(), db); err != nil {
 		return nil, err
 	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, err
-	}
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetConnMaxLifetime(10 * time.Minute)
 	return db, nil
 }
 

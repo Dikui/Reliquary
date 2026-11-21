@@ -22,6 +22,7 @@ type Client struct {
 	observerCtx    context.Context
 	observerCancel context.CancelFunc
 	observerWG     sync.WaitGroup
+	pendingCommits map[string]time.Time // visibility deadlines, nil when the observer is idle
 	closed         bool
 	suspending     map[string]bool
 	objects        map[string]string

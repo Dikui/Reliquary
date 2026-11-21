@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"time"
 
@@ -13,7 +14,10 @@ import (
 	"gorm.io/gorm"
 )
 
-const wakeTaskType = "operation:wake"
+const (
+	wakeTaskType      = "operation:wake"
+	dispatchBatchSize = 500
+)
 
 type wakePayload struct {
 	ID string `json:"operation_id"`
@@ -62,7 +66,7 @@ func (c *Client) dispatchPending(ctx context.Context, recovery bool) error {
 		return err
 	}
 	var ops []Job
-	if err := c.db.WithContext(ctx).Where("state IN ? AND process_at <= ?", []TaskState{TaskStatePending, TaskStateScheduled, TaskStateRetry}, now).Order("process_at,created_at,id").Limit(500).Find(&ops).Error; err != nil {
+	if err := c.db.WithContext(ctx).Where("state IN ? AND process_at <= ?", []TaskState{TaskStatePending, TaskStateScheduled, TaskStateRetry}, now).Order("process_at,created_at,id").Limit(dispatchBatchSize).Find(&ops).Error; err != nil {
 		return err
 	}
 	if transport == nil {
@@ -83,35 +87,83 @@ func (c *Client) dispatchPending(ctx context.Context, recovery bool) error {
 	return nil
 }
 
-// WatchCommit provides a best-effort prompt wake for transaction owners that
-// cannot expose an after-commit hook. It checks visibility on the root DB, never
-// on the caller's transaction. The periodic sweep covers long transactions.
+// The producer may still hold a transaction and must never wait for an observer
+// connection. One observer per client checks committed IDs in batches on the root DB.
 func (c *Client) watchCommit(id string) {
 	c.observerMu.Lock()
+	defer c.observerMu.Unlock()
 	if c.closed {
-		c.observerMu.Unlock()
 		return
 	}
-	c.observerWG.Add(1)
-	parent := c.observerCtx
-	c.observerMu.Unlock()
-	go func() {
-		defer c.observerWG.Done()
-		ctx, cancel := context.WithTimeout(parent, time.Second)
-		defer cancel()
-		for ctx.Err() == nil {
-			var count int64
-			if c.db.WithContext(ctx).Model(&Job{}).Where("id=?", id).Count(&count).Error == nil && count > 0 {
-				c.Wake()
-				// A short-lived producer (for example report creation) need not own workers.
-				_ = c.DispatchPending(ctx)
-				return
+	if c.pendingCommits == nil {
+		c.pendingCommits = make(map[string]time.Time)
+		c.observerWG.Add(1)
+		go c.observeCommits(c.observerCtx)
+	}
+	c.pendingCommits[id] = time.Time{}
+}
+
+func (c *Client) commitIDs(ctx context.Context) []string {
+	c.observerMu.Lock()
+	defer c.observerMu.Unlock()
+	if ctx.Err() != nil {
+		c.pendingCommits = nil
+		return nil
+	}
+	now := time.Now()
+	ids := make([]string, 0, len(c.pendingCommits))
+	for id, until := range c.pendingCommits {
+		if until.IsZero() {
+			// Give arrivals during a previous dispatch their first visibility check.
+			c.pendingCommits[id] = now.Add(time.Second)
+		} else if !now.Before(until) {
+			delete(c.pendingCommits, id)
+			continue
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		c.pendingCommits = nil
+	}
+	return ids
+}
+
+func (c *Client) observeCommits(ctx context.Context) {
+	defer c.observerWG.Done()
+	for {
+		ids := c.commitIDs(ctx)
+		if len(ids) == 0 {
+			return
+		}
+		for batch := range slices.Chunk(ids, dispatchBatchSize) {
+			probe, cancel := context.WithTimeout(ctx, time.Second)
+			var visible []string
+			err := c.db.WithContext(probe).Model(&Job{}).Where("id IN ?", batch).Pluck("id", &visible).Error
+			cancel()
+			if err != nil {
+				break
 			}
-			if !waitContext(ctx, 25*time.Millisecond) {
-				return
+			if len(visible) == 0 {
+				continue
+			}
+			c.observerMu.Lock()
+			for _, id := range visible {
+				delete(c.pendingCommits, id)
+			}
+			c.observerMu.Unlock()
+			c.Wake()
+			c.mu.Lock()
+			hasWorkers := c.cancel != nil
+			c.mu.Unlock()
+			if !hasWorkers {
+				// A producer-only client has no local worker to receive its wake.
+				dispatch, stop := context.WithTimeout(ctx, 5*time.Second)
+				_ = c.DispatchPending(dispatch)
+				stop()
 			}
 		}
-	}()
+		waitContext(ctx, 25*time.Millisecond)
+	}
 }
 
 func (c *Client) redisQueue(name string) string { return "reliquary:" + c.namespace + ":" + name }
