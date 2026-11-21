@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -30,6 +31,8 @@ import (
 	"reliquary/internal/types"
 	"sort"
 )
+
+var backupCloneName = regexp.MustCompile(`^reliquary_admin_[0-9a-f]{16}$`)
 
 func maintenanceDatabase() (*gorm.DB, string, error) {
 	if driver := strings.TrimSpace(os.Getenv("DB_DRIVER")); driver != "" && driver != "postgres" {
@@ -55,7 +58,7 @@ func maintenanceDatabase() (*gorm.DB, string, error) {
 func runMaintenance(args []string, input io.Reader, output io.Writer) error {
 	applogger.SetOutput(os.Stderr)
 	if len(args) == 0 {
-		return errors.New("usage: server maintenance flush|manifest|verify|scrub|models|model-test|credentials|chatgpt-login|chatgpt-complete|secret-scan|graph-rebuild|graph-check|graph-verify|graph-clear-drill|audit|queue-replay|queue-probe-drill|reindex|export-sources|migrate|rebuild|rebuild-files|pause|resume|status|record|configure|due")
+		return errors.New("usage: server maintenance flush|manifest|verify|scrub|prepare-delivery|models|model-test|credentials|chatgpt-login|chatgpt-complete|secret-scan|graph-rebuild|graph-check|graph-verify|graph-clear-drill|audit|queue-replay|queue-probe-drill|reindex|export-sources|migrate|rebuild|rebuild-files|pause|resume|status|record|configure|due")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -309,6 +312,18 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 			return err
 		}
 		return emit(result)
+	case "prepare-delivery":
+		var database string
+		if err := db.WithContext(ctx).Raw("SELECT current_database()").Scan(&database).Error; err != nil {
+			return err
+		}
+		if !backupCloneName.MatchString(database) {
+			return errors.New("prepare-delivery requires a disposable backup clone")
+		}
+		if err := maintenance.PrepareDelivery(ctx, db); err != nil {
+			return err
+		}
+		return emit(map[string]bool{"ok": true})
 	case "models":
 		models, err := maintenance.Models(ctx, db)
 		if err != nil {

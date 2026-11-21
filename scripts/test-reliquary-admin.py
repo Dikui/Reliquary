@@ -96,6 +96,68 @@ class AdminStorageTests(unittest.TestCase):
         ctx.stopped.assert_not_called()
         self.assertNotIn(mock.call("manifest"), ctx.cli_json.call_args_list)
 
+    def test_delivery_backup_seals_the_cleaned_clone_and_keeps_normal_backups(self):
+        ctx = self.host_context(RELIQUARY_ADMIN_DIRECT="1", DB_NAME="production")
+        ctx.database_only = True
+        ctx.check_host_directories(settings=False)
+        backups = Path(ctx.env["BACKUP_DIR"])
+        normal_backups = [backups / f"backup-{i}" for i in range(4)]
+        for path in normal_backups:
+            path.mkdir()
+            (path / "manifest.json").write_text("{}")
+
+        clone = "reliquary_admin_1234567890abcdef"
+        caller = {"kind": "api_keys", "id": "old-caller", "name": "Private caller"}
+        account = {"kind": "chatgpt_accounts", "id": "old-account", "name": "sender@example.test"}
+        parser = {"kind": "spaces", "id": "1", "fields": ["parser_engine_config.api_key"]}
+        model = {"kind": "models", "id": "chat", "fields": ["chatgpt_login"]}
+        cleaned = False
+
+        def invoke(*args, overrides=None):
+            nonlocal cleaned
+            if args[0] == "prepare-delivery":
+                self.assertEqual(overrides["DB_NAME"], clone)
+                cleaned = True
+            if args[0] in {"manifest", "scrub"}:
+                on_clone = (overrides or {}).get("DB_NAME") == clone
+                required = [model] if on_clone and cleaned else [caller, account, parser, model]
+                if args[0] == "scrub":
+                    self.assertTrue(on_clone)
+                    self.assertFalse(cleaned)
+                    return {"required": required, "paused_models": ["chat"]}
+                return {"required_credentials": required, "tables": {"chatgpt_accounts": {"rows": int(not (on_clone and cleaned))}}}
+            return {"ok": True}
+
+        def dump(tool, database, *args, output):
+            self.assertEqual((tool, database), ("pg_dump", clone))
+            self.assertTrue(cleaned)
+            output.write(b"clean clone")
+
+        args = admin.parser().parse_args(["backup", str(backups), "--delivery"])
+        with mock.patch.object(ctx, "configured_backup_directory", return_value=None), \
+             mock.patch.object(ctx, "stopped", side_effect=lambda *_: contextlib.nullcontext()), \
+             mock.patch.object(ctx, "cloned_database", return_value=contextlib.nullcontext(clone)), \
+             mock.patch.object(ctx, "cli_json", side_effect=invoke), \
+             mock.patch.object(ctx, "sql", return_value="1:false"), \
+             mock.patch.object(ctx, "pg", side_effect=dump), \
+             mock.patch.object(ctx, "scan_dump_credentials"), \
+             mock.patch.object(admin, "source_copy", return_value={"commit": "fixture"}), \
+             mock.patch.object(admin, "record") as record, contextlib.redirect_stdout(io.StringIO()):
+            package = admin.backup(ctx, args)
+        self.assertTrue(package.name.startswith("delivery-"))
+        manifest = admin.check_install_backup(package)
+        self.assertIs(manifest["delivery"], True)
+        self.assertEqual(manifest["required_credentials"], [model, parser])
+        snapshot = json.loads((package / "snapshot.json").read_text())
+        self.assertIs(snapshot["delivery"], True)
+        self.assertEqual(snapshot["tables"]["chatgpt_accounts"]["rows"], 0)
+        self.assertEqual(snapshot["required_credentials"], [model, parser])
+        requirements = json.loads((package / "required-credentials.json").read_text())
+        self.assertEqual(requirements["required"], [model, parser])
+        self.assertEqual(requirements["paused_models"], ["chat"])
+        self.assertTrue(all(path.exists() for path in normal_backups))
+        record.assert_not_called()
+
     def host_context(self, **overrides):
         source = self.root / "source"
         source.mkdir(exist_ok=True)

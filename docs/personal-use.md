@@ -253,6 +253,10 @@ docker compose up -d app
 
 成功输出 `backup complete and read-back verified` 与具体备份路径。未变化文件用硬链接复用，每份成功备份都可独立恢复，默认保留最近四份。需要同时保存部署镜像和源码时加 `--with-images`，再用 `unpack` 恢复。失败或超时不会产生假成功备份。
 
+向客户交付资料库时使用 `./reliquary-admin backup <交付目录> --delivery`。命令在临时数据库克隆中清除 ChatGPT 账号、登录尝试和安装标识、API Key 记录、登录令牌、资源访问授权、操作日志以及模型调用记录、内容和删除记录，并清空资料上的收录 Key ID 和名称。单用户记录原样保留。ChatGPT 模型及库的选型保留，旧账号绑定和用量状态清除。客户登录后可在网页为原模型选择自己的账号并测试。交付包省略飞书会话和运行状态。
+
+交付方正式库的业务数据、账号与 Key 不受影响。打包期间沿用备份的暂停和恢复流程。输出为 `delivery-*` 目录，`manifest.json` 中包含 `"delivery": true`，可用于客户全新安装。定时备份的轮转与恢复演练仍使用 `backup-*` 目录。[带数据包安装](agent-installation.md#带数据包安装)
+
 完整恢复使用新的空 PG 数据库和空文件目录，目标应用保持停止。先填写目标 `.env` 中的四服务连接、`RELIQUARY_VAULT_DIR`、`RELIQUARY_FILES_DIR` 和新系统密钥。恢复不覆盖现有数据库或非空目录：
 
 ```bash

@@ -262,6 +262,8 @@ def check_install_backup(package):
     if not isinstance(metadata.get("required_credentials"), list) or not isinstance(metadata.get("code"), dict) or \
             not isinstance(metadata.get("versions"), dict):
         raise AdminError("Backup manifest is missing recovery metadata")
+    if not isinstance(metadata.get("delivery", False), bool):
+        raise AdminError("Backup manifest delivery marker must be a boolean")
     check_files(package)
     return metadata
 
@@ -1064,6 +1066,7 @@ def check_context_directories(ctx, backup_directory=None, **options):
 
 
 def create_package(ctx, destination, args, kind="pack", previous=None):
+    delivery = kind == "backup" and getattr(args, "delivery", False)
     check_context_directories(ctx, Path(destination).resolve() if kind == "pack" else Path(destination).resolve().parent)
     destination = empty_directory(destination)
     result = {"status": "failed", "started_at": dt.datetime.now(dt.timezone.utc).isoformat(), "path": str(destination)}
@@ -1090,7 +1093,7 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                         raise AdminError("Runtime source materials are missing; run record-runtime --source <source-checkout> before backing up")
             # Export and validate code and image availability while writers are still running.
             code = source_copy(ctx, stage, args.include_worktree, runtime_commit, runtime_source, runtime_code)
-            agent = agent_directory(getattr(ctx, "root", ROOT))
+            agent = None if delivery else agent_directory(getattr(ctx, "root", ROOT))
             with (agent_stopped(agent, args.timeout) if agent else contextlib.nullcontext()), \
                     ctx.stopped("drain" if kind == "pack" else "snapshot", args.timeout, args.keep_paused,
                                 getattr(args, "automatic", False), destination):
@@ -1126,18 +1129,41 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                         expected = "/maintenance-package/" + original_manifest.name
                     ctx.cli_json("verify", "--manifest", expected, "--vectors", overrides=clone_check)
                     original_manifest.unlink()
-                    required += scrubbed.get("required", [])
-                    if agent:
-                        required.append(AGENT_REQUIRED)
-                    json_write(stage / "required-credentials.json", {"required": required, "paused_models": scrubbed.get("paused_models", []), "paused_sources": scrubbed.get("paused_sources", [])})
-                    with (stage / "database.dump").open("wb") as stream:
-                        ctx.pg("pg_dump", database, "-Fc", "--no-owner", "--no-acl", output=stream)
+                    if delivery:
+                        ctx.cli_json("prepare-delivery", overrides=side)
+                        if not getattr(ctx, "database_only", False):
+                            replica = stage / "vault" / ".reliquary"
+                            # The historical replica's append-only file may
+                            # only be replaced in this disposable staged copy.
+                            (replica / "operation_logs.jsonl").unlink(missing_ok=True)
+                            if (replica / "quarantine").is_dir():
+                                shutil.rmtree(replica / "quarantine")
+                        ctx.cli_json("flush", overrides=side)
                     snapshot = ctx.cli_json("manifest", overrides=side)
                     # A scrubbed space no longer contains the parser keys.
                     # Keep their original field names for reconfiguration and
                     # narrow credential-related comparison exceptions.
-                    snapshot["required_credentials"] = before.get("required_credentials", [])
+                    original_required = before.get("required_credentials", [])
+                    if delivery:
+                        delivery_required = snapshot["required_credentials"]
+                        delivery_required += [
+                            item for item in original_required if item.get("kind") == "spaces"
+                            and item not in delivery_required
+                        ]
+                        snapshot["delivery"] = True
+                        required += delivery_required
+                    else:
+                        snapshot["required_credentials"] = original_required
+                        required += scrubbed.get("required", [])
+                    if agent:
+                        required.append(AGENT_REQUIRED)
+                    json_write(stage / "required-credentials.json", {"required": required, "paused_models": scrubbed.get("paused_models", []), "paused_sources": scrubbed.get("paused_sources", [])})
                     json_write(stage / "snapshot.json", snapshot)
+                    if delivery:
+                        expected = str(Path(expected).with_name("snapshot.json"))
+                        ctx.cli_json("verify", "--manifest", expected, "--vectors", overrides=clone_check)
+                    with (stage / "database.dump").open("wb") as stream:
+                        ctx.pg("pg_dump", database, "-Fc", "--no-owner", "--no-acl", output=stream)
                     json_write(stage / "models.json", ctx.cli_json("models", overrides=side))
                 deduplicate_tree(stage / "vault", previous / "vault" if previous else None)
                 deduplicate_tree(stage / "resources", previous / "resources" if previous else None)
@@ -1155,6 +1181,8 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                 metadata = {"format": FORMAT, "kind": kind, "storage": "database" if getattr(ctx, "database_only", False) else "vault", "created_at": result["started_at"], "code": code, "images": packed_images,
                             "versions": versions, "required_credentials": required,
                             "comparison": "Exact preserved data and file hashes; vectors, runtime state and search scores are regenerated. Retrieval compares article IDs."}
+                if delivery:
+                    metadata["delivery"] = True
                 json_write(stage / "manifest.json", metadata)
                 agent_secrets = read_env(agent / "agent.env") if agent and (agent / "agent.env").is_file() else {}
                 scan_secrets(stage, {**effective, **{k: v for k, v in ctx.env.items() if SECRET.search(k)}, **agent_secrets})
@@ -1181,7 +1209,7 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
         raise
     finally:
         result["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
-        if kind == "backup":
+        if kind == "backup" and not delivery:
             confirmed = record(ctx, "backup", result)
             if getattr(args, "upgrade", False) and result["status"] == "success":
                 capture_upgrade_backup_record(ctx, destination, result, before, confirmed)
@@ -1189,16 +1217,20 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
 
 def backup(ctx, args):
     directory = host_path(args.directory or default_backup_directory(ctx.env), ctx.env, getattr(ctx, "root", ROOT))
+    delivery = getattr(args, "delivery", False)
+    prefix = "delivery" if delivery else "backup"
     try:
         check_context_directories(ctx, directory)
         directory.mkdir(parents=True, exist_ok=True)
-        existing = sorted(p for p in directory.glob("backup-*") if (p / "manifest.json").is_file())
-        destination = directory / ("backup-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + secrets.token_hex(3))
+        existing = sorted(p for p in directory.glob(prefix + "-*") if (p / "manifest.json").is_file())
+        destination = directory / (prefix + "-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + secrets.token_hex(3))
         path = create_package(ctx, destination, args, "backup", existing[-1] if existing else None)
-        rotate(directory, 4)
+        if not delivery:
+            rotate(directory, 4)
         return path
     except OSError as error:
-        record(ctx, "backup", {"status": "failed", "path": str(directory), "error": str(error)})
+        if not delivery:
+            record(ctx, "backup", {"status": "failed", "path": str(directory), "error": str(error)})
         raise AdminError("Backup filesystem failure: " + str(error)) from error
 
 
@@ -1431,6 +1463,9 @@ def require_parser_credentials(ctx, package, state_name=".maintenance-restore.js
         state.update({"state": "waiting_credentials", "package": str(package), "missing_parser_credentials": missing})
         json_write(state_path, state)
         print_credentials(missing)
+        if getattr(ctx, "customer_data_install", False):
+            for item in missing:
+                print(f"缺少必需的云解析器凭据 {item['name']}（{', '.join(item['fields'])}）", file=sys.stderr)
         raise AdminError("State: waiting_credentials. Collection and task execution remain paused. Fill every listed cloud parser credential in space/parser settings, then run " + resume_command + ".")
 
 
@@ -2124,7 +2159,8 @@ def setup_models(ctx, args):
                 missing_credentials |= needs_credentials
                 missing_models |= not needs_credentials
             impact = "blocks recovery" if required else "recovery can continue"
-            print(f"Model unavailable: {name} ({model_id}). Affects {feature}; {impact}. {error}", file=sys.stderr)
+            output = sys.stdout if not required and getattr(ctx, "customer_data_install", False) else sys.stderr
+            print(f"Model unavailable: {name} ({model_id}). Affects {feature}; {impact}. {error}", file=output)
     if isinstance(data, dict) and data.get("embedding_required") is True and not any(
             str(model.get("type", "")).lower() == "embedding" and model.get("id") == selected_embedding for model in models):
         missing_models = True
@@ -2430,6 +2466,8 @@ def parser():
         p.add_argument("--include-worktree", action="store_true")
         p.add_argument("--automatic", action="store_true")
         p.add_argument("--with-images", action="store_true")
+        if name == "backup":
+            p.add_argument("--delivery", action="store_true", help="Remove installation identity and logs from the backup clone")
     p = sub.add_parser("restore")
     p.add_argument("package")
     p.add_argument("--skip-models", action="store_true")

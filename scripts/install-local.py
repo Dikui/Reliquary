@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepare a local runtime, install a new deployment, or update an existing one."""
 import argparse
+from contextlib import redirect_stdout
 from importlib.util import module_from_spec, spec_from_file_location
 import json
 import os
@@ -21,6 +22,7 @@ SOURCE = Path(__file__).resolve().parent.parent
 LABEL = 'com.reliquary.autostart'
 BASE_SERVICES = ('postgres', 'redis', 'neo4j')
 RESTORE_STATE = '.maintenance-restore.json'
+DATA_INSTALL_LOG = 'logs/data-install.log'
 
 
 def runtime_compose(config, project):
@@ -164,13 +166,13 @@ def require_unused_project(project):
             raise ValueError('Compose project already exists; choose an unused --project-name for this installation')
 
 
-def install(root, env_file, project, app_port=None, frontend_port=None, *, data=None, retry_command=None):
+def install(root, env_file, project, app_port=None, frontend_port=None, *, data=None):
     """Resume first installation without overwriting any existing configuration."""
     for command in ('docker', 'git'):
         if not shutil.which(command):
             raise ValueError(f'{command} is required; see docs/local-deployment.md#客户全新安装')
     if data is not None:
-        return install_data(root, env_file, project, app_port, frontend_port, data, retry_command)
+        return install_data(root, env_file, project, app_port, frontend_port, data)
     deploy = root / 'deploy'
     marker = deploy / 'customer-install.json'
     if deploy.exists() and not marker.exists():
@@ -262,7 +264,7 @@ def data_baseline(data, revision):
         raise ValueError('备份数据库迁移版本缺失、未完成或不在当前源码的迁移历史中')
     if int(matched[1]) == 0:
         raise ValueError('此备份的旧结构缺少维护暂停门禁，无法安全启动网页。请先升级备份来源，再生成交付包。')
-    return commit, migration, max(versions)
+    return commit, migration, max(versions), metadata.get('delivery', False)
 
 
 def data_context(deploy):
@@ -280,20 +282,26 @@ def data_context(deploy):
             str(deploy / name) for name in ('docker-compose.yml', admin.LOCAL_IMAGES)}:
         raise ValueError('带数据包安装要求使用当前安装器生成的 Compose 配置。')
     ctx.startup_locked = True
+    ctx.customer_data_install = True
     return ctx
 
 
-def install_data(root, env_file, project, app_port, frontend_port, data, retry_command):
+def install_data(root, env_file, project, app_port, frontend_port, data):
     if root == SOURCE or root.is_relative_to(SOURCE) or root.is_relative_to(data):
         raise ValueError('运行目录必须位于源码和数据包之外')
     revision = admin.clean_revision(SOURCE)
-    commit, migration, target = data_baseline(data, revision)
+    commit, migration, target, delivery = data_baseline(data, revision)
     identity = {'path': str(data), 'checksums': admin.digest(data / 'checksums.json')}
     deploy = root / 'deploy'
     marker = deploy / 'customer-install.json'
     state_path = deploy / RESTORE_STATE
-    (root / 'logs').mkdir(parents=True, exist_ok=True, mode=0o700)
-    with admin.startup_lock(deploy):
+    log_path = root / DATA_INSTALL_LOG
+    log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # Log maintenance stdout while action-required diagnostics reach stderr.
+    with admin.startup_lock(deploy), os.fdopen(
+        os.open(log_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600),
+        'a', encoding='utf-8', buffering=1,
+    ) as log:
         if deploy.exists():
             if not marker.is_file():
                 raise ValueError('已有部署目录。带数据包安装只用于全新安装。')
@@ -308,7 +316,8 @@ def install_data(root, env_file, project, app_port, frontend_port, data, retry_c
         else:
             require_unused_project(project)
             record = {'project': project, 'status': 'prepared', 'source': str(SOURCE), 'revision': revision, 'data': identity}
-            prepare(root, env_file, project, record=record)
+            with redirect_stdout(log):
+                prepare(root, env_file, project, record=record)
         status = record['status']
         agent = load_agent()
         values = deployment_values(deploy / '.env')
@@ -346,18 +355,24 @@ def install_data(root, env_file, project, app_port, frontend_port, data, retry_c
                 # A previous attempt may have committed PG before failing to verify or copy files.
                 admin.require_empty_restore_database(ctx)
                 ctx.scheduler_required = True
-                admin.restore(ctx, data, argparse.Namespace(skip_models=True, preserve_version=True,
-                                                            expected_migration=migration))
+                with redirect_stdout(log):
+                    admin.restore(ctx, data, argparse.Namespace(skip_models=True, preserve_version=True,
+                                                               expected_migration=migration))
             else:
                 state = json.loads(state_path.read_text())
                 if state.get('package') != str(data) or state.get('state') != 'waiting_models':
                     raise ValueError('恢复记录与本次安装不符，请保留现场并检查维护日志。')
                 if state.get('startup_pending'):
-                    admin.finish_restore_startup(ctx, state)
+                    with redirect_stdout(log):
+                        admin.finish_restore_startup(ctx, state)
             admin.json_write(marker, {**record, 'status': 'data_restored'})
             settings = deployment_values(deploy / '.env')['CHATGPT_SETTINGS_URL']
-            print(f'数据已恢复，任务保持暂停。请打开 {settings}，在「设置 → 模型设置」登录 ChatGPT 并测试。')
-            print(f'完成后重跑：{retry_command}')
+            if delivery:
+                model_setup = '登录您自己的 ChatGPT，编辑所需的聊天模型，选择该账号和可用模型，保存并测试'
+            else:
+                model_setup = '重新登录原模型使用的 ChatGPT 账号，刷新并测试模型'
+            print(f'数据已导入并核对通过。请打开 {settings}，在「设置 → 模型设置」{model_setup}，'
+                  f'然后重新执行同一条命令。完整清单见 {log_path}。')
             return
 
         if status != 'data_restored':
@@ -365,18 +380,19 @@ def install_data(root, env_file, project, app_port, frontend_port, data, retry_c
         state = json.loads(state_path.read_text())
         if state.get('package') != str(data):
             raise ValueError('恢复记录与本次安装的数据包不符。')
-        if state.get('state') != 'ready':
-            admin.unpack(ctx, argparse.Namespace(package=None, resume=True, no_scheduler=False))
-            if json.loads(state_path.read_text()).get('state') != 'ready':
-                raise ValueError('恢复尚未通过核对，请检查凭据和维护日志。')
-        pending = deploy / admin.PENDING_UPGRADE
-        current = ctx.sql("SELECT version::text||':'||dirty::text FROM schema_migrations")
-        if pending.is_file() or current == migration and current != f'{target}:false':
-            admin.upgrade_installed(ctx, argparse.Namespace(timeout=300, backup=False, include_worktree=False),
-                                    SOURCE, revision)
-        elif current != f'{target}:false':
-            raise ValueError(f'无法确认数据库迁移状态：{current}')
-        admin.record_runtime(ctx, SOURCE)
+        with redirect_stdout(log):
+            if state.get('state') != 'ready':
+                admin.unpack(ctx, argparse.Namespace(package=None, resume=True, no_scheduler=False))
+                if json.loads(state_path.read_text()).get('state') != 'ready':
+                    raise ValueError('恢复尚未通过核对，请检查凭据和维护日志。')
+            pending = deploy / admin.PENDING_UPGRADE
+            current = ctx.sql("SELECT version::text||':'||dirty::text FROM schema_migrations")
+            if pending.is_file() or current == migration and current != f'{target}:false':
+                admin.upgrade_installed(ctx, argparse.Namespace(timeout=300, backup=False, include_worktree=False),
+                                        SOURCE, revision)
+            elif current != f'{target}:false':
+                raise ValueError(f'无法确认数据库迁移状态：{current}')
+            admin.record_runtime(ctx, SOURCE)
         shutil.copy2(SOURCE / 'scripts/agent-local.py', root / 'scripts/agent-local.py')
         admin.json_write(marker, {**record, 'status': 'base_ready', 'version': (SOURCE / 'VERSION').read_text().strip()})
     announce_install(root, agent)
@@ -500,7 +516,7 @@ def main():
     mode.add_argument('--install', action='store_true', help='Build all dependencies and start a new customer installation')
     mode.add_argument('--update', action='store_true', help='Update an existing customer installation from this checkout')
     parser.add_argument('--backup', action='store_true', help='With --update, back up before a database upgrade')
-    parser.add_argument('--data', type=Path, help='With --install, import a verified backup into a new installation')
+    parser.add_argument('--data', type=Path, help='With --install, import a verified backup or delivery package into a new installation')
     parser.add_argument('--app-port', type=int, help='Backend port for a new customer installation')
     parser.add_argument('--frontend-port', type=int, help='Web port for a new customer installation')
     args = parser.parse_args()
@@ -517,8 +533,7 @@ def main():
             install_autostart(root, args.ollama)
         elif args.install:
             install(root, args.env_file.expanduser().resolve() if args.env_file else None, args.project_name,
-                    args.app_port, args.frontend_port, data=args.data.expanduser().resolve() if args.data else None,
-                    retry_command=retry_command)
+                    args.app_port, args.frontend_port, data=args.data.expanduser().resolve() if args.data else None)
         else:
             prepare(root, args.env_file.expanduser().resolve() if args.env_file else None, args.project_name)
     except (admin.AdminError, ValueError, OSError, subprocess.CalledProcessError, EOFError) as error:

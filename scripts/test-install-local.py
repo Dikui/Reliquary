@@ -249,6 +249,9 @@ class CustomerDataInstallationTests(unittest.TestCase):
         self.events = []
         self.ancestry_error = False
         self.nonempty = False
+        self.real_restore = installer.admin.restore
+        self.real_unpack = installer.admin.unpack
+        self.log = self.root / installer.DATA_INSTALL_LOG
         self.add_mocks()
 
     def add_mocks(self):
@@ -266,6 +269,9 @@ class CustomerDataInstallationTests(unittest.TestCase):
             return ''
 
         def docker(args, **kwargs):
+            if 'pg_restore' in args:
+                self.nonempty = True
+                return subprocess.CompletedProcess(args, 0, b'', b'')
             self.assertIn('build', args)
             self.events.append(('build', kwargs['cwd']))
 
@@ -293,6 +299,7 @@ class CustomerDataInstallationTests(unittest.TestCase):
             self.assertFalse(args.no_scheduler)
             self.events.append(('resume',))
             installer.admin.json_write(self.state, {'state': 'ready', 'package': str(self.data)})
+            print('Restore verification passed. State: ready.')
 
         def upgrade(ctx, args, source, revision):
             self.assertTrue(ctx.startup_locked)
@@ -325,17 +332,20 @@ class CustomerDataInstallationTests(unittest.TestCase):
             self.addCleanup(patcher.stop)
             patcher.start()
 
-    def package(self, *, older=False):
+    def package(self, *, older=False, delivery=False, credentials=()):
         self.data.mkdir()
         self.migration = f'{self.target - int(older)}:false'
         for name in ('snapshot.json', 'models.json', 'database.dump'):
             (self.data / name).write_text('{}')
         for name in ('vault', 'resources'):
             (self.data / name).mkdir()
-        installer.admin.json_write(self.data / 'manifest.json', {
-            'kind': 'backup', 'format': installer.admin.FORMAT, 'required_credentials': [],
+        manifest = {
+            'kind': 'backup', 'format': installer.admin.FORMAT, 'required_credentials': list(credentials),
             'code': {'commit': self.old, 'dirty': False}, 'versions': {'migration': self.migration},
-        })
+        }
+        if delivery:
+            manifest['delivery'] = True
+        installer.admin.json_write(self.data / 'manifest.json', manifest)
         self.rehash()
 
     def rehash(self):
@@ -354,6 +364,7 @@ class CustomerDataInstallationTests(unittest.TestCase):
         self.assertEqual(error.exception.code, 1)
         self.assertIn(message, errors.getvalue())
         self.assertIn('修正原因后重跑', errors.getvalue())
+        return errors.getvalue()
 
     def test_invalid_package_and_nonancestor_leave_no_runtime(self):
         self.package()
@@ -381,9 +392,26 @@ class CustomerDataInstallationTests(unittest.TestCase):
             ('restore',),
         ])
         self.assertEqual(json.loads(self.marker.read_text())['status'], 'data_restored')
-        self.assertIn('登录 ChatGPT 并测试', output)
-        self.assertIn('--data', output)
+        self.assertIn('重新登录原模型使用的 ChatGPT 账号，刷新并测试模型', output)
         self.assertFalse((self.root / 'scripts/agent-local.py').exists())
+
+    def test_first_stage_saves_full_checklist_and_prints_one_chinese_prompt(self):
+        credential = {'kind': 'models', 'id': 'sample', 'name': '示例模型', 'fields': ['parameters.api_key']}
+        self.package(credentials=[credential])
+        self.restore.side_effect = self.real_restore
+        with mock.patch.object(installer.admin.Context, 'cli_json', return_value={'ok': True}):
+            output = self.run_install()
+        settings = installer.deployment_values(self.deploy / '.env')['CHATGPT_SETTINGS_URL']
+        self.assertEqual(output.splitlines(), [
+            '构建后端及网页镜像，自动下载 Go、Node 和前端依赖…',
+            f'数据已导入并核对通过。请打开 {settings}，在「设置 → 模型设置」重新登录原模型使用的 ChatGPT 账号，'
+            f'刷新并测试模型，然后重新执行同一条命令。完整清单见 {self.log}。',
+        ])
+        log = self.log.read_text()
+        self.assertIn('Reconfiguration checklist:', log)
+        self.assertIn('Confirm these retained public settings', log)
+        self.assertIn('示例模型 / parameters.api_key', log)
+        self.assertEqual(json.loads(self.state.read_text())['required_credentials'], [credential])
 
     def test_second_install_resumes_before_optional_upgrade_and_offers_pi(self):
         self.package(older=True)
@@ -401,9 +429,78 @@ class CustomerDataInstallationTests(unittest.TestCase):
     def test_same_schema_resumes_without_upgrading(self):
         self.package()
         self.run_install()
-        self.run_install()
+        output = self.run_install()
+        self.assertIn('资料库本体安装完成', output)
+        self.assertNotIn('State: ready', output)
+        self.assertIn('State: ready', self.log.read_text())
         self.assertEqual(self.events[-3:], [('resume',), ('record',), ('offer_pi',)])
         self.upgrade_installed.assert_not_called()
+
+    def test_delivery_install_restores_then_resumes_after_customer_model_setup(self):
+        self.package(delivery=True)
+        output = self.run_install()
+        self.assertEqual(len(output.splitlines()), 2)
+        self.assertIn('登录您自己的 ChatGPT，编辑所需的聊天模型，选择该账号和可用模型，保存并测试', output.splitlines()[-1])
+        self.assertEqual(json.loads(self.marker.read_text())['status'], 'data_restored')
+        self.run_install()
+        self.restore.assert_called_once()
+        self.unpack.assert_called_once()
+        self.assertEqual(json.loads(self.marker.read_text())['status'], 'base_ready')
+        self.assertEqual(self.events[-3:], [('resume',), ('record',), ('offer_pi',)])
+
+    def test_required_model_error_reaches_the_terminal(self):
+        self.package()
+        self.run_install()
+        self.unpack.side_effect = self.real_unpack
+        model = {'id': 'chat', 'name': 'Required chat', 'type': 'KnowledgeQA', 'source': 'remote'}
+        with mock.patch.object(installer.admin.Context, 'cli_json', side_effect=[
+            {'models': [model], 'selected_model_ids': ['chat']},
+            {'ready': False, 'error': 'provider returned an error'},
+        ]):
+            error = self.reject('State: waiting_models')
+        self.assertIn('Required chat', error)
+        self.assertIn('provider returned an error', error)
+
+    def test_missing_parser_credential_is_named_in_terminal_and_log(self):
+        field = 'parser_engine_config.mineru.api_key'
+        self.package(credentials=[{'kind': 'spaces', 'id': '1', 'name': '资料库', 'fields': [field]}])
+        self.run_install()
+        self.unpack.side_effect = self.real_unpack
+        with mock.patch.object(installer.admin.Context, 'cli_json', return_value={}):
+            error = self.reject('State: waiting_credentials')
+        self.assertIn(f'缺少必需的云解析器凭据 资料库（{field}）', error)
+        self.assertNotIn('Confirm these retained public settings', error)
+        self.assertIn(f'资料库 / {field}', self.log.read_text())
+
+    def test_standalone_unpack_prints_full_checklist(self):
+        credential = {'kind': 'models', 'id': 'fixture', 'fields': ['parameters.api_key']}
+        self.package(credentials=[credential])
+        manifest = self.data / 'manifest.json'
+        metadata = json.loads(manifest.read_text())
+        metadata['images'] = {'app': {'id': 'fixture-image', 'archive': 'app.tar', 'reference': 'fixture:app'}}
+        installer.admin.json_write(manifest, metadata)
+        installer.admin.json_write(self.data / 'source-files.json', {'removed': []})
+        installer.admin.json_write(self.data / 'compose.images.json', {'services': {'app': {}}})
+        self.rehash()
+        ctx = mock.Mock(root=self.deploy, env={}, direct=True, local_server=None, app='app', db='postgres')
+        ctx.sql.return_value = '0'
+        ctx.legacy_schema.return_value = False
+        ctx.cli_json.return_value = {'ok': True}
+        ctx.pg_command.return_value = ['pg_restore']
+        ctx.storage.side_effect = lambda name: ('host', self.deploy / name)
+        ctx.host_storage_path.side_effect = lambda name: self.deploy / name
+        self.restore.side_effect = self.real_restore
+        args = installer.admin.parser().parse_args(['unpack', str(self.data), '--target', str(self.deploy), '--skip-models'])
+        with mock.patch.object(installer.admin, 'Context', return_value=ctx), \
+             mock.patch.object(installer.admin, 'restored_environment', return_value={'VAULT_ROOT': '/vault', 'LOCAL_STORAGE_BASE_DIR': '/files'}), \
+             mock.patch.object(installer.admin, 'run', return_value=b'[{"Id":"fixture-image"}]'), \
+             mock.patch.object(installer.admin, 'remember_runtime'), \
+             mock.patch.object(installer.admin.socket, 'socket'), \
+             mock.patch('sys.stdout', new_callable=io.StringIO) as output:
+            self.real_unpack(ctx, args)
+        self.assertIn('Reconfiguration checklist:', output.getvalue())
+        self.assertIn('Confirm these retained public settings', output.getvalue())
+        self.assertIn('fixture / parameters.api_key', output.getvalue())
 
     def test_resume_rejects_a_different_path_or_modified_package(self):
         self.package()
