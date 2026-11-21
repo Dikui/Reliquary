@@ -60,7 +60,7 @@ func TestShelfGuideScopesReadsToEnabledLibrary(t *testing.T) {
 			ProductLines []types.Entity `json:"product_lines"`
 		} `json:"values"`
 	}
-	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": other.ID}, &empty)
+	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": other.ID, "node_id": " \t "}, &empty)
 	require.EqualValues(t, 32<<20, empty.MaxFileBytes)
 	require.Empty(t, empty.Values.ProductLines)
 	for _, input := range []map[string]any{

@@ -245,7 +245,7 @@ func TestShelfMCPGetReturnsSelectedFactsAndEvidence(t *testing.T) {
 	}}, http.StatusCreated, &saved)
 	client := f.connect(t, "2025-11-25")
 	var detail types.ShelfNodeDetail
-	mcpCall(t, client, "shelf_get", map[string]any{"library_id": library.ID, "node_id": shelfNode(nodes, "model"), "combination": map[string]string{"module_a": shelfNode(nodes, "a")}}, &detail)
+	mcpCall(t, client, "shelf_get", map[string]any{"library_id": library.ID, "node_id": shelfNode(nodes, "model"), "as_of": " \t ", "combination": map[string]string{"module_a": shelfNode(nodes, "a"), "module_b": " "}}, &detail)
 	require.True(t, detail.Recorded)
 	require.Equal(t, shelfNode(nodes, "model"), detail.Entity.ID)
 	require.Len(t, detail.Shelf.SaleStatuses, 1)
@@ -315,4 +315,50 @@ func TestShelfMCPQueryStatusFilters(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, response.IsError)
 	require.Contains(t, response.Content[0].(*mcp.TextContent).Text, "region_a")
+}
+
+func TestShelfMCPQueryBlankCertificationFiltersRespectRegionIntent(testRun *testing.T) {
+	f, library, nodes := shelfModelSetup(testRun)
+	configureCertificationStandards(f, &library)
+	planned := time.Now().AddDate(0, 0, -2).Format(time.DateOnly)
+	operations := []types.ShelfOperation{
+		{ID: "unscoped", Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Delayed unscoped certificate", ShelfCertification: types.ShelfCertification{
+			OwnerID: shelfNode(nodes, "model"), Standard: "standard_a", CertificationObject: "Container", Progress: "进行中", PlannedDate: planned,
+		}}},
+		{ID: "regional", Type: "create_certification", Certification: &types.ShelfCertificationInput{Name: "Delayed regional certificate", ShelfCertification: types.ShelfCertification{
+			OwnerID: shelfNode(nodes, "single"), Standard: "standard_a", CertificationObject: "Container", Region: "region_a", Progress: "进行中", PlannedDate: planned,
+		}}},
+	}
+	path := "/libraries/" + library.ID + "/shelf"
+	f.request(http.MethodPost, path+"/changesets", types.ShelfChangesetInput{Source: types.OperationSource{Type: "web"}, Confirmed: true, Operations: operations}, http.StatusCreated, nil)
+	client := f.connect(testRun, "2025-11-25")
+	var statusOnly types.ShelfQueryResult
+	mcpCall(testRun, client, "shelf_query", map[string]any{"library_id": library.ID, "certification": map[string]any{"status": "delayed"}, "limit": 1}, &statusOnly)
+	require.NotNil(testRun, statusOnly.CertificationTotal)
+	require.EqualValues(testRun, 2, *statusOnly.CertificationTotal)
+
+	certification := map[string]any{"progress": "", "region": "", "standard": "", "status": "delayed"}
+	input := map[string]any{
+		"library_id": library.ID, "ancestor_id": "", "as_of": "", "certification": certification,
+		"composition": []any{}, "detail": "summary", "document_gaps": false, "facets": false,
+		"limit": 1, "offset": 0, "parameters": []any{}, "part_id": "", "sale_statuses": []any{},
+	}
+	var padded types.ShelfQueryResult
+	mcpCall(testRun, client, "shelf_query", input, &padded)
+	require.Equal(testRun, statusOnly.CertificationTotal, padded.CertificationTotal)
+
+	certification["no_region"] = true
+	var unscoped types.ShelfQueryResult
+	mcpCall(testRun, client, "shelf_query", input, &unscoped)
+	require.NotNil(testRun, unscoped.CertificationTotal)
+	require.EqualValues(testRun, 1, *unscoped.CertificationTotal)
+	require.Len(testRun, unscoped.Items, 1)
+	require.Equal(testRun, shelfNode(nodes, "model"), unscoped.Items[0].Entity.ID)
+
+	var httpResult types.ShelfQueryResult
+	f.request(http.MethodPost, path+"/query", map[string]any{"certification": map[string]any{"status": "delayed", "region": ""}}, http.StatusOK, &httpResult)
+	require.Equal(testRun, unscoped.CertificationTotal, httpResult.CertificationTotal)
+	f.request(http.MethodPost, path+"/query", map[string]any{"certification": map[string]any{"status": "delayed", "progress": ""}}, http.StatusOK, &httpResult)
+	require.NotNil(testRun, httpResult.CertificationTotal)
+	require.Zero(testRun, *httpResult.CertificationTotal)
 }

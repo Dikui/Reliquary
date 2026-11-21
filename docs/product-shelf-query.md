@@ -123,9 +123,12 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
 
 每个按 `min`、`max` 筛选的参数，响应都带 `parameter_missing` 一项：`{"field","name","models"}`，`models` 是满足其他全部筛选、但该字段没有结构化取值的型号数，为 0 时也返回。这些型号不在 `items` 和 `total` 中，数值可能写在描述或正文里；把该参数换成 `missing: true` 重新筛选即可列出。同时缺少多个被筛选字段的型号不计入任何一项。只用 `missing: true` 筛选时不返回此项。
 
-标准按规范名、明确别名或键匹配；未知标准返回零条。进度按原写法精确匹配。认证地区 `certification.region` 按本库配置区域键精确筛选，非空名称、别名或未知键会被拒绝；显式空字符串只匹配不分地区的认证，省略地区则不限。认证地区与可售状态使用同一套区域键，认证不推导可售状态。可用 `{"certification":{"status":"delayed"}}` 查询有延期认证的型号，或用 `date_conflict` 查询实际取证日期待核对的型号。
+标准按规范名、明确别名或键匹配；未知标准返回零条。进度按原写法精确匹配。认证地区 `certification.region` 按本库配置区域键精确筛选，非空名称、别名或未知键会被拒绝。认证地区与可售状态使用同一套区域键，认证不推导可售状态。可用 `{"certification":{"status":"delayed"}}` 查询有延期认证的型号，或用 `date_conflict` 查询实际取证日期待核对的型号。
 
-状态表也可省略状态筛选项的 `region` 表示任一区域，或只给 `region` 表示该区域的任意已记录状态。`planned_eom:true/false` 筛选计划退市标记，仍与其他条件在同一选配组合上求交。`no_record:true` 表示指定区域完全没有记录；省略区域时表示没有任何区域记录，不表示任意一格为空，也不把部分选配无记录推断为整格无记录。`no_record` 不能与 `status` 或 `planned_eom` 同时指定，空筛选项会被拒绝。
+- HTTP `POST /libraries/:id/shelf/query`：省略 `certification.region` 表示不限地区，显式传 `""` 只匹配不分地区的认证。省略 `certification.progress` 表示不限进度，显式传 `""` 只匹配无进度的认证。`as_of` 省略时用当前时间，传入空字符串会报错。
+- MCP `shelf_query`：可选字符串去首尾空白后为空等同省略；空的 `as_of` 用当前时间，空的 `certification.region` 或 `certification.progress` 不筛该字段。只查不分地区的认证时传 `{"certification":{"no_region":true}}`，不能与非空 `region` 同用。`shelf_get` 的空 `as_of` 同样用当前时间，`shelf_guide` 的空 `node_id` 读取库级指南。认证写入时空 `region` 仍表示不分地区。
+
+状态表也可省略状态筛选项的 `region` 表示任一区域，或只给 `region` 表示该区域的任意已记录状态。`planned_eom:true/false` 筛选计划退市标记，仍与其他条件在同一选配组合上求交。`no_record:true` 表示指定区域完全没有记录；省略区域时表示没有任何区域记录，不表示任意一格为空，也不把部分选配无记录推断为整格无记录。`no_record` 不能与 `status` 或 `planned_eom` 同时指定。HTTP 拒绝空筛选项；MCP 跳过归一化后全空的区域状态、参数或组成项，有部分值的项仍按原规则校验。
 
 反查复用同一接口：`{"part_id":"part-id"}` 返回使用该部件的型号；`{"certification":{"standard":"标准写法"}}` 返回具有适用认证的型号。`composition` 可按部件类型指定多个可接受部件。部件归档不会删除已有组成关系，反查与型号详情仍保留这些已记录的使用关系；活动型号与认证清单默认隐藏自身已归档的条目。
 
