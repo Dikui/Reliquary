@@ -74,7 +74,7 @@ func (s *ContentCheckService) Configure(ctx context.Context, in types.ContentChe
 			return apperrors.NewBadRequestError("select an active generation model")
 		}
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		initial := types.ContentCheckSettings{SpaceID: in.SpaceID, Weekday: 1, ScanAfter: time.Now().UTC()}
 		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&initial).Error; err != nil {
 			return err
@@ -115,7 +115,7 @@ func (s *ContentCheckService) List(ctx context.Context, page int) (*types.Conten
 }
 func (s *ContentCheckService) Start(ctx context.Context, previous string) (*types.ContentCheckRun, error) {
 	var run *types.ContentCheckRun
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { var err error; run, err = s.startTx(ctx, tx, previous, false); return err })
+	err := maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error { var err error; run, err = s.startTx(ctx, tx, previous, false); return err })
 	return run, err
 }
 func (s *ContentCheckService) startTx(ctx context.Context, tx *gorm.DB, previous string, scheduled bool) (*types.ContentCheckRun, error) {

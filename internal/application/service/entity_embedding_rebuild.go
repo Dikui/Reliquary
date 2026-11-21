@@ -126,6 +126,16 @@ func nameEntityOutsideExtractedLibrary(db *gorm.DB, spaceID uint64, entityID str
 	return exists, err
 }
 
+func (r *EntityNameEmbeddingRebuilder) RequestRebuild(ctx context.Context, spaceID uint64) error {
+	return maintenanceops.BusinessWriteTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		bound, err := r.WithTransaction(ctx, tx)
+		if err != nil {
+			return err
+		}
+		return bound.MarkAndEnqueue(ctx, spaceID, "administrator")
+	})
+}
+
 // Profile-wide marking happens only at explicit lifecycle triggers, never in
 // mention resolution. Unavailable profiles preserve existing vectors and flags.
 func (r *EntityNameEmbeddingRebuilder) MarkAndEnqueue(ctx context.Context, spaceID uint64, reason string) error {

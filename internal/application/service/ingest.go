@@ -16,6 +16,7 @@ import (
 	"reliquary/internal/diagnostics"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -140,12 +141,24 @@ func (s *entryService) IngestBatch(ctx context.Context, request *types.IngestBat
 	if total > types.MaxIngestInlineRequestBytes {
 		return nil, werrors.NewBadRequestError("inline images exceed the 20 MiB request limit")
 	}
+	var result *types.IngestBatchResult
+	err = s.withInteractiveEntryWrite(ctx, func(ctx context.Context) error {
+		var err error
+		result, err = s.ingestBatchItems(ctx, request)
+		return err
+	})
+	return result, err
+}
+
+// Hold admission for the whole batch so maintenance cannot interrupt it after
+// some item transactions commit and hide their results behind a paused error.
+func (s *entryService) ingestBatchItems(ctx context.Context, request *types.IngestBatchRequest) (*types.IngestBatchResult, error) {
 	result := &types.IngestBatchResult{Items: make([]types.IngestResult, 0, len(request.Items))}
 	for i := range request.Items {
 		item, err := s.ingestWithDiagnostics(ctx, &request.Items[i], i)
 		if err != nil {
 			var identityErr *ingestIdentityError
-			if errors.As(err, &identityErr) {
+			if errors.As(err, &identityErr) || maintenanceops.IsPausedError(err) {
 				return nil, err
 			}
 			var app *werrors.AppError

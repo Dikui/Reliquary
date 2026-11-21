@@ -181,7 +181,7 @@ func (h *EntityHandler) RebuildNameEmbeddings(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if err := h.rebuilder.MarkAndEnqueue(ctx, types.MustSpaceIDFromContext(ctx), "administrator"); err != nil {
+	if err := h.rebuilder.RequestRebuild(ctx, types.MustSpaceIDFromContext(ctx)); err != nil {
 		c.Error(err)
 		return
 	}

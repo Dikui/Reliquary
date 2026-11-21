@@ -11,6 +11,7 @@ import (
 	"reliquary/internal/diagnostics"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/modelcalls"
 	"reliquary/internal/types"
 )
@@ -55,7 +56,7 @@ func (s *entryService) lookupIngestRecovery(ctx context.Context, failure *types.
 }
 
 func technicalIngestError(err error) bool {
-	if err == nil {
+	if err == nil || maintenanceops.IsPausedError(err) {
 		return false
 	}
 	var identity *ingestIdentityError

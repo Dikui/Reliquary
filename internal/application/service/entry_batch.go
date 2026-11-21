@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
 )
@@ -382,7 +383,7 @@ func (s *entryService) GetEntryBatchResult(ctx context.Context, id string, page,
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	if err := s.recoverBatchItems(ctx, id); err != nil {
+	if err := s.recoverBatchItems(ctx, id); err != nil && !maintenanceops.IsPausedError(err) {
 		return nil, err
 	}
 	var all []types.EntryBatchItem
@@ -779,6 +780,9 @@ func (s *entryService) RetryEntryBatch(ctx context.Context, id string) (*types.E
 // Recover ledger state after a terminal dispatcher failure without interrupting live children.
 func (s *entryService) recoverBatchItems(ctx context.Context, id string) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
+			return err
+		}
 		// Serialize recovery with user retries before reading dispatcher or item state.
 		var head taskqueue.Job
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").First(&head, "id=? AND task_type=?", id, types.TypeEntryBatch).Error; err != nil {

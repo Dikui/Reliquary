@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"reliquary/internal/application/service"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/skills"
 )
@@ -241,6 +242,9 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 		}
 		output, err := submitShelf(ctx, entities, in)
 		if err != nil {
+			if maintenanceops.IsPausedError(err) {
+				return nil, nil, err
+			}
 			var app *apperrors.AppError
 			if !errors.As(err, &app) {
 				return nil, nil, err

@@ -17,6 +17,7 @@ import (
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -446,16 +447,22 @@ func (s *entryService) UpdateEntry(ctx context.Context, entry *types.Entry) erro
 		record.CustomMetadata = entry.CustomMetadata
 	}
 
-	if s.db != nil && record.Title != previousTitle && record.SourceKind != "report" &&
-		record.StructuredSummary != nil && record.ParseStatus == types.ParseStatusCompleted {
-		library, err := s.libraryService.GetLibraryByID(ctx, record.LibraryID)
-		if err != nil {
-			return err
+	if s.db != nil {
+		var library *types.Library
+		if record.Title != previousTitle && record.SourceKind != "report" &&
+			record.StructuredSummary != nil && record.ParseStatus == types.ParseStatusCompleted {
+			library, err = s.libraryService.GetLibraryByID(ctx, record.LibraryID)
+			if err != nil {
+				return err
+			}
 		}
 		// Keep a title change and its vector atomic when the provider fails.
-		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 			if err := repository.NewEntryRepository(tx).UpdateEntry(ctx, record); err != nil {
 				return err
+			}
+			if library == nil {
+				return nil
 			}
 			return indexArticleEmbedding(ctx, tx, s.modelService, library, record)
 		}); err != nil {

@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"reliquary/internal/application/graph"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -195,7 +196,7 @@ func (s *EntityService) MergeManagedEntities(ctx context.Context, id string, inp
 		return nil, err
 	}
 	var target *types.Entity
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
@@ -327,7 +328,7 @@ func (s *EntityService) SplitManagedEntity(ctx context.Context, id string, input
 		return nil, err
 	}
 	var target *types.Entity
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}

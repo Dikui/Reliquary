@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/graph"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -162,7 +163,7 @@ func (s *EntityService) createManagedEntity(ctx context.Context, libraryID strin
 		return nil, apperrors.NewUnauthorizedError("entity editor required")
 	}
 	entity := types.Entity{ID: id, SpaceID: spaceID, LibraryID: libraryID, EntityType: "product", Kind: input.Kind, Code: input.Code, CanonicalName: input.Name, Description: input.Description, Attributes: input.Attributes, AutoMatch: input.AutoMatch, Revision: 1, CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
@@ -232,7 +233,7 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		return nil, apperrors.NewBadRequestError("effective_at requires attributes")
 	}
 	var entity types.Entity
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
@@ -404,7 +405,7 @@ func (s *EntityService) DeleteManagedEntity(ctx context.Context, id string, revi
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return apperrors.NewUnauthorizedError("entity editor required")
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}

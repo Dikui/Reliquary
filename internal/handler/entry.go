@@ -1017,6 +1017,10 @@ func (h *EntryHandler) UpdateEntry(c *gin.Context) {
 	}
 
 	if err := h.kgService.UpdateEntry(effCtx, &entry); err != nil {
+		if appErr, ok := errors.IsAppError(err); ok {
+			c.Error(appErr)
+			return
+		}
 		logger.ErrorWithFields(ctx, err, nil)
 		c.Error(errors.NewInternalServerError(err.Error()))
 		return

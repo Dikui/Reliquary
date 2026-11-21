@@ -7,6 +7,7 @@ import (
 	"time"
 
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 
 	"gorm.io/gorm"
@@ -87,7 +88,7 @@ func (s *FollowService) Follow(ctx context.Context, targetType, targetID string)
 		return nil, werrors.NewUnauthorizedError("authenticated follow actor required")
 	}
 	var target *types.FollowTarget
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		var err error
 		target, err = resolveFollowTarget(tx, spaceID, targetType, targetID)
 		if err != nil {
@@ -132,7 +133,7 @@ func (s *FollowService) Unfollow(ctx context.Context, targetType, targetID strin
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return werrors.NewUnauthorizedError("authenticated follow actor required")
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		target, err := resolveFollowTarget(tx, spaceID, targetType, targetID)
 		if err != nil {
 			var appErr *werrors.AppError
