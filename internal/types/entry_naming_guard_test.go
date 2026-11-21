@@ -103,6 +103,26 @@ var entryNamingExceptions = map[string]entryNamingException{
 		Reason: "既有模型类型 KnowledgeQA 保持原值",
 		Tokens: []string{"KnowledgeQA"},
 	},
+	"internal/router/maintenance_write_pg_test.go": {
+		Reason: "既有模型类型 KnowledgeQA 保持原值",
+		Tokens: []string{"KnowledgeQA"},
+	},
+	"internal/maintenance/delivery.go": {
+		Reason: "交付包按既有模型类型 KnowledgeQA 识别 ChatGPT 聊天模型",
+		Tokens: []string{"KnowledgeQA"},
+	},
+	"internal/maintenance/delivery_test.go": {
+		Reason: "既有模型类型 KnowledgeQA 保持原值",
+		Tokens: []string{"KnowledgeQA"},
+	},
+	"internal/maintenance/delivery_pg_test.go": {
+		Reason: "既有模型类型 KnowledgeQA 保持原值",
+		Tokens: []string{"KnowledgeQA"},
+	},
+	"internal/maintenance/verify.go": {
+		Reason: "恢复核对按既有模型类型 KnowledgeQA 识别 ChatGPT 聊天模型的重新绑定",
+		Tokens: []string{"KnowledgeQA"},
+	},
 	"frontend/src/views/library/components/ShelfSettingsPage.vue": {
 		Reason: "既有模型类型 KnowledgeQA 保持原值",
 		Tokens: []string{"KnowledgeQA"},
