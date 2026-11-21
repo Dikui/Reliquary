@@ -63,7 +63,7 @@ func (r *EmbeddingRebuilder) StartCandidateAndEnqueue(ctx context.Context, space
 func (r *EmbeddingRebuilder) candidateContent(ctx context.Context, db *gorm.DB, spaceID uint64, item types.EmbeddingRebuildItem) (string, *types.Entry, string, error) {
 	if item.Kind == "entity" {
 		var entity types.Entity
-		if err := db.WithContext(ctx).Where("space_id=? AND id=? AND merged_into_id=''", spaceID, item.SourceID).First(&entity).Error; err != nil {
+		if err := extractedNameEntities(db.WithContext(ctx), spaceID).Where("id=?", item.SourceID).First(&entity).Error; err != nil {
 			return "", nil, "", err
 		}
 		return entityNameEmbeddingText(entity.CanonicalName, entity.EntityType, entity.Description), nil, "", nil
@@ -124,6 +124,11 @@ func (r *EmbeddingRebuilder) candidateInput(ctx context.Context, db *gorm.DB, sp
 func (r *EmbeddingRebuilder) prepareCandidateItem(ctx context.Context, run *types.EmbeddingRebuildRun, item types.EmbeddingRebuildItem, p entityEmbeddingProfile) (embeddingItemWrite, error) {
 	input, contentHash, entry, err := r.candidateInput(ctx, r.db, run.SpaceID, item, p.embedder, false)
 	if err != nil {
+		if item.Kind == "entity" && errors.Is(err, gorm.ErrRecordNotFound) {
+			if excluded, lookupErr := nameEntityOutsideExtractedLibrary(r.db.WithContext(ctx), run.SpaceID, item.SourceID); lookupErr != nil || excluded {
+				return nil, lookupErr
+			}
+		}
 		return nil, err
 	}
 	var vector []float32
@@ -159,6 +164,14 @@ func (r *EmbeddingRebuilder) prepareCandidateItem(ctx context.Context, run *type
 		row.EntryID, row.LibraryID = entry.ID, entry.LibraryID
 	}
 	return func(tx *gorm.DB) error {
+		if item.Kind == "entity" {
+			if err := lockEntitySpaceShared(tx, run.SpaceID); err != nil {
+				return err
+			}
+			if excluded, err := nameEntityOutsideExtractedLibrary(tx, run.SpaceID, item.SourceID); err != nil || excluded {
+				return err
+			}
+		}
 		_, currentHash, _, err := r.candidateInput(ctx, tx, run.SpaceID, item, p.embedder, true)
 		if err != nil {
 			return err
@@ -200,11 +213,18 @@ func (r *EmbeddingRebuilder) SwitchCandidate(ctx context.Context, spaceID uint64
 		if err != nil {
 			return err
 		}
+		// Older runs may include catalog entities that no longer need vectors.
+		excluded := `source.kind='entity' AND EXISTS (
+ SELECT 1 FROM entities WHERE entities.id=source.source_id AND entities.space_id=? AND NOT (` + extractedEntityLibrarySQL + `))`
 		var vectors []candidateVector
-		if err := tx.Where("run_id=?", run.ID).Find(&vectors).Error; err != nil {
+		if err := tx.Table("embedding_rebuild_vectors source").Where("source.run_id=?", run.ID).Where("NOT ("+excluded+")", spaceID).Find(&vectors).Error; err != nil {
 			return err
 		}
-		if int64(len(vectors)) != run.TotalCount {
+		var excludedItems int64
+		if err := tx.Table("embedding_rebuild_items source").Where("source.run_id=?", run.ID).Where(excluded, spaceID).Count(&excludedItems).Error; err != nil {
+			return err
+		}
+		if int64(len(vectors)) != run.TotalCount-excludedItems {
 			return apperrors.NewBadRequestError("candidate vectors are incomplete")
 		}
 		var count int64
@@ -252,7 +272,7 @@ func (r *EmbeddingRebuilder) SwitchCandidate(ctx context.Context, spaceID uint64
 			case v.Kind == "image":
 				err = tx.Exec(`INSERT INTO image_embeddings(entry_id,space_id,library_id,attachment_path,model_id,dimension,embedding,content_hash) VALUES (?,?,?,?,?,?,?,?)`, v.EntryID, spaceID, v.LibraryID, v.AttachmentPath, v.ModelID, v.Dimension, v.Embedding, v.ContentHash).Error
 			case v.Kind == "entity":
-				err = tx.Model(&types.Entity{}).Where("id=? AND space_id=?", v.SourceID, spaceID).Updates(map[string]any{"name_embedding": types.EntityNameEmbedding(v.Embedding.Slice()), "embedding_model_id": v.ModelID, "embedding_dimension": v.Dimension, "embedding_needs_rebuild": false}).Error
+				err = extractedNameEntities(tx, spaceID).Where("id=?", v.SourceID).Updates(map[string]any{"name_embedding": types.EntityNameEmbedding(v.Embedding.Slice()), "embedding_model_id": v.ModelID, "embedding_dimension": v.Dimension, "embedding_needs_rebuild": false}).Error
 			default:
 				return fmt.Errorf("unknown vector kind %s", v.Kind)
 			}

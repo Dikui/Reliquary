@@ -33,6 +33,11 @@ def reachable(url):
 def main(ollama):
     if not (DEPLOY / '.env').is_file():
         raise RuntimeError('Deployment .env is missing')
+    marker = DEPLOY / 'customer-install.json'
+    if marker.is_file():
+        installation = json.loads(marker.read_text())
+        if installation.get('data') and installation.get('status') != 'base_ready':
+            raise RuntimeError('Data installation is in progress; continue with install-local.py --install --data')
     if (DEPLOY / '.maintenance-schedule/local-upgrade.pending.json').is_file():
         raise RuntimeError('Database upgrade is pending; inspect it with reliquary-admin')
     if ollama and not reachable('http://127.0.0.1:11434/api/tags'):

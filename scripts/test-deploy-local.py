@@ -1,6 +1,7 @@
 """Exercise local deployment selection and rollback without Docker or npm."""
 import importlib.util
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stdout
+import io
 import json
 import os
 from pathlib import Path
@@ -153,6 +154,153 @@ class DeploymentTests(unittest.TestCase):
                 with self.assertRaisesRegex(deployer.admin.AdminError, error):
                     deployer.deploy(source, directory, all_services=True)
             run.assert_not_called()
+
+    def config_plan(self, directory, *paths):
+        ctx = mock.Mock(env={'COMPOSE_FILE': 'docker-compose.yml'})
+        return deployer.DeploymentPlan(ctx, 'new', {}, {'app': 'old'}, ['app', 'frontend'], False, set(paths))
+
+    def test_new_environment_defaults_preserve_customer_values_and_report_removed_keys(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        env = directory / '.env'
+        env.write_text("COMPOSE_FILE=docker-compose.yml\nCUSTOM='keep $literal'\nREMOVED=customer\nCHANGED=customer\n")
+        before = env.read_bytes()
+        (source / '.env.example').write_text('CUSTOM=template\nCHANGED=new\nDEFAULT=enabled\nJWT_SECRET=placeholder\nEMPTY=\n')
+        plan = self.config_plan(directory, '.env.example')
+        summary = []
+        with mock.patch.object(deployer, 'revision_file', return_value=b'REMOVED=before\nCHANGED=old\n'), \
+             deployer.runtime_update(source, directory, plan, mock.Mock(), summary):
+            values = deployer.admin.read_env(env)
+            self.assertEqual({key: values[key] for key in ('CUSTOM', 'REMOVED', 'CHANGED', 'DEFAULT')},
+                             {'CUSTOM': 'keep $literal', 'REMOVED': 'customer', 'CHANGED': 'customer', 'DEFAULT': 'enabled'})
+            self.assertRegex(values['JWT_SECRET'], r'^[0-9a-f]{64}$')
+            self.assertNotIn('EMPTY', values)
+            self.assertTrue(env.read_bytes().startswith(before))
+            self.assertEqual(plan.ctx.env['DEFAULT'], 'enabled')
+        self.assertIn('REMOVED 已从模板删除', '\n'.join(summary))
+        self.assertIn('CHANGED 的模板默认值已变更', '\n'.join(summary))
+        self.assertNotIn(values['JWT_SECRET'], '\n'.join(summary))
+        backup, = (directory / '.maintenance-schedule').glob('runtime-config-*')
+        self.assertEqual((backup / '.env').read_bytes(), before)
+        self.assertEqual(backup.stat().st_mode & 0o777, 0o700)
+
+    def test_external_credential_must_be_supplied_before_update(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        (source / '.env.example').write_text('DEFAULT=enabled\nREMOTE_API_KEY=placeholder\n')
+        env = directory / '.env'
+        before = env.read_bytes()
+        plan = self.config_plan(directory, '.env.example')
+        with mock.patch.object(deployer, 'revision_file', return_value=None):
+            with self.assertRaisesRegex(deployer.admin.AdminError, 'REMOTE_API_KEY'):
+                with deployer.runtime_update(source, directory, plan, mock.Mock(), []):
+                    self.fail('Deployment must be blocked before runtime writes')
+            self.assertEqual(env.read_bytes(), before)
+            with env.open('a') as stream:
+                stream.write('REMOTE_API_KEY="provided-by-customer"\n')
+            with deployer.runtime_update(source, directory, plan, mock.Mock(), []):
+                self.assertEqual(deployer.admin.read_env(env)['REMOTE_API_KEY'], 'provided-by-customer')
+
+    def compose_fixture(self, source, directory, *, custom=False, infrastructure=False):
+        old = {'name': 'customer', 'services': {
+            'app': {'image': 'template-app', 'pull_policy': 'never', 'environment': {'EXAMPLE': 'old'}},
+            'frontend': {'image': 'template-ui', 'pull_policy': 'never'},
+            'postgres': {'image': 'pg:1'},
+        }}
+        new = json.loads(json.dumps(old))
+        new['services']['app']['environment']['EXAMPLE'] = 'new'
+        if infrastructure:
+            new['services']['postgres']['image'] = 'pg:2'
+        runtime = json.loads(json.dumps(old))
+        runtime['services']['app']['image'] = 'installed-app'
+        runtime['services']['frontend']['image'] = 'installed-ui'
+        if custom:
+            runtime['services']['app']['environment']['EXAMPLE'] = 'customer edit'
+        (directory / 'docker-compose.yml').write_text(json.dumps(runtime))
+        (source / 'docker-compose.yml').write_text(json.dumps(new))
+        (directory / 'config/prompt_templates').mkdir(parents=True)
+        (directory / 'config/prompt_templates/processing.yaml').write_text('custom prompt')
+        (directory / 'config/config.yaml').write_text('old config')
+        (source / 'config').mkdir()
+        (source / 'config/config.yaml').write_text('new config')
+        baselines = {'docker-compose.yml': json.dumps(old).encode(), 'config/config.yaml': b'old config'}
+        return baselines
+
+    def test_generated_compose_and_config_preserve_images_and_prompt_templates(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        baselines = self.compose_fixture(source, directory)
+        plan = self.config_plan(directory, *baselines)
+        with mock.patch.object(deployer, 'revision_file', side_effect=lambda _s, _r, name: baselines[name]), \
+             deployer.runtime_update(source, directory, plan, lambda path, *_: json.loads(path.read_text()), []):
+            services = json.loads((directory / 'docker-compose.yml').read_text())['services']
+            self.assertEqual(services['app']['image'], 'installed-app')
+            self.assertEqual(services['frontend']['image'], 'installed-ui')
+            self.assertEqual(services['app']['environment']['EXAMPLE'], 'new')
+            self.assertEqual((directory / 'config/config.yaml').read_text(), 'new config')
+            self.assertEqual((directory / 'config/prompt_templates/processing.yaml').read_text(), 'custom prompt')
+        plan.ctx.compose.assert_called_once_with('config', '--quiet')
+
+    def test_custom_config_and_infrastructure_changes_require_manual_sync(self):
+        for changed in ('compose', 'config', 'infra'):
+            with self.subTest(changed=changed):
+                temp, source, directory = self.fixture()
+                self.addCleanup(temp.cleanup)
+                baselines = self.compose_fixture(source, directory, custom=changed == 'compose',
+                                                 infrastructure=changed == 'infra')
+                if changed == 'config':
+                    (directory / 'config/config.yaml').write_text('customer config')
+                before = {name: (directory / name).read_bytes() for name in baselines}
+                plan = self.config_plan(directory, *baselines)
+                with mock.patch.object(deployer, 'revision_file', side_effect=lambda _s, _r, name: baselines[name]), \
+                     self.assertRaisesRegex(deployer.admin.AdminError, '需要人工合并'):
+                    with deployer.runtime_update(source, directory, plan, lambda path, *_: json.loads(path.read_text()), []):
+                        self.fail('Deployment must be blocked by runtime customization')
+                self.assertEqual({name: (directory / name).read_bytes() for name in baselines}, before)
+
+    def test_runtime_files_are_rolled_back_if_starting_new_services_fails(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        baselines = self.compose_fixture(source, directory)
+        plan = self.config_plan(directory, *baselines)._replace(images={
+            name: {'reference': 'old-' + name, 'id': 'old-' + name} for name in deployer.SERVICES})
+        before = {name: (directory / name).read_bytes() for name in baselines}
+        env = (directory / '.env').read_bytes()
+        starts = []
+
+        def start(_ctx, _services):
+            starts.append((directory / 'config/config.yaml').read_bytes())
+            if starts[-1] == b'new config':
+                raise deployer.admin.AdminError('app failed')
+
+        with mock.patch.object(deployer, 'revision_file', side_effect=lambda _s, _r, name: baselines[name]), \
+             mock.patch.object(deployer.admin, 'build_service_images', return_value={}), \
+             mock.patch.object(deployer.admin, 'image_override', return_value={}), \
+             mock.patch.object(deployer.admin, 'start_application_services', side_effect=start), \
+             mock.patch.object(deployer.admin, 'record_runtime'), \
+             self.assertRaisesRegex(deployer.admin.AdminError, 'app failed'):
+            plan.ctx.root = directory
+            plan.revisions['frontend'] = 'old'
+            with deployer.runtime_update(source, directory, plan, lambda path, *_: json.loads(path.read_text()), []) as rollback:
+                deployer.apply_update(source, directory, plan, container_frontend=True, rollback_runtime=rollback)
+        self.assertEqual(starts, [b'new config', b'old config'])
+        self.assertEqual({name: (directory / name).read_bytes() for name in baselines}, before)
+        self.assertEqual((directory / '.env').read_bytes(), env)
+
+    def test_upgrade_notes_use_semver_with_exclusive_current_and_inclusive_target(self):
+        temp, source, _directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        (source / 'docs').mkdir()
+        (source / 'docs/upgrade-notes.md').write_text(
+            '# Notes\n\n## 0.17.11\nLater\n\n## 0.17.10\nVerify\n\n'
+            '## 0.17.10-rc.10\nPrepare\n\n## 0.17.10-rc.2\nAlready applied\n\n## 0.17.2\nEarlier\n')
+        with redirect_stdout(io.StringIO()) as output:
+            deployer.print_upgrade_notes(source, '0.17.10-rc.2', '0.17.10+rebuild')
+        self.assertIn('Prepare', output.getvalue())
+        self.assertIn('Verify', output.getvalue())
+        self.assertLess(output.getvalue().index('Prepare'), output.getvalue().index('Verify'))
+        for excluded in ('Later', 'Already applied', 'Earlier'):
+            self.assertNotIn(excluded, output.getvalue())
 
     def test_failed_update_restores_files_and_restarts_old_service(self):
         temp, source, directory = self.fixture()

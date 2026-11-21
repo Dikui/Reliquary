@@ -272,7 +272,11 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 			}
 			result.Differences = append(result.Differences, maintenance.CompareManifestWithSettings(&wanted, actual, maintenance.CompareOptions{AllowModelChange: *allowModelChange, AllowOperationLogAppend: *allowOperationLogAppend, AllowReconfigurationAppend: *allowReconfigurationAppend})...)
 			if *vectors && !*allowModelChange {
-				result.Differences = append(result.Differences, maintenance.CompareVectors(&wanted, actual)...)
+				differences, err := maintenance.CompareRestoredVectors(ctx, db, &wanted, actual)
+				if err != nil {
+					return err
+				}
+				result.Differences = append(result.Differences, differences...)
 			}
 			result.OK = len(result.Differences) == 0
 		}
@@ -307,6 +311,10 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 		return emit(result)
 	case "models":
 		models, err := maintenance.Models(ctx, db)
+		if err != nil {
+			return err
+		}
+		embeddingRequired, err := service.EmbeddingRequired(ctx, db, types.SingleSpaceID)
 		if err != nil {
 			return err
 		}
@@ -368,7 +376,7 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 			generationIDs = append(generationIDs, id)
 		}
 		sort.Strings(generationIDs)
-		return emit(map[string]any{"models": models, "selected_embedding": selected, "selected_model_ids": selectedIDs, "selected_generation_ids": generationIDs})
+		return emit(map[string]any{"models": models, "selected_embedding": selected, "embedding_required": embeddingRequired, "selected_model_ids": selectedIDs, "selected_generation_ids": generationIDs})
 	case "model-test":
 		flags := flag.NewFlagSet("model-test", flag.ContinueOnError)
 		flags.SetOutput(io.Discard)

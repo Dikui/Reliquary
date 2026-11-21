@@ -45,6 +45,8 @@ type Manifest struct {
 	Vectors            []VectorProfile          `json:"vectors"`
 	Required           []Requirement            `json:"required_credentials"`
 	CollectionExports  []CollectionExportProof  `json:"collection_exports,omitempty"`
+
+	ExtractedEntityVectorsOnly bool `json:"extracted_entity_vectors_only,omitempty"`
 }
 type Verification struct {
 	OK             bool             `json:"ok"`
@@ -175,7 +177,8 @@ func buildManifest(ctx context.Context, db *gorm.DB, root, uploads string, datab
 	if err != nil {
 		return nil, err
 	}
-	manifest.Vectors, err = VectorProfiles(ctx, db)
+	manifest.ExtractedEntityVectorsOnly = db.Migrator().HasColumn("libraries", "entity_mode")
+	manifest.Vectors, err = vectorProfiles(ctx, db, manifest.ExtractedEntityVectorsOnly)
 	if err != nil {
 		return nil, err
 	}

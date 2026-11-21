@@ -16,6 +16,8 @@ import (
 	"reliquary/internal/maintenance"
 	"reliquary/internal/types"
 	"reliquary/internal/vaultpath"
+
+	"gorm.io/gorm"
 )
 
 func (v *VaultService) StartReplica() error {
@@ -56,17 +58,64 @@ func (v *VaultService) VerifyRuntime(ctx context.Context) (*maintenance.Verifica
 	return v.verify(ctx, false, false)
 }
 
+const (
+	articleVectorSourcesSQL = `FROM entries k JOIN libraries b ON b.id=k.library_id WHERE k.deleted_at IS NULL AND k.source_kind IN ('article','mine') AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true'`
+	chunkVectorSourcesSQL   = `FROM chunks c JOIN libraries b ON b.id=c.library_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true'`
+	imageModelSupportsSQL   = `COALESCE((m.parameters #>> '{embedding_parameters,supports_images}')::boolean,false)`
+)
+
+func maintenanceEmbeddingModelSQL(db *gorm.DB) string {
+	// Historical offline verification must not assume migration 10 has run.
+	if !db.Migrator().HasColumn("spaces", "embedding_model_id") {
+		return "COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)"
+	}
+	return "(SELECT s.embedding_model_id FROM spaces s WHERE s.id=b.space_id)"
+}
+
+// EmbeddingRequired checks for vector sources, including sources with existing vectors.
+func EmbeddingRequired(ctx context.Context, db *gorm.DB, spaceID uint64) (bool, error) {
+	db = db.WithContext(ctx)
+	entitySources := "SELECT 1 FROM entities WHERE space_id=? AND merged_into_id=''"
+	if db.Migrator().HasColumn("libraries", "entity_mode") {
+		entitySources += " AND " + extractedEntityLibrarySQL
+	}
+	var required bool
+	if err := db.Raw("SELECT EXISTS (SELECT 1 "+chunkVectorSourcesSQL+" AND b.deleted_at IS NULL AND b.space_id=?)"+
+		" OR EXISTS (SELECT 1 "+articleVectorSourcesSQL+" AND b.deleted_at IS NULL AND b.space_id=?)"+
+		" OR EXISTS ("+entitySources+")", spaceID, spaceID, spaceID).Scan(&required).Error; err != nil || required {
+		return required, err
+	}
+	// Use the same saved-body references and model capability as vault verification.
+	rows, err := db.Raw(`SELECT k.id,k.source_kind,k.vault_path,k.vault_body FROM entries k
+ JOIN libraries b ON b.id=k.library_id JOIN models m ON m.id=`+maintenanceEmbeddingModelSQL(db)+`
+ WHERE k.deleted_at IS NULL AND k.vault_path<>'' AND b.deleted_at IS NULL AND b.space_id=?
+ AND b.indexing_strategy->>'vector_enabled'='true' AND `+imageModelSupportsSQL, spaceID).Rows()
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var entry types.Entry
+		if err := rows.Scan(&entry.ID, &entry.SourceKind, &entry.VaultPath, &entry.VaultBody); err != nil {
+			return false, err
+		}
+		if entry.SourceKind == "report" && vaultpath.UserMetadata(entry.VaultPath) {
+			continue
+		}
+		if len(articleImagePaths(&entry)) > 0 {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
 func (v *VaultService) verify(ctx context.Context, repair, exported bool) (*maintenance.Verification, error) {
 	result := &maintenance.Verification{OK: true, Differences: []string{}, Repaired: []string{}}
 	legacy := !v.db.Migrator().HasColumn("libraries", "directory")
 	if legacy && repair {
 		return result, fmt.Errorf("legacy vault repair requires its matching release")
 	}
-	// Historical offline verification must not assume migration 10 has run.
-	embeddingModelSQL := "(SELECT s.embedding_model_id FROM spaces s WHERE s.id=b.space_id)"
-	if !v.db.Migrator().HasColumn("spaces", "embedding_model_id") {
-		embeddingModelSQL = "COALESCE(NULLIF(b.model_tiers->>'embedding',''),b.embedding_model_id)"
-	}
+	embeddingModelSQL := maintenanceEmbeddingModelSQL(v.db)
 	var pendingImages int64
 	var articles []types.Entry
 	if err := v.db.WithContext(ctx).Unscoped().Where("vault_path<>'' AND deleted_at IS NULL").Find(&articles).Error; err != nil {
@@ -144,7 +193,7 @@ func (v *VaultService) verify(ctx context.Context, repair, exported bool) (*main
 			}
 			if expected == "" {
 				var supports bool
-				if err := v.db.WithContext(ctx).Raw(`SELECT COALESCE((m.parameters #>> '{embedding_parameters,supports_images}')::boolean,false) FROM libraries b JOIN models m ON m.id=`+embeddingModelSQL+` WHERE b.id=? AND b.indexing_strategy->>'vector_enabled'='true'`, article.LibraryID).Scan(&supports).Error; err != nil {
+				if err := v.db.WithContext(ctx).Raw(`SELECT `+imageModelSupportsSQL+` FROM libraries b JOIN models m ON m.id=`+embeddingModelSQL+` WHERE b.id=? AND b.indexing_strategy->>'vector_enabled'='true'`, article.LibraryID).Scan(&supports).Error; err != nil {
 					return result, err
 				}
 				if supports {
@@ -197,16 +246,20 @@ func (v *VaultService) verify(ctx context.Context, repair, exported bool) (*main
 	if pendingImages > 0 {
 		result.PendingVectors["images"] = pendingImages
 	}
-	for key, query := range map[string]string{
-		"articles": `SELECT count(*) FROM entries k JOIN libraries b ON b.id=k.library_id WHERE k.deleted_at IS NULL AND k.source_kind IN ('article','mine') AND k.parse_status='completed' AND k.structured_summary IS NOT NULL AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=EMBEDDING_MODEL_SQL)`,
-		"chunks":   `SELECT count(*) FROM chunks c JOIN libraries b ON b.id=c.library_id WHERE c.deleted_at IS NULL AND c.is_enabled AND b.indexing_strategy->>'vector_enabled'='true' AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=EMBEDDING_MODEL_SQL)`,
-		"entities": `SELECT count(*) FROM entities e WHERE e.merged_into_id='' AND EXISTS(
+	entityGaps := `SELECT count(*) FROM entities WHERE merged_into_id='' AND EXISTS(
  SELECT 1 FROM libraries b LEFT JOIN models m ON m.id=EMBEDDING_MODEL_SQL
- WHERE b.space_id=e.space_id AND b.deleted_at IS NULL AND b.indexing_strategy->>'vector_enabled'='true' AND (
- e.name_embedding IS NULL OR e.embedding_needs_rebuild OR m.id IS NULL OR m.type<>'Embedding'
- OR e.embedding_model_id<>m.id OR e.embedding_dimension<>vector_dims(e.name_embedding)
+ WHERE b.space_id=entities.space_id AND b.deleted_at IS NULL AND b.indexing_strategy->>'vector_enabled'='true' AND (
+ entities.name_embedding IS NULL OR entities.embedding_needs_rebuild OR m.id IS NULL OR m.type<>'Embedding'
+ OR entities.embedding_model_id<>m.id OR entities.embedding_dimension<>vector_dims(entities.name_embedding)
  OR (COALESCE(NULLIF((m.parameters #>> '{embedding_parameters,dimension}')::int,0),NULLIF((m.parameters->>'dimension')::int,0),0)>0
- AND e.embedding_dimension<>COALESCE(NULLIF((m.parameters #>> '{embedding_parameters,dimension}')::int,0),NULLIF((m.parameters->>'dimension')::int,0),0))))`,
+ AND entities.embedding_dimension<>COALESCE(NULLIF((m.parameters #>> '{embedding_parameters,dimension}')::int,0),NULLIF((m.parameters->>'dimension')::int,0),0))))`
+	if v.db.Migrator().HasColumn("libraries", "entity_mode") {
+		entityGaps += " AND " + extractedEntityLibrarySQL
+	}
+	for key, query := range map[string]string{
+		"articles": "SELECT count(*) " + articleVectorSourcesSQL + " AND NOT EXISTS(SELECT 1 FROM article_embeddings e WHERE e.entry_id=k.id AND e.model_id=EMBEDDING_MODEL_SQL)",
+		"chunks":   "SELECT count(*) " + chunkVectorSourcesSQL + " AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.model_id=EMBEDDING_MODEL_SQL)",
+		"entities": entityGaps,
 	} {
 		var count int64
 		if err := v.db.WithContext(ctx).Raw(strings.ReplaceAll(query, "EMBEDDING_MODEL_SQL", embeddingModelSQL)).Scan(&count).Error; err != nil {

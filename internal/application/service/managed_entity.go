@@ -161,7 +161,7 @@ func (s *EntityService) createManagedEntity(ctx context.Context, libraryID strin
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, apperrors.NewUnauthorizedError("entity editor required")
 	}
-	entity := types.Entity{ID: id, SpaceID: spaceID, LibraryID: libraryID, EntityType: "product", Kind: input.Kind, Code: input.Code, CanonicalName: input.Name, Description: input.Description, Attributes: input.Attributes, AutoMatch: input.AutoMatch, Revision: 1, EmbeddingNeedsRebuild: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	entity := types.Entity{ID: id, SpaceID: spaceID, LibraryID: libraryID, EntityType: "product", Kind: input.Kind, Code: input.Code, CanonicalName: input.Name, Description: input.Description, Attributes: input.Attributes, AutoMatch: input.AutoMatch, Revision: 1, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
@@ -206,9 +206,6 @@ func (s *EntityService) createManagedEntity(ctx context.Context, libraryID strin
 		}
 		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "create_entity", entity.ID, nil, entity); err != nil {
 			return err
-		}
-		if s.nameEmbeddingRebuilder != nil {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "managed_entity_created")
 		}
 		return nil
 	})
@@ -340,9 +337,6 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 			entity.ArchivedAt = nil
 		}
 		entity.Revision++
-		if before.CanonicalName != entity.CanonicalName || before.Description != entity.Description {
-			entity.EmbeddingNeedsRebuild = true
-		}
 		entity.UpdatedAt = time.Now()
 		if err := tx.Save(&entity).Error; err != nil {
 			return err
@@ -393,9 +387,6 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		}
 		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "update_entity", id, before, entity); err != nil {
 			return err
-		}
-		if s.nameEmbeddingRebuilder != nil && (before.CanonicalName != entity.CanonicalName || before.Description != entity.Description) {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "managed_entity_updated")
 		}
 		return nil
 	})

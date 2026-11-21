@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import secrets
 import shlex
 import shutil
@@ -18,6 +19,8 @@ import reliquary_admin as admin
 
 SOURCE = Path(__file__).resolve().parent.parent
 LABEL = 'com.reliquary.autostart'
+BASE_SERVICES = ('postgres', 'redis', 'neo4j')
+RESTORE_STATE = '.maintenance-restore.json'
 
 
 def runtime_compose(config, project):
@@ -51,7 +54,14 @@ def run(*args, **kwargs):
     return subprocess.check_output(args, text=True, **kwargs)
 
 
-def prepare(root, env_file, project):
+def render_runtime_compose(template, env_path, project):
+    config = json.loads(run('docker', 'compose', '--project-name', project, '--env-file', str(env_path),
+                            '--file', str(template), 'config', '--no-interpolate',
+                            '--no-env-resolution', '--no-path-resolution', '--format', 'json'))
+    return runtime_compose(config, project)
+
+
+def prepare(root, env_file, project, *, record=None):
     deploy = root / 'deploy'
     if deploy.exists():
         raise ValueError('deploy/ already exists; refusing to overwrite its configuration')
@@ -74,10 +84,8 @@ def prepare(root, env_file, project):
         env_path = stage / '.env'
         env_path.touch(mode=0o600)
         env_path.write_text(deployment_env(text, root, project))
-        config = json.loads(run(docker, 'compose', '--project-name', project, '--env-file', str(env_path),
-                                '--file', str(SOURCE / 'docker-compose.yml'), 'config', '--no-interpolate',
-                                '--no-env-resolution', '--no-path-resolution', '--format', 'json'))
-        (stage / 'docker-compose.yml').write_text(json.dumps(runtime_compose(config, project), indent=2) + '\n')
+        config = render_runtime_compose(SOURCE / 'docker-compose.yml', env_path, project)
+        (stage / 'docker-compose.yml').write_text(json.dumps(config, indent=2) + '\n')
         shutil.copytree(SOURCE / 'config', stage / 'config')
         for name in ('reliquary-admin', 'VERSION'):
             shutil.copy2(SOURCE / name, stage / name)
@@ -87,6 +95,8 @@ def prepare(root, env_file, project):
         for directory in ('scripts', 'data/vault', 'data/files', 'logs/diagnostics', 'backups'):
             (root / directory).mkdir(parents=True, exist_ok=True, mode=0o700)
         shutil.copy2(SOURCE / 'scripts/startup-local.py', root / 'scripts/startup.py')
+        if record is not None:
+            admin.json_write(stage / 'customer-install.json', record)
         stage.rename(deploy)
     print(f'Prepared {deploy}. Review .env, build images from source, then start from deploy/.')
 
@@ -147,62 +157,42 @@ def offer_pi(root, agent):
         print(f'稍后配置本地 Pi 时运行：{command}')
 
 
-def install(root, env_file, project, app_port=None, frontend_port=None):
+def require_unused_project(project):
+    for resource in ('container', 'volume', 'network'):
+        existing = run('docker', resource, 'ls', '-q', '--filter', f'label=com.docker.compose.project={project}')
+        if existing.strip():
+            raise ValueError('Compose project already exists; choose an unused --project-name for this installation')
+
+
+def install(root, env_file, project, app_port=None, frontend_port=None, *, data=None, retry_command=None):
     """Resume first installation without overwriting any existing configuration."""
     for command in ('docker', 'git'):
         if not shutil.which(command):
             raise ValueError(f'{command} is required; see docs/local-deployment.md#客户全新安装')
+    if data is not None:
+        return install_data(root, env_file, project, app_port, frontend_port, data, retry_command)
     deploy = root / 'deploy'
     marker = deploy / 'customer-install.json'
     if deploy.exists() and not marker.exists():
         raise ValueError('This command installs into a new runtime directory; existing deployments use their upgrade procedure')
     if not deploy.exists():
-        for resource in ('container', 'volume', 'network'):
-            existing = run('docker', resource, 'ls', '-q', '--filter', f'label=com.docker.compose.project={project}')
-            if existing.strip():
-                raise ValueError('Compose project already exists; choose an unused --project-name for this installation')
+        require_unused_project(project)
         prepare(root, env_file, project)
         marker.write_text(json.dumps({'project': project, 'status': 'prepared'}) + '\n')
     values = deployment_values(deploy / '.env')
     if values.get('COMPOSE_PROJECT_NAME') != project:
         raise ValueError('Existing installation has a different project name')
-    if json.loads(marker.read_text()).get('status') == 'base_ready':
+    record = json.loads(marker.read_text())
+    if record.get('data'):
+        raise ValueError('本次安装需要原 --data 参数。安装完成后请使用 --update。')
+    if record.get('status') == 'base_ready':
         shutil.copy2(SOURCE / 'scripts/agent-local.py', root / 'scripts/agent-local.py')
         print(f'基础安装已完成。需要飞书对话入口时运行：python3 "{root / "scripts/agent-local.py"}" configure')
         offer_pi(root, load_agent())
         return
-    for key, port in [('APP_PORT', app_port), ('FRONTEND_PORT', frontend_port)]:
-        if port is not None:
-            if not 1 <= port <= 65535:
-                raise ValueError('Port must be between 1 and 65535')
-            values[key] = str(port)
     revision = run('git', '-C', str(SOURCE), 'rev-parse', 'HEAD').strip()
-    version = (SOURCE / 'VERSION').read_text().strip()
-    tag = f'{version}-{revision[:12]}-{secrets.token_hex(3)}'
-    print('构建后端及网页镜像，自动下载 Go、Node 和前端依赖…', flush=True)
-    with tempfile.TemporaryDirectory(prefix='reliquary-install-') as temporary:
-        override = Path(temporary) / 'build.json'
-        override.write_text(json.dumps({'services': {
-            'app': {'image': f'reliquary-app:{tag}', 'build': {'args': {'VERSION_ARG': version, 'COMMIT_ID_ARG': revision}}},
-            'frontend': {'image': f'reliquary-ui:{tag}', 'build': {'dockerfile': 'Dockerfile.build', 'args': {'COMMIT_ID_ARG': revision}}},
-        }}))
-        subprocess.run(['docker', 'compose', '--env-file', str(deploy / '.env'), '-f', str(SOURCE / 'docker-compose.yml'),
-                        '-f', str(override), 'build', *build_proxy_args({**values, **os.environ}), 'app', 'frontend'],
-                       cwd=SOURCE, check=True)
-    config_path = deploy / 'docker-compose.yml'
-    config = json.loads(config_path.read_text())
-    config['services']['app']['image'] = f'reliquary-app:{tag}'
-    config['services']['frontend']['image'] = f'reliquary-ui:{tag}'
-    config_path.write_text(json.dumps(config, indent=2) + '\n')
-    values['RELIQUARY_VERSION'] = tag
-    # Keep the generated callbacks aligned with the customer-selected ports.
-    values['CHATGPT_CALLBACK_URL'] = f"http://127.0.0.1:{values.get('APP_PORT', '8080')}/auth/callback"
-    values['CHATGPT_SETTINGS_URL'] = f"http://127.0.0.1:{values.get('FRONTEND_PORT', '80')}/platform/settings?section=models"
     agent = load_agent()
-    # ChatGPT sign-in needs these two hosts, as docs/personal-use.md (使用 ChatGPT 订阅) requires.
-    hosts = [host for host in values.get('SSRF_WHITELIST', '').split(',') if host]
-    values['SSRF_WHITELIST'] = ','.join(dict.fromkeys([*hosts, 'auth.openai.com', 'api.openai.com']))
-    agent.write_env(deploy / '.env', values)
+    install_images(deploy, values, app_port, frontend_port, SOURCE, revision, agent)
     # Optional entries are configured separately after the base installation succeeds.
     shutil.copy2(SOURCE / 'scripts/agent-local.py', root / 'scripts/agent-local.py')
     subprocess.run(['docker', 'compose', '--project-directory', str(deploy), 'up', '-d', '--no-build', '--pull', 'never', '--wait'], check=True)
@@ -214,38 +204,226 @@ def install(root, env_file, project, app_port=None, frontend_port=None):
     settings = values['CHATGPT_SETTINGS_URL']
     print(f'基础服务已启动。请在网页配置资料库和模型：{settings}')
     webbrowser.open(settings)
+    announce_install(root, agent)
+
+
+def install_images(deploy, values, app_port, frontend_port, source, revision, agent):
+    for key, port in [('APP_PORT', app_port), ('FRONTEND_PORT', frontend_port)]:
+        if port is not None:
+            if not 1 <= port <= 65535:
+                raise ValueError('Port must be between 1 and 65535')
+            values[key] = str(port)
+    version = (source / 'VERSION').read_text().strip()
+    tag = f'{version}-{revision[:12]}-{secrets.token_hex(3)}'
+    print('构建后端及网页镜像，自动下载 Go、Node 和前端依赖…', flush=True)
+    with tempfile.TemporaryDirectory(prefix='reliquary-install-') as temporary:
+        override = Path(temporary) / 'build.json'
+        override.write_text(json.dumps({'services': {
+            'app': {'image': f'reliquary-app:{tag}', 'build': {'args': {'VERSION_ARG': version, 'COMMIT_ID_ARG': revision}}},
+            'frontend': {'image': f'reliquary-ui:{tag}', 'build': {'dockerfile': 'Dockerfile.build', 'args': {'COMMIT_ID_ARG': revision}}},
+        }}))
+        subprocess.run(['docker', 'compose', '--env-file', str(deploy / '.env'), '-f', str(source / 'docker-compose.yml'),
+                        '-f', str(override), 'build', *build_proxy_args({**values, **os.environ}), 'app', 'frontend'],
+                       cwd=source, check=True)
+    config_path = deploy / 'docker-compose.yml'
+    config = json.loads(config_path.read_text())
+    config['services']['app']['image'] = f'reliquary-app:{tag}'
+    config['services']['frontend']['image'] = f'reliquary-ui:{tag}'
+    admin.json_write(config_path, config)
+    values['RELIQUARY_VERSION'] = tag
+    # Keep the generated callbacks aligned with the customer-selected ports.
+    values['CHATGPT_CALLBACK_URL'] = f"http://127.0.0.1:{values.get('APP_PORT', '8080')}/auth/callback"
+    values['CHATGPT_SETTINGS_URL'] = f"http://127.0.0.1:{values.get('FRONTEND_PORT', '80')}/platform/settings?section=models"
+    # ChatGPT sign-in needs these two hosts, as docs/personal-use.md (使用 ChatGPT 订阅) requires.
+    hosts = [host for host in values.get('SSRF_WHITELIST', '').split(',') if host]
+    values['SSRF_WHITELIST'] = ','.join(dict.fromkeys([*hosts, 'auth.openai.com', 'api.openai.com']))
+    agent.write_env(deploy / '.env', values)
+
+
+def announce_install(root, agent):
     print(f'资料库本体安装完成。需要飞书对话入口时运行：python3 "{root / "scripts/agent-local.py"}" configure')
     offer_pi(root, agent)
 
 
+def data_baseline(data, revision):
+    metadata = admin.check_install_backup(data)
+    code = metadata.get('code') or {}
+    commit = code.get('commit', '')
+    if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', commit) or code.get('dirty'):
+        raise ValueError('备份必须登记干净的源码提交')
+    try:
+        run('git', '-C', str(SOURCE), 'merge-base', '--is-ancestor', commit, revision, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as error:
+        raise ValueError(f'备份提交 {commit} 必须是当前 HEAD {revision} 本身或其祖先，请核对源码及 Git 历史') from error
+    migration = (metadata.get('versions') or {}).get('migration', '')
+    matched = re.fullmatch(r'([0-9]+):false', migration) if isinstance(migration, str) else None
+    versions = {int(path.name.partition('_')[0]) for path in (SOURCE / 'migrations/versioned').glob('*.up.sql')}
+    if not matched or int(matched[1]) not in versions:
+        raise ValueError('备份数据库迁移版本缺失、未完成或不在当前源码的迁移历史中')
+    if int(matched[1]) == 0:
+        raise ValueError('此备份的旧结构缺少维护暂停门禁，无法安全启动网页。请先升级备份来源，再生成交付包。')
+    return commit, migration, max(versions)
+
+
+def data_context(deploy):
+    ctx = admin.installed_context(deploy)
+    if (ctx.direct or ctx.local_server or ctx.app != 'app' or ctx.db != 'postgres' or
+            ctx.env.get('DB_HOST', 'postgres') != 'postgres' or ctx.env.get('DB_PORT', '5432') != '5432' or
+            ctx.env.get('REDIS_ADDR', 'redis:6379') != 'redis:6379' or
+            ctx.env.get('NEO4J_URI', 'bolt://neo4j:7687') != 'bolt://neo4j:7687'):
+        raise ValueError('带数据包安装要求使用新 Compose 项目内的 PostgreSQL、Redis 和 Neo4j。请核对 .env 和终端变量。')
+    for name, host in (('vault', 'data/vault'), ('resources', 'data/files')):
+        if ctx.host_storage_path(name) != (deploy.parent / host).resolve():
+            raise ValueError(f'带数据包安装要求使用新运行目录的 {host}。')
+    files = {str((deploy / name).resolve()) for name in ctx.env['COMPOSE_FILE'].split(os.pathsep)}
+    if str(deploy / 'docker-compose.yml') not in files or files - {
+            str(deploy / name) for name in ('docker-compose.yml', admin.LOCAL_IMAGES)}:
+        raise ValueError('带数据包安装要求使用当前安装器生成的 Compose 配置。')
+    ctx.startup_locked = True
+    return ctx
+
+
+def install_data(root, env_file, project, app_port, frontend_port, data, retry_command):
+    if root == SOURCE or root.is_relative_to(SOURCE) or root.is_relative_to(data):
+        raise ValueError('运行目录必须位于源码和数据包之外')
+    revision = admin.clean_revision(SOURCE)
+    commit, migration, target = data_baseline(data, revision)
+    identity = {'path': str(data), 'checksums': admin.digest(data / 'checksums.json')}
+    deploy = root / 'deploy'
+    marker = deploy / 'customer-install.json'
+    state_path = deploy / RESTORE_STATE
+    (root / 'logs').mkdir(parents=True, exist_ok=True, mode=0o700)
+    with admin.startup_lock(deploy):
+        if deploy.exists():
+            if not marker.is_file():
+                raise ValueError('已有部署目录。带数据包安装只用于全新安装。')
+            record = json.loads(marker.read_text())
+            if record.get('data') != identity:
+                raise ValueError('数据包与首次安装记录不一致，请使用原路径和原始数据包。已有安装使用 --update。')
+            if record.get('status') == 'base_ready':
+                print('资料库本体已完成数据导入。后续请使用 --update。')
+                return
+            if (record.get('project'), record.get('source'), record.get('revision')) != (project, str(SOURCE), revision):
+                raise ValueError('续装需要与首次安装相同的项目、源码目录和提交。')
+        else:
+            require_unused_project(project)
+            record = {'project': project, 'status': 'prepared', 'source': str(SOURCE), 'revision': revision, 'data': identity}
+            prepare(root, env_file, project, record=record)
+        status = record['status']
+        agent = load_agent()
+        values = deployment_values(deploy / '.env')
+        if values.get('COMPOSE_PROJECT_NAME') != project:
+            raise ValueError('Existing installation has a different project name')
+        ctx = data_context(deploy)
+        if ctx.env.get('COMPOSE_PROJECT_NAME') != project:
+            raise ValueError('请使用首次安装登记的 Compose 项目。')
+        if record.get('images_prepared') and ctx.env.get('AUTO_MIGRATE') != 'false':
+            raise ValueError('带数据包安装要求 AUTO_MIGRATE=false，避免应用启动时改动待核对的结构。')
+
+        if status == 'prepared':
+            if not state_path.exists():
+                if not record.get('images_prepared'):
+                    values['AUTO_MIGRATE'] = 'false'
+                    if int(migration.partition(':')[0]) < target:
+                        # Build the old binary against its own source, never against files supplied by the package.
+                        with tempfile.TemporaryDirectory(prefix='reliquary-restore-source-') as temporary:
+                            historical = Path(temporary)
+                            run('git', 'clone', '--shared', '--no-checkout', str(SOURCE), str(historical))
+                            run('git', '-C', str(historical), 'checkout', '--detach', commit)
+                            build_file = historical / 'frontend/Dockerfile.build'
+                            if not build_file.is_file():
+                                shutil.copy2(SOURCE / 'frontend/Dockerfile.build', build_file)
+                            install_images(deploy, values, app_port, frontend_port, historical, commit, agent)
+                    else:
+                        install_images(deploy, values, app_port, frontend_port, SOURCE, revision, agent)
+                    record['images_prepared'] = True
+                    admin.json_write(marker, record)
+                ctx = data_context(deploy)
+                if ctx.env.get('AUTO_MIGRATE') != 'false':
+                    raise ValueError('请将运行环境的 AUTO_MIGRATE 设为 false，再重跑安装。')
+                ctx.compose('pull', *BASE_SERVICES)
+                ctx.compose('up', '-d', '--no-deps', '--no-build', '--pull', 'never', '--wait', *BASE_SERVICES)
+                # A previous attempt may have committed PG before failing to verify or copy files.
+                admin.require_empty_restore_database(ctx)
+                ctx.scheduler_required = True
+                admin.restore(ctx, data, argparse.Namespace(skip_models=True, preserve_version=True,
+                                                            expected_migration=migration))
+            else:
+                state = json.loads(state_path.read_text())
+                if state.get('package') != str(data) or state.get('state') != 'waiting_models':
+                    raise ValueError('恢复记录与本次安装不符，请保留现场并检查维护日志。')
+                if state.get('startup_pending'):
+                    admin.finish_restore_startup(ctx, state)
+            admin.json_write(marker, {**record, 'status': 'data_restored'})
+            settings = deployment_values(deploy / '.env')['CHATGPT_SETTINGS_URL']
+            print(f'数据已恢复，任务保持暂停。请打开 {settings}，在「设置 → 模型设置」登录 ChatGPT 并测试。')
+            print(f'完成后重跑：{retry_command}')
+            return
+
+        if status != 'data_restored':
+            raise ValueError(f'无法继续安装，未知状态 {status}')
+        state = json.loads(state_path.read_text())
+        if state.get('package') != str(data):
+            raise ValueError('恢复记录与本次安装的数据包不符。')
+        if state.get('state') != 'ready':
+            admin.unpack(ctx, argparse.Namespace(package=None, resume=True, no_scheduler=False))
+            if json.loads(state_path.read_text()).get('state') != 'ready':
+                raise ValueError('恢复尚未通过核对，请检查凭据和维护日志。')
+        pending = deploy / admin.PENDING_UPGRADE
+        current = ctx.sql("SELECT version::text||':'||dirty::text FROM schema_migrations")
+        if pending.is_file() or current == migration and current != f'{target}:false':
+            admin.upgrade_installed(ctx, argparse.Namespace(timeout=300, backup=False, include_worktree=False),
+                                    SOURCE, revision)
+        elif current != f'{target}:false':
+            raise ValueError(f'无法确认数据库迁移状态：{current}')
+        admin.record_runtime(ctx, SOURCE)
+        shutil.copy2(SOURCE / 'scripts/agent-local.py', root / 'scripts/agent-local.py')
+        admin.json_write(marker, {**record, 'status': 'base_ready', 'version': (SOURCE / 'VERSION').read_text().strip()})
+    announce_install(root, agent)
+
+
 def update(root, *, backup=False):
-    head = admin.clean_revision(SOURCE)
     deployer = load_script('deploy-local')
-    branch = deployer.git(SOURCE, 'branch', '--show-current') or 'detached HEAD'
-    print(f'源码分支 {branch}，提交 {head}，版本 {(SOURCE / "VERSION").read_text().strip()}', flush=True)
     directory = root / 'deploy'
-    admin.validate_installed_directory(SOURCE, directory)
-    admin.customer_source(directory, SOURCE)
+    version = (SOURCE / 'VERSION').read_text().strip()
+    registered = directory / 'VERSION'
+    current = registered.read_text().strip() if registered.is_file() else None
     results = dict.fromkeys(('基础服务', '数据库迁移', '本次备份', '本地 Pi', '飞书'), '未执行')
+    config_summary = []
     failures = []
     try:
+        head = admin.clean_revision(SOURCE)
+        branch = deployer.git(SOURCE, 'branch', '--show-current') or 'detached HEAD'
+        print(f'源码分支 {branch}，提交 {head}，版本 {version}', flush=True)
+        admin.validate_installed_directory(SOURCE, directory)
+        admin.customer_source(directory, SOURCE)
+        if not current:
+            current = json.loads((directory / 'customer-install.json').read_text()).get('version')
         with admin.startup_lock(directory):
-            plan = deployer.plan_update(SOURCE, directory, head)
-            if plan.migrations:
-                results['数据库迁移'] = '升级未完成，请检查升级日志'
-                if backup:
-                    results['本次备份'] = '已请求，结果见升级日志'
-                options = argparse.Namespace(timeout=300, backup=backup, include_worktree=False)
-                plan.ctx.startup_locked = True
-                services = admin.upgrade_installed(plan.ctx, options, SOURCE, head)
-                results['数据库迁移'] = '已执行并验证'
-                if backup:
-                    results['本次备份'] = '已创建并校验'
-            else:
-                services = deployer.apply_update(SOURCE, directory, plan, container_frontend=True)
-                results['数据库迁移'] = '无变更'
-                if backup:
-                    results['本次备份'] = '无数据库升级，已跳过'
+            ctx = admin.installed_context(directory)
+            images = admin.runtime_images(ctx) if not (directory / admin.PENDING_UPGRADE).is_file() else None
+            if images:
+                image_version = images['app']['labels'].get('org.opencontainers.image.version')
+                if deployer.semver(image_version):
+                    current = image_version
+            plan = deployer.plan_update(SOURCE, directory, head, customer=True, ctx=ctx, images=images)
+            with deployer.runtime_update(SOURCE, directory, plan, render_runtime_compose, config_summary) as rollback:
+                if plan.migrations:
+                    results['数据库迁移'] = '升级未完成，请检查升级日志'
+                    if backup:
+                        results['本次备份'] = '已请求，结果见升级日志'
+                    options = argparse.Namespace(timeout=300, backup=backup, include_worktree=False)
+                    plan.ctx.startup_locked = True
+                    services = admin.upgrade_installed(plan.ctx, options, SOURCE, head)
+                    results['数据库迁移'] = '已执行并验证'
+                    if backup:
+                        results['本次备份'] = '已创建并校验'
+                else:
+                    services = deployer.apply_update(SOURCE, directory, plan, container_frontend=True,
+                                                     rollback_runtime=rollback)
+                    results['数据库迁移'] = '无变更'
+                    if backup:
+                        results['本次备份'] = '无数据库升级，已跳过'
             results['基础服务'] = ', '.join(services) + ' 已更新，健康检查通过' if services else '无需重建'
 
             agent = load_agent()
@@ -268,6 +446,9 @@ def update(root, *, backup=False):
         print('更新汇总', flush=True)
         for label, result in results.items():
             print(f'- {label}：{result}')
+        for result in config_summary:
+            print(f'- 运行配置：{result}')
+        deployer.print_upgrade_notes(SOURCE, current, version)
     if failures:
         raise admin.AdminError('请修正入口更新错误后重试：' + '、'.join(failures))
 
@@ -319,24 +500,31 @@ def main():
     mode.add_argument('--install', action='store_true', help='Build all dependencies and start a new customer installation')
     mode.add_argument('--update', action='store_true', help='Update an existing customer installation from this checkout')
     parser.add_argument('--backup', action='store_true', help='With --update, back up before a database upgrade')
+    parser.add_argument('--data', type=Path, help='With --install, import a verified backup into a new installation')
     parser.add_argument('--app-port', type=int, help='Backend port for a new customer installation')
     parser.add_argument('--frontend-port', type=int, help='Web port for a new customer installation')
     args = parser.parse_args()
     if args.backup and not args.update:
         parser.error('--backup requires --update')
+    if args.data is not None and not args.install:
+        parser.error('--data requires --install')
     root = args.root.expanduser().resolve()
+    retry_command = shlex.join([sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]])
     try:
         if args.update:
             update(root, backup=args.backup)
         elif args.install_autostart:
             install_autostart(root, args.ollama)
         elif args.install:
-            install(root, args.env_file.expanduser().resolve() if args.env_file else None, args.project_name, args.app_port, args.frontend_port)
+            install(root, args.env_file.expanduser().resolve() if args.env_file else None, args.project_name,
+                    args.app_port, args.frontend_port, data=args.data.expanduser().resolve() if args.data else None,
+                    retry_command=retry_command)
         else:
             prepare(root, args.env_file.expanduser().resolve() if args.env_file else None, args.project_name)
     except (admin.AdminError, ValueError, OSError, subprocess.CalledProcessError, EOFError) as error:
         action = 'Update' if args.update else 'Installation'
-        parser.exit(1, f'{action} failed: {error}\n')
+        retry = f'修正原因后重跑：{retry_command}\n' if args.data is not None else ''
+        parser.exit(1, f'{action} failed: {error}\n{retry}')
 
 
 if __name__ == '__main__':

@@ -20,7 +20,7 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// EntityNameEmbeddingRebuilder uses the library embedding model for entity names.
+// EntityNameEmbeddingRebuilder uses the space embedding model for extracted entity names.
 type EntityNameEmbeddingRebuilder struct {
 	db     *gorm.DB
 	models interfaces.ModelService
@@ -107,8 +107,23 @@ func (r *EntityNameEmbeddingRebuilder) profileForModel(ctx context.Context, spac
 	return profile, nil
 }
 
-func (r *EntityNameEmbeddingRebuilder) pendingQuery(db *gorm.DB, spaceID uint64, _ entityEmbeddingProfile) *gorm.DB {
-	return db.Model(&types.Entity{}).Where("space_id=? AND merged_into_id='' AND embedding_needs_rebuild", spaceID)
+const extractedEntityLibrarySQL = `EXISTS (
+ SELECT 1 FROM libraries l WHERE l.id=entities.library_id AND l.space_id=entities.space_id
+ AND l.deleted_at IS NULL AND l.entity_mode='extracted')`
+
+func extractedNameEntities(db *gorm.DB, spaceID uint64) *gorm.DB {
+	return db.Model(&types.Entity{}).Where("space_id=? AND merged_into_id=''", spaceID).Where(extractedEntityLibrarySQL)
+}
+
+func pendingEntityNames(db *gorm.DB, spaceID uint64) *gorm.DB {
+	return extractedNameEntities(db, spaceID).Where("embedding_needs_rebuild")
+}
+
+func nameEntityOutsideExtractedLibrary(db *gorm.DB, spaceID uint64, entityID string) (bool, error) {
+	var exists bool
+	query := db.Model(&types.Entity{}).Select("1").Where("space_id=? AND id=?", spaceID, entityID).Where("NOT (" + extractedEntityLibrarySQL + ")")
+	err := db.Raw("SELECT EXISTS (?)", query).Scan(&exists).Error
+	return exists, err
 }
 
 // Profile-wide marking happens only at explicit lifecycle triggers, never in
@@ -136,6 +151,11 @@ func (r *EntityNameEmbeddingRebuilder) MarkAndEnqueue(ctx context.Context, space
 	if r == nil || r.db == nil || spaceID == 0 {
 		return errors.New("embedding rebuild scope or database is unavailable")
 	}
+	db := r.db.WithContext(ctx)
+	var hasEntities bool
+	if err := db.Raw("SELECT EXISTS (?)", extractedNameEntities(db, spaceID).Select("1")).Scan(&hasEntities).Error; err != nil || !hasEntities {
+		return err
+	}
 	profile, profileErr := r.profile(ctx, spaceID)
 	force := reason == "embedding_model_updated"
 	if profileErr == nil && !force {
@@ -150,7 +170,7 @@ func (r *EntityNameEmbeddingRebuilder) MarkAndEnqueue(ctx context.Context, space
 		if err := lockEntitySpaceShared(tx, spaceID); err != nil {
 			return err
 		}
-		query := tx.Model(&types.Entity{}).Where("space_id=? AND merged_into_id='' AND NOT embedding_needs_rebuild", spaceID)
+		query := extractedNameEntities(tx, spaceID).Where("NOT embedding_needs_rebuild")
 		if profileErr == nil && !force {
 			query = query.Where("name_embedding IS NULL OR embedding_model_id<>? OR embedding_dimension<>? OR vector_dims(name_embedding)<>?", profile.modelID, profile.dimension, profile.dimension)
 		}
@@ -176,14 +196,14 @@ func (r *EntityNameEmbeddingRebuilder) Enqueue(ctx context.Context, spaceID uint
 	if r == nil || r.db == nil || spaceID == 0 {
 		return errors.New("embedding rebuild scope or database is unavailable")
 	}
-	profile, _ := r.profile(ctx, spaceID)
 	var pending int64
-	if err := r.pendingQuery(r.db.WithContext(ctx), spaceID, profile).Count(&pending).Error; err != nil {
+	if err := pendingEntityNames(r.db.WithContext(ctx), spaceID).Count(&pending).Error; err != nil {
 		return err
 	}
 	if pending == 0 {
 		return nil
 	}
+	profile, _ := r.profile(ctx, spaceID)
 	run := types.EntityNameEmbeddingRebuildRun{ID: uuid.NewString(), SpaceID: spaceID, Status: "pending", Reason: strings.TrimSpace(reason), ModelID: profile.modelID, Dimension: profile.dimension, ProfileHash: profile.hash, TotalCount: pending, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := r.db.WithContext(ctx).Create(&run).Error; err != nil {
 		return err
@@ -207,9 +227,8 @@ func (r *EntityNameEmbeddingRebuilder) Status(ctx context.Context, spaceID uint6
 	if r == nil || r.db == nil || spaceID == 0 {
 		return nil, errors.New("embedding rebuild scope or database is unavailable")
 	}
-	profile, _ := r.profile(ctx, spaceID)
 	status := &types.EntityNameEmbeddingRebuildStatus{}
-	if err := r.pendingQuery(r.db.WithContext(ctx), spaceID, profile).Count(&status.PendingCount).Error; err != nil {
+	if err := pendingEntityNames(r.db.WithContext(ctx), spaceID).Count(&status.PendingCount).Error; err != nil {
 		return nil, err
 	}
 	var run types.EntityNameEmbeddingRebuildRun
@@ -294,6 +313,16 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskque
 			handleErr = errors.Join(handleErr, err)
 		}
 	}()
+	if strings.HasPrefix(run.Reason, "managed_entity_") {
+		// These legacy runs were queued by an edit to the managed catalog.
+		run.TotalCount = 0
+	} else if err := pendingEntityNames(r.db.WithContext(ctx), payload.SpaceID).Count(&run.TotalCount).Error; err != nil {
+		return err
+	}
+	if run.TotalCount == 0 {
+		return r.db.WithContext(ctx).Model(&types.EntityNameEmbeddingRebuildRun{}).Where("id=? AND attempt_id=?", run.ID, run.AttemptID).
+			Updates(map[string]any{"total_count": 0, "profile_hash": ""}).Error
+	}
 	profile, err := r.profile(ctx, payload.SpaceID)
 	if err != nil {
 		return err
@@ -301,9 +330,6 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskque
 	run.ModelID = profile.modelID
 	run.Dimension = profile.dimension
 	run.ProfileHash = profile.hash
-	if err := r.pendingQuery(r.db.WithContext(ctx), payload.SpaceID, profile).Count(&run.TotalCount).Error; err != nil {
-		return err
-	}
 	if err := r.db.WithContext(ctx).Model(&types.EntityNameEmbeddingRebuildRun{}).Where("id=? AND attempt_id=?", run.ID, run.AttemptID).Updates(map[string]any{"model_id": run.ModelID, "dimension": run.Dimension, "profile_hash": run.ProfileHash, "total_count": run.TotalCount}).Error; err != nil {
 		return err
 	}
@@ -311,7 +337,7 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskque
 	cursor := ""
 	for {
 		var entities []types.Entity
-		query := r.pendingQuery(r.db.WithContext(ctx), payload.SpaceID, profile).Order("id").Limit(batchSize)
+		query := pendingEntityNames(r.db.WithContext(ctx), payload.SpaceID).Order("id").Limit(batchSize)
 		if cursor != "" {
 			query = query.Where("id>?", cursor)
 		}
@@ -363,7 +389,7 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *taskque
 				return errors.New("embedding rebuild attempt was superseded")
 			}
 			for i, entity := range entities {
-				result := tx.Model(&types.Entity{}).Where("space_id=? AND id=? AND merged_into_id='' AND canonical_name=? AND entity_type=? AND description=? AND updated_at=?", payload.SpaceID, entity.ID, entity.CanonicalName, entity.EntityType, entity.Description, entity.UpdatedAt).
+				result := extractedNameEntities(tx, payload.SpaceID).Where("id=? AND canonical_name=? AND entity_type=? AND description=? AND updated_at=?", entity.ID, entity.CanonicalName, entity.EntityType, entity.Description, entity.UpdatedAt).
 					Updates(map[string]any{"name_embedding": types.EntityNameEmbedding(vectors[i]), "embedding_model_id": profile.modelID, "embedding_dimension": profile.dimension, "embedding_needs_rebuild": false, "updated_at": time.Now()})
 				if result.Error != nil {
 					return result.Error

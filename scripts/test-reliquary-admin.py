@@ -732,6 +732,73 @@ class AdminStorageTests(unittest.TestCase):
         self.assertFalse(admin.setup_models(ctx, argparse.Namespace(install=False, download=False, start=False)))
         self.assertEqual(ctx.waiting_state, "waiting_models")
 
+    def test_unreachable_selected_embedding_only_blocks_when_required(self):
+        args = argparse.Namespace(install=False, download=False, start=False)
+        model = {"id": "embed", "name": "local-embedding", "type": "Embedding", "source": "ollama", "status": "active"}
+        for required in (False, True):
+            with self.subTest(required=required), contextlib.redirect_stderr(io.StringIO()) as diagnostics:
+                ctx = argparse.Namespace(env={}, cli_json=mock.Mock(return_value={
+                    "models": [model], "selected_embedding": {"id": "embed"},
+                    "selected_model_ids": ["embed"], "embedding_required": required,
+                }))
+                with (
+                    mock.patch.object(admin.shutil, "which", return_value="/bin/ollama"),
+                    mock.patch.object(admin, "request_json", side_effect=OSError("connection refused")),
+                ):
+                    self.assertEqual(not required, admin.setup_models(ctx, args))
+                self.assertIn("local-embedding (embed)", diagnostics.getvalue())
+                self.assertIn("vector indexing and search", diagnostics.getvalue())
+                self.assertIn("connection refused", diagnostics.getvalue())
+                self.assertIn("blocks recovery" if required else "recovery can continue", diagnostics.getvalue())
+                if required:
+                    self.assertEqual("waiting_models", ctx.waiting_state)
+
+    def test_optional_ollama_install_failure_does_not_block(self):
+        model = {"id": "embed", "name": "local-embedding", "type": "Embedding", "source": "ollama", "status": "active"}
+        ctx = argparse.Namespace(env={}, cli_json=mock.Mock(return_value={
+            "models": [model], "selected_embedding": {"id": "embed"}, "embedding_required": False,
+        }))
+        with (
+            contextlib.redirect_stderr(io.StringIO()) as diagnostics,
+            mock.patch.object(admin, "prepare_ollama_cli", side_effect=admin.AdminError("installer unavailable")),
+            mock.patch.object(admin, "request_json", side_effect=OSError("connection refused")),
+        ):
+            self.assertTrue(admin.setup_models(ctx, argparse.Namespace(install=True, download=False, start=False)))
+        self.assertIn("installer unavailable", diagnostics.getvalue())
+        self.assertIn("recovery can continue", diagnostics.getvalue())
+
+    def test_unavailable_unselected_models_and_rerank_do_not_block(self):
+        models = [
+            {"id": "chat", "name": "Spare chat", "type": "KnowledgeQA", "source": "remote", "status": "active"},
+            {"id": "rank", "name": "Selected reranker", "type": "Rerank", "source": "remote", "status": "active"},
+            {"id": "spare-vector", "name": "Spare embedding", "type": "Embedding", "source": "remote", "status": "active"},
+            {"id": "embed", "name": "Selected embedding", "type": "Embedding", "source": "remote", "status": "active"},
+        ]
+        def cli_json(command, *args):
+            if command == "models":
+                return {"models": models, "selected_model_ids": ["rank", "embed"],
+                        "selected_embedding": {"id": "embed"}, "embedding_required": True}
+            return {"ready": args[1] == "embed", "error": "service unavailable"}
+        ctx = argparse.Namespace(env={}, cli_json=cli_json)
+        with contextlib.redirect_stderr(io.StringIO()) as diagnostics:
+            self.assertTrue(admin.setup_models(ctx, argparse.Namespace(install=False, download=False, start=False)))
+        for name, feature in (("Spare chat", "document processing"), ("Selected reranker", "reranking"), ("Spare embedding", "vector indexing")):
+            self.assertIn(name, diagnostics.getvalue())
+            self.assertIn(feature, diagnostics.getvalue())
+
+    def test_selected_chatgpt_needing_login_waits_for_credentials(self):
+        for status, error in (("needs_login", "sign in to ChatGPT"), ("active", "chatgpt: sign in again")):
+            with self.subTest(status=status), contextlib.redirect_stderr(io.StringIO()) as diagnostics:
+                model = {"id": "chat", "name": "ChatGPT", "type": "KnowledgeQA", "source": "chatgpt", "status": status}
+                cli = mock.Mock(side_effect=[{"models": [model], "selected_model_ids": ["chat"], "embedding_required": False},
+                                             admin.AdminError(error)])
+                ctx = argparse.Namespace(env={}, cli_json=cli)
+                self.assertFalse(admin.setup_models(ctx, argparse.Namespace(install=False, download=False, start=False)))
+                self.assertEqual("waiting_credentials", ctx.waiting_state)
+                self.assertIn("ChatGPT (chat)", diagnostics.getvalue())
+                self.assertIn(error, diagnostics.getvalue())
+                cli.assert_called_with("model-test", "--id", "chat")
+
     def test_runner_recovers_crash_after_resume_and_before_app_restart(self):
         class FakeContext:
             env = {}
@@ -812,6 +879,26 @@ class AdminStorageTests(unittest.TestCase):
                             self.assertLess(ctx.calls.index(("graph-rebuild",)), ctx.calls.index(("resume",)))
                         else:
                             self.assertNotIn(("graph-rebuild",), ctx.calls)
+
+    def test_restore_rebuilds_vectors_only_when_required_and_identity_changed(self):
+        admin.json_write(self.root / "models.json", {"selected_embedding": {"id": "embed", "profile_hash": "original"}})
+        for required, changed in ((False, True), (True, False), (True, True)):
+            with self.subTest(required=required, changed=changed):
+                models = {"selected_embedding": {"id": "embed", "profile_hash": "new" if changed else "original"},
+                          "embedding_required": required}
+                ctx = argparse.Namespace(
+                    root=self.root, direct=True, local_server=None, legacy_schema=lambda: False,
+                    sql=lambda query: "f", server=mock.Mock(), cli_json=mock.Mock(return_value=models),
+                )
+                with mock.patch.object(admin, "verify_reconfigured_data", return_value={"ok": True}) as verify:
+                    admin.finalize_restore(ctx, self.root)
+                if required and changed:
+                    ctx.server.assert_called_once_with("reembed", "--preserve-entity-timestamps", capture=False)
+                else:
+                    ctx.server.assert_not_called()
+                self.assertEqual(changed, "--allow-model-change" in verify.call_args.args)
+                self.assertIn("--vectors", verify.call_args.args)
+                ctx.cli_json.assert_called_with("resume")
 
     def test_scheduler_install_failure_keeps_restore_paused(self):
         class FakeContext:
@@ -1467,6 +1554,26 @@ with mock.patch('subprocess.run') as docker:
             admin.restore(ctx, package, argparse.Namespace(skip_models=True))
         self.assertLess(ctx.calls.index(("export-sources",)), ctx.calls.index(("migrate",)))
         self.assertFalse(ctx.legacy_schema())
+
+    def test_verified_restore_retries_startup_without_importing_database_again(self):
+        ctx, package, _ = self.old_backup_restore_context()
+        ctx.scheduler_required = True
+        args = argparse.Namespace(skip_models=True, preserve_version=True)
+        resume = argparse.Namespace(package=None, resume=True, no_scheduler=False)
+        state = self.root / ".maintenance-restore.json"
+        with mock.patch.object(admin, "check_files"), \
+             mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)) as pg, \
+             mock.patch.object(admin, "start_paused_environment", side_effect=[admin.AdminError("startup failed"), None]), \
+             mock.patch.object(admin, "setup_models", return_value=True), \
+             mock.patch.object(admin, "finalize_restore") as finalize, contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(admin.AdminError, "startup failed"):
+                admin.restore(ctx, package, args)
+            self.assertTrue(json.loads(state.read_text())["startup_pending"])
+            admin.unpack(ctx, resume)
+            self.assertNotIn("startup_pending", json.loads(state.read_text()))
+            finalize.assert_called_once_with(ctx, package.resolve())
+            pg.assert_called_once()
+            self.assertTrue(ctx.scheduler_required)
 
     def test_exact_old_image_rollback_preserves_original_schema(self):
         ctx, package, required = self.old_backup_restore_context(legacy=True)

@@ -223,6 +223,227 @@ class CustomerPiInstallationTests(unittest.TestCase):
             self.assertIn('需要飞书对话入口时运行', self.output)
             self.commands.assert_not_called()
 
+    def test_install_without_data_starts_the_full_stack(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.runtime(temporary)
+            self.install(root, interactive=False)
+            calls = [call.args[0] for call in self.commands.call_args_list]
+            self.assertIn('build', calls[0])
+            self.assertEqual(calls[1][4:], ['up', '-d', '--no-build', '--pull', 'never', '--wait'])
+            self.assertFalse((root / 'deploy/.maintenance-restore.json').exists())
+
+
+class CustomerDataInstallationTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name).resolve() / 'runtime with spaces'
+        self.data = Path(temp.name).resolve() / 'backup'
+        self.deploy = self.root / 'deploy'
+        self.marker = self.deploy / 'customer-install.json'
+        self.state = self.deploy / installer.RESTORE_STATE
+        self.head, self.old = 'a' * 40, 'b' * 40
+        self.target = max(int(path.name.partition('_')[0]) for path in
+                          (installer.SOURCE / 'migrations/versioned').glob('*.up.sql'))
+        self.migration = f'{self.target}:false'
+        self.events = []
+        self.ancestry_error = False
+        self.nonempty = False
+        self.add_mocks()
+
+    def add_mocks(self):
+        def command(*args, **_):
+            if '--is-ancestor' in args:
+                self.assertEqual(args[-2:], (self.old, self.head))
+                if self.ancestry_error:
+                    raise subprocess.CalledProcessError(1, args)
+            if 'checkout' in args:
+                historical = Path(args[2])
+                (historical / 'VERSION').write_text('0.16.5')
+                (historical / 'frontend').mkdir()
+            if '--format' in args:
+                return json.dumps({'services': {'app': {}, 'frontend': {}}, 'name': 'customer'})
+            return ''
+
+        def docker(args, **kwargs):
+            self.assertIn('build', args)
+            self.events.append(('build', kwargs['cwd']))
+
+        def compose(*args):
+            self.events.append(args)
+            return b''
+
+        def sql(statement):
+            if 'count(*) FROM pg_tables' in statement:
+                return '1' if self.nonempty else '0'
+            return self.migration
+
+        def restore(ctx, data, args):
+            self.assertEqual((ctx.root, data), (self.deploy, self.data))
+            self.assertTrue(ctx.scheduler_required)
+            self.assertEqual((args.skip_models, args.preserve_version, args.expected_migration),
+                             (True, True, self.migration))
+            self.assertEqual(ctx.env['AUTO_MIGRATE'], 'false')
+            self.events.append(('restore',))
+            self.nonempty = True
+            installer.admin.json_write(self.state, {'state': 'waiting_models', 'package': str(data)})
+
+        def resume(ctx, args):
+            self.assertTrue(args.resume)
+            self.assertFalse(args.no_scheduler)
+            self.events.append(('resume',))
+            installer.admin.json_write(self.state, {'state': 'ready', 'package': str(self.data)})
+
+        def upgrade(ctx, args, source, revision):
+            self.assertTrue(ctx.startup_locked)
+            self.assertFalse(args.backup)
+            self.assertFalse(args.include_worktree)
+            self.assertEqual(revision, self.head)
+            self.assertEqual(json.loads(self.state.read_text())['state'], 'ready')
+            self.migration = f'{self.target}:false'
+            self.events.append(('upgrade',))
+
+        replacements = {
+            'clean_revision': {'return_value': self.head},
+            'restore': {'side_effect': restore},
+            'unpack': {'side_effect': resume},
+            'upgrade_installed': {'side_effect': upgrade},
+            'record_runtime': {'side_effect': lambda *_: self.events.append(('record',))},
+        }
+        for name, kwargs in replacements.items():
+            patcher = mock.patch.object(installer.admin, name, **kwargs)
+            self.addCleanup(patcher.stop)
+            setattr(self, name, patcher.start())
+        for patcher in (
+            mock.patch.object(installer.shutil, 'which', return_value='/usr/bin/docker'),
+            mock.patch.object(installer, 'run', side_effect=command),
+            mock.patch.object(installer.subprocess, 'run', side_effect=docker),
+            mock.patch.object(installer.admin.Context, 'compose', side_effect=compose),
+            mock.patch.object(installer.admin.Context, 'sql', side_effect=sql),
+            mock.patch.object(installer, 'offer_pi', side_effect=lambda *_: self.events.append(('offer_pi',))),
+        ):
+            self.addCleanup(patcher.stop)
+            patcher.start()
+
+    def package(self, *, older=False):
+        self.data.mkdir()
+        self.migration = f'{self.target - int(older)}:false'
+        for name in ('snapshot.json', 'models.json', 'database.dump'):
+            (self.data / name).write_text('{}')
+        for name in ('vault', 'resources'):
+            (self.data / name).mkdir()
+        installer.admin.json_write(self.data / 'manifest.json', {
+            'kind': 'backup', 'format': installer.admin.FORMAT, 'required_credentials': [],
+            'code': {'commit': self.old, 'dirty': False}, 'versions': {'migration': self.migration},
+        })
+        self.rehash()
+
+    def rehash(self):
+        installer.admin.json_write(self.data / 'checksums.json', installer.admin.hashes(self.data))
+
+    def run_install(self, data=None):
+        argv = ['install-local.py', '--install', '--root', str(self.root), '--project-name', 'customer',
+                '--data', str(data or self.data)]
+        with mock.patch('sys.argv', argv), mock.patch('sys.stdout', new_callable=io.StringIO) as output:
+            installer.main()
+        return output.getvalue()
+
+    def reject(self, message, data=None):
+        with self.assertRaises(SystemExit) as error, mock.patch('sys.stderr', new_callable=io.StringIO) as errors:
+            self.run_install(data)
+        self.assertEqual(error.exception.code, 1)
+        self.assertIn(message, errors.getvalue())
+        self.assertIn('修正原因后重跑', errors.getvalue())
+
+    def test_invalid_package_and_nonancestor_leave_no_runtime(self):
+        self.package()
+        manifest = self.data / 'manifest.json'
+        contents = manifest.read_bytes()
+        manifest.unlink()
+        self.reject('missing manifest.json')
+        self.assertFalse(self.root.exists())
+        manifest.write_bytes(contents)
+        (self.data / 'database.dump').write_text('tampered')
+        self.reject('checksum mismatch')
+        self.assertFalse(self.root.exists())
+        self.rehash()
+        self.ancestry_error = True
+        self.reject('必须是当前 HEAD')
+        self.assertFalse(self.root.exists())
+        self.assertEqual(self.events, [])
+
+    def test_first_install_only_starts_infrastructure_before_restore(self):
+        self.package()
+        output = self.run_install()
+        self.assertEqual(self.events, [
+            ('build', installer.SOURCE), ('pull', *installer.BASE_SERVICES),
+            ('up', '-d', '--no-deps', '--no-build', '--pull', 'never', '--wait', *installer.BASE_SERVICES),
+            ('restore',),
+        ])
+        self.assertEqual(json.loads(self.marker.read_text())['status'], 'data_restored')
+        self.assertIn('登录 ChatGPT 并测试', output)
+        self.assertIn('--data', output)
+        self.assertFalse((self.root / 'scripts/agent-local.py').exists())
+
+    def test_second_install_resumes_before_optional_upgrade_and_offers_pi(self):
+        self.package(older=True)
+        self.run_install()
+        self.assertNotEqual(self.events[0][1], installer.SOURCE)
+        self.run_install()
+        self.assertEqual(self.events[-4:], [('resume',), ('upgrade',), ('record',), ('offer_pi',)])
+        self.assertEqual(json.loads(self.marker.read_text())['status'], 'base_ready')
+        self.assertTrue((self.root / 'scripts/agent-local.py').is_file())
+        self.run_install()
+        self.restore.assert_called_once()
+        self.unpack.assert_called_once()
+        self.upgrade_installed.assert_called_once()
+
+    def test_same_schema_resumes_without_upgrading(self):
+        self.package()
+        self.run_install()
+        self.run_install()
+        self.assertEqual(self.events[-3:], [('resume',), ('record',), ('offer_pi',)])
+        self.upgrade_installed.assert_not_called()
+
+    def test_resume_rejects_a_different_path_or_modified_package(self):
+        self.package()
+        self.run_install()
+        other = self.data.with_name('another-package')
+        installer.shutil.copytree(self.data, other)
+        self.reject('与首次安装记录不一致', other)
+        (self.data / 'models.json').write_text('{"other": true}')
+        self.rehash()
+        self.reject('与首次安装记录不一致')
+        self.restore.assert_called_once()
+        self.unpack.assert_not_called()
+
+    def test_retry_does_not_restore_over_partially_restored_postgres(self):
+        self.package()
+
+        def interrupted(*_):
+            self.nonempty = True
+            raise installer.admin.AdminError('verification failed')
+
+        self.restore.side_effect = interrupted
+        self.reject('verification failed')
+        self.reject('new empty database')
+        self.restore.assert_called_once()
+        self.assertEqual(json.loads(self.marker.read_text())['status'], 'prepared')
+
+    def test_ready_restore_is_not_reverified_when_record_runtime_fails(self):
+        self.package(older=True)
+        self.run_install()
+        record_runtime = self.record_runtime.side_effect
+        self.record_runtime.side_effect = installer.admin.AdminError('record failed')
+        self.reject('record failed')
+        self.assertEqual(json.loads(self.marker.read_text())['status'], 'data_restored')
+        self.record_runtime.side_effect = record_runtime
+        self.run_install()
+        self.restore.assert_called_once()
+        self.unpack.assert_called_once()
+        self.upgrade_installed.assert_called_once()
+        self.assertEqual(json.loads(self.marker.read_text())['status'], 'base_ready')
+
 
 class CustomerUpdateTests(unittest.TestCase):
     def setUp(self):
@@ -329,6 +550,41 @@ class CustomerUpdateTests(unittest.TestCase):
         self.assertEqual(error.exception.code, 1)
         self.assertIn(str(registered), self.errors.getvalue())
         self.images.assert_not_called()
+
+    def test_update_prints_crossed_release_notes_on_success_or_config_stop(self):
+        source = self.root / 'source'
+        (source / 'docs').mkdir(parents=True)
+        (source / 'scripts').mkdir()
+        (source / 'scripts/agent-local.py').touch()
+        (source / 'VERSION').write_text('0.17.10\n')
+        (self.directory / 'VERSION').write_text('0.17.1\n')
+        (source / 'docs/upgrade-notes.md').write_text(
+            '# Notes\n\n## 0.17.5\nPreviously handled\n\n## 0.17.10\nVerify the new setting\n\n## 0.18.0\nLater\n')
+        self.marker.write_text(json.dumps({'status': 'base_ready', 'source': str(source)}))
+        self.images.return_value['app']['labels']['org.opencontainers.image.version'] = '0.17.5'
+        template = source / '.env.example'
+        with mock.patch.object(installer, 'SOURCE', source), \
+             mock.patch.object(self.deployer, 'changed_paths', return_value={'.env.example'}), \
+             mock.patch.object(self.deployer, 'revision_file', return_value=b''), \
+             mock.patch.object(installer.admin.Context, 'compose'), \
+             mock.patch.object(self.deployer, 'apply_update', return_value=['app']) as apply:
+            template.write_text('FEATURE=on\n')
+            self.run_update()
+            self.assertIn('本次运行配置变更已应用', self.output.getvalue())
+            self.assertIn('Verify the new setting', self.output.getvalue())
+            self.assertNotIn('Previously handled', self.output.getvalue())
+            self.assertNotIn('Later', self.output.getvalue())
+            self.assertEqual(installer.admin.read_env(self.directory / '.env')['FEATURE'], 'on')
+            apply.reset_mock()
+            self.output.truncate(0)
+            self.output.seek(0)
+            self.git.side_effect = [b'', b'new-revision']
+            template.write_text('REMOTE_API_KEY=\n')
+            with self.assertRaises(SystemExit):
+                self.run_update()
+            self.assertIn('Verify the new setting', self.output.getvalue())
+            self.assertIn('REMOTE_API_KEY', self.errors.getvalue())
+            apply.assert_not_called()
 
 
 if __name__ == '__main__':

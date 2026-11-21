@@ -147,7 +147,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 			}
 		}
 		var entities []types.Entity
-		if err := tx.Select("id").Where("space_id=? AND merged_into_id=''", spaceID).Order("id").Find(&entities).Error; err != nil {
+		if err := extractedNameEntities(tx, spaceID).Select("id").Order("id").Find(&entities).Error; err != nil {
 			return err
 		}
 		for _, entity := range entities {
@@ -391,7 +391,7 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 	}
 	if item.Kind == "entity" {
 		var entity types.Entity
-		if err := r.db.WithContext(ctx).Where("space_id=? AND id=? AND merged_into_id=''", run.SpaceID, item.SourceID).First(&entity).Error; err != nil {
+		if err := extractedNameEntities(r.db.WithContext(ctx), run.SpaceID).Where("id=?", item.SourceID).First(&entity).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, nil
 			}
@@ -405,13 +405,18 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 			if err := lockEntitySpaceShared(tx, run.SpaceID); err != nil {
 				return err
 			}
-			query := tx.Model(&types.Entity{}).Where("id=? AND space_id=? AND merged_into_id='' AND canonical_name=? AND entity_type=? AND description=?", entity.ID, run.SpaceID, entity.CanonicalName, entity.EntityType, entity.Description)
+			query := extractedNameEntities(tx, run.SpaceID).Where("id=? AND canonical_name=? AND entity_type=? AND description=?", entity.ID, entity.CanonicalName, entity.EntityType, entity.Description)
 			updates := map[string]any{"name_embedding": types.EntityNameEmbedding(vector), "embedding_model_id": run.ModelID, "embedding_dimension": run.Dimension, "embedding_needs_rebuild": false}
 			if r.preserveEntityProfileTimestamps {
 				query = query.Where("updated_at=?", entity.UpdatedAt)
 				updates["updated_at"] = entity.UpdatedAt
 			}
 			result := query.Updates(updates)
+			if result.Error == nil && result.RowsAffected == 0 {
+				if excluded, err := nameEntityOutsideExtractedLibrary(tx, run.SpaceID, entity.ID); err != nil || excluded {
+					return err
+				}
+			}
 			return rebuildSourceWriteResult(result)
 		}, nil
 	}
