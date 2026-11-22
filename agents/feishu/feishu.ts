@@ -1,11 +1,12 @@
 import { Client, defaultHttpInstance, EventDispatcher, LoggerLevel, WSClient, type HttpInstance } from '@larksuiteoapi/node-sdk';
+import { DeliveryError, type Delivery } from './transport.js';
 import type { FeishuConfig } from './config.js';
 import { QueryError, record } from './output.js';
 import type { IncomingMessage, Outgoing } from './store.js';
 
 export type MessageInfo = { message_id: string; chat_id: string; parent_id?: string; thread_id?: string;
   create_time?: string; deleted?: boolean; sender?: { id: string; sender_type: string }; body?: { content: string } };
-export type Delivery = { messageId: string };
+export { DeliveryError, type Delivery } from './transport.js';
 
 export function parseIncomingMessage(value: unknown, config: FeishuConfig, botId: string): IncomingMessage | undefined {
   const event = record(value);
@@ -46,10 +47,6 @@ export function parseIncomingMessage(value: unknown, config: FeishuConfig, botId
   } catch { return { ...result, rejection: '无法解析这条文字消息，请重新输入。' }; }
 }
 
-export class DeliveryError extends Error {
-  constructor(public kind: 'unknown' | 'retry' | 'failed', public code: string) { super(code); }
-}
-
 function apiData(response: { code?: number; msg?: string; data?: unknown }) {
   if (response.code !== 0) {
     const retry = [99991400, 230020, 11232, 11233].includes(response.code ?? -1);
@@ -59,6 +56,7 @@ function apiData(response: { code?: number; msg?: string; data?: unknown }) {
 }
 
 export class FeishuTransport {
+  readonly retryAmbiguous = true;
   readonly client: Client;
   private ws?: WSClient;
   private botId = '';

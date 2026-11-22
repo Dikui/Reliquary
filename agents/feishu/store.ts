@@ -2,9 +2,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { chmodSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { FeishuConfig } from './config.js';
 import { QueryError } from './output.js';
 import type { ShelfProposal } from './shelf.js';
+
+export type ChannelScope = { appId: string; tenantKey: string; chatId: string };
 
 export type IncomingMessage = {
   messageId: string; parentId: string | null; eventId: string; senderId: string;
@@ -38,18 +39,18 @@ export function lockDataDir(dataDir: string): DatabaseSync {
     return lock;
   } catch {
     lock.close();
-    throw new QueryError('already_running', '该数据目录已有运行中的飞书进程或维护操作');
+    throw new QueryError('already_running', '该数据目录已有运行中的机器人服务或维护操作');
   }
 }
 
-export function splitReply(text: string): string[] {
+export function splitReply(text: string, maxBytes = 12000): string[] {
   const parts: string[] = [];
   let current = '';
   let size = 0;
   // Leave ample room for JSON escaping and the segment label in Feishu's payload limit.
   for (const char of text) {
     const bytes = Buffer.byteLength(char);
-    if (size + bytes > 12000) { parts.push(current); current = ''; size = 0; }
+    if (size + bytes > maxBytes) { parts.push(current); current = ''; size = 0; }
     current += char;
     size += bytes;
   }
@@ -63,7 +64,8 @@ export class Store {
   private closed = false;
   private lock: DatabaseSync;
 
-  constructor(dataDir: string, readonly scope: Pick<FeishuConfig, 'appId' | 'tenantKey' | 'chatId'>) {
+  constructor(dataDir: string, readonly scope: ChannelScope, readonly channel = 'Feishu', private readonly replyBytes = 12000) {
+    if (!Number.isSafeInteger(replyBytes) || replyBytes < 4) throw new RangeError('invalid reply byte limit');
     this.lock = lockDataDir(dataDir);
     const path = join(dataDir, 'feishu.sqlite');
     try { this.db = new DatabaseSync(path); }
@@ -102,7 +104,7 @@ export class Store {
       this.transaction(() => {
         const owner = this.db.prepare('SELECT * FROM runtime WHERE id=1').get() as { pid: number; scope: string; token: string } | undefined;
         const key = JSON.stringify({ appId: scope.appId, tenantKey: scope.tenantKey, chatId: scope.chatId });
-        if (owner && owner.scope !== key) throw new QueryError('store_scope_changed', '数据目录已绑定其他飞书租户、应用或群');
+        if (owner && owner.scope !== key) throw new QueryError('store_scope_changed', '数据目录已绑定其他渠道、应用、群或资料范围');
         if (owner?.pid && !owner.token.startsWith('sqlite:')) {
           let alive = true;
           try { process.kill(owner.pid, 0); }
@@ -191,7 +193,7 @@ export class Store {
   finish(job: Job, output: CompletedOutput, status = 'succeeded', error: string | null = null) {
     this.transaction(() => {
       this.db.prepare('UPDATE jobs SET status=?, error=? WHERE id=?').run(status, error, job.id);
-      const parts = splitReply(output.text);
+      const parts = splitReply(output.text, this.replyBytes);
       parts.forEach((content, part) => {
         this.db.prepare(`INSERT OR IGNORE INTO outbox
           (job_id, part, uuid, reply_to, content, answer_entry, session_file, proposal_id, proposal_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -245,7 +247,7 @@ export class Store {
     this.transaction(() => {
       const job = this.db.prepare('SELECT message_id FROM jobs WHERE id=?').get(jobId)!;
       const next = Number(this.db.prepare('SELECT COALESCE(MAX(part),-1)+1 AS part FROM outbox WHERE job_id=?').get(jobId)!.part);
-      const parts = splitReply(output.text);
+      const parts = splitReply(output.text, this.replyBytes);
       parts.forEach((content, index) => this.db.prepare(`INSERT INTO outbox
         (job_id,part,uuid,reply_to,content,answer_entry,session_file,proposal_id,proposal_token) VALUES (?,?,?,?,?,?,?,?,?)`)
         .run(jobId, next + index, randomUUID(), String(job.message_id), content, output.answerEntryId ?? null,

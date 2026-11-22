@@ -1,13 +1,12 @@
 import type { Config } from './config.js';
-import { QueryAgent } from './pi.js';
+import { QueryAgent, type modelRuntime } from './pi.js';
 import { safeFailure, type QueryTools } from './tools.js';
-import { DeliveryError, type FeishuTransport } from './feishu.js';
+import { DeliveryError, type MessageTransport } from './transport.js';
 import { Store, type Job } from './store.js';
 import { ShelfEditor, type ShelfProposal } from './shelf.js';
 import { attachmentTool } from './attachment.js';
 
 export class Worker {
-  private modelWork: Promise<void> | undefined;
   private deliveryWork: Promise<void> | undefined;
   private stopping = false;
   private active?: QueryAgent;
@@ -15,9 +14,9 @@ export class Worker {
   lastError: string | null = null;
 
   constructor(private config: Config, private queries: QueryTools, readonly store: Store,
-    private transport: Pick<FeishuTransport, 'reply' | 'reconcile'> & Partial<Pick<FeishuTransport, 'download'>>,
+    private transport: Pick<MessageTransport, 'reply' | 'reconcile'> & Partial<Pick<MessageTransport, 'download' | 'retryAmbiguous'>>,
     private log: (event: string, details?: object) => void,
-    private shelf?: ShelfEditor) {}
+    private shelf?: ShelfEditor, private getRuntime?: () => ReturnType<typeof modelRuntime>) {}
 
   private async proposalOutput(job: Job, proposal: ShelfProposal, message?: string) {
     const text = message ?? this.shelf!.render(proposal);
@@ -63,6 +62,7 @@ export class Worker {
 
   async runNextJob(): Promise<boolean> {
     await this.reconcileProposals();
+    if (this.stopping) return false;
     const job = this.store.nextJob();
     if (!job) return false;
     if (job.rejection) {
@@ -96,11 +96,13 @@ export class Worker {
           { download: this.transport.download.bind(this.transport) }, this.shelf));
       }
       this.active = await QueryAgent.open(this.config, this.queries, {
+        runtime: await this.getRuntime?.(),
         sessionFile: conversation.session_file ?? conversation.parent_file ?? undefined,
         answerEntryId: conversation.session_file ? undefined : conversation.branch_entry ?? undefined,
         proposalTool: this.shelf?.definition(job), shelfContext: this.shelf?.context(job),
         additionalTools,
       });
+      if (this.stopping) throw new Error('service_stopping');
       const checkpoint = this.active.checkpoint();
       this.store.started(job, checkpoint.sessionFile, checkpoint.baseLeaf);
       started = true;
@@ -139,7 +141,7 @@ export class Worker {
           const found = await this.transport.reconcile(row);
           if (found) { this.store.sent(row, found.messageId); continue; }
           // Feishu UUID deduplication expires after one hour. Keep ambiguous old sends for review.
-          if (!row.first_attempt || Date.now() - row.first_attempt >= 55 * 60 * 1000) {
+          if (this.transport.retryAmbiguous === false || !row.first_attempt || Date.now() - row.first_attempt >= 55 * 60 * 1000) {
             this.store.deliveryProblem(row, 'unknown', 'delivery_not_confirmed');
             continue;
           }
@@ -157,13 +159,6 @@ export class Worker {
     }
   }
 
-  wake() {
-    if (this.stopping || this.modelWork) return;
-    this.modelWork = (async () => {
-      while (!this.stopping && await this.runNextJob()) this.deliver();
-    })().catch(() => { this.lastError = 'worker_error'; this.log('worker_error'); }).finally(() => { this.modelWork = undefined; });
-  }
-
   deliver() {
     if (this.stopping || this.deliveryWork) return;
     void this.flushOutbox().catch(() => this.log('delivery_error'));
@@ -172,6 +167,44 @@ export class Worker {
   async close() {
     this.stopping = true;
     await this.active?.session.abort();
-    await Promise.all([this.modelWork, this.deliveryWork]);
+    await this.deliveryWork;
+  }
+}
+
+// One model queue serves all channels. Each worker owns only its channel's state and transport.
+export class PiService {
+  private work?: Promise<void>;
+  private stopping = false;
+
+  constructor(private workers: Worker[], private log: (event: string) => void) {}
+
+  wake() {
+    if (this.stopping) return;
+    return this.work ??= this.drain().catch(() => this.log('worker_error')).finally(() => { this.work = undefined; });
+  }
+
+  private async drain() {
+    let progressed: boolean;
+    do {
+      progressed = false;
+      for (const worker of this.workers) {
+        if (this.stopping) return;
+        try {
+          if (await worker.runNextJob()) {
+            progressed = true;
+            worker.deliver();
+          }
+        } catch {
+          worker.lastError = 'worker_error';
+          this.log('worker_error');
+        }
+      }
+    } while (progressed);
+  }
+
+  async close() {
+    this.stopping = true;
+    await Promise.all(this.workers.map(worker => worker.close()));
+    await this.work;
   }
 }

@@ -157,7 +157,7 @@ export async function refreshModelCatalog(config: Config, shutdown: AbortSignal)
   }
 }
 
-async function modelRuntime(config: Config, queries: QueryTools) {
+export async function modelRuntime(config: Config, queries: QueryTools) {
   const subscription = config.modelAPI === 'openai-codex-responses';
   const authPath = config.authFile;
   const { redact } = queries;
@@ -277,14 +277,14 @@ export class QueryAgent {
   private constructor(readonly session: AgentSession, private config: Config, private queries: QueryTools, private runtime: ModelRuntime) {}
 
   static async open(config: Config, queries: QueryTools, options: { sessionFile?: string; answerEntryId?: string;
-    proposalTool?: ToolDefinition; additionalTools?: ToolDefinition[]; shelfContext?: string } = {}) {
+    runtime?: ModelRuntime; proposalTool?: ToolDefinition; additionalTools?: ToolDefinition[]; shelfContext?: string } = {}) {
     await mkdir(config.dataDir, { recursive: true, mode: 0o700 });
     const dataDir = await realpath(config.dataDir);
     const sessionDir = join(dataDir, 'sessions');
     await mkdir(sessionDir, { recursive: true, mode: 0o700 });
     const cwd = join(dataDir, 'workspace');
     await mkdir(cwd, { recursive: true, mode: 0o700 });
-    const runtime = await modelRuntime(config, queries);
+    const runtime = options.runtime ?? await modelRuntime(config, queries);
     const model = runtime.getModel(config.modelAPI === 'openai-codex-responses' ? 'openai-codex' : 'reliquary-demo', config.model);
     if (!model) throw new QueryError('model_unavailable', '配置的模型无法加载');
     let manager: SessionManager;

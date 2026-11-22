@@ -96,11 +96,11 @@ export class ShelfEditor {
           }
           const request = structuredClone(input) as Data;
           for (const [index, item] of request.items.entries()) {
-            item.source_ref ||= active?.request.items[index]?.source_ref ?? `feishu:${job.message_id}:${index}`;
+            item.source_ref ||= active?.request.items[index]?.source_ref ?? `${this.store.channel.toLowerCase()}:${job.message_id}:${index}`;
           }
           const proposal: ShelfProposal = {
             id: active?.id ?? randomUUID(), kind: 'ingest', conversationId: job.conversation_id!, ownerId: job.sender_id,
-            jobId: job.id, libraryId: '', status: 'pending', source: 'Reliquary Feishu', request,
+            jobId: job.id, libraryId: '', status: 'pending', source: `Reliquary ${this.store.channel}`, request,
             token: randomBytes(6).toString('hex').toUpperCase(), expires: Date.now() + 10 * 60 * 1000, fingerprint: '',
           };
           this.queries.validateIngest(request);
@@ -215,8 +215,8 @@ export class ShelfEditor {
       const operations = await this.normalize(input.library_id, input.operations);
       const id = randomUUID();
       proposal = { id, conversationId: job.conversation_id, ownerId: job.sender_id, jobId: job.id,
-        libraryId: input.library_id, status: 'preparing', source: `Reliquary Feishu/${id}`, token: '', expires: 0, fingerprint: '',
-        request: { library_id: input.library_id, source: { type: 'agent', agent_name: `Reliquary Feishu/${id}` },
+        libraryId: input.library_id, status: 'preparing', source: `Reliquary ${this.store.channel}/${id}`, token: '', expires: 0, fingerprint: '',
+        request: { library_id: input.library_id, source: { type: 'agent', agent_name: `Reliquary ${this.store.channel}/${id}` },
           operations, decisions: operations.map(op => ({ item_id: op.id, action: 'apply' })), confirmed: false } };
     } else {
       if (!proposal || proposal.libraryId !== input.library_id || !proposal.changeset) throw new QueryError('unknown_proposal', '当前发送人在此会话没有对应提议');

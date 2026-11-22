@@ -4,7 +4,7 @@ import { Value } from 'typebox/value';
 import type { Config } from './config.js';
 import { QueryError, record } from './output.js';
 import { safeFailure, type QueryTools } from './tools.js';
-import type { FeishuTransport } from './feishu.js';
+import type { MessageTransport } from './transport.js';
 import type { Job, Store } from './store.js';
 import type { ShelfEditor } from './shelf.js';
 
@@ -18,7 +18,7 @@ const attachmentSchema = Type.Object({
 }, { additionalProperties: false });
 
 export function attachmentTool(config: Config, queries: QueryTools, store: Store, job: Job,
-  transport: Pick<FeishuTransport, 'download'>, shelf: ShelfEditor): ToolDefinition {
+  transport: Pick<MessageTransport, 'download'>, shelf: ShelfEditor): ToolDefinition {
   return {
     name: 'attachment', label: '会话附件与货架导入',
     description: 'list 列出当前发送人在本会话提供的文件；read 读取 UTF-8 文本或完整 xlsx 盘点（可指定 worksheet、offset、limit 分页）；upload 暂存货架原件；import 按已确认方案生成待确认变更集；changesets 分页读取已有批次。先 list 取得 message_id，写入目标使用 library_id，import 需要 plan_key 和 file_date。',
