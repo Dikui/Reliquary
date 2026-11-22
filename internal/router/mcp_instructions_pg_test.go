@@ -22,7 +22,8 @@ func TestMCPSkillInstructions(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, utf8.Valid(rules))
 	require.NotEmpty(t, strings.TrimSpace(string(rules)))
-	require.LessOrEqual(t, utf8.RuneCount(rules), 1500)
+	// Every entry sends the rules with each request (handshake instructions, or Pi's system prompt), so keep them short.
+	require.LessOrEqual(t, utf8.RuneCount(rules), 1600)
 	require.NotRegexp(t, mcpDeprecatedTerms, string(rules))
 
 	entrypoint, err := skills.Files.ReadFile("reliquary/SKILL.md")

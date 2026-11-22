@@ -128,7 +128,7 @@ def pi_runtime(temporary):
     (source / 'skills/reliquary/workflows').mkdir(parents=True)
     (source / 'skills/reliquary/SKILL.md').write_text('---\nname: reliquary\n---\n')
     (source / 'skills/reliquary/workflows/shelf-import.md').write_text('# 导入\n')
-    (source / 'skills/reliquary/embed.go').write_text('package skills\n')
+    (source / 'skills/reliquary/rules.md').write_text('# Reliquary 使用规则\n\n- 闲聊、笑话、通用知识不作答。\n')
     agent.write_env(root / 'deploy/.env', {'COMPOSE_PROJECT_NAME': 'customer', 'APP_PORT': '18080'})
     (root / 'deploy/docker-compose.yml').write_text('{"networks":{"Reliquary-network":{"name":"custom-net"}}}')
     (root / 'deploy/customer-install.json').write_text('{"status":"base_ready","source":"%s"}' % source)
@@ -202,16 +202,18 @@ class LocalPiTests(unittest.TestCase):
             self.assertIn('RELIQUARY_API_KEY=pi-fixture-key\n', (directory / 'pi.env').read_text())
             for secret in [agent_dir / 'auth.json', directory / 'pi.env']:
                 self.assertEqual(secret.stat().st_mode & 0o777, 0o600)
-            self.assertTrue((agent_dir / 'skills/reliquary/workflows/shelf-import.md').is_file())
-            self.assertFalse((agent_dir / 'skills/reliquary/embed.go').exists())
+            # Pi never sends MCP server instructions, so the shared rules ride in the system prompt instead
+            # of a skill copy the model would have to read first.
+            self.assertFalse((agent_dir / 'skills/reliquary').exists())
             system = (agent_dir / 'APPEND_SYSTEM.md').read_text()
+            self.assertTrue(system.endswith('# Reliquary 使用规则\n\n- 闲聊、笑话、通用知识不作答。\n'))
             self.assertIn('只读', system)
             self.assertIn('reliquary_upload_workbook', system)
             self.assertIn('reliquary_stage_attachment', system)
             self.assertIn('add_document_version', system)
             self.assertNotIn('没有上传工作文件夹文件的工具', system)
-            self.assertIn('闲聊、笑话、通用知识', system)
             self.assertIn('至少 3 行 3 列时才用 Markdown 表格', system)
+            self.assertNotIn('MCP 握手说明', system)
             api.assert_called_once_with('http://127.0.0.1:18080', '/space/api-keys', {'name': 'Reliquary Pi'})
             self.assertTrue((root / 'workspace').is_dir())
             launcher = root / 'scripts/pi'
@@ -500,7 +502,7 @@ class LocalPiUpdateTests(unittest.TestCase):
             current = root.parent / 'current-source'
             agent.shutil.copytree(source, current)
             (current / 'VERSION').write_text('0.18.0\n')
-            (current / 'skills/reliquary/workflows/shelf-import.md').write_text('# 新导入流程\n')
+            (current / 'skills/reliquary/rules.md').write_text('# Reliquary 使用规则\n\n- 新规则。\n')
 
             def run(command, **_):
                 return agent.subprocess.CompletedProcess(command, 0, pi_events('测试库'), '')
@@ -513,10 +515,10 @@ class LocalPiUpdateTests(unittest.TestCase):
             self.assertNotIn('reliquary-pi:previous', (root / 'scripts/pi').read_text())
             self.assertTrue((root / 'scripts/pi').stat().st_mode & 0o100)
             guidance = root / 'agents/pi/data/agent'
-            self.assertEqual((guidance / 'skills/reliquary/workflows/shelf-import.md').read_text(), '# 新导入流程\n')
-            self.assertFalse((guidance / 'skills/reliquary/workflows/obsolete.md').exists())
-            self.assertFalse((guidance / 'skills/reliquary/embed.go').exists())
-            self.assertIn('只读', (guidance / 'APPEND_SYSTEM.md').read_text())
+            self.assertFalse((guidance / 'skills/reliquary').exists())
+            system = (guidance / 'APPEND_SYSTEM.md').read_text()
+            self.assertIn('只读', system)
+            self.assertTrue(system.endswith('- 新规则。\n'))
             for name, content in preserved.items():
                 self.assertEqual((root / name).read_bytes(), content)
                 self.assertEqual((root / name).stat().st_mode & 0o777, 0o600)

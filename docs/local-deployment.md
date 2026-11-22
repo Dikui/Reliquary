@@ -10,7 +10,7 @@
 ├── agents/
 │   ├── pi/          config.json、pi.env（本地 Pi 配置时生成）
 │   │   └── data/agent/  settings.json、mcp.json、models.json、auth.json、
-│   │                    APPEND_SYSTEM.md、skills/reliquary/、sessions/
+│   │                    APPEND_SYSTEM.md、sessions/
 │   └── feishu/      compose.yaml、agent.env、enabled（飞书配置时生成）
 │       └── data/    飞书 SQLite、Pi sessions/ 和本地运行状态
 ├── workspace/       本地 Pi 默认工作文件夹，只读挂载到 /workspace
@@ -111,7 +111,7 @@ python3 "$HOME/Project/Reliquary/scripts/agent-local.py" pi-update --root "$HOME
 
 `scripts/pi` 每次在 Docker 中启动终端会话，退出后容器删除，配置与会话保留在 `agents/pi/data/agent/`。把待处理文件放到选定的工作文件夹，在对话中使用 `/workspace` 下的路径。
 
-`pi-update` 必须从要发布的源码仓库执行。先退出正在运行的 Pi。命令重建镜像，刷新 `APPEND_SYSTEM.md`、技能包、启动器和 `models.json` 中的 Reliquary provider，再实际检查 `list_libraries` 调用。ChatGPT 使用 `pi.env` 中的 Reliquary API Key，客户 API 密钥继续存于 `auth.json`。字段或凭据不足时保留原模型文件，并提示运行 `pi-configure`。检查失败时恢复原镜像配置、启动器及本次改写的模型和凭据文件，已刷新的规则与技能继续生效。单独运行 `deploy-local.py` 时需另行更新 Pi。
+`pi-update` 必须从要发布的源码仓库执行。先退出正在运行的 Pi。命令重建镜像，刷新 `APPEND_SYSTEM.md`（含最新使用规则）、启动器和 `models.json` 中的 Reliquary provider，再实际检查 `list_libraries` 调用。ChatGPT 使用 `pi.env` 中的 Reliquary API Key，客户 API 密钥继续存于 `auth.json`。字段或凭据不足时保留原模型文件，并提示运行 `pi-configure`。检查失败时恢复原镜像配置、启动器及本次改写的模型和凭据文件，已刷新的规则继续生效。单独运行 `deploy-local.py` 时需另行更新 Pi。
 
 `pi.env` 与 `auth.json` 含可用凭据，Pi 的 read 工具仍能读到容器内自己的凭据文件。`reliquary-admin` 暂不备份本地 Pi 的配置和会话，不能沿用下文飞书状态的恢复承诺；重新配置能恢复连接，不能恢复丢失的本地 Pi 会话。
 

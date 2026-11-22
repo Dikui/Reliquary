@@ -104,7 +104,7 @@ python3 scripts/install-local.py --install --root "$HOME/Reliquary"
 | `scripts/agent-local.py` | 已安装的 Agent 配置和运维入口 |
 | `scripts/pi` | 本地 Pi 容器启动器 |
 | `agents/pi/config.json`、`agents/pi/pi.env` | 本地 Pi 镜像、模型与工作目录配置、Reliquary API Key 和代理 |
-| `agents/pi/data/agent/` | settings.json、mcp.json、models.json、auth.json、APPEND_SYSTEM.md、skills/reliquary/ 和 sessions/ |
+| `agents/pi/data/agent/` | settings.json、mcp.json、models.json、auth.json、APPEND_SYSTEM.md（入口约束加使用规则全文）和 sessions/ |
 | `workspace/` | 本地 Pi 默认工作文件夹，只读挂载到容器 `/workspace` |
 | `agents/feishu/compose.yaml` | Agent 容器配置（configure 生成） |
 | `agents/feishu/agent.env` | 客户模型与飞书配置（configure 生成） |
@@ -235,7 +235,7 @@ RELIQUARY_PI_MODEL_API_KEY=... python3 "$HOME/Reliquary/scripts/agent-local.py" 
 1. 再次核对已取得第 4 步的数据外流同意，按提示选择客户 API 或 ChatGPT 订阅。已有兼容的模型配置时可选择复用，否则填写第 4 步的模型参数。
 2. 选择一个 Pi 可读取的工作文件夹，默认 `~/Reliquary/workspace`。只放本次任务所需资料，以只读方式挂载到容器的 `/workspace`。模型仍能通过 read 读到容器内 Pi 自己的凭据文件，不把容器视为凭据隔离边界。
 3. 按实际网络填写容器可达的模型代理；直连时留空，已有代理输入 `-` 可改为直连。
-4. 向导创建本机 Reliquary API Key，写入第 3 步的配置、技能包副本和启动器。内置工具只开放 read，MCP 只连接 Reliquary，另有 `reliquary_upload_workbook` 和 `reliquary_stage_attachment`；不开放命令执行和本地文件修改工具。
+4. 向导创建本机 Reliquary API Key，写入第 3 步的配置、系统提示（入口约束加 `rules.md` 使用规则全文）和启动器。内置工具只开放 read，MCP 只连接 Reliquary，另有 `reliquary_upload_workbook` 和 `reliquary_stage_attachment`；不开放命令执行和本地文件修改工具。
 5. 等待模型实际调用 `list_libraries`，会消耗少量额度。成功输出包含“本地 Pi 已读到资料库”及回答，不能仅凭进程退出码认定成功。失败时配置保留，修正模型、网络或服务后重跑同一命令。
 
 启动 Pi，发出“列出你能查询的资料库”，核对实际名称与网页一致；退出后继续上次会话，请它根据刚才的列表说明各库用途，未填说明的明确标出。
