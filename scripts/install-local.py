@@ -192,7 +192,7 @@ def install(root, env_file, project, app_port=None, frontend_port=None, *, data=
         raise ValueError('本次安装需要原 --data 参数。安装完成后请使用 --update。')
     if record.get('status') == 'base_ready':
         shutil.copy2(SOURCE / 'scripts/agent-local.py', root / 'scripts/agent-local.py')
-        print(f'基础安装已完成。需要飞书对话入口时运行：python3 "{root / "scripts/agent-local.py"}" configure')
+        print(f'基础安装已完成。需要群聊对话入口时运行：python3 "{root / "scripts/agent-local.py"}" configure')
         offer_pi(root, load_agent())
         return
     revision = run('git', '-C', str(SOURCE), 'rev-parse', 'HEAD').strip()
@@ -246,7 +246,7 @@ def install_images(deploy, values, app_port, frontend_port, source, revision, ag
 
 
 def announce_install(root, agent):
-    print(f'资料库本体安装完成。需要飞书对话入口时运行：python3 "{root / "scripts/agent-local.py"}" configure')
+    print(f'资料库本体安装完成。需要群聊对话入口时运行：python3 "{root / "scripts/agent-local.py"}" configure')
     offer_pi(root, agent)
 
 
@@ -407,7 +407,7 @@ def update(root, *, backup=False):
     version = (SOURCE / 'VERSION').read_text().strip()
     registered = directory / 'VERSION'
     current = registered.read_text().strip() if registered.is_file() else None
-    results = dict.fromkeys(('基础服务', '数据库迁移', '本次备份', '本地 Pi', '飞书'), '未执行')
+    results = dict.fromkeys(('基础服务', '数据库迁移', '本次备份', '本地 Pi', '群聊'), '未执行')
     config_summary = []
     failures = []
     try:
@@ -449,7 +449,7 @@ def update(root, *, backup=False):
             shutil.copy2(SOURCE / 'scripts/agent-local.py', root / 'scripts/agent-local.py')
             for label, configured, refresh in (
                 ('本地 Pi', agent.pi_configured, lambda: agent.update_pi(root)),
-                ('飞书', agent.feishu_configured, lambda: agent.operate(root, 'update')),
+                ('群聊', agent.chat_configured, lambda: agent.operate(root, 'update')),
             ):
                 try:
                     if not configured(root):

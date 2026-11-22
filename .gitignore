@@ -20,7 +20,7 @@
 # 构建和依赖文件
 node_modules/
 /dist/
-/agents/feishu/dist/
+/agents/chat/dist/
 /build/
 *.log
 

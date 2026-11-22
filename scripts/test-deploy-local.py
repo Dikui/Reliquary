@@ -131,7 +131,7 @@ class DeploymentTests(unittest.TestCase):
 
     def test_optional_agent_entries_do_not_rebuild_library_services(self):
         # Ticket local-pi-agent/01: each entry under agents/ has its own image and update command (ADR 0028).
-        changed = {'agents/pi/Dockerfile', 'agents/pi/package-lock.json', 'agents/feishu/main.ts', 'scripts/agent-local.py'}
+        changed = {'agents/pi/Dockerfile', 'agents/pi/package-lock.json', 'agents/chat/service.ts', 'scripts/agent-local.py'}
         self.assertEqual(deployer.affected(changed), set())
         self.assertEqual(deployer.affected(changed | {'internal/handler/mcp.go'}), set(deployer.SERVICES))
 

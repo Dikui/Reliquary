@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, type IncomingMessage, type Outgoing } from './store.js';
 import { Worker } from './worker.js';
-import { DeliveryError } from './feishu.js';
+import { DeliveryError } from './transport.js';
 import type { Config } from './config.js';
 import type { QueryTools } from './tools.js';
 

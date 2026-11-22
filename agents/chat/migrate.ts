@@ -4,9 +4,9 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { randomBytes } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { loadConfig, loadFeishuConfig, type Config, type FeishuConfig } from './config.js';
+import { loadConfig, type Config } from './config.js';
 import { QueryError } from './output.js';
-import { lockDataDir } from './store.js';
+import { lockDataDir, type ChannelScope } from './store.js';
 import { connectQueryTools, safeFailure } from './tools.js';
 
 async function libraryIdentity(config: Config) {
@@ -23,7 +23,7 @@ async function libraryIdentity(config: Config) {
 export async function migrateState(options: {
   source: string; destination: string; runtimeRoot: string; sourceEndpoint: string;
   targetCheckEndpoint?: string;
-  config: Config; scope: Pick<FeishuConfig, 'appId' | 'tenantKey' | 'chatId'>;
+  config: Config; scope: ChannelScope;
 }) {
   const source = await realpath(options.source);
   const parent = await realpath(dirname(resolve(options.destination)));
@@ -129,6 +129,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     const config = loadConfig();
     console.log(JSON.stringify(await migrateState({ source: values.from, destination: config.dataDir,
       runtimeRoot: values['runtime-root']!, sourceEndpoint: values['from-endpoint'],
-      targetCheckEndpoint: values['target-check-endpoint'], config, scope: loadFeishuConfig() })));
+      targetCheckEndpoint: values['target-check-endpoint'], config, scope: {
+        appId: process.env.FEISHU_APP_ID ?? '', tenantKey: process.env.FEISHU_TENANT_KEY ?? '',
+        chatId: process.env.FEISHU_CHAT_ID ?? '',
+      } })));
   } catch (error) { console.error(JSON.stringify(safeFailure(error))); process.exitCode = 1; }
 }

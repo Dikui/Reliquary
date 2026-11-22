@@ -569,9 +569,9 @@ class AdminStorageTests(unittest.TestCase):
         with mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), \
              mock.patch.object(admin, "start_paused_environment"), contextlib.redirect_stdout(output):
             admin.restore(destination, package, argparse.Namespace(skip_models=True))
-        state = target / "agents/feishu/data"
+        state = target / "agents/chat/data"
         self.assertEqual((state / "sessions/conversation.jsonl").read_bytes(), (package / "agent/sessions/conversation.jsonl").read_bytes())
-        self.assertFalse((target / "agents/feishu/enabled").exists())
+        self.assertFalse((target / "agents/chat/enabled").exists())
         self.assertIn("Feishu agent", output.getvalue())
 
     def test_agent_credential_in_state_rejects_backup_and_restarts_agent(self):

@@ -60,12 +60,17 @@ def startup_lock(directory, *, wait=False):
 # Its state shares the backup's stopped window; credentials never enter packages.
 AGENT_PACKAGE_DIRECTORY = "agent"
 AGENT_EXCLUDED = {"auth.json", "runtime-lock.sqlite", "runtime-lock.sqlite-wal", "runtime-lock.sqlite-shm", "runtime-lock.sqlite-journal"}
-AGENT_REQUIRED = {"kind": "agent", "name": "feishu", "fields": ["MODEL_API_KEY or ChatGPT model", "FEISHU_APP_SECRET", "RELIQUARY_API_KEY"]}
+AGENT_REQUIRED = {"kind": "agent", "name": "chat", "fields": ["MODEL_API_KEY or ChatGPT model", "channel credentials", "RELIQUARY_API_KEY"]}
+
+
+def chat_state_directory(root):
+    legacy = root / "agents/feishu"
+    return legacy if legacy.is_dir() else root / "agents/chat"
 
 
 def agent_directory(deploy):
     """Return the installed agent directory, or None when the entry was never enabled."""
-    directory = Path(deploy).parent / "agents/feishu"
+    directory = chat_state_directory(Path(deploy).parent)
     return directory if Path(deploy).name == "deploy" and (directory / "compose.yaml").is_file() else None
 
 
@@ -98,7 +103,7 @@ def extract_agent_archive(data, target):
             name = Path(member.name)
             if name.is_absolute() or ".." in name.parts:
                 raise AdminError(f"Unsafe agent state path: {member.name}")
-            if name.parts and name.parts[0] in AGENT_EXCLUDED and len(name.parts) == 1:
+            if name.name in AGENT_EXCLUDED:
                 continue
             destination = target / name
             if member.isdir():
@@ -114,7 +119,7 @@ def extract_agent_archive(data, target):
 
 def copy_agent_state(directory, target):
     # Read through the agent image as root: on Linux the state belongs to the container's node user.
-    excludes = [f"--exclude=./{name}" for name in sorted(AGENT_EXCLUDED)]
+    excludes = [f"--exclude={name}" for name in sorted(AGENT_EXCLUDED)]
     data = run(["docker", "run", "--rm", "--user", "0:0", "-v", f"{directory / 'data'}:/data:ro", "--entrypoint", "tar",
                 agent_image(directory), "-C", "/data", *excludes, "-cf", "-", "."])
     extract_agent_archive(data, target)
@@ -128,7 +133,7 @@ def agent_restore_target(ctx, package):
     if root.name != "deploy":
         print(f"Feishu agent state stays in {Path(package) / AGENT_PACKAGE_DIRECTORY}; this target is not a runtime deploy/ directory.")
         return None
-    directory = root.parent / "agents/feishu"
+    directory = chat_state_directory(root.parent)
     if (directory / "enabled").exists():
         raise AdminError("Stop the Feishu agent (agent-local.py stop) before restore")
     state = directory / "data"
@@ -139,9 +144,15 @@ def agent_restore_target(ctx, package):
 
 def verify_agent_state(source, scratch):
     """Open a disposable copy so WAL replay never touches the package."""
-    import sqlite3
     snapshot_tree(source, scratch)
-    database = scratch / "feishu.sqlite"
+    result = verify_agent_database(scratch / "feishu.sqlite")
+    for channel_db in scratch.glob("*/feishu.sqlite"):
+        result[channel_db.parent.name] = verify_agent_database(channel_db)
+    return result
+
+
+def verify_agent_database(database):
+    import sqlite3
     if not database.is_file():
         raise AdminError("Agent state in the package has no feishu.sqlite")
     connection = sqlite3.connect(database)

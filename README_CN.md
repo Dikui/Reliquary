@@ -84,20 +84,15 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" pi-configure
 > [!IMPORTANT]
 > 启用本地 Pi 前，须同意将每轮完整上下文（问题、工具读到的资料片段、从工作文件夹读取的内容、历史回复）发送给所选模型服务商；ChatGPT 订阅经 Reliquary 后端转发给 OpenAI。资料库正文、文件和数据库不会整体同步出去。本地 Pi 会话暂未纳入 `reliquary-admin` 备份。见 [ADR 0029](docs/adr/0029-recommend-local-pi.md) 和 [Agent 辅助安装指南](docs/agent-installation.md)。
 
-### 可选：飞书对话入口
+### 可选的群聊服务
 
-```bash
-python3 "$HOME/Reliquary/scripts/agent-local.py" configure
-```
+在运行目录放置所选平台的接入模块、依赖锁和预期入口名单。执行 `python3 "$HOME/Reliquary/scripts/agent-local.py" configure` 选择资料库和模型并启动共享 Pi 服务。各入口分别保存会话。[接入与部署指南](agents/chat/README.md)
 
-首次运行时构建飞书 Agent（下载 Pi 和飞书 SDK），再引导选择资料库、自己的模型 API 或 ChatGPT 订阅、飞书应用和测试群，检查模型工具调用后启动机器人。ChatGPT 在网页授权并选择模型，已有连接可直接复用。飞书应用配置与账号授权由本人完成。
-
-> [!IMPORTANT]
-> 启用飞书入口后，群内问答经飞书服务器传输并保存在飞书；每轮对话的上下文（问题、工具读到的资料片段、历史回复）发送给所选模型服务商。资料库本体仍只在本机运行。见 [ADR 0028](docs/adr/0028-optional-feishu-entry.md)。
+群消息经所选平台传输。每轮提问、工具读取的资料片段及相关对话历史会发送给所选模型服务商。
 
 默认网页为 <http://127.0.0.1>，API 为 <http://127.0.0.1:8080>，MCP 为 `http://127.0.0.1:8080/mcp`。端口冲突时增加 `--app-port 18080 --frontend-port 18081`。同机第二套安装还需独立 `--project-name` 和 `.env` 中的 `REDIS_PORT`。
 
-资料库数据存于本机。网页采用本机免登录访问，外部工具使用 API Key。完整安装、存储、授权、更新与恢复步骤见[本地部署指南](docs/local-deployment.md)，飞书使用方法见[Agent 指南](agents/feishu/README.md)。
+资料库数据存于本机。网页采用本机免登录访问，外部工具使用 API Key。完整安装、存储、授权、更新与恢复步骤见[本地部署指南](docs/local-deployment.md)，群聊使用方法见[Agent 指南](agents/chat/README.md)。
 
 ## 使用
 

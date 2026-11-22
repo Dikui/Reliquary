@@ -186,7 +186,7 @@ class CustomerPiInstallationTests(unittest.TestCase):
             self.assert_resume_command(root)
             self.assertFalse((root / 'agents/pi').exists())
             self.assertEqual(self.prompt.call_count, 1)
-            self.assertIn('需要飞书对话入口时运行', self.output)
+            self.assertIn('需要群聊对话入口时运行', self.output)
 
     def test_noninteractive_install_prints_command_without_prompting(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -213,14 +213,14 @@ class CustomerPiInstallationTests(unittest.TestCase):
                 self.assertFalse((root / 'agents/pi').exists())
                 self.assertEqual(json.loads((root / 'deploy/customer-install.json').read_text())['status'], 'prepared')
 
-    def test_ready_base_still_offers_pi_and_keeps_feishu_hint(self):
+    def test_ready_base_still_offers_pi_and_keeps_chat_hint(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = self.runtime(temporary)
             self.install(root, interactive=False)
             self.install(root, ['n'])
             self.assert_resume_command(root)
             self.assertEqual(self.prompt.call_count, 1)
-            self.assertIn('需要飞书对话入口时运行', self.output)
+            self.assertIn('需要群聊对话入口时运行', self.output)
             self.commands.assert_not_called()
 
     def test_install_without_data_starts_the_full_stack(self):
@@ -605,7 +605,7 @@ class CustomerUpdateTests(unittest.TestCase):
         feishu.assert_not_called()
         for status in ('源码分支 feature，提交 new-revision', 'app 已更新，健康检查通过',
                        '数据库迁移：无变更', '本次备份：无数据库升级，已跳过',
-                       '本地 Pi：未配置，已跳过', '飞书：未配置，已跳过'):
+                       '本地 Pi：未配置，已跳过', '群聊：未配置，已跳过'):
             self.assertIn(status, self.output.getvalue())
 
     def test_migration_runs_upgrade_without_backup_by_default_then_updates_configured_entries(self):
@@ -621,7 +621,7 @@ class CustomerUpdateTests(unittest.TestCase):
         pi.assert_called_once_with(self.root)
         feishu.assert_called_once_with(self.root, 'update')
         for status in ('数据库迁移：已执行并验证', '本次备份：未执行',
-                       '本地 Pi：已更新，检查通过', '飞书：已更新，保持停用'):
+                       '本地 Pi：已更新，检查通过', '群聊：已更新，保持停用'):
             self.assertIn(status, self.output.getvalue())
 
     def test_backup_flag_is_forwarded_to_database_upgrade(self):

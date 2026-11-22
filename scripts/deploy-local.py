@@ -34,7 +34,7 @@ def affected(paths):
         return set(SERVICES)
     selected = set()
     for name in paths:
-        if name.startswith(('agents/feishu/', 'agents/pi/')) or name == 'scripts/agent-local.py':
+        if name.startswith(('agents/chat/', 'agents/feishu/', 'agents/pi/')) or name == 'scripts/agent-local.py':
             continue  # Optional agent entries have their own images and state-preserving updates.
         if name.startswith(("docs/", ".scratch/", ".github/", "config/prompt_templates/")) or name.startswith(("README", "AGENTS.md", "CLAUDE.md")):
             continue

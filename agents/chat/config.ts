@@ -2,20 +2,6 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { QueryError } from './output.js';
 
 export type Config = ReturnType<typeof loadConfig>;
-export type FeishuConfig = ReturnType<typeof loadFeishuConfig>;
-
-export function loadFeishuConfig(env: NodeJS.ProcessEnv = process.env) {
-  const value = (name: string) => {
-    const text = env[name]?.trim();
-    if (!text) throw new QueryError('invalid_config', `Missing configuration: ${name}`);
-    return text;
-  };
-  return {
-    appId: value('FEISHU_APP_ID'), appSecret: value('FEISHU_APP_SECRET'),
-    tenantKey: value('FEISHU_TENANT_KEY'), chatId: value('FEISHU_CHAT_ID'),
-  };
-}
-
 export function loadDataDir(env: NodeJS.ProcessEnv = process.env) {
   const path = env.AGENT_DATA_DIR?.trim();
   if (!path || !isAbsolute(path)) throw new QueryError('invalid_config', 'AGENT_DATA_DIR must be absolute');

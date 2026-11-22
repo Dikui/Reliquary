@@ -181,7 +181,20 @@ def choose_model(base, frontend):
     raise ValueError('请选择 1 或 2')
 
 
-def source_checkout(root, entry='feishu'):
+def chat_directory(root):
+    legacy = root / 'agents/feishu'
+    return legacy if legacy.is_dir() else root / 'agents/chat'
+
+
+def required_channels(root):
+    path = root / 'integrations/chat.json'
+    names = json.loads(path.read_text())
+    if not isinstance(names, list) or not names or not all(isinstance(n, str) and n.strip() == n and n for n in names):
+        raise ValueError(f'请填写预期入口名称列表：{path}')
+    return set(names)
+
+
+def source_checkout(root, entry='chat'):
     """Prefer the source recorded by install-local.py, then this script's own checkout."""
     candidates = []
     marker = root / 'deploy/customer-install.json'
@@ -215,12 +228,25 @@ def build_proxy_args(env):
     return args
 
 
-def build_image(source, root, entry='feishu'):
+def build_image(source, root, entry='chat'):
     revision = subprocess.check_output(['git', '-C', str(source), 'rev-parse', '--short=12', 'HEAD'], text=True).strip()
     image = f'reliquary-{entry}:' + (source / 'VERSION').read_text().strip() + '-' + revision + '-' + secrets.token_hex(3)
     env_file = root / 'deploy/.env'
     settings = {**(read_env(env_file) if env_file.is_file() else {}), **os.environ}
-    subprocess.run(['docker', 'build', *build_proxy_args(settings), '-t', image, str(source / 'agents' / entry)], check=True)
+    command = ['docker', 'build', *build_proxy_args(settings), '-t', image]
+    context = source / 'agents' / entry
+    if entry == 'chat':
+        required_channels(root)
+        integration = root / 'integrations/chat'
+        with tempfile.TemporaryDirectory() as temporary:
+            # Only adapter sources and their locked dependencies enter the named build context.
+            inputs = {'main.ts', 'package.json', 'package-lock.json'}
+            inputs.update(p.name for p in integration.glob('*.ts') if not p.name.endswith('.test.ts'))
+            for name in sorted(inputs):
+                shutil.copyfile(integration / name, Path(temporary) / name)
+            subprocess.run([*command, '--build-context', f'channels={temporary}', str(context)], check=True)
+    else:
+        subprocess.run([*command, str(context)], check=True)
     return image
 
 
@@ -232,13 +258,13 @@ def backend_network(root):
 
 
 def install_agent(root):
-    """Build the optional Feishu entry on first use; compose.yaml is written last as the completion mark."""
-    directory = root / 'agents/feishu'
+    """Build the optional chat service on first use; compose.yaml is written last as the completion mark."""
+    directory = chat_directory(root)
     if (directory / 'compose.yaml').exists():
         return
     deploy = root / 'deploy'
     source = source_checkout(root)
-    print('首次启用飞书入口：构建 Agent 镜像，自动下载 Pi Agent、Pi AI、Pi MCP 和飞书 SDK…', flush=True)
+    print('首次启用消息入口：构建共享服务和本机接入组件…', flush=True)
     image = build_image(source, root)
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     state = directory / 'data'
@@ -249,10 +275,10 @@ def install_agent(root):
     project = read_env(deploy / '.env')['COMPOSE_PROJECT_NAME']
     network = backend_network(root)
     config = json.loads(subprocess.check_output(
-        ['docker', 'compose', '--env-file', str(deploy / '.env'), '-f', str(source / 'agents/feishu/compose.yaml'),
+        ['docker', 'compose', '--env-file', str(deploy / '.env'), '-f', str(source / 'agents/chat/compose.yaml'),
          'config', '--no-interpolate', '--no-env-resolution', '--no-path-resolution', '--format', 'json'],
         text=True, env={**os.environ, 'AGENT_IMAGE': image, 'AGENT_STATE_DIR': str(state)}))
-    config['name'] = project + '-feishu'
+    config['name'] = project + '-chat'
     service = config['services']['agent']
     service['image'] = image
     service['volumes'][0]['source'] = str(state)
@@ -268,7 +294,7 @@ def configure(root):
     runtime = read_env(root / 'deploy/.env')
     base = 'http://127.0.0.1:' + runtime.get('APP_PORT', '8080')
     frontend = 'http://127.0.0.1:' + runtime.get('FRONTEND_PORT', '80')
-    directory = root / 'agents/feishu'
+    directory = chat_directory(root)
     values = read_env(directory / 'agent.env') if (directory / 'agent.env').exists() else {}
     if (directory / 'enabled').exists():
         raise ValueError('请先执行 stop，待当前任务结束后再更改运行配置')
@@ -302,25 +328,16 @@ def configure(root):
             values.pop(key, None)
     else:
         raise ValueError('请选择 1 或 2')
-    print('飞书应用需启用机器人，订阅长连接事件 im.message.receive_v1，发布权限并加入目标群。')
-    print('权限：im:message.group_at_msg:readonly、im:message:send_as_bot、im:message:readonly、im:message.group_msg')
-    print('注意：im:message.group_msg 允许应用读取所在群的全部消息，仅用于核对发送结果；建议机器人只加入专用群。')
-    print('打开 https://open.feishu.cn/app 完成配置。Tenant Key 见企业信息，Chat ID 可从群设置中的群信息获取。')
-    values.update(FEISHU_APP_ID=input('飞书 App ID：').strip(), FEISHU_APP_SECRET=getpass.getpass('飞书 App Secret：'),
-                  FEISHU_TENANT_KEY=input('飞书 Tenant Key：').strip(), FEISHU_CHAT_ID=input('飞书 Chat ID：').strip())
-    # Scope is immutable for existing conversations; reject before replacing configuration.
     previous = read_env(directory / 'agent.env') if (directory / 'agent.env').exists() else {}
-    for key in ['FEISHU_APP_ID', 'FEISHU_TENANT_KEY', 'FEISHU_CHAT_ID', 'RELIQUARY_LIBRARY_IDS']:
-        value = ','.join(ids) if key == 'RELIQUARY_LIBRARY_IDS' else values[key]
-        if previous.get(key) and previous[key] != value and (directory / 'data/feishu.sqlite').exists():
-            raise ValueError('现有会话已绑定其他群或库，请使用独立目录或先执行状态迁移')
+    if previous.get('RELIQUARY_LIBRARY_IDS') and previous['RELIQUARY_LIBRARY_IDS'] != ','.join(ids) and any((directory / 'data').rglob('*.sqlite')):
+        raise ValueError('现有会话已绑定其他资料库，请先核对历史或使用独立目录')
     if not previous.get('RELIQUARY_API_KEY'):
-        key = api(base, '/space/api-keys', {'name': 'Reliquary Feishu'})
+        key = api(base, '/space/api-keys', {'name': 'Reliquary Chat'})
         values['RELIQUARY_API_KEY'] = key['token']
     values.update(RELIQUARY_API_URL='http://app:8080', RELIQUARY_LIBRARY_IDS=','.join(ids), AGENT_DATA_DIR='/data')
     if 'HTTP_PROXY' in os.environ or 'HTTPS_PROXY' in os.environ:
         print('如需代理，请填写容器可访问的地址。宿主回环地址需改用 host.docker.internal。')
-    proxy = input('模型及飞书代理地址 [留空为直连]：').strip()
+    proxy = input('模型及消息入口代理地址 [留空为直连]：').strip()
     for key in ['HTTP_PROXY', 'HTTPS_PROXY']:
         values.pop(key, None)
         if proxy:
@@ -340,7 +357,7 @@ def configure(root):
 
 
 def compose(root, *args):
-    directory = root / 'agents/feishu'
+    directory = chat_directory(root)
     return ['docker', 'compose', '--project-directory', str(directory), *args]
 
 
@@ -354,18 +371,67 @@ def maintenance_lock(root):
         yield
 
 
-def feishu_configured(root):
-    directory = root / 'agents/feishu'
+def chat_configured(root):
+    directory = chat_directory(root)
     env = directory / 'agent.env'
     if not (directory / 'compose.yaml').is_file() or not env.is_file():
         return False
     values = read_env(env)
-    return all(values.get(key) for key in ('RELIQUARY_API_KEY', 'MODEL_SOURCE', 'FEISHU_APP_ID',
-                                            'FEISHU_APP_SECRET', 'FEISHU_TENANT_KEY', 'FEISHU_CHAT_ID'))
+    model_configured = values.get('MODEL_SOURCE') in ('api', 'chatgpt') or values.get('MODEL_API') in (
+        'openai-completions', 'openai-responses', 'anthropic-messages', 'openai-codex-responses')
+    return bool(model_configured and values.get('RELIQUARY_API_KEY'))
+
+
+def write_config(path, data):
+    fd, name = tempfile.mkstemp(dir=path.parent)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(data)
+        os.replace(name, path)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
+def check_mount(directory, volumes):
+    if not any(v.get('type') == 'bind' and v.get('target') == '/data'
+               and Path(v.get('source', '')).resolve() == (directory / 'data').resolve() for v in volumes):
+        raise ValueError('消息服务 /data 未挂载原有会话目录')
+
+
+def start_checked(root, expected):
+    subprocess.run(compose(root, 'up', '-d', '--no-build', '--pull', 'never', '--wait', '--wait-timeout', '120'), check=True)
+    if expected is None:
+        return  # Previously installed standalone image.
+    container = subprocess.check_output(compose(root, 'ps', '-q', 'agent'), text=True).strip()
+    mounts = json.loads(subprocess.check_output(['docker', 'inspect', '--format', '{{json .Mounts}}', container], text=True))
+    check_mount(chat_directory(root), [{'type': v['Type'], 'source': v['Source'], 'target': v['Destination']} for v in mounts])
+    health = json.loads(subprocess.check_output(compose(root, 'exec', '-T', 'agent', 'node', '--input-type=module', '-e',
+        "process.stdout.write(await (await fetch('http://127.0.0.1:8787/ready')).text())"), text=True))
+    missing = sorted(n for n in expected if health.get('channels', {}).get(n) != 'connected')
+    if missing or not health.get('ready'):
+        raise ValueError('消息入口验收失败：' + ', '.join(missing or ['服务未就绪']))
+
+
+def activate_image(root, image):
+    directory = chat_directory(root)
+    path = directory / 'compose.yaml'
+    before = path.read_bytes()
+    config = json.loads(before)
+    expected = required_channels(root)
+    check_mount(directory, config['services']['agent']['volumes'])
+    config['services']['agent']['image'] = image
+    write_config(path, (json.dumps(config, indent=2) + '\n').encode())
+    try:
+        start_checked(root, expected)
+    except BaseException:
+        write_config(path, before)
+        start_checked(root, expected)
+        print('已回退到上一镜像，原数据挂载及预期入口均已核验。', flush=True)
+        raise
 
 
 def operate(root, action):
-    directory = root / 'agents/feishu'
+    directory = chat_directory(root)
     if action == 'login':
         print('在浏览器完成 Pi 的独立 ChatGPT 登录，凭据将保存至 Agent 数据目录。')
         subprocess.run(compose(root, 'run', '--rm', '--no-deps', '-p', '127.0.0.1:1455:1455',
@@ -375,34 +441,38 @@ def operate(root, action):
         subprocess.run(compose(root, 'run', '--rm', '--no-deps', 'agent',
                               'node', '--use-env-proxy', 'dist/setup.js', '--model'), check=True)
     elif action == 'start':
+        pending = directory / 'pending-image'
+        if pending.is_file():
+            try:
+                activate_image(root, pending.read_text().strip())
+            except Exception:
+                if not (directory / 'enabled').exists():
+                    subprocess.run(compose(root, 'stop'), check=True)
+                raise
+            finally:
+                pending.unlink(missing_ok=True)
+        else:
+            expected = required_channels(root) if (root / 'integrations/chat.json').exists() else None
+            start_checked(root, expected)
         (directory / 'enabled').touch(mode=0o600)
-        subprocess.run(compose(root, 'up', '-d', '--no-build', '--pull', 'never', '--wait'), check=True)
         print('请在目标群 @机器人 发送安装验证消息，收到回复后执行 status 核对。')
     elif action == 'stop':
         (directory / 'enabled').unlink(missing_ok=True)
         subprocess.run(compose(root, 'stop'), check=True)
     elif action == 'update':
         source = Path(__file__).resolve().parent.parent
-        if not (source / 'agents/feishu/Dockerfile').exists():
+        if not (source / 'agents/chat/Dockerfile').exists():
             raise ValueError('请从仓库中的 scripts/agent-local.py 执行 update --root 运行目录')
         if not (directory / 'compose.yaml').exists():
-            raise ValueError('尚未启用飞书入口，请先执行 configure')
+            raise ValueError('尚未启用群聊入口，请先执行 configure')
         image = build_image(source, root)
-        path = directory / 'compose.yaml'
-        before = path.read_bytes()
-        config = json.loads(before)
-        config['services']['agent']['image'] = image
-        path.write_text(json.dumps(config, indent=2) + '\n')
+        pending = directory / 'pending-image'
         if not (directory / 'enabled').exists():
-            # A stopped agent stays stopped; the next start uses the new image.
-            print('Agent 已停止，新镜像将在下次 start 时使用。')
+            write_config(pending, image.encode())
+            print('Agent 已停止；下次 start 验收候选镜像，失败时回退。')
             return False
-        try:
-            subprocess.run(compose(root, 'up', '-d', '--no-build', '--pull', 'never', '--wait'), check=True)
-        except BaseException:
-            path.write_bytes(before)
-            subprocess.run(compose(root, 'up', '-d', '--no-build', '--pull', 'never', '--wait'), check=True)
-            raise
+        activate_image(root, image)
+        pending.unlink(missing_ok=True)
         return True
     elif action == 'status':
         subprocess.run(compose(root, 'ps'), check=True)
@@ -561,13 +631,13 @@ def configure_pi(root, *, show_notice=True, options=None):
         config['image'] = build_image(source, root, 'pi')
         write_json(directory / 'config.json', config, private=True)
 
-    feishu = root / 'agents/feishu/agent.env'
-    shared = read_env(feishu) if feishu.exists() else {}
+    chat_env = chat_directory(root) / 'agent.env'
+    shared = read_env(chat_env) if chat_env.exists() else {}
     # Only the customer-facing protocols are shared; Feishu's developer-only Codex mode has no Pi equivalent.
     if options is not None:
         model = model_from_options(base, frontend, options)
     elif shared.get('MODEL_SOURCE') in ('api', 'chatgpt') and shared.get('MODEL_API') in MODEL_APIS and \
-            input(f"复用飞书入口的模型 {shared.get('MODEL_NAME')}？[Y/n]：").strip().lower() in ('', 'y', 'yes'):
+            input(f"复用群聊入口的模型 {shared.get('MODEL_NAME')}？[Y/n]：").strip().lower() in ('', 'y', 'yes'):
         model = {key: shared[key] for key in MODEL_KEYS if key in shared}
     else:
         model = choose_model(base, frontend)

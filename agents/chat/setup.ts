@@ -1,7 +1,6 @@
 import { QueryAgent } from './pi.js';
-import { loadConfig, loadFeishuConfig } from './config.js';
+import { loadConfig } from './config.js';
 import { connectQueryTools, safeFailure } from './tools.js';
-import { FeishuTransport } from './feishu.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,10 +22,6 @@ async function check() {
       }
       console.log(JSON.stringify({ component: 'model', ready: true, toolCall: true }));
     }
-    const transport = new FeishuTransport(loadFeishuConfig(), () => {});
-    try { await transport.identify(); }
-    finally { transport.close(); }
-    console.log(JSON.stringify({ component: 'feishu_identity', ready: true }));
   } finally {
     await agent?.close();
     await queries.close();
