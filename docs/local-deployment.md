@@ -61,7 +61,7 @@ python3 scripts/install-local.py --install --root "$HOME/Reliquary"
 python3 "$HOME/Reliquary/scripts/agent-local.py" pi-configure
 ```
 
-首次配置从安装时登记的源码构建 Pi 镜像，宿主机无需安装 Node。若登记的源码已移动，从含 Pi 实现的源码仓库执行 `python3 scripts/agent-local.py pi-configure --root "$HOME/Reliquary"`。按提示选择客户 API 或已授权的 ChatGPT 模型、一个工作文件夹和容器可达的模型代理；已有飞书模型配置时可选择复用。
+首次配置从安装时登记的源码构建 Pi 镜像，宿主机无需安装 Node。若登记的源码已移动，从含 Pi 实现的源码仓库执行 `python3 scripts/agent-local.py pi-configure --root "$HOME/Reliquary"`。按提示选择客户 API 或 ChatGPT 订阅（网页登录后没有聊天模型时自动创建 `gpt-6.2-astra`，推理强度 `high`）、一个工作文件夹和容器可达的模型代理；已有飞书模型配置时可选择复用。
 
 默认工作文件夹为 `~/Reliquary/workspace`，以只读方式挂载到容器的 `/workspace`；Pi 自身状态另挂载到 `/data`。配置写入 `agents/pi/config.json`、`pi.env` 和 `data/agent/` 下的工具、MCP、模型、凭据、规则及技能文件，并生成启动器 `scripts/pi`。内置工具只有 read，MCP 只连接 Reliquary，另有工作簿上传和原件暂存工具。表格必须按导入方案上传、审核确认，不自行拆成逐行写入。
 

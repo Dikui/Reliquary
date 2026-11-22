@@ -1,4 +1,5 @@
 """Customer installation preserves private configuration and starts the selected model."""
+import contextlib
 import importlib.util
 import io
 import json
@@ -287,6 +288,116 @@ class LocalPiTests(unittest.TestCase):
                            [{'token': 'pi-fixture-key'}], (0, pi_events('测试库'), ''), secrets=['synthetic-key'])
             models = agent.json.loads((root / 'agents/pi/data/agent/models.json').read_text())
             self.assertEqual(models['providers'][agent.PI_PROVIDER]['baseUrl'], 'https://model.example/v1')
+
+    def configure_without_prompts(self, root, argv, responses, environ=None):
+        """Run pi-configure with command-line options; any prompt fails the test."""
+        options = agent.argparse.Namespace(model_source=None, model=None, model_api=None, model_base_url=None,
+                                           context_window=128000, max_tokens=8192, workspace=None, proxy=None)
+        for key, value in argv.items():
+            setattr(options, key, value)
+
+        def run(command, **_):
+            return agent.subprocess.CompletedProcess(command, 0, pi_events('测试库') if command[0] != 'docker' else '', '')
+
+        with mock.patch('builtins.input', side_effect=AssertionError('prompted')), \
+             mock.patch.object(agent.getpass, 'getpass', side_effect=AssertionError('prompted')), \
+             mock.patch.dict(agent.os.environ, environ or {}, clear=False), \
+             mock.patch.object(agent, 'api', side_effect=responses) if responses is not None else contextlib.nullcontext(), \
+             mock.patch.object(agent.subprocess, 'check_output', return_value='abc123def456'), \
+             mock.patch.object(agent.subprocess, 'run', side_effect=run), \
+             mock.patch('sys.stdout', new_callable=io.StringIO) as output:
+            try:
+                agent.configure_pi(root, options=options)
+            finally:
+                self.output = output.getvalue()
+
+    def test_api_options_configure_pi_without_prompts_and_read_key_from_environment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            folder = Path(temporary).resolve() / 'customer-files'
+            self.configure_without_prompts(
+                root, {'model_source': 'api', 'model_api': 'openai-responses', 'model_base_url': 'https://model.example/v1',
+                       'model': 'test-model', 'max_tokens': 4096, 'workspace': folder, 'proxy': 'http://proxy:7890'},
+                [{'token': 'pi-fixture-key'}], {agent.PI_MODEL_KEY_ENV: 'synthetic-env-key'})
+            agent_dir = root / 'agents/pi/data/agent'
+            settings = agent.json.loads((agent_dir / 'settings.json').read_text())
+            provider = agent.json.loads((agent_dir / 'models.json').read_text())['providers'][settings['defaultProvider']]
+            self.assertEqual((provider['baseUrl'], provider['api']), ('https://model.example/v1', 'openai-responses'))
+            self.assertEqual(provider['models'][0]['maxTokens'], 4096)
+            auth = agent.json.loads((agent_dir / 'auth.json').read_text())
+            self.assertEqual(auth[settings['defaultProvider']], {'type': 'api_key', 'key': 'synthetic-env-key'})
+            self.assertNotIn('synthetic-env-key', (root / 'agents/pi/config.json').read_text())
+            self.assertIn('HTTPS_PROXY=http://proxy:7890\n', (root / 'agents/pi/pi.env').read_text())
+            self.assertIn(f'source={folder},target=/workspace,readonly', (root / 'scripts/pi').read_text())
+            self.assertIn('本地 Pi 已读到资料库', self.output)
+
+    def test_api_options_without_environment_key_stop_before_writing_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            with mock.patch.dict(agent.os.environ):
+                agent.os.environ.pop(agent.PI_MODEL_KEY_ENV, None)
+                with self.assertRaisesRegex(ValueError, agent.PI_MODEL_KEY_ENV):
+                    self.configure_without_prompts(
+                        root, {'model_source': 'api', 'model_api': 'openai-completions',
+                               'model_base_url': 'https://model.example/v1', 'model': 'test-model'}, [])
+            self.assertFalse((root / 'agents/pi/pi.env').exists())
+
+    def test_chatgpt_option_selects_the_only_tested_model_or_requires_a_name(self):
+        chat = {'id': 'chat/model', 'name': 'gpt-test', 'source': 'chatgpt', 'status': 'active', 'parameters': {}}
+        other = {**chat, 'id': 'chat/other', 'name': 'gpt-other'}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            self.configure_without_prompts(root, {'model_source': 'chatgpt'}, [[chat], {'token': 'pi-fixture-key'}])
+            settings = agent.json.loads((root / 'agents/pi/data/agent/settings.json').read_text())
+            self.assertEqual(settings['defaultModel'], 'gpt-test')
+            self.assertEqual(settings['defaultThinkingLevel'], 'high')
+            with self.assertRaisesRegex(ValueError, 'gpt-test、gpt-other'):
+                self.configure_without_prompts(root, {'model_source': 'chatgpt'}, [[chat, other]])
+            self.configure_without_prompts(root, {'model_source': 'chatgpt', 'model': 'gpt-other'}, [[chat, other]])
+            settings = agent.json.loads((root / 'agents/pi/data/agent/settings.json').read_text())
+            self.assertEqual(settings['defaultModel'], 'gpt-other')
+            astra = {**chat, 'id': 'chat/astra', 'name': 'gpt-6.2-astra'}
+            self.configure_without_prompts(root, {'model_source': 'chatgpt'}, [[chat, astra]])
+            settings = agent.json.loads((root / 'agents/pi/data/agent/settings.json').read_text())
+            self.assertEqual(settings['defaultModel'], 'gpt-6.2-astra')
+
+    def test_chatgpt_option_creates_the_default_model_with_the_signed_in_account(self):
+        account = {'id': 'acct-1', 'email': 'customer@example.test', 'status': 'connected'}
+        offered = [{'slug': 'gpt-6.1-sol', 'display_name': 'GPT-6.1 Sol'}, {'slug': 'gpt-6.2-astra', 'display_name': 'GPT-6.2 Astra'}]
+        created = {'id': 'chat/new', 'name': 'gpt-6.2-astra', 'source': 'chatgpt', 'status': 'active', 'parameters': {}}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            with mock.patch.object(agent, 'api', side_effect=[[], {'accounts': [account]}, offered, created,
+                                                              {'token': 'pi-fixture-key'}]) as api:
+                self.configure_without_prompts(root, {'model_source': 'chatgpt'}, None)
+            calls = [call.args for call in api.call_args_list]
+            self.assertEqual([call[1] for call in calls],
+                             ['/models', '/chatgpt/accounts', '/chatgpt/accounts/acct-1/models', '/models', '/space/api-keys'])
+            body = calls[3][2]
+            self.assertEqual((body['name'], body['type'], body['source']), ('gpt-6.2-astra', 'KnowledgeQA', 'chatgpt'))
+            self.assertEqual(body['parameters']['extra_config']['chatgpt_account_id'], 'acct-1')
+            agent_dir = root / 'agents/pi/data/agent'
+            settings = agent.json.loads((agent_dir / 'settings.json').read_text())
+            self.assertEqual((settings['defaultModel'], settings['defaultThinkingLevel']), ('gpt-6.2-astra', 'high'))
+            provider = agent.json.loads((agent_dir / 'models.json').read_text())['providers'][settings['defaultProvider']]
+            self.assertEqual(provider['baseUrl'], 'http://app:8080/api/v1/agent/models/chat%2Fnew')
+            with self.assertRaisesRegex(ValueError, 'gpt-6.1-sol、gpt-6.2-astra'):
+                self.configure_without_prompts(root, {'model_source': 'chatgpt', 'model': 'gpt-missing'},
+                                               [[], {'accounts': [account]}, offered])
+            with self.assertRaisesRegex(ValueError, 'section=models'):
+                self.configure_without_prompts(root, {'model_source': 'chatgpt'}, [[], {'accounts': []}])
+
+    def test_interactive_subscription_creates_the_default_model_after_web_login(self):
+        account = {'id': 'acct-1', 'status': 'connected'}
+        created = {'id': 'chat/new', 'name': 'gpt-6.2-astra', 'source': 'chatgpt', 'status': 'active', 'parameters': {}}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            api, _ = self.configure(root, ['2', '', ''], [[], {'accounts': [account]}, {'accounts': [account]},
+                                                          [{'slug': 'gpt-6.2-astra'}], created, {'token': 'pi-fixture-key'}],
+                                    (0, pi_events('测试库'), ''))
+            self.assertEqual(api.call_args_list[4].args[1], '/models')
+            settings = agent.json.loads((root / 'agents/pi/data/agent/settings.json').read_text())
+            self.assertEqual((settings['defaultModel'], settings['defaultThinkingLevel']), ('gpt-6.2-astra', 'high'))
 
     def test_failed_check_keeps_configuration_and_reports_reason(self):
         with tempfile.TemporaryDirectory() as temporary:

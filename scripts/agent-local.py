@@ -86,22 +86,89 @@ def chatgpt_models(base):
     return [item for item in models if item.get('source') == 'chatgpt' and item.get('status') == 'active']
 
 
+PI_MODEL_KEY_ENV = 'RELIQUARY_PI_MODEL_API_KEY'
+
+
+PI_CHATGPT_MODEL = 'gpt-6.2-astra'
+PI_THINKING_LEVEL = 'high'
+
+
+def connected_chatgpt_accounts(base):
+    return [item for item in api(base, '/chatgpt/accounts').get('accounts', []) if item.get('status') == 'connected']
+
+
+def create_chatgpt_model(base, frontend, slug):
+    """Create the chat model the web editor would: the only connected account plus a model from its own list."""
+    accounts = connected_chatgpt_accounts(base)
+    if not accounts:
+        raise ValueError(f'尚未登录 ChatGPT。请在 {frontend}/platform/settings?section=models '
+                         '点击 Continue with ChatGPT 登录后重试')
+    if len(accounts) > 1:
+        raise ValueError('已登录多个 ChatGPT 账号，请在网页「设置 → 模型设置」为 Pi 新建聊天模型后重试')
+    account = accounts[0]
+    slug = slug or PI_CHATGPT_MODEL
+    offered = api(base, '/chatgpt/accounts/' + urllib.parse.quote(account['id'], safe='') + '/models')
+    matched = [item for item in offered if item.get('slug') == slug]
+    if not matched:
+        names = '、'.join(item.get('slug', '') for item in offered) or '无'
+        raise ValueError(f'ChatGPT 账号没有模型 {slug}，请用 --model 指定可用模型：{names}')
+    display = matched[0].get('display_name') or slug
+    print(f'为本地 Pi 创建 ChatGPT 聊天模型 {display}（账号 {account.get("email") or account["id"]}）', flush=True)
+    return api(base, '/models', {
+        'name': slug, 'display_name': display, 'type': 'KnowledgeQA', 'source': 'chatgpt', 'description': '本地 Pi 对话模型',
+        'parameters': {'extra_config': {'chatgpt_account_id': account['id'], 'chatgpt_display_name': display}}})
+
+
+def chatgpt_model_values(model):
+    return dict(MODEL_SOURCE='chatgpt', MODEL_API='openai-responses', MODEL_ID=model['id'], MODEL_NAME=model['name'],
+                MODEL_CONTEXT_WINDOW=str(model.get('parameters', {}).get('context_window') or 128000),
+                MODEL_MAX_TOKENS=str(model.get('parameters', {}).get('max_output_tokens') or 8192))
+
+
+def model_from_options(base, frontend, options):
+    """Non-interactive model choice for agent-driven installs; the API key only comes from the environment."""
+    if options.model_source == 'chatgpt':
+        available = chatgpt_models(base)
+        if options.model:
+            matched = [item for item in available if options.model in (item.get('name'), item.get('id'))]
+        elif len(available) == 1:
+            matched = available
+        else:
+            matched = [item for item in available if item.get('name') == PI_CHATGPT_MODEL]
+        if len(matched) == 1:
+            return chatgpt_model_values(matched[0])
+        if not available or options.model and not matched:
+            return chatgpt_model_values(create_chatgpt_model(base, frontend, options.model))
+        names = '、'.join(item.get('name') or item['id'] for item in available)
+        raise ValueError(f'请用 --model 指定一个 ChatGPT 聊天模型，可选：{names}')
+    missing = [flag for flag, value in (('--model-api', options.model_api), ('--model-base-url', options.model_base_url),
+                                        ('--model', options.model)) if not value]
+    if missing:
+        raise ValueError('客户 API 模式缺少参数：' + '、'.join(missing))
+    if options.model_api not in MODEL_APIS:
+        raise ValueError('不支持的模型协议')
+    key = os.environ.get(PI_MODEL_KEY_ENV, '')
+    if not key:
+        raise ValueError(f'客户 API 模式需要在环境变量 {PI_MODEL_KEY_ENV} 中提供模型 API Key')
+    return dict(MODEL_SOURCE='api', MODEL_API=options.model_api, MODEL_BASE_URL=options.model_base_url,
+                MODEL_NAME=options.model, MODEL_API_KEY=key, MODEL_CONTEXT_WINDOW=str(options.context_window),
+                MODEL_MAX_TOKENS=str(options.max_tokens))
+
+
 def choose_model(base, frontend):
     """Choose a customer API or Reliquary-managed ChatGPT model for local Pi."""
     source = input('模型来源 [1 客户 API / 2 ChatGPT 订阅]：').strip()
     if source == '2':
         available = chatgpt_models(base)
-        if not available:
+        if not available and not connected_chatgpt_accounts(base):
             url = frontend + '/platform/settings?section=models'
-            print('请在以下网页选择已连接的 ChatGPT 账号并创建聊天模型。首次使用时点击 Continue with ChatGPT 授权。')
+            print('请在以下网页点击 Continue with ChatGPT 登录。登录后回到这里，会自动创建 Pi 使用的聊天模型。')
             print(url)
             webbrowser.open(url)
-            input('网页操作完成后按回车继续：')
-            available = chatgpt_models(base)
-        model = choose(available, 'ChatGPT 模型')
-        return dict(MODEL_SOURCE='chatgpt', MODEL_API='openai-responses', MODEL_ID=model['id'], MODEL_NAME=model['name'],
-                    MODEL_CONTEXT_WINDOW=str(model.get('parameters', {}).get('context_window') or 128000),
-                    MODEL_MAX_TOKENS=str(model.get('parameters', {}).get('max_output_tokens') or 8192))
+            input('网页登录完成后按回车继续：')
+        if not available:
+            return chatgpt_model_values(create_chatgpt_model(base, frontend, None))
+        return chatgpt_model_values(choose(available, 'ChatGPT 模型'))
     if source == '1':
         protocol = input(f"协议 [{' / '.join(MODEL_APIS)}]：").strip()
         if protocol not in MODEL_APIS:
@@ -471,7 +538,8 @@ def refresh_pi_guidance(source, agent_dir):
     shutil.copytree(source / 'skills/reliquary', skill, ignore=shutil.ignore_patterns('*.go'))
 
 
-def configure_pi(root, *, show_notice=True):
+def configure_pi(root, *, show_notice=True, options=None):
+    """Interactive by default; options with model_source answer every prompt for agent-driven installs."""
     runtime = read_env(root / 'deploy/.env')
     base = 'http://127.0.0.1:' + runtime.get('APP_PORT', '8080')
     frontend = 'http://127.0.0.1:' + runtime.get('FRONTEND_PORT', '80')
@@ -494,20 +562,29 @@ def configure_pi(root, *, show_notice=True):
     feishu = root / 'agents/feishu/agent.env'
     shared = read_env(feishu) if feishu.exists() else {}
     # Only the customer-facing protocols are shared; Feishu's developer-only Codex mode has no Pi equivalent.
-    if shared.get('MODEL_SOURCE') in ('api', 'chatgpt') and shared.get('MODEL_API') in MODEL_APIS and \
+    if options is not None:
+        model = model_from_options(base, frontend, options)
+    elif shared.get('MODEL_SOURCE') in ('api', 'chatgpt') and shared.get('MODEL_API') in MODEL_APIS and \
             input(f"复用飞书入口的模型 {shared.get('MODEL_NAME')}？[Y/n]：").strip().lower() in ('', 'y', 'yes'):
         model = {key: shared[key] for key in MODEL_KEYS if key in shared}
     else:
         model = choose_model(base, frontend)
 
     default = config.get('workspace') or str(root / 'workspace')
-    workspace = Path(input(f'Pi 可读取的工作文件夹（只读挂载）[{default}]：').strip() or default).expanduser().resolve()
+    if options is not None:
+        answer = str(options.workspace or '')
+    else:
+        answer = input(f'Pi 可读取的工作文件夹（只读挂载）[{default}]：').strip()
+    workspace = Path(answer or default).expanduser().resolve()
     if ',' in str(workspace) or ',' in str(directory):
         raise ValueError('Docker 挂载路径不能包含逗号，请换一个工作文件夹或运行目录')
     workspace.mkdir(parents=True, exist_ok=True)
     previous = environment.get('HTTPS_PROXY', '')
-    proxy = input(f"模型代理地址，需容器可访问{'，输入 - 改为直连' if previous else ''} [{previous or '留空为直连'}]：").strip() \
-        or previous
+    if options is not None:
+        proxy = (options.proxy or '').strip() or previous
+    else:
+        proxy = input(f"模型代理地址，需容器可访问{'，输入 - 改为直连' if previous else ''} [{previous or '留空为直连'}]：").strip() \
+            or previous
     proxy = '' if proxy == '-' else proxy
 
     if not environment.get('RELIQUARY_API_KEY'):
@@ -527,6 +604,8 @@ def configure_pi(root, *, show_notice=True):
                     extensions=['-builtin:codemode', '-builtin:tool-search', '-builtin:llama.cpp',
                                 '/app/reliquary-upload.ts'],
                     packages=[], skills=[], prompts=[], defaultProjectTrust='never', enableInstallTelemetry=False)
+    if model['MODEL_SOURCE'] == 'chatgpt':
+        settings['defaultThinkingLevel'] = PI_THINKING_LEVEL
     write_json(settings_path, settings)
     write_json(agent_dir / 'mcp.json', {'autoEnableCodemode': False, 'mcpServers': {'reliquary': {
         'url': 'http://app:8080/mcp', 'headers': {'Authorization': 'Bearer ${RELIQUARY_API_KEY}'},
@@ -655,13 +734,24 @@ def main():
     parser.add_argument('action', choices=['configure', 'login', 'check', 'start', 'stop', 'status', 'update',
                                            'pi-configure', 'pi-update'])
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parent.parent)
+    pi = parser.add_argument_group('pi-configure 非交互参数（给出 --model-source 时不再提问）')
+    pi.add_argument('--model-source', choices=['api', 'chatgpt'], help='api 为客户 API，chatgpt 为网页中已测试的 ChatGPT 聊天模型')
+    pi.add_argument('--model', help='API 模式的模型名称；ChatGPT 模式按名称或 ID 选择，没有对应聊天模型时用已登录账号自动创建，默认 ' + PI_CHATGPT_MODEL)
+    pi.add_argument('--model-api', choices=MODEL_APIS, help='API 模式的协议')
+    pi.add_argument('--model-base-url', help='API 模式的根地址；Key 从环境变量 ' + PI_MODEL_KEY_ENV + ' 读取')
+    pi.add_argument('--context-window', type=int, default=128000)
+    pi.add_argument('--max-tokens', type=int, default=8192)
+    pi.add_argument('--workspace', type=Path, help='Pi 只读工作文件夹，默认沿用已有设置或运行目录下 workspace')
+    pi.add_argument('--proxy', help='容器可访问的模型代理；省略沿用已有设置，- 改为直连')
     args = parser.parse_args()
+    if args.model_source and args.action != 'pi-configure':
+        parser.error('--model-source 等参数只用于 pi-configure')
     try:
         with maintenance_lock(args.root.resolve()):
             if args.action == 'configure':
                 configure(args.root.resolve())
             elif args.action == 'pi-configure':
-                configure_pi(args.root.resolve())
+                configure_pi(args.root.resolve(), options=args if args.model_source else None)
             elif args.action == 'pi-update':
                 update_pi(args.root.resolve())
             else:

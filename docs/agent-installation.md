@@ -191,14 +191,12 @@ python3 scripts/install-local.py --update --root "$HOME/Reliquary"
 
 #### 本地 Pi
 
-1. 在第 6 步的配置向导选择 ChatGPT 订阅，填写 Pi 支持的模型名称，默认 `gpt-6.1-sol`。
-2. 已有 Pi 登录时继续使用。首次连接由向导启动 Pi 登录，输出准确授权页。
-3. 将授权页交给客户完成账号选择、登录与订阅授权。
-4. 确认浏览器返回 `http://localhost:1455/auth/callback`，终端显示 Pi 登录完成。
+本地 Pi 不单独登录，经 Reliquary 后端使用客户在网页登录的 ChatGPT 账号，令牌由后端续期。
 
-浏览器在部署电脑运行，本机端口 1455 需要可用。远程安装先安排能回到 Pi 登录进程的隧道。提供或打开终端输出的实际授权 URL，再等待客户完成。具体支持的账号与模型以 Pi 登录结果为准。
+1. 打开 `WEB_BASE` 加 `/platform/settings?section=models`，请客户点击 Continue with ChatGPT 完成登录。
+2. 第 5 步执行 `pi-configure` 选择 ChatGPT 订阅。已有可用的 ChatGPT 聊天模型时直接选用；没有时，向导用唯一已登录账号从该账号可用模型中创建聊天模型，默认 `gpt-6.2-astra`，Pi 推理强度 `high`。
 
-本地 Pi 的订阅模式从 Reliquary 模型列表选择。后续沿用数据库内的账号连接和令牌续期。
+已登录多个账号时，在网页为 Pi 新建聊天模型后再配置。自动创建的模型只供 Pi 对话，资料后台处理模型另行分配。
 
 #### Reliquary Agent 的飞书入口
 
@@ -208,7 +206,7 @@ Pi 凭据保存到 `agents/feishu/data/auth.json`，由 Pi 续期。重新授权
 
 Agent 对话模型与资料后台处理配置分别设置。需要摘要、实体处理时，在网页创建聊天模型并分配给资料库。需要向量检索时配置共享 Embedding，重排按需配置。ChatGPT 接入用于生成，Embedding 与重排使用其支持的其他来源。仅配置入口的 API 参数会接通对话，不会配置资料后台处理模型。
 
-完成条件取决于所选入口。API 模式需准备好参数。本地 Pi 的订阅模式需有活跃的 Reliquary ChatGPT 模型。飞书入口的订阅模式需选定 Pi 模型名称。实际工具调用在第 5 步或第 7 步验证。
+完成条件取决于所选入口。API 模式需准备好参数。本地 Pi 的订阅模式需客户已在网页登录 ChatGPT。飞书入口的订阅模式需选定 Pi 模型名称。实际工具调用在第 5 步或第 7 步验证。
 
 ## 5. 配置并验证本地 Pi
 
@@ -219,6 +217,20 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" pi-configure
 ```
 
 首次配置从安装时登记的源码构建 Pi 镜像。若找不到源码，从第 1 步确定的源码根目录执行 `python3 scripts/agent-local.py pi-configure --root "$HOME/Reliquary"`。
+
+Agent 的终端不能逐项应答时，用非交互参数一次给全；给出 `--model-source` 后不再提问，缺少的参数直接报错。安装器在非交互终端会跳过 Pi 并打印这条提示，Agent 取得第 4 步同意后执行。
+
+```sh
+# ChatGPT 订阅：客户先在网页登录；没有聊天模型时自动创建，默认 gpt-6.2-astra，可用 --model 指定
+python3 "$HOME/Reliquary/scripts/agent-local.py" pi-configure --model-source chatgpt
+
+# 客户 API：Key 只从环境变量读取，由客户在自己的终端或私有文件中设置，不经过对话
+RELIQUARY_PI_MODEL_API_KEY=... python3 "$HOME/Reliquary/scripts/agent-local.py" pi-configure \
+  --model-source api --model-api openai-responses --model-base-url https://api.openai.com/v1 --model 模型名称 \
+  --context-window 128000 --max-tokens 8192
+```
+
+可选 `--workspace` 指定只读工作文件夹（默认沿用已有设置或 `~/Reliquary/workspace`），`--proxy` 指定容器可达的代理（省略沿用已有设置，`-` 改为直连）。之后的下列步骤与交互方式相同。
 
 1. 再次核对已取得第 4 步的数据外流同意，按提示选择客户 API 或 ChatGPT 订阅。已有兼容的模型配置时可选择复用，否则填写第 4 步的模型参数。
 2. 选择一个 Pi 可读取的工作文件夹，默认 `~/Reliquary/workspace`。只放本次任务所需资料，以只读方式挂载到容器的 `/workspace`。模型仍能通过 read 读到容器内 Pi 自己的凭据文件，不把容器视为凭据隔离边界。

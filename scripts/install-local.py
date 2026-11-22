@@ -156,7 +156,10 @@ def offer_pi(root, agent):
         except (ValueError, OSError, subprocess.CalledProcessError, EOFError) as error:
             print(f'本地 Pi 配置未完成：{error}\n资料库本体已安装。修正后运行：{command}')
     else:
-        print(f'稍后配置本地 Pi 时运行：{command}')
+        print(f'稍后配置本地 Pi 时运行：{command}\n'
+              '无交互终端时追加 --model-source chatgpt [--model 模型名]，'
+              '或 --model-source api --model-api 协议 --model-base-url 根地址 --model 模型名，'
+              'API Key 放在环境变量 RELIQUARY_PI_MODEL_API_KEY。')
 
 
 def require_unused_project(project):
