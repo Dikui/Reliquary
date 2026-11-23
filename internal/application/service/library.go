@@ -12,6 +12,7 @@ import (
 	"reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -166,28 +167,55 @@ func (s *libraryService) UpdateLibrary(ctx context.Context,
 	description string,
 	config *types.LibraryConfig,
 ) (*types.Library, error) {
-	if s.nameEmbeddingRebuilder != nil && s.db != nil && !entityDatabaseInTransaction(s.db) {
-		var result *types.Library
-		err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			copy := *s
-			copy.db = tx
-			copy.repo = repository.NewLibraryRepository(tx)
+	if id == "" {
+		logger.Error(ctx, "Library ID is empty")
+		return nil, errors.New("library ID cannot be empty")
+	}
+	if s.db == nil {
+		return s.updateLibrary(ctx, id, name, description, config)
+	}
+	var result *types.Library
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		state, err := maintenanceops.WriteStateTx(ctx, tx)
+		if err != nil {
+			return err
+		}
+		copy := *s
+		copy.db = tx
+		copy.repo = repository.NewLibraryRepository(tx)
+		if state.Paused {
+			if config == nil || config.ModelTiers == nil || *config != (types.LibraryConfig{ModelTiers: config.ModelTiers}) {
+				return libraryWritePaused(state, config != nil && config.ModelTiers != nil)
+			}
+			library, err := lockedLibrarySettings(ctx, tx, id, types.SingleSpaceID)
+			if err != nil {
+				return err
+			}
+			// The legacy PUT includes the displayed name and description even
+			// when only the user’s model choices changed.
+			if name != library.Name || description != library.Description {
+				return libraryWritePaused(state, true)
+			}
+			result, err = savePausedLibraryModels(ctx, tx, library, *config.ModelTiers, true)
+			return err
+		}
+		if s.nameEmbeddingRebuilder != nil && !entityDatabaseInTransaction(s.db) {
+			if err := lockEntitySpaceShared(tx, types.SingleSpaceID); err != nil {
+				return err
+			}
 			bound, err := s.nameEmbeddingRebuilder.BindTransaction(ctx, tx)
 			if err != nil {
 				return err
 			}
 			copy.nameEmbeddingRebuilder = bound
-			result, err = copy.UpdateLibrary(ctx, id, name, description, config)
-			return err
-		})
-		return result, err
-	}
+		}
+		result, err = copy.updateLibrary(ctx, id, name, description, config)
+		return err
+	})
+	return result, err
+}
 
-	if id == "" {
-		logger.Error(ctx, "Library ID is empty")
-		return nil, errors.New("library ID cannot be empty")
-	}
-
+func (s *libraryService) updateLibrary(ctx context.Context, id, name, description string, config *types.LibraryConfig) (*types.Library, error) {
 	logger.Infof(ctx, "Updating library, ID: %s, name: %s", id, name)
 
 	// Get existing library

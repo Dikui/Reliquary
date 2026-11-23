@@ -84,20 +84,15 @@ Choose your model API or an authorized ChatGPT model, a work folder (default `~/
 > [!IMPORTANT]
 > Before enabling local Pi, agree to send each turn's full context (questions, library excerpts read by tools, content read from the work folder and earlier replies) to your chosen model provider. ChatGPT subscription calls go through the Reliquary backend to OpenAI. Library bodies, files and the database are not synchronized in bulk. Local Pi sessions are not yet included in `reliquary-admin` backups. See [ADR 0029](docs/adr/0029-recommend-local-pi.md) and the [agent installation guide](docs/agent-installation.md).
 
-### Optional: Feishu chat entry
+### Optional chat service
 
-```bash
-python3 "$HOME/Reliquary/scripts/agent-local.py" configure
-```
+Provide your platform adapters and their npm lockfile in the runtime directory, then list the channels that must be connected. Run `python3 "$HOME/Reliquary/scripts/agent-local.py" configure` to select libraries and a model and start the shared Pi service. Each adapter uses a separate conversation store. See the [adapter and deployment guide](agents/chat/README.md).
 
-The first run builds the Feishu agent (downloading Pi and the Feishu SDK), then selects libraries, your API provider or ChatGPT subscription, and your Feishu app and group. It checks a model tool call and starts the bot. Authorize ChatGPT in the Web UI when connecting an account for the first time. Existing connected models can be reused. Complete Feishu app permissions and account authorization yourself.
-
-> [!IMPORTANT]
-> With the Feishu entry enabled, group questions and answers travel through and are stored by Feishu, and each turn's context (question, library excerpts read by tools, earlier replies) is sent to the selected model provider. The library itself still runs only on this machine. See [ADR 0028](docs/adr/0028-optional-feishu-entry.md).
+Group messages pass through the selected messaging platforms. Each turn sends the question, retrieved library excerpts and relevant conversation history to the selected model provider.
 
 The default Web UI is <http://127.0.0.1>, API is <http://127.0.0.1:8080>, and MCP is `http://127.0.0.1:8080/mcp`. For occupied ports, add `--app-port 18080 --frontend-port 18081`. A second installation on the same host also needs a unique `--project-name` and `REDIS_PORT` in its environment file.
 
-Library data stays on this machine. Local browser access uses the existing local-access policy. External tools authenticate with API keys. See the [local deployment guide](docs/local-deployment.md) for installation, storage, authorization and recovery, and the [agent guide](agents/feishu/README.md) for Feishu usage.
+Library data stays on this machine. Local browser access uses the existing local-access policy. External tools authenticate with API keys. See the [local deployment guide](docs/local-deployment.md) for installation, storage, authorization and recovery, and the [agent guide](agents/chat/README.md) for chat operations.
 
 ## Usage
 

@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"reliquary/internal/application/graph"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -195,7 +196,7 @@ func (s *EntityService) MergeManagedEntities(ctx context.Context, id string, inp
 		return nil, err
 	}
 	var target *types.Entity
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
@@ -256,7 +257,6 @@ func (s *EntityService) MergeManagedEntities(ctx context.Context, id string, inp
 		}
 		target.Revision++
 		target.UpdatedAt = now
-		target.EmbeddingNeedsRebuild = true
 		if err := tx.Save(target).Error; err != nil {
 			return err
 		}
@@ -302,9 +302,6 @@ func (s *EntityService) MergeManagedEntities(ctx context.Context, id string, inp
 		if err := queueManagedEntity(tx, target); err != nil {
 			return err
 		}
-		if s.nameEmbeddingRebuilder != nil {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "managed_entity_merged")
-		}
 		return nil
 	})
 	if err == nil {
@@ -331,7 +328,7 @@ func (s *EntityService) SplitManagedEntity(ctx context.Context, id string, input
 		return nil, err
 	}
 	var target *types.Entity
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
@@ -351,7 +348,7 @@ func (s *EntityService) SplitManagedEntity(ctx context.Context, id string, input
 		}
 		now := time.Now()
 		in := input.NewEntity
-		target = &types.Entity{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: library.ID, EntityType: "product", Kind: in.Kind, Code: in.Code, CanonicalName: in.Name, Description: in.Description, Attributes: in.Attributes, AutoMatch: in.AutoMatch, Revision: 1, EmbeddingNeedsRebuild: true, CreatedAt: now, UpdatedAt: now}
+		target = &types.Entity{ID: uuid.NewString(), SpaceID: spaceID, LibraryID: library.ID, EntityType: "product", Kind: in.Kind, Code: in.Code, CanonicalName: in.Name, Description: in.Description, Attributes: in.Attributes, AutoMatch: in.AutoMatch, Revision: 1, CreatedAt: now, UpdatedAt: now}
 		if err := validateManagedEntity(library, target); err != nil {
 			return err
 		}
@@ -407,9 +404,6 @@ func (s *EntityService) SplitManagedEntity(ctx context.Context, id string, input
 		}
 		if err := queueManagedEntity(tx, target); err != nil {
 			return err
-		}
-		if s.nameEmbeddingRebuilder != nil {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "managed_entity_split")
 		}
 		return nil
 	})

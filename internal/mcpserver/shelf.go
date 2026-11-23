@@ -5,11 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"reliquary/internal/application/service"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/skills"
 )
@@ -25,12 +29,110 @@ type shelfGetInput struct {
 	LibraryID   string            `json:"library_id"`
 	NodeID      string            `json:"node_id"`
 	Combination map[string]string `json:"combination,omitempty"`
-	AsOf        *time.Time        `json:"as_of,omitempty"`
+	AsOf        string            `json:"as_of,omitempty"`
 }
 
 type shelfQueryInput struct {
-	LibraryID string `json:"library_id"`
+	LibraryID     string                   `json:"library_id"`
+	AsOf          string                   `json:"as_of,omitempty"`
+	Certification *shelfCertificationInput `json:"certification,omitempty"`
 	types.ShelfQueryRequest
+}
+
+type shelfCertificationInput struct {
+	Standard string `json:"standard,omitempty"`
+	Progress string `json:"progress,omitempty"`
+	Region   string `json:"region,omitempty"`
+	Status   string `json:"status,omitempty"`
+	NoRegion bool   `json:"no_region,omitempty"`
+}
+
+func shelfReadTime(value string) (*time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	at, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return nil, fmt.Errorf("invalid as_of: %w", err)
+	}
+	return &at, nil
+}
+
+func (in shelfGetInput) readOptions() (types.ShelfReadOptions, error) {
+	at, err := shelfReadTime(in.AsOf)
+	if err != nil {
+		return types.ShelfReadOptions{}, err
+	}
+	options := types.ShelfReadOptions{AsOf: at}
+	for module, partID := range in.Combination {
+		if partID = strings.TrimSpace(partID); partID != "" {
+			if options.Combination == nil {
+				options.Combination = make(map[string]string, len(in.Combination))
+			}
+			options.Combination[module] = partID
+		}
+	}
+	return options, nil
+}
+
+func (in shelfQueryInput) queryRequest() (types.ShelfQueryRequest, error) {
+	request := in.ShelfQueryRequest
+	at, err := shelfReadTime(in.AsOf)
+	if err != nil {
+		return request, err
+	}
+	request.AsOf = at
+	request.AncestorID = strings.TrimSpace(request.AncestorID)
+	request.PartID = strings.TrimSpace(request.PartID)
+	request.Detail = strings.TrimSpace(request.Detail)
+	request.SaleStatuses = nil
+	for _, filter := range in.SaleStatuses {
+		filter.Region = strings.TrimSpace(filter.Region)
+		filter.Status = strings.TrimSpace(filter.Status)
+		if filter != (types.ShelfStatusFilter{}) {
+			request.SaleStatuses = append(request.SaleStatuses, filter)
+		}
+	}
+	request.Parameters = nil
+	for _, filter := range in.Parameters {
+		filter.Field = strings.TrimSpace(filter.Field)
+		if filter != (types.ShelfParameterFilter{}) {
+			request.Parameters = append(request.Parameters, filter)
+		}
+	}
+	request.Composition = nil
+	for _, filter := range in.Composition {
+		filter.ModuleType = strings.TrimSpace(filter.ModuleType)
+		for index, partID := range filter.PartIDs {
+			filter.PartIDs[index] = strings.TrimSpace(partID)
+		}
+		if filter.ModuleType != "" || slices.ContainsFunc(filter.PartIDs, func(id string) bool { return id != "" }) {
+			request.Composition = append(request.Composition, filter)
+		}
+	}
+	request.Certification = nil
+	if in.Certification != nil {
+		certification := in.Certification
+		region := strings.TrimSpace(certification.Region)
+		if certification.NoRegion && region != "" {
+			return request, apperrors.NewBadRequestError("certification.no_region cannot be combined with a nonblank certification.region")
+		}
+		filter := types.ShelfCertificationFilter{
+			Standard: strings.TrimSpace(certification.Standard),
+			Status:   strings.TrimSpace(certification.Status),
+		}
+		if region != "" || certification.NoRegion {
+			filter.Region = &region
+		}
+		if progress := strings.TrimSpace(certification.Progress); progress != "" {
+			filter.Progress = &progress
+		}
+		if filter != (types.ShelfCertificationFilter{}) {
+			request.Certification = &filter
+		}
+	}
+	return request, nil
 }
 
 type shelfSubmitInput struct {
@@ -43,6 +145,44 @@ type shelfSubmitInput struct {
 	Decisions   []types.ShelfDecision  `json:"decisions,omitempty"`
 }
 
+func registerShelfQueryTool(server *mcp.Server, query func(context.Context, string, types.ShelfQueryRequest) (*types.ShelfQueryResult, error)) {
+	addTool(server, "shelf_query", mcp.ToolAnnotations{ReadOnlyHint: true}, "结构化筛选或按部件、认证标准反查型号，所有筛选须由同一可行组合满足。返回 items、分页前型号数 total、truncated、as_of、detail。"+
+		"带 certification 条件时另返回 certification_total，按认证实体 ID 去重统计分页前命中全部筛选的认证，共用认证只计一次。只问数量时传 limit=1，型号数读 total，认证条数读 certification_total。"+
+		"matching_conditions 外层为或，内层为且。truncated=true 表示本次未覆盖全部结果，非首页也为 true；offset 加本页条数小于 total 时才有下一页。"+
+		"默认 detail=summary，每项只含 entity（含 description，不含 attributes）、current_stage、本次筛选命中的 facts 及 matching_conditions、partial_options。逐条列出认证时按 total 翻页，读取 field=certification 的事实，按 entity_id 去重，使用 value.standard_name 和 origin_label。要完整详情对选中型号用 shelf_get。"+
+		"目标模糊需要追问时传 facets=true 与 limit=1，按全部命中型号返回区域状态、部件、参数范围和认证的型号数，用作追问选项；计数不保证与其他条件在同一组合下成立，用户选定后重新筛选并以 total 为准。可选字符串去首尾空白后为空等同省略，全空筛选项忽略。"+shelfExpertNotice+externalContentNotice,
+		object(map[string]any{
+			"library_id": text("已开启货架的库 ID，必填"), "ancestor_id": text("产品线、平台或产品名称 ID，限定其下属型号"),
+			"sale_statuses": map[string]any{"type": "array", "description": "区域状态筛选，各项取交集；每项至少给 region、status、planned_eom、no_record 之一", "items": object(map[string]any{
+				"region":      text("区域键，取 list_libraries 中货架配置 regions[].key（如 jp），不是显示名；省略表示任一区域"),
+				"status":      text("状态：GA、DEV、Planning、EOM、待定；省略或空表示任一状态"),
+				"planned_eom": boolean("true 只查标记计划退市的状态，false 排除计划退市"),
+				"no_record":   boolean("true 查该区域没有状态记录的型号，省略 region 时查所有区域都没有记录的型号；不能与 status、planned_eom 同用，无记录不等于待定"),
+			})},
+			"parameters": map[string]any{"type": "array", "description": "结构化数值参数筛选，各项取交集。按闭区间相交匹配：记录 [9,54] 会命中 min=50，不代表保证达到 50，须核对返回值；只匹配结构化参数，描述和正文中的数值不参与筛选。按 min/max 筛选时响应带 parameter_missing：满足其他筛选但该字段无结构化取值、因而未计入结果的型号数", "items": object(map[string]any{"field": text("本库参数字段键，非空筛选项必填"), "min": map[string]any{"type": "number"}, "max": map[string]any{"type": "number"}, "missing": boolean("true 查该字段所属产品线内没有结构化取值的型号（即 facets 的 missing），不能与 min、max 同用；这些型号的数值可能写在描述或正文中")})},
+			"part_id":    text("反查使用此部件的型号"),
+			"composition": map[string]any{"type": "array", "description": "各部件类型条件取交集，同一部件类型的部件集合内任选其一；非空筛选项须填写部件类型键和部件 ID 列表", "items": object(map[string]any{
+				"module_type": text("本库部件类型键"), "part_ids": stringArray("允许的本库部件 ID"),
+			})},
+			"certification": object(map[string]any{
+				"standard": text("标准配置键、规范名或明确别名"), "progress": text("进度原文"),
+				"region":    text("配置区域键，省略或空表示不限地区；只查不分地区的认证用 no_region"),
+				"no_region": boolean("true 只查不分地区的认证，不能与非空 region 同用"),
+				"status":    text("认证状态：" + strings.Join(types.ShelfCertificationStatuses(), "、") + "。date_conflict 按本地当天判断，其余状态按 as_of 的本地日期判断"),
+			}),
+			"document_gaps": boolean("只查有资料缺口（清单行 gap=true）的型号，默认 false；未设阶段时缺文件和只有初稿都算缺口，设了阶段时只算已到期未交；0 条不等于资料齐全"), "as_of": text("业务时间，RFC3339，省略或空为当前时间"),
+			"detail": text("返回详略，省略或空默认为 summary；full 返回每个型号的完整详情，体积大，仅在确需逐项资料清单时少量使用"),
+			"facets": boolean("true 时额外返回 facets：在全部命中型号上统计 sale_statuses（区域、状态、型号数、只对部分选配成立的型号数）、composition（部件及型号数）、parameters（有结构化值的型号数、缺失数、最小值与最大值）、certifications（标准、进度、区域及型号数）；默认 false"),
+			"limit":  integer("默认 50，最大 100", 1, 100), "offset": integer("跳过条数，默认 0", 0, 0),
+		}, "library_id"), func(ctx context.Context, in shelfQueryInput) (any, error) {
+			request, err := in.queryRequest()
+			if err != nil {
+				return nil, err
+			}
+			return query(ctx, in.LibraryID, request)
+		})
+}
+
 func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 	if entities == nil {
 		return
@@ -52,11 +192,11 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 		panic(err)
 	}
 	addTool(server, "shelf_guide", mcp.ToolAnnotations{ReadOnlyHint: true}, "补充货架前读取本库补充规范，返回 rules、实时可用值 values、max_file_bytes 和已保存 import_plans。不传 node_id 时另含与方案校验同源的 import_fields；传 node_id 附节点缺口。"+shelfExpertNotice+externalContentNotice,
-		object(map[string]any{"library_id": text("已开启货架的库 ID，必填"), "node_id": text("可选产品线、平台、产品名称、型号或部件 ID")}, "library_id"), func(ctx context.Context, in struct {
+		object(map[string]any{"library_id": text("已开启货架的库 ID，必填"), "node_id": text("可选产品线、平台、产品名称、型号或部件 ID，省略或空时读取库级规范")}, "library_id"), func(ctx context.Context, in struct {
 			LibraryID string `json:"library_id"`
 			NodeID    string `json:"node_id,omitempty"`
 		}) (any, error) {
-			guide, err := entities.ShelfGuide(ctx, in.LibraryID, in.NodeID)
+			guide, err := entities.ShelfGuide(ctx, in.LibraryID, strings.TrimSpace(in.NodeID))
 			if err != nil {
 				return nil, err
 			}
@@ -75,30 +215,16 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 	addTool(server, "shelf_get", mcp.ToolAnnotations{ReadOnlyHint: true}, "按已澄清的节点 ID 读取详情，支持部件组合与业务时间。返回 entity、shelf、facts、as_of、recorded，事实保留条件、来源日志、快照及生效和记录时间；recorded=false 表示该时点无记录。"+shelfExpertNotice+externalContentNotice,
 		object(map[string]any{
 			"library_id": text("已开启货架的库 ID，必填"), "node_id": text("候选中明确选定的节点 ID，必填"),
-			"combination": map[string]any{"type": "object", "additionalProperties": text("该部件类型选择的部件 ID"), "description": "部件类型键到部件 ID 的映射，指定时须选择每个选配部件类型；省略返回所有适用条件"},
-			"as_of":       text("业务时间，RFC3339，省略为当前时间"),
+			"combination": map[string]any{"type": "object", "additionalProperties": text("该部件类型选择的部件 ID，空值视为未选择"), "description": "部件类型键到部件 ID 的映射，指定时须选择每个选配部件类型；没有选择时返回所有适用条件"},
+			"as_of":       text("业务时间，RFC3339，省略或空为当前时间"),
 		}, "library_id", "node_id"), func(ctx context.Context, in shelfGetInput) (any, error) {
-			return entities.ShelfGet(ctx, in.LibraryID, in.NodeID, types.ShelfReadOptions{AsOf: in.AsOf, Combination: in.Combination})
+			options, err := in.readOptions()
+			if err != nil {
+				return nil, err
+			}
+			return entities.ShelfGet(ctx, in.LibraryID, in.NodeID, options)
 		})
-	addTool(server, "shelf_query", mcp.ToolAnnotations{ReadOnlyHint: true}, "结构化筛选或按部件、认证标准反查型号，所有筛选须由同一可行组合满足。返回 items、分页前 total、truncated、as_of、detail；matching_conditions 外层为或，内层为且。truncated=true 表示本次未覆盖全部结果，非首页也为 true；offset 加本页条数小于 total 时才有下一页。默认 detail=summary，每项只含 entity（含 description，不含 attributes）、current_stage、本次筛选命中的 facts 及 matching_conditions、partial_options；只问数量时传 limit=1 读 total，要完整详情对选中型号用 shelf_get。目标模糊需要追问时传 facets=true 与 limit=1，按全部命中型号返回区域状态、部件、参数范围和认证的型号数，用作追问选项；计数不保证与其他条件在同一组合下成立，用户选定后重新筛选并以 total 为准。"+shelfExpertNotice+externalContentNotice,
-		object(map[string]any{
-			"library_id": text("已开启货架的库 ID，必填"), "ancestor_id": text("产品线、平台或产品名称 ID，限定其下属型号"),
-			"sale_statuses": map[string]any{"type": "array", "description": "区域状态筛选，各项取交集；每项至少给 region、status、planned_eom、no_record 之一", "items": object(map[string]any{
-				"region":      text("区域键，取 list_libraries 中货架配置 regions[].key（如 jp），不是显示名；省略表示任一区域"),
-				"status":      enum("状态；省略表示任一状态", "GA", "DEV", "Planning", "EOM", "待定"),
-				"planned_eom": boolean("true 只查标记计划退市的状态，false 排除计划退市"),
-				"no_record":   boolean("true 查该区域没有状态记录的型号，省略 region 时查所有区域都没有记录的型号；不能与 status、planned_eom 同用，无记录不等于待定"),
-			})},
-			"parameters":  map[string]any{"type": "array", "description": "结构化数值参数筛选，各项取交集。按闭区间相交匹配：记录 [9,54] 会命中 min=50，不代表保证达到 50，须核对返回值；只匹配结构化参数，描述和正文中的数值不参与筛选。按 min/max 筛选时响应带 parameter_missing：满足其他筛选但该字段无结构化取值、因而未计入结果的型号数", "items": object(map[string]any{"field": text("本库参数字段键"), "min": map[string]any{"type": "number"}, "max": map[string]any{"type": "number"}, "missing": boolean("true 查该字段所属产品线内没有结构化取值的型号（即 facets 的 missing），不能与 min、max 同用；这些型号的数值可能写在描述或正文中")}, "field")},
-			"composition": shelfConditionsSchema(), "part_id": text("反查使用此部件的型号"),
-			"certification": object(map[string]any{"standard": text("标准配置键、规范名或明确别名"), "progress": text("进度原文"), "region": text("配置区域键，空字符串筛选不分地区的认证，省略则不限地区")}),
-			"document_gaps": boolean("只查有到期未交（missing）资料的型号，默认 false；无文件、只有初稿和未设当前阶段的不算到期，0 条不等于资料齐全"), "as_of": text("业务时间，RFC3339，省略为当前时间"),
-			"detail": enum("返回详略，默认 summary；full 返回每个型号的完整详情，体积大，仅在确需逐项资料清单时少量使用", "summary", "full"),
-			"facets": boolean("true 时额外返回 facets：在全部命中型号上统计 sale_statuses（区域、状态、型号数、只对部分选配成立的型号数）、composition（部件及型号数）、parameters（有结构化值的型号数、缺失数、最小值与最大值）、certifications（标准、进度、区域及型号数）；默认 false"),
-			"limit":  integer("默认 50，最大 100", 1, 100), "offset": integer("跳过条数，默认 0", 0, 0),
-		}, "library_id"), func(ctx context.Context, in shelfQueryInput) (any, error) {
-			return entities.ShelfQuery(ctx, in.LibraryID, in.ShelfQueryRequest)
-		})
+	registerShelfQueryTool(server, entities.ShelfQuery)
 	mcp.AddTool(server, &mcp.Tool{Name: "shelf_submit", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), OpenWorldHint: new(false)}, Description: "提交有类型的货架操作列表，返回持久化变更集及逐项 before、after、conflicts。未带 confirmed 或为 false 只保存待确认提议，不改货架。预览后用 changeset_id、revision 和逐项 decisions 继续保存或确认同一变更集，不重传 source、operations。必须向用户展示差异与冲突并取得明确同意后才传 confirmed=true，不得自行补确认。含义不确定项必须先修正、放弃或暂缓，普通 apply 不能跳过。" + shelfExpertNotice + externalContentNotice, InputSchema: object(map[string]any{
 		"library_id":   text("已开启货架的库 ID，必填"),
 		"changeset_id": text("继续处理先前返回的待确认变更集 ID；此时必传 revision，不传 source、operations"), "revision": integer("读取到的变更集修订号", 1, 0),
@@ -116,6 +242,9 @@ func registerShelfTools(server *mcp.Server, entities *service.EntityService) {
 		}
 		output, err := submitShelf(ctx, entities, in)
 		if err != nil {
+			if maintenanceops.IsPausedError(err) {
+				return nil, nil, err
+			}
 			var app *apperrors.AppError
 			if !errors.As(err, &app) {
 				return nil, nil, err
@@ -184,7 +313,7 @@ func shelfOperationSchema() map[string]any {
 		"parameter_values": map[string]any{"type": "object", "description": "字段键到参数值数组，空数组移除该参数", "additionalProperties": map[string]any{"type": "array", "items": object(map[string]any{
 			"value": map[string]any{"description": "按配置字段类型提供值，数值也可为闭区间 {min,max}"}, "conditions": shelfConditionsSchema(),
 		}, "value")}},
-		"certification":   shelfPayloadSchema("认证完整字段：name、owner_id、standard、certification_object、cell_part_id、region、year、agency、progress、start_date、obtained_date、issued_date、validity、number、cloud_url、conditions；新增须给 name，region 为配置区域键或空（不分地区），日期为 YYYY-MM-DD；不猜所属节点"),
+		"certification":   shelfPayloadSchema("认证完整字段：name、owner_id、standard、certification_object、cell_part_id、region、year、agency、progress、notes（备注，最多 20000 字）、start_date、planned_date（计划取证日期）、obtained_date（实际取证日期，不得晚于今天，未取证留空）、issued_date、validity、number、cloud_url、conditions；新增须给 name，region 为配置区域键或空（不分地区），日期为 YYYY-MM-DD；不猜所属节点"),
 		"document":        shelfPayloadSchema("资料版本：name、owner_id 或 unassigned=true、requirement_ids（多项资料要求 ID，兼容旧 requirement_id）、certificate_number、attachment_id 或 cloud_url、entry_id、version_label、stage(draft/final)、file_category、origin、occurred_at、conditions；归属须明确指定"),
 		"classification":  shelfPayloadSchema("classify_document 的完整归类：owner_id、requirement_ids、certificate_number、conditions；作用于同一文件全部版本"),
 		"version_id":      text("select_document_version 选择的本文件已有版本 ID"),

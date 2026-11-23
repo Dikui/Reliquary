@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/graph"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -161,8 +162,8 @@ func (s *EntityService) createManagedEntity(ctx context.Context, libraryID strin
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, apperrors.NewUnauthorizedError("entity editor required")
 	}
-	entity := types.Entity{ID: id, SpaceID: spaceID, LibraryID: libraryID, EntityType: "product", Kind: input.Kind, Code: input.Code, CanonicalName: input.Name, Description: input.Description, Attributes: input.Attributes, AutoMatch: input.AutoMatch, Revision: 1, EmbeddingNeedsRebuild: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	entity := types.Entity{ID: id, SpaceID: spaceID, LibraryID: libraryID, EntityType: "product", Kind: input.Kind, Code: input.Code, CanonicalName: input.Name, Description: input.Description, Attributes: input.Attributes, AutoMatch: input.AutoMatch, Revision: 1, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
@@ -207,9 +208,6 @@ func (s *EntityService) createManagedEntity(ctx context.Context, libraryID strin
 		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "create_entity", entity.ID, nil, entity); err != nil {
 			return err
 		}
-		if s.nameEmbeddingRebuilder != nil {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "managed_entity_created")
-		}
 		return nil
 	})
 	return &entity, managedWriteError(err)
@@ -235,7 +233,7 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		return nil, apperrors.NewBadRequestError("effective_at requires attributes")
 	}
 	var entity types.Entity
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
@@ -340,9 +338,6 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 			entity.ArchivedAt = nil
 		}
 		entity.Revision++
-		if before.CanonicalName != entity.CanonicalName || before.Description != entity.Description {
-			entity.EmbeddingNeedsRebuild = true
-		}
 		entity.UpdatedAt = time.Now()
 		if err := tx.Save(&entity).Error; err != nil {
 			return err
@@ -394,9 +389,6 @@ func (s *EntityService) UpdateManagedEntity(ctx context.Context, id string, patc
 		if err := NewOperationLogService(tx).RecordTx(ctx, tx, "update_entity", id, before, entity); err != nil {
 			return err
 		}
-		if s.nameEmbeddingRebuilder != nil && (before.CanonicalName != entity.CanonicalName || before.Description != entity.Description) {
-			return s.nameEmbeddingRebuilder.EnqueueTx(ctx, tx, spaceID, "managed_entity_updated")
-		}
 		return nil
 	})
 	if err == nil {
@@ -413,7 +405,7 @@ func (s *EntityService) DeleteManagedEntity(ctx context.Context, id string, revi
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return apperrors.NewUnauthorizedError("entity editor required")
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}

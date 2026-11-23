@@ -18,6 +18,9 @@ type VectorProfile struct {
 	SourcesSHA256 string `json:"sources_sha256"`
 }
 
+const extractedVectorEntitySQL = ` AND EXISTS (SELECT 1 FROM public.libraries l
+ WHERE l.id=e.library_id AND l.space_id=e.space_id AND l.deleted_at IS NULL AND l.entity_mode='extracted')`
+
 // ModelProfile hashes embedding semantics while excluding credentials,
 // maintenance reminders, display fields, connection status and request limits.
 func ModelProfile(model map[string]any) string {
@@ -56,6 +59,9 @@ func CheckVectorDimensions(ctx context.Context, db *gorm.DB) ([]string, error) {
 		"embeddings":         `SELECT e.id AS identity,e.model_id,e.dimension,vector_dims(e.embedding) AS actual FROM embeddings e WHERE e.embedding IS NOT NULL AND e.is_enabled`,
 		"entities":           `SELECT e.id AS identity,e.embedding_model_id AS model_id,e.embedding_dimension AS dimension,vector_dims(e.name_embedding) AS actual FROM entities e WHERE e.name_embedding IS NOT NULL`,
 	}
+	if db.Migrator().HasColumn("libraries", "entity_mode") {
+		queries["entities"] += extractedVectorEntitySQL
+	}
 	differences := []string{}
 	dimensions := map[string]map[int]bool{}
 	for table, query := range queries {
@@ -91,6 +97,10 @@ func CheckVectorDimensions(ctx context.Context, db *gorm.DB) ([]string, error) {
 }
 
 func VectorProfiles(ctx context.Context, db *gorm.DB) ([]VectorProfile, error) {
+	return vectorProfiles(ctx, db, db.Migrator().HasColumn("libraries", "entity_mode"))
+}
+
+func vectorProfiles(ctx context.Context, db *gorm.DB, extractedOnly bool) ([]VectorProfile, error) {
 	models, err := Models(ctx, db)
 	if err != nil {
 		return nil, err
@@ -102,8 +112,11 @@ func VectorProfiles(ctx context.Context, db *gorm.DB) ([]VectorProfile, error) {
 	queries := map[string]string{
 		"article_embeddings": `SELECT model_id,dimension,jsonb_build_array(space_id,library_id,entry_id,content_hash)::text AS source FROM public.article_embeddings`,
 		"image_embeddings":   `SELECT model_id,dimension,jsonb_build_array(space_id,library_id,entry_id,attachment_path,content_hash)::text AS source FROM public.image_embeddings`,
-		"entities":           `SELECT embedding_model_id AS model_id,embedding_dimension AS dimension,jsonb_build_array(space_id,id,normalized_name)::text AS source FROM public.entities WHERE name_embedding IS NOT NULL AND merged_into_id=''`,
+		"entities":           `SELECT e.embedding_model_id AS model_id,e.embedding_dimension AS dimension,jsonb_build_array(e.space_id,e.id,e.normalized_name)::text AS source FROM public.entities e WHERE e.name_embedding IS NOT NULL AND e.merged_into_id=''`,
 		"embeddings":         `SELECT e.model_id,e.dimension,jsonb_build_array(e.library_id,e.entry_id,e.source_type,c.chunk_index,c.content_hash)::text AS source FROM public.embeddings e LEFT JOIN public.chunks c ON c.id=e.chunk_id WHERE e.embedding IS NOT NULL AND e.is_enabled`,
+	}
+	if extractedOnly {
+		queries["entities"] += extractedVectorEntitySQL
 	}
 	type source struct {
 		ModelID   string
@@ -148,4 +161,20 @@ func CompareVectors(expected, actual *Manifest) []string {
 		return nil
 	}
 	return []string{"vector coverage, dimension or model profile differs"}
+}
+
+// CompareRestoredVectors accepts the original coverage digest of older backups.
+// Their entity digest may mix extracted and managed sources for the same model.
+func CompareRestoredVectors(ctx context.Context, db *gorm.DB, expected, actual *Manifest) ([]string, error) {
+	differences := CompareVectors(expected, actual)
+	if len(differences) == 0 || expected.ExtractedEntityVectorsOnly || !db.Migrator().HasColumn("libraries", "entity_mode") {
+		return differences, nil
+	}
+	legacy := *actual
+	var err error
+	legacy.Vectors, err = vectorProfiles(ctx, db, false)
+	if err != nil {
+		return nil, err
+	}
+	return CompareVectors(expected, &legacy), nil
 }

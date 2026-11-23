@@ -21,17 +21,56 @@ and indexing. Maintenance is intentionally excluded from the
 shared pool because its long-running tasks could pin elastic capacity needed by
 the user-facing pipeline.
 
-PostgreSQL claiming uses row locks with SKIP LOCKED. Dedicated and shared pools consume
-the same core/enrichment queues; one task is still processed by one worker.
+Dedicated and shared pools consume Redis wake messages for the same
+core/enrichment queues. A worker locks the PostgreSQL operation row and checks
+its generation, delivery number and state before admitting the handler.
 
 ## Configuration
 
-All settings are available under System settings and require a service restart:
+The following worker settings are available under System settings and take
+effect on service restart.
 
 - `queue.core_concurrency` / `RELIQUARY_QUEUE_CORE_CONCURRENCY`
 - `queue.enrichment_concurrency` / `RELIQUARY_QUEUE_ENRICHMENT_CONCURRENCY`
 - `queue.maintenance_concurrency` / `RELIQUARY_QUEUE_MAINTENANCE_CONCURRENCY`
 - `queue.shared_concurrency` / `RELIQUARY_QUEUE_SHARED_CONCURRENCY`
+
+## PostgreSQL connection budget
+
+| Connection source | Default maximum | Configuration |
+| --- | ---: | --- |
+| Application GORM / pgx `database/sql` pool | 40 per server | `DB_MAX_OPEN_CONNS` |
+| Maintenance GORM pool, including `maintenance`, `vault-rebuild` and `reembed` on the live or cloned database | 4 per CLI process | `DB_MAINTENANCE_MAX_OPEN_CONNS` |
+| golang-migrate | 1 pinned session per active migration | Released when the migration closes |
+| Backup clone pipeline | 2 per clone | One serial `pg_dump` on the source and one serial `pg_restore` on the clone |
+
+HTTP requests, dispatch, all 30 default workers and session-level advisory locks
+share the application pool. The worker singleton pins one of its 40 connections.
+Topic backfill, shelf parsing and vault file rebuilds also take their lock
+sessions from the caller's pool. PostgreSQL LISTEN/NOTIFY sessions and
+standalone pgx pools contribute zero connections. Redis handles wake delivery.
+
+A single-host installation with one server and one concurrent maintenance CLI
+budgets **48 connections** even if both processes run migrations and a backup
+streams to a clone at the same time (`40 + 4 + 2 + 2`). Compose uses PostgreSQL's
+default `max_connections=100`, leaving 52 slots including PostgreSQL's reserved
+slots. At startup each process checks that the combined budget fits strictly
+below the server's non-reserved connection count. The Compose health check
+uses one transient `pg_isready` connection. Clone creation and cleanup each run
+a single `psql` session outside the streaming step. Additional CLI processes,
+parallel backups and unrelated database clients share the remaining headroom.
+
+Set the two limits in the deployment's `.env`. The server reads them on startup
+and each CLI reads them when invoked. Both accept integers of at least 3. Offline
+replay can hold a singleton session and a transaction while dispatch needs a
+third connection. When tuning worker concurrency, allow room above the number
+of simultaneous lock holders for their queries, HTTP requests and dispatch.
+
+Each queue client batches transaction-visibility checks in one observer, up to
+500 operation IDs per query. It checks the root database so only committed
+operations trigger a wake. The dispatcher publishes up to 500 due operations per
+pass. When the SQL pool is full, callers wait for a connection within their
+context deadline. The periodic sweep picks up long transactions and missed wakes.
 
 ## Capacity layers
 

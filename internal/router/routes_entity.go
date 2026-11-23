@@ -14,6 +14,7 @@ func RegisterEntityRoutes(r *gin.RouterGroup, h *handler.EntityHandler) {
 	r.POST("/libraries/:id/entities", h.CreateManagedEntity)
 	r.GET("/libraries/:id/shelf/import-plans", h.ShelfImportPlans)
 	r.POST("/libraries/:id/shelf/import-plans/suggest", h.SuggestShelfImportPlan)
+	r.POST("/libraries/:id/shelf/imports/inspect", h.InspectShelfWorkbook)
 	r.POST("/libraries/:id/shelf/imports", h.ImportShelfWorkbook)
 	r.POST("/libraries/:id/shelf/imports/suggest-text", h.SuggestShelfImportText)
 	r.GET("/libraries/:id/shelf/documents", h.ShelfDocuments)

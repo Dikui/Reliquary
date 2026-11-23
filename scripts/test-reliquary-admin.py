@@ -96,6 +96,68 @@ class AdminStorageTests(unittest.TestCase):
         ctx.stopped.assert_not_called()
         self.assertNotIn(mock.call("manifest"), ctx.cli_json.call_args_list)
 
+    def test_delivery_backup_seals_the_cleaned_clone_and_keeps_normal_backups(self):
+        ctx = self.host_context(RELIQUARY_ADMIN_DIRECT="1", DB_NAME="production")
+        ctx.database_only = True
+        ctx.check_host_directories(settings=False)
+        backups = Path(ctx.env["BACKUP_DIR"])
+        normal_backups = [backups / f"backup-{i}" for i in range(4)]
+        for path in normal_backups:
+            path.mkdir()
+            (path / "manifest.json").write_text("{}")
+
+        clone = "reliquary_admin_1234567890abcdef"
+        caller = {"kind": "api_keys", "id": "old-caller", "name": "Private caller"}
+        account = {"kind": "chatgpt_accounts", "id": "old-account", "name": "sender@example.test"}
+        parser = {"kind": "spaces", "id": "1", "fields": ["parser_engine_config.api_key"]}
+        model = {"kind": "models", "id": "chat", "fields": ["chatgpt_login"]}
+        cleaned = False
+
+        def invoke(*args, overrides=None):
+            nonlocal cleaned
+            if args[0] == "prepare-delivery":
+                self.assertEqual(overrides["DB_NAME"], clone)
+                cleaned = True
+            if args[0] in {"manifest", "scrub"}:
+                on_clone = (overrides or {}).get("DB_NAME") == clone
+                required = [model] if on_clone and cleaned else [caller, account, parser, model]
+                if args[0] == "scrub":
+                    self.assertTrue(on_clone)
+                    self.assertFalse(cleaned)
+                    return {"required": required, "paused_models": ["chat"]}
+                return {"required_credentials": required, "tables": {"chatgpt_accounts": {"rows": int(not (on_clone and cleaned))}}}
+            return {"ok": True}
+
+        def dump(tool, database, *args, output):
+            self.assertEqual((tool, database), ("pg_dump", clone))
+            self.assertTrue(cleaned)
+            output.write(b"clean clone")
+
+        args = admin.parser().parse_args(["backup", str(backups), "--delivery"])
+        with mock.patch.object(ctx, "configured_backup_directory", return_value=None), \
+             mock.patch.object(ctx, "stopped", side_effect=lambda *_: contextlib.nullcontext()), \
+             mock.patch.object(ctx, "cloned_database", return_value=contextlib.nullcontext(clone)), \
+             mock.patch.object(ctx, "cli_json", side_effect=invoke), \
+             mock.patch.object(ctx, "sql", return_value="1:false"), \
+             mock.patch.object(ctx, "pg", side_effect=dump), \
+             mock.patch.object(ctx, "scan_dump_credentials"), \
+             mock.patch.object(admin, "source_copy", return_value={"commit": "fixture"}), \
+             mock.patch.object(admin, "record") as record, contextlib.redirect_stdout(io.StringIO()):
+            package = admin.backup(ctx, args)
+        self.assertTrue(package.name.startswith("delivery-"))
+        manifest = admin.check_install_backup(package)
+        self.assertIs(manifest["delivery"], True)
+        self.assertEqual(manifest["required_credentials"], [model, parser])
+        snapshot = json.loads((package / "snapshot.json").read_text())
+        self.assertIs(snapshot["delivery"], True)
+        self.assertEqual(snapshot["tables"]["chatgpt_accounts"]["rows"], 0)
+        self.assertEqual(snapshot["required_credentials"], [model, parser])
+        requirements = json.loads((package / "required-credentials.json").read_text())
+        self.assertEqual(requirements["required"], [model, parser])
+        self.assertEqual(requirements["paused_models"], ["chat"])
+        self.assertTrue(all(path.exists() for path in normal_backups))
+        record.assert_not_called()
+
     def host_context(self, **overrides):
         source = self.root / "source"
         source.mkdir(exist_ok=True)
@@ -507,9 +569,9 @@ class AdminStorageTests(unittest.TestCase):
         with mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)), \
              mock.patch.object(admin, "start_paused_environment"), contextlib.redirect_stdout(output):
             admin.restore(destination, package, argparse.Namespace(skip_models=True))
-        state = target / "agents/feishu/data"
+        state = target / "agents/chat/data"
         self.assertEqual((state / "sessions/conversation.jsonl").read_bytes(), (package / "agent/sessions/conversation.jsonl").read_bytes())
-        self.assertFalse((target / "agents/feishu/enabled").exists())
+        self.assertFalse((target / "agents/chat/enabled").exists())
         self.assertIn("Feishu agent", output.getvalue())
 
     def test_agent_credential_in_state_rejects_backup_and_restarts_agent(self):
@@ -732,6 +794,73 @@ class AdminStorageTests(unittest.TestCase):
         self.assertFalse(admin.setup_models(ctx, argparse.Namespace(install=False, download=False, start=False)))
         self.assertEqual(ctx.waiting_state, "waiting_models")
 
+    def test_unreachable_selected_embedding_only_blocks_when_required(self):
+        args = argparse.Namespace(install=False, download=False, start=False)
+        model = {"id": "embed", "name": "local-embedding", "type": "Embedding", "source": "ollama", "status": "active"}
+        for required in (False, True):
+            with self.subTest(required=required), contextlib.redirect_stderr(io.StringIO()) as diagnostics:
+                ctx = argparse.Namespace(env={}, cli_json=mock.Mock(return_value={
+                    "models": [model], "selected_embedding": {"id": "embed"},
+                    "selected_model_ids": ["embed"], "embedding_required": required,
+                }))
+                with (
+                    mock.patch.object(admin.shutil, "which", return_value="/bin/ollama"),
+                    mock.patch.object(admin, "request_json", side_effect=OSError("connection refused")),
+                ):
+                    self.assertEqual(not required, admin.setup_models(ctx, args))
+                self.assertIn("local-embedding (embed)", diagnostics.getvalue())
+                self.assertIn("vector indexing and search", diagnostics.getvalue())
+                self.assertIn("connection refused", diagnostics.getvalue())
+                self.assertIn("blocks recovery" if required else "recovery can continue", diagnostics.getvalue())
+                if required:
+                    self.assertEqual("waiting_models", ctx.waiting_state)
+
+    def test_optional_ollama_install_failure_does_not_block(self):
+        model = {"id": "embed", "name": "local-embedding", "type": "Embedding", "source": "ollama", "status": "active"}
+        ctx = argparse.Namespace(env={}, cli_json=mock.Mock(return_value={
+            "models": [model], "selected_embedding": {"id": "embed"}, "embedding_required": False,
+        }))
+        with (
+            contextlib.redirect_stderr(io.StringIO()) as diagnostics,
+            mock.patch.object(admin, "prepare_ollama_cli", side_effect=admin.AdminError("installer unavailable")),
+            mock.patch.object(admin, "request_json", side_effect=OSError("connection refused")),
+        ):
+            self.assertTrue(admin.setup_models(ctx, argparse.Namespace(install=True, download=False, start=False)))
+        self.assertIn("installer unavailable", diagnostics.getvalue())
+        self.assertIn("recovery can continue", diagnostics.getvalue())
+
+    def test_unavailable_unselected_models_and_rerank_do_not_block(self):
+        models = [
+            {"id": "chat", "name": "Spare chat", "type": "KnowledgeQA", "source": "remote", "status": "active"},
+            {"id": "rank", "name": "Selected reranker", "type": "Rerank", "source": "remote", "status": "active"},
+            {"id": "spare-vector", "name": "Spare embedding", "type": "Embedding", "source": "remote", "status": "active"},
+            {"id": "embed", "name": "Selected embedding", "type": "Embedding", "source": "remote", "status": "active"},
+        ]
+        def cli_json(command, *args):
+            if command == "models":
+                return {"models": models, "selected_model_ids": ["rank", "embed"],
+                        "selected_embedding": {"id": "embed"}, "embedding_required": True}
+            return {"ready": args[1] == "embed", "error": "service unavailable"}
+        ctx = argparse.Namespace(env={}, cli_json=cli_json)
+        with contextlib.redirect_stderr(io.StringIO()) as diagnostics:
+            self.assertTrue(admin.setup_models(ctx, argparse.Namespace(install=False, download=False, start=False)))
+        for name, feature in (("Spare chat", "document processing"), ("Selected reranker", "reranking"), ("Spare embedding", "vector indexing")):
+            self.assertIn(name, diagnostics.getvalue())
+            self.assertIn(feature, diagnostics.getvalue())
+
+    def test_selected_chatgpt_needing_login_waits_for_credentials(self):
+        for status, error in (("needs_login", "sign in to ChatGPT"), ("active", "chatgpt: sign in again")):
+            with self.subTest(status=status), contextlib.redirect_stderr(io.StringIO()) as diagnostics:
+                model = {"id": "chat", "name": "ChatGPT", "type": "KnowledgeQA", "source": "chatgpt", "status": status}
+                cli = mock.Mock(side_effect=[{"models": [model], "selected_model_ids": ["chat"], "embedding_required": False},
+                                             admin.AdminError(error)])
+                ctx = argparse.Namespace(env={}, cli_json=cli)
+                self.assertFalse(admin.setup_models(ctx, argparse.Namespace(install=False, download=False, start=False)))
+                self.assertEqual("waiting_credentials", ctx.waiting_state)
+                self.assertIn("ChatGPT (chat)", diagnostics.getvalue())
+                self.assertIn(error, diagnostics.getvalue())
+                cli.assert_called_with("model-test", "--id", "chat")
+
     def test_runner_recovers_crash_after_resume_and_before_app_restart(self):
         class FakeContext:
             env = {}
@@ -812,6 +941,26 @@ class AdminStorageTests(unittest.TestCase):
                             self.assertLess(ctx.calls.index(("graph-rebuild",)), ctx.calls.index(("resume",)))
                         else:
                             self.assertNotIn(("graph-rebuild",), ctx.calls)
+
+    def test_restore_rebuilds_vectors_only_when_required_and_identity_changed(self):
+        admin.json_write(self.root / "models.json", {"selected_embedding": {"id": "embed", "profile_hash": "original"}})
+        for required, changed in ((False, True), (True, False), (True, True)):
+            with self.subTest(required=required, changed=changed):
+                models = {"selected_embedding": {"id": "embed", "profile_hash": "new" if changed else "original"},
+                          "embedding_required": required}
+                ctx = argparse.Namespace(
+                    root=self.root, direct=True, local_server=None, legacy_schema=lambda: False,
+                    sql=lambda query: "f", server=mock.Mock(), cli_json=mock.Mock(return_value=models),
+                )
+                with mock.patch.object(admin, "verify_reconfigured_data", return_value={"ok": True}) as verify:
+                    admin.finalize_restore(ctx, self.root)
+                if required and changed:
+                    ctx.server.assert_called_once_with("reembed", "--preserve-entity-timestamps", capture=False)
+                else:
+                    ctx.server.assert_not_called()
+                self.assertEqual(changed, "--allow-model-change" in verify.call_args.args)
+                self.assertIn("--vectors", verify.call_args.args)
+                ctx.cli_json.assert_called_with("resume")
 
     def test_scheduler_install_failure_keeps_restore_paused(self):
         class FakeContext:
@@ -1406,6 +1555,14 @@ with mock.patch('subprocess.run') as docker:
         backup.assert_not_called()
         self.assertEqual(ctx.calls, [("stopped", "snapshot", 300, True), ("export-sources",), ("migrate",)])
 
+    def test_retrying_a_pending_upgrade_reuses_the_existing_pause(self):
+        ctx = admin.Context(self.root, {"RELIQUARY_ADMIN_DIRECT": "1", "RELIQUARY_ADMIN_OFFLINE": "1"})
+        with mock.patch.object(ctx, "ensure_legacy_helper", return_value=False), \
+             mock.patch.object(ctx, "cli_json", return_value={"paused": True}) as command:
+            with ctx.stopped("snapshot", 300, keep_paused=True, reuse_pause=True):
+                self.assertEqual(command.call_args_list, [mock.call("status"), mock.call("flush")])
+        self.assertEqual(command.call_args_list, [mock.call("status"), mock.call("flush")])
+
     def old_backup_restore_context(self, legacy=False):
         package = self.root / "package"
         package.mkdir()
@@ -1459,6 +1616,26 @@ with mock.patch('subprocess.run') as docker:
             admin.restore(ctx, package, argparse.Namespace(skip_models=True))
         self.assertLess(ctx.calls.index(("export-sources",)), ctx.calls.index(("migrate",)))
         self.assertFalse(ctx.legacy_schema())
+
+    def test_verified_restore_retries_startup_without_importing_database_again(self):
+        ctx, package, _ = self.old_backup_restore_context()
+        ctx.scheduler_required = True
+        args = argparse.Namespace(skip_models=True, preserve_version=True)
+        resume = argparse.Namespace(package=None, resume=True, no_scheduler=False)
+        state = self.root / ".maintenance-restore.json"
+        with mock.patch.object(admin, "check_files"), \
+             mock.patch.object(admin.subprocess, "run", return_value=argparse.Namespace(returncode=0)) as pg, \
+             mock.patch.object(admin, "start_paused_environment", side_effect=[admin.AdminError("startup failed"), None]), \
+             mock.patch.object(admin, "setup_models", return_value=True), \
+             mock.patch.object(admin, "finalize_restore") as finalize, contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(admin.AdminError, "startup failed"):
+                admin.restore(ctx, package, args)
+            self.assertTrue(json.loads(state.read_text())["startup_pending"])
+            admin.unpack(ctx, resume)
+            self.assertNotIn("startup_pending", json.loads(state.read_text()))
+            finalize.assert_called_once_with(ctx, package.resolve())
+            pg.assert_called_once()
+            self.assertTrue(ctx.scheduler_required)
 
     def test_exact_old_image_rollback_preserves_original_schema(self):
         ctx, package, required = self.old_backup_restore_context(legacy=True)
@@ -1669,7 +1846,8 @@ class IKB20DrillTests(unittest.TestCase):
             database = "reliquary_drill_0123456789abcdef"
             def run(argv, **kwargs):
                 return b"healthy" if argv[1] == "inspect" else b""
-            with mock.patch.object(admin, "run", side_effect=run) as command:
+            # The command and port probe are simulated so this test needs no Docker or sockets.
+            with mock.patch.object(admin, "run", side_effect=run) as command, mock.patch.object(admin.socket, "socket"):
                 with admin.drill_runtime(ctx, root / "temporary", root / "backup", database) as (invoke, expected):
                     invoke("queue-replay")
                 self.assertTrue(any(call.args[0][:3] == ["docker", "rm", "-f"] for call in command.call_args_list))

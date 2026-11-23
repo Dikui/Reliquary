@@ -6,7 +6,9 @@
 
 不传 node_id 时，values.requirement_lists 只返回各所属清单的 name、活动要求 total，以及绑定的 product_lines 和 platforms（均为 id、name），不返回逐条要求。归类前须明确节点，再传 node_id 读取 values.requirements 的 items、total、truncated。型号只取自身清单要求，上层节点按下属型号涉及的要求 ID 去重，部件没有应交清单，返回空列表。每条要求仅含 id、name（原实体名）、list_name、中英文名 name_zh/name_en、初稿及终稿应交阶段 draft_due_stage/final_due_stage；不含完整属性，修改时先读取完整实体快照。
 
-节点 gaps.documents 列出 missing（缺）和 draft_only（只有初稿），gaps.no_file_documents 单独列出 no_file（无文件），不把无文件推断为已到期。两类资料缺口均保留原清单状态和选配条件，上层节点汇总下属型号。型号与产品名称都未设当前阶段时，型号 gaps.current_stage_unset=true，每条无文件缺口也带此提示，须请维护者补阶段。此时清单状态只有 has_file 和 no_file，gaps 不列只有初稿的项；需要区分初稿与终稿时，读 shelf_get 清单每行 document.stage。gaps.sale_statuses 是完全没有记录的区域，gaps.pending_changesets 是相关待确认批次。部件只返回相关待确认批次，其余缺口列表为空。
+配置 checklist_markets_by_region 时，型号清单按 as_of 快照与指定部件组合，从 GA、DEV、Planning 区域推导 checklist_markets，未指定组合时取任一条件下在售市场；EOM、待定及未对应区域不计入。仅列任一市场为 required 或 optional 的要求，多个市场取最强 necessity；markets 为空的要求照常列出且省略 necessity。无检查市场时清单为空并返回 checklist_skipped_reason=no_active_market，仍计入型号总数。对应表为空时不做市场筛选，不返回上述新增字段。
+
+节点 gaps.documents 只列出清单中 gap=true 的资料行，与型号 has_gaps、上层汇总及 document_gaps 查询筛选一致：necessity=optional 的项始终不算缺口；其余 missing（缺）算缺口；draft_only（只有初稿）仅在型号和产品名称均未设阶段时算缺口，此时所有资料视为到期；有当前终稿为 delivered（已交）。设了阶段时，终稿未到期的初稿不算缺口。no_file_documents 为兼容保留的空列表，不再返回 has_file 或 no_file 状态。资料缺口保留原清单状态、gap 和选配条件，上层节点汇总下属型号。current_stage_unset 仅说明未设阶段，无须先补阶段。gaps.sale_statuses 是完全没有记录的区域，gaps.pending_changesets 是相关待确认批次。部件只返回相关待确认批次，其余缺口列表为空。
 
 各缺口列表及节点资料要求分别先完整计数，再保留前 100 项；total 是截断前条数，truncated=true 时不得声称已列全。资料缺口按型号的清单条件行计数，values.requirements 按要求 ID 去重计数。可用 shelf_query 遍历型号、shelf_get 读完整清单，待确认批次用 HTTP 分页继续读取。
 
@@ -68,8 +70,16 @@ requirement_ids 为本库活动资料要求 ID 数组，可明确关联多项，
 
 名称原样保存，身份以 ID 和类别为准。同类别的名称、别名、代码共用唯一名称空间；资料要求例外，在同一所属清单内唯一。跨类别同名须明确确认实体 ID、类别和原写法。别名只能用于已确认的同一身份，不按近似拼写合并；same_entity 只加名称与别名，不合并提议属性。
 
+计划或预计取证日期写 planned_date。obtained_date 是实际取证日期，未取证时留空，晚于当天的写入会被拒绝。原表备注列映射到 notes，最多 20000 字。
+
+认证状态 status 中，date_conflict 以进程本地当天为准，其余按 as_of 的本地日期判断。依次取首个命中：date_conflict（实际取证日期晚于今天）、obtained（实际取证日期不晚于 as_of 的本地日期，或未填实际日期且进度为已取证、已完成）、paused（进度含暂停）、delayed（计划取证日期早于 as_of 的本地日期）、not_started（进度为待启动、未启动）、in_progress（有进度、启动日期或计划取证日期）、unknown（其余）。shelf_query 可用 certification.status 筛选。
+
+`shelf_query` 带认证条件时用 `certification_total` 读取按实体 ID 去重的认证条数，`total` 为型号数，认证事实的 `value.standard_name` 为规范名。
+
+答复 delayed 时给出计划取证日期及 notes 中的延期说明（如有）；date_conflict 提示“实际取证日期晚于今天，需核对”。同一型号按相同 cell_part_id 与 conditions 汇总：有 date_conflict 先提示核对；全部 obtained 为已完成；有 delayed 为延期并逐项列出；其余为进行中。
+
 认证识别键为型号（或明确的所属部件、产品名称、平台）＋标准＋认证对象＋电芯部件＋地区。年份单列，标准使用库内键、规范名或明确别名；电芯等区分认证的差异须写入 cell_part_id 或 conditions，只写在名称或描述里时，新增与已有记录识别键和条件相同会被 uncertain 拦下；名称里出现所属型号组成中的部件名或别名，而该部件不在 cell_part_id 或 conditions 里，新增、改名或改身份时同样被拦下；导入行唯一匹配已有认证、却把非空的年份、机构或证书编号改成另一个值时为 uncertain，同一张证书须改用明确的 update_certification 提交，另一张证书须把差异写进识别字段或条件；通用 update_certification 的零条或多条匹配仍须提交方处理。认证进度和报告导入在零条匹配时生成 create_certification，以 new 反馈；一条匹配更新，多条仍为 uncertain，不合并。新增未映射 name 或名称单元格为空时，名称为“所属节点原名 / 标准规范名 / 认证对象原文”，有电芯部件再加“ / 电芯部件原名”，有地区再加“ / 地区名”（使用配置区域显示名）；映射 name 且非空时用原文。同名仍报冲突，不加后缀。
 
 资料要求按“所属清单＋名称”识别，list_name 必须明确；导入清单由方案键和工作表确定。applies_to 只绑定产品线或平台，型号适用其所属产品线和平台上的全部要求；市场键取 markets，与可售区域 regions 独立。阶段按 stages 数组顺序，键保持身份，不推断业务含义。没有区域状态记录不等于待定。无法确定的身份、归属、字段含义和条件均退回提交方，不推断。
 
-认证地区与可售状态共用 values.regions。每个区域返回 key、name 和可选 aliases，别名去首尾空白、不区分大小写，键、名称、别名唯一识别一个区域；用户可在货架设置的区域标签编辑并存库，不预置客户写法。create_certification、update_certification 的 region 只接受配置区域键或空，空表示不分地区且参与识别。认证进度、报告及海外核对的地区单元格按键、名称、别名解析为键，未知非空原文为 uncertain，details 保留原文，请提交方修正或加别名，不猜地理归属。shelf_query 的认证地区只用区域键筛选，显式空字符串查空地区，省略则不限；shelf_get 返回 region_name 供显示。没有客户生产数据，本次不迁移旧认证地区；旧的非配置键按原文显示，修改须改为配置键或空。更正时显式给 update_certification.entity_id 和 revision，并保持其他四个身份字段一致；新键已命中其他记录时仍阻塞。
+认证地区与可售状态共用 values.regions。每个区域返回 key、name 和可选 aliases，别名去首尾空白、不区分大小写，键、名称、别名唯一识别一个区域；用户可在货架设置的区域标签编辑并存库，不预置客户写法。create_certification、update_certification 的 region 只接受配置区域键或空，空表示不分地区且参与识别。认证进度、报告及海外核对的地区单元格按键、名称、别名解析为键，未知非空原文为 uncertain，details 保留原文，请提交方修正或加别名，不猜地理归属。shelf_query 的认证地区只用区域键筛选，region 省略或空表示不限，只查不分地区的认证用 certification.no_region=true，不能同时给非空 region；progress 省略或空表示不限进度。shelf_get 返回 region_name 供显示。没有客户生产数据，本次不迁移旧认证地区；旧的非配置键按原文显示，修改须改为配置键或空。更正时显式给 update_certification.entity_id 和 revision，并保持其他四个身份字段一致；新键已命中其他记录时仍阻塞。

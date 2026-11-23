@@ -161,12 +161,24 @@ func (s *EntityService) shelfCertificationEntities(ctx context.Context, library 
 	return rows, nil
 }
 
+// Check only proposed writes. Existing snapshots can still be read or used in
+// structural validation, even when they contain a future obtained date.
+func (s *EntityService) checkShelfCertificationObtainedDate(date string) error {
+	if _, err := time.Parse(time.DateOnly, date); err == nil && date > s.db.NowFunc().Local().Format(time.DateOnly) {
+		return errors.New("uncertain: 实际取证日期不能晚于今天，未取证请填写 planned_date")
+	}
+	return nil
+}
+
 func (s *EntityService) resolveShelfCertification(ctx context.Context, draft *types.ShelfChangeset, op types.ShelfOperation, at time.Time, decision *types.ShelfDecision) (*types.Entity, error) {
+	record := op.Certification.ShelfCertification
+	if err := s.checkShelfCertificationObtainedDate(record.ObtainedDate); err != nil {
+		return nil, apperrors.NewBadRequestError(err.Error())
+	}
 	library, err := managedLibrary(s.db, draft.SpaceID, draft.LibraryID)
 	if err != nil {
 		return nil, err
 	}
-	record := op.Certification.ShelfCertification
 	standard, ok := library.ShelfConfig.Standard(record.Standard)
 	if !ok {
 		return nil, apperrors.NewBadRequestError("uncertain: certification standard is unknown")
@@ -397,6 +409,9 @@ func (s *EntityService) writeShelfCertification(ctx context.Context, draft *type
 	}
 	at := shelfCertificationTime(draft, op)
 	if op.Type == "create_certification" {
+		if err := s.checkShelfCertificationObtainedDate(record.ObtainedDate); err != nil {
+			return nil, apperrors.NewBadRequestError(err.Error())
+		}
 		if op.Certification.Name == "" {
 			return nil, apperrors.NewBadRequestError("certification name is required")
 		}
@@ -496,6 +511,7 @@ func (s *EntityService) shelfCertificationViews(ctx context.Context, library *ty
 	if err != nil {
 		return nil, err
 	}
+	today := s.db.NowFunc()
 	for _, entity := range rows {
 		raw, ok := entity.Attributes["certification"]
 		if !ok {
@@ -513,7 +529,10 @@ func (s *EntityService) shelfCertificationViews(ctx context.Context, library *ty
 			return nil, apperrors.NewBadRequestError("certification standard is no longer configured")
 		}
 		entity.KindLabel = managedKindLabel(library, entity.Kind)
-		result = append(result, types.ShelfCertificationView{Entity: entity, Certification: record, StandardName: standard.Name, RegionName: library.ShelfConfig.RegionName(record.Region), Origin: "self"})
+		result = append(result, types.ShelfCertificationView{
+			Entity: entity, Certification: record, Status: types.ShelfCertificationStatus(record, at, today),
+			StandardName: standard.Name, RegionName: library.ShelfConfig.RegionName(record.Region), Origin: "self",
+		})
 	}
 	return result, nil
 }

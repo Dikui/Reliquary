@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -31,6 +32,8 @@ import (
 	"sort"
 )
 
+var backupCloneName = regexp.MustCompile(`^reliquary_admin_[0-9a-f]{16}$`)
+
 func maintenanceDatabase() (*gorm.DB, string, error) {
 	if driver := strings.TrimSpace(os.Getenv("DB_DRIVER")); driver != "" && driver != "postgres" {
 		return nil, "", fmt.Errorf("unsupported database driver %s", driver)
@@ -48,14 +51,14 @@ func maintenanceDatabase() (*gorm.DB, string, error) {
 	query.Set("sslmode", "disable")
 	query.Set("connect_timeout", "10")
 	u.RawQuery = query.Encode()
-	db, err := gorm.Open(postgres.Open(u.String()), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	db, err := database.MaintenancePool.Open(postgres.Open(u.String()), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	return db, u.String(), err
 }
 
 func runMaintenance(args []string, input io.Reader, output io.Writer) error {
 	applogger.SetOutput(os.Stderr)
 	if len(args) == 0 {
-		return errors.New("usage: server maintenance flush|manifest|verify|scrub|models|model-test|credentials|chatgpt-login|chatgpt-complete|secret-scan|graph-rebuild|graph-check|graph-verify|graph-clear-drill|audit|queue-replay|queue-probe-drill|reindex|export-sources|migrate|rebuild|rebuild-files|pause|resume|status|record|configure|due")
+		return errors.New("usage: server maintenance flush|manifest|verify|scrub|prepare-delivery|models|model-test|credentials|chatgpt-login|chatgpt-complete|secret-scan|graph-rebuild|graph-check|graph-verify|graph-clear-drill|audit|queue-replay|queue-probe-drill|reindex|export-sources|migrate|rebuild|rebuild-files|pause|resume|status|record|configure|due")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -272,7 +275,11 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 			}
 			result.Differences = append(result.Differences, maintenance.CompareManifestWithSettings(&wanted, actual, maintenance.CompareOptions{AllowModelChange: *allowModelChange, AllowOperationLogAppend: *allowOperationLogAppend, AllowReconfigurationAppend: *allowReconfigurationAppend})...)
 			if *vectors && !*allowModelChange {
-				result.Differences = append(result.Differences, maintenance.CompareVectors(&wanted, actual)...)
+				differences, err := maintenance.CompareRestoredVectors(ctx, db, &wanted, actual)
+				if err != nil {
+					return err
+				}
+				result.Differences = append(result.Differences, differences...)
 			}
 			result.OK = len(result.Differences) == 0
 		}
@@ -305,8 +312,24 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 			return err
 		}
 		return emit(result)
+	case "prepare-delivery":
+		var database string
+		if err := db.WithContext(ctx).Raw("SELECT current_database()").Scan(&database).Error; err != nil {
+			return err
+		}
+		if !backupCloneName.MatchString(database) {
+			return errors.New("prepare-delivery requires a disposable backup clone")
+		}
+		if err := maintenance.PrepareDelivery(ctx, db); err != nil {
+			return err
+		}
+		return emit(map[string]bool{"ok": true})
 	case "models":
 		models, err := maintenance.Models(ctx, db)
+		if err != nil {
+			return err
+		}
+		embeddingRequired, err := service.EmbeddingRequired(ctx, db, types.SingleSpaceID)
 		if err != nil {
 			return err
 		}
@@ -368,7 +391,7 @@ func runMaintenanceDatabase(ctx context.Context, db *gorm.DB, dsn string, args [
 			generationIDs = append(generationIDs, id)
 		}
 		sort.Strings(generationIDs)
-		return emit(map[string]any{"models": models, "selected_embedding": selected, "selected_model_ids": selectedIDs, "selected_generation_ids": generationIDs})
+		return emit(map[string]any{"models": models, "selected_embedding": selected, "embedding_required": embeddingRequired, "selected_model_ids": selectedIDs, "selected_generation_ids": generationIDs})
 	case "model-test":
 		flags := flag.NewFlagSet("model-test", flag.ContinueOnError)
 		flags.SetOutput(io.Discard)

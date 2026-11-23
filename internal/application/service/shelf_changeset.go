@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -163,7 +164,7 @@ func (s *EntityService) SubmitShelfChangeset(ctx context.Context, libraryID stri
 		draft.Items = append(draft.Items, types.ShelfChangesetItem{ID: op.ID, EntityID: id, Operation: op, Before: types.JSON("null"), After: types.JSON("null"), Conflicts: []types.ShelfConflict{}})
 	}
 	var refreshIDs []string
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, types.MustSpaceIDFromContext(ctx)); err != nil {
 			return err
 		}
@@ -288,7 +289,7 @@ func (s *EntityService) ReviewShelfChangeset(ctx context.Context, libraryID, id 
 	}
 	var refreshIDs []string
 	var draft types.ShelfChangeset
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, types.MustSpaceIDFromContext(ctx)); err != nil {
 			return err
 		}

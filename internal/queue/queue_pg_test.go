@@ -98,12 +98,12 @@ func TestEnqueueSharesCommitAndRollback(t *testing.T) {
 	require.NoError(t, tx.Commit().Error)
 	require.NoError(t, db.Model(&Job{}).Where("id = ?", committed.ID).Count(&count).Error)
 	require.EqualValues(t, 1, count)
-	require.NoError(t, c.DispatchPending(context.Background()))
-	var committedOp Job
-	require.NoError(t, db.First(&committedOp, "id=?", committed.ID).Error)
+	// This producer has no worker or periodic sweep. Its observer must publish
+	// the committed operation even while the rolled-back ID is still invisible.
+	committedOp := jobState(t, c, committed.ID, TaskStateDispatched)
 	inspector := asynq.NewInspector(c.redisOpt)
 	defer inspector.Close()
-	wake, err := inspector.GetTaskInfo(c.redisQueue(committedOp.Queue), deliveryID(&committedOp))
+	wake, err := inspector.GetTaskInfo(c.redisQueue(committedOp.Queue), deliveryID(committedOp))
 	require.NoError(t, err)
 	require.JSONEq(t, fmt.Sprintf(`{"operation_id":%q}`, committed.ID), string(wake.Payload), "Redis contains only the durable operation ID")
 	// A duplicate deterministic schedule ID leaves the outer transaction usable.

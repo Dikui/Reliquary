@@ -8,6 +8,7 @@ import (
 	pgretriever "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service/retriever"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"time"
@@ -34,6 +35,9 @@ func (s *entryService) correctContentType(ctx context.Context, id, contentType s
 	}
 	spaceID := types.MustSpaceIDFromContext(ctx)
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
+			return err
+		}
 		if err := graph.Lock(tx, spaceID); err != nil {
 			return err
 		}

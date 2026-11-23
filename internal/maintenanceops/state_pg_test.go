@@ -44,6 +44,46 @@ func TestCollectionPauseWaitsForAcceptedTransaction(t *testing.T) {
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { return CheckCollectionTx(context.Background(), tx) }))
 }
 
+func TestMaintenancePauseWaitsForBusinessWriteCommit(t *testing.T) {
+	db := pgtest.Open(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	started := make(chan struct{})
+	finishWrite := make(chan struct{})
+	writeDone := make(chan error, 1)
+	go func() {
+		writeDone <- BusinessWriteTransaction(ctx, db, func(tx *gorm.DB) error {
+			close(started)
+			select {
+			case <-finishWrite:
+				return tx.Exec("INSERT INTO system_settings (key, value, value_type, category) VALUES ('maintenance-test', 'true', 'bool', 'test')").Error
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+	}()
+	select {
+	case <-started:
+	case err := <-writeDone:
+		t.Fatalf("write failed before admission: %v", err)
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	pauseDone := make(chan error, 1)
+	go func() { pauseDone <- Pause(ctx, db, "snapshot", "backup", nil) }()
+	select {
+	case err := <-pauseDone:
+		t.Fatalf("pause crossed an admitted write: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(finishWrite)
+	require.NoError(t, <-writeDone)
+	require.NoError(t, <-pauseDone)
+	var exists bool
+	require.NoError(t, db.Raw("SELECT EXISTS(SELECT 1 FROM system_settings WHERE key='maintenance-test')").Scan(&exists).Error)
+	require.True(t, exists)
+}
+
 func TestDrainTimeoutResumesCollectionAndRecordsAlert(t *testing.T) {
 	db := pgtest.Open(t)
 	require.NoError(t, db.Exec("INSERT INTO task_pending_ops(id,task_type,queue,state) VALUES('processing-article','document:process','default','active')").Error)

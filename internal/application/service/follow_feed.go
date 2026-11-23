@@ -11,6 +11,7 @@ import (
 
 	"gorm.io/gorm"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -144,7 +145,7 @@ func (s *FollowService) MarkViewed(ctx context.Context, viewedAt *time.Time, sel
 	if err != nil {
 		return nil, err
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		for _, library := range libraries {
 			if err := tx.Exec(`INSERT INTO follow_feed_library_states(space_id,library_id,last_viewed_at) VALUES(?,?,?) ON CONFLICT(space_id,library_id) DO UPDATE SET last_viewed_at=GREATEST(follow_feed_library_states.last_viewed_at,EXCLUDED.last_viewed_at)`, spaceID, library.ID, value).Error; err != nil {
 				return err

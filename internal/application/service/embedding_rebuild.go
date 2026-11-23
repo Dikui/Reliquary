@@ -10,6 +10,7 @@ import (
 	"time"
 
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/models/embedding"
 	taskqueue "reliquary/internal/queue"
 	"reliquary/internal/types"
@@ -147,7 +148,7 @@ func (r *EmbeddingRebuilder) Start(ctx context.Context, spaceID uint64) (*types.
 			}
 		}
 		var entities []types.Entity
-		if err := tx.Select("id").Where("space_id=? AND merged_into_id=''", spaceID).Order("id").Find(&entities).Error; err != nil {
+		if err := extractedNameEntities(tx, spaceID).Select("id").Order("id").Find(&entities).Error; err != nil {
 			return err
 		}
 		for _, entity := range entities {
@@ -203,15 +204,17 @@ func (r *EmbeddingRebuilder) Continue(ctx context.Context, spaceID uint64, runID
 }
 
 func (r *EmbeddingRebuilder) Pause(ctx context.Context, spaceID uint64, runID string) error {
-	result := r.db.WithContext(ctx).Model(&types.EmbeddingRebuildRun{}).Where("space_id=? AND id=? AND status IN ('pending','running')", spaceID, runID).
-		Updates(map[string]any{"status": "paused", "attempt_id": "", "lease_until": nil})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return apperrors.NewBadRequestError("embedding rebuild is not pending or running")
-	}
-	return nil
+	return maintenanceops.BusinessWriteTransaction(ctx, r.db, func(tx *gorm.DB) error {
+		result := tx.Model(&types.EmbeddingRebuildRun{}).Where("space_id=? AND id=? AND status IN ('pending','running')", spaceID, runID).
+			Updates(map[string]any{"status": "paused", "attempt_id": "", "lease_until": nil})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return apperrors.NewBadRequestError("embedding rebuild is not pending or running")
+		}
+		return nil
+	})
 }
 
 func (r *EmbeddingRebuilder) Enqueue(ctx context.Context, run *types.EmbeddingRebuildRun) error {
@@ -391,7 +394,7 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 	}
 	if item.Kind == "entity" {
 		var entity types.Entity
-		if err := r.db.WithContext(ctx).Where("space_id=? AND id=? AND merged_into_id=''", run.SpaceID, item.SourceID).First(&entity).Error; err != nil {
+		if err := extractedNameEntities(r.db.WithContext(ctx), run.SpaceID).Where("id=?", item.SourceID).First(&entity).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, nil
 			}
@@ -405,13 +408,18 @@ func (r *EmbeddingRebuilder) prepareItem(ctx context.Context, run *types.Embeddi
 			if err := lockEntitySpaceShared(tx, run.SpaceID); err != nil {
 				return err
 			}
-			query := tx.Model(&types.Entity{}).Where("id=? AND space_id=? AND merged_into_id='' AND canonical_name=? AND entity_type=? AND description=?", entity.ID, run.SpaceID, entity.CanonicalName, entity.EntityType, entity.Description)
+			query := extractedNameEntities(tx, run.SpaceID).Where("id=? AND canonical_name=? AND entity_type=? AND description=?", entity.ID, entity.CanonicalName, entity.EntityType, entity.Description)
 			updates := map[string]any{"name_embedding": types.EntityNameEmbedding(vector), "embedding_model_id": run.ModelID, "embedding_dimension": run.Dimension, "embedding_needs_rebuild": false}
 			if r.preserveEntityProfileTimestamps {
 				query = query.Where("updated_at=?", entity.UpdatedAt)
 				updates["updated_at"] = entity.UpdatedAt
 			}
 			result := query.Updates(updates)
+			if result.Error == nil && result.RowsAffected == 0 {
+				if excluded, err := nameEntityOutsideExtractedLibrary(tx, run.SpaceID, entity.ID); err != nil || excluded {
+					return err
+				}
+			}
 			return rebuildSourceWriteResult(result)
 		}, nil
 	}
@@ -568,7 +576,7 @@ func (r *EmbeddingRebuilder) StartAndEnqueue(ctx context.Context, spaceID uint64
 	if !ok {
 		return nil, errors.New("embedding task queue must support PostgreSQL transactions")
 	}
-	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		copy := *r
 		profiles := *r.profiles
 		copy.db, profiles.db = tx, tx
@@ -590,7 +598,7 @@ func (r *EmbeddingRebuilder) ContinueAndEnqueue(ctx context.Context, spaceID uin
 	if !ok {
 		return errors.New("embedding task queue must support PostgreSQL transactions")
 	}
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return maintenanceops.BusinessWriteTransaction(ctx, r.db, func(tx *gorm.DB) error {
 		copy := *r
 		profiles := *r.profiles
 		copy.db, profiles.db = tx, tx

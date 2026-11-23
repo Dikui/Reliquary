@@ -10,6 +10,20 @@ import (
 	"reliquary/internal/types"
 )
 
+func (h *EntityHandler) InspectShelfWorkbook(c *gin.Context) {
+	_, data, err := readShelfWorkbookUpload(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	result, err := h.service.InspectShelfWorkbook(c.Request.Context(), c.Param("id"), data)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}
+
 func (h *EntityHandler) ImportShelfWorkbook(c *gin.Context) {
 	filename, data, err := readShelfWorkbookUpload(c)
 	if err != nil {

@@ -17,17 +17,20 @@ type ShelfComposition struct {
 }
 
 type ShelfModelDetail struct {
-	Documents        []ShelfNodeDocument              `json:"documents"`
-	OtherDocuments   []ShelfOtherDocument             `json:"other_documents"`
-	CurrentStage     string                           `json:"current_stage,omitempty"`
-	StageOwnerID     string                           `json:"stage_owner_id,omitempty"`
-	Checklist        []ShelfChecklistItem             `json:"checklist"`
-	ChecklistSummary *ShelfChecklistSummary           `json:"checklist_summary,omitempty"`
-	Certifications   []ShelfCertificationView         `json:"certifications"`
-	Composition      []ShelfComposition               `json:"composition"`
-	SaleStatuses     []ShelfSaleStatus                `json:"sale_statuses"`
-	Parameters       map[string][]ShelfParameterValue `json:"parameters"`
-	CombinationRules [][]ShelfCondition               `json:"combination_rules"`
+	Documents              []ShelfNodeDocument              `json:"documents"`
+	OtherDocuments         []ShelfOtherDocument             `json:"other_documents"`
+	CurrentStage           string                           `json:"current_stage,omitempty"`
+	StageOwnerID           string                           `json:"stage_owner_id,omitempty"`
+	Checklist              []ShelfChecklistItem             `json:"checklist"`
+	ChecklistMarkets       []string                         `json:"checklist_markets,omitzero"`
+	ChecklistSkippedReason string                           `json:"checklist_skipped_reason,omitempty"`
+	HasGaps                bool                             `json:"has_gaps"`
+	ChecklistSummary       *ShelfChecklistSummary           `json:"checklist_summary,omitempty"`
+	Certifications         []ShelfCertificationView         `json:"certifications"`
+	Composition            []ShelfComposition               `json:"composition"`
+	SaleStatuses           []ShelfSaleStatus                `json:"sale_statuses"`
+	Parameters             map[string][]ShelfParameterValue `json:"parameters"`
+	CombinationRules       [][]ShelfCondition               `json:"combination_rules"`
 }
 
 type ShelfNodeDocument struct {

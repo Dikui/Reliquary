@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+	"reliquary/internal/types"
 )
 
 func TestMain(m *testing.M) { os.Exit(pgtest.Run(m)) }
@@ -266,6 +267,44 @@ func TestVectorManifestComparesCoverageAndProfileNotValuesOrChunkIDs(t *testing.
 	actual, err = BuildManifest(ctx, db, root, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, CompareVectors(wanted, actual))
+}
+
+func TestVectorVerificationExcludesManagedEntityNamesAndAcceptsLegacyCoverage(t *testing.T) {
+	ctx := context.Background()
+	db := pgtest.Open(t)
+	seed(t, db)
+	library := types.Library{ID: "catalog", SpaceID: 1, Name: "Catalog", Directory: "catalog", EntityMode: types.EntityModeManaged}
+	require.NoError(t, db.Create(&library).Error)
+	require.NoError(t, db.Exec("UPDATE entities SET name_embedding='[1,0,0]',embedding_model_id='embed',embedding_dimension=3 WHERE id='entity-a'").Error)
+	require.NoError(t, db.Create(&types.Entity{ID: "catalog-product", SpaceID: 1, LibraryID: library.ID, EntityType: "product", Kind: "product",
+		CanonicalName: "Catalog product", NormalizedName: "catalog product", NameEmbedding: types.EntityNameEmbedding{1, 0, 0}, EmbeddingModelID: "embed", EmbeddingDimension: 3}).Error)
+	legacy, err := vectorProfiles(ctx, db, false)
+	require.NoError(t, err)
+	require.Len(t, legacy, 1)
+	require.Equal(t, 2, legacy[0].Count)
+	current, err := VectorProfiles(ctx, db)
+	require.NoError(t, err)
+	require.Len(t, current, 1)
+	require.Equal(t, 1, current[0].Count)
+	expected := &Manifest{Vectors: legacy}
+	actual := &Manifest{Vectors: current, ExtractedEntityVectorsOnly: true}
+	differences, err := CompareRestoredVectors(ctx, db, expected, actual)
+	require.NoError(t, err)
+	require.Empty(t, differences)
+	require.NoError(t, db.Exec("UPDATE entities SET embedding_dimension=7 WHERE id='catalog-product'").Error)
+	differences, err = CheckVectorDimensions(ctx, db)
+	require.NoError(t, err)
+	require.Empty(t, differences)
+	profiles, err := VectorProfiles(ctx, db)
+	require.NoError(t, err)
+	require.Equal(t, current, profiles)
+	require.NoError(t, db.Exec("UPDATE entities SET embedding_dimension=3 WHERE id='catalog-product'").Error)
+	require.NoError(t, db.Exec("UPDATE entities SET name_embedding=NULL WHERE id='entity-a'").Error)
+	actual.Vectors, err = VectorProfiles(ctx, db)
+	require.NoError(t, err)
+	differences, err = CompareRestoredVectors(ctx, db, expected, actual)
+	require.NoError(t, err)
+	require.NotEmpty(t, differences, "an extracted vector missing from the restored database remains a difference")
 }
 
 func mustRead(t *testing.T, path string) []byte {

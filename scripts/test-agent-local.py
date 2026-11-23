@@ -1,6 +1,8 @@
 """Customer installation preserves private configuration and starts the selected model."""
+import contextlib
 import importlib.util
 import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -17,7 +19,7 @@ class AgentInstallationTests(unittest.TestCase):
             root = Path(temporary)
             agent.write_env(root / 'deploy/.env', {'APP_PORT': '18080', 'FRONTEND_PORT': '18081'})
             answers = iter(['1', '1', 'openai-completions', 'https://model.example/v1', 'test-model', '', '',
-                            'test-app', 'test-tenant', 'test-chat', ''])
+                            ''])
             responses = [[{'id': 'test-library', 'name': '测试库'}], {'token': 'local-fixture-key'}]
             with mock.patch('builtins.input', side_effect=lambda _: next(answers)), \
                  mock.patch.object(agent.getpass, 'getpass', side_effect=["synthetic-$secret's", 'synthetic-app-secret']), \
@@ -25,7 +27,7 @@ class AgentInstallationTests(unittest.TestCase):
                  mock.patch.object(agent, 'install_agent') as install, \
                  mock.patch.object(agent, 'operate') as operate:
                 agent.configure(root)
-            path = root / 'agents/feishu/agent.env'
+            path = root / 'agents/chat/agent.env'
             values = agent.read_env(path)
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             self.assertEqual(values['MODEL_API_KEY'], "synthetic-$secret's")
@@ -39,65 +41,91 @@ class AgentInstallationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             agent.write_env(root / 'deploy/.env', {'APP_PORT': '18080'})
-            answers = iter(['1', '2', '1', 'test-app', 'test-tenant', 'test-chat', ''])
-            responses = [[{'id': 'library', 'name': '测试库'}],
-                         [{'id': 'model', 'name': 'customer-model', 'source': 'chatgpt', 'status': 'active'}],
-                         {'token': 'fixture-key'}]
+            auth = root / 'agents/chat/data/auth.json'
+            auth.parent.mkdir(parents=True)
+            auth.write_text('{"openai-codex":{"type":"oauth"}}')
+            answers = iter(['1', '2', '', ''])
+            responses = [[{'id': 'library', 'name': '测试库'}], {'token': 'fixture-key'}]
             with mock.patch('builtins.input', side_effect=lambda _: next(answers)), \
                  mock.patch.object(agent.getpass, 'getpass', return_value='synthetic-secret'), \
-                 mock.patch.object(agent, 'api', side_effect=responses), \
+                 mock.patch.object(agent, 'api', side_effect=responses) as api, \
                  mock.patch.object(agent, 'install_agent'), \
-                 mock.patch.object(agent, 'operate'), \
-                 mock.patch.object(agent.webbrowser, 'open') as browser:
+                 mock.patch.object(agent, 'operate') as operate:
                 agent.configure(root)
-            browser.assert_not_called()
-            self.assertEqual(agent.read_env(root / 'agents/feishu/agent.env')['MODEL_ID'], 'model')
+            values = agent.read_env(root / 'agents/chat/agent.env')
+            self.assertEqual(values['MODEL_NAME'], 'gpt-6.1-sol')
+            self.assertEqual(values['MODEL_API'], 'openai-codex-responses')
+            self.assertNotIn('MODEL_ID', values)
+            self.assertEqual([call.args[1] for call in api.call_args_list], ['/libraries', '/space/api-keys'])
+            self.assertEqual(operate.call_args_list, [mock.call(root, 'check'), mock.call(root, 'start')])
+            auth.write_text('{}')
+            answers = iter(['1', '2', '', ''])
+            with mock.patch('builtins.input', side_effect=lambda _: next(answers)), \
+                 mock.patch.object(agent.getpass, 'getpass', return_value='synthetic-secret'), \
+                 mock.patch.object(agent, 'api', return_value=[{'id': 'library', 'name': '测试库'}]), \
+                 mock.patch.object(agent, 'install_agent'), \
+                 mock.patch.object(agent, 'operate') as operate:
+                agent.configure(root)
+            self.assertEqual(operate.call_args_list, [mock.call(root, 'login'), mock.call(root, 'check'), mock.call(root, 'start')])
 
     def test_agent_update_restores_previous_image_after_failure(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            path = root / 'agents/feishu/compose.yaml'
+            path = root / 'agents/chat/compose.yaml'
             path.parent.mkdir(parents=True)
-            original = b'{"services":{"agent":{"image":"old-image"}}}'
+            volume = {'type': 'bind', 'source': str(path.parent / 'data'), 'target': '/data'}
+            original = agent.json.dumps({'services': {'agent': {'image': 'old-image', 'volumes': [volume]}}}).encode()
             path.write_bytes(original)
             (path.parent / 'enabled').touch()
-            with mock.patch.object(agent.subprocess, 'check_output', return_value='testcommit'), \
-                 mock.patch.object(agent.subprocess, 'run', side_effect=[None, RuntimeError('unhealthy'), None]):
-                with self.assertRaises(RuntimeError):
+            mounted = agent.json.dumps([{'Type': 'bind', 'Source': volume['source'], 'Destination': '/data'}])
+            missing = '{"ready":true,"channels":{"alpha":"connected"}}'
+            both = '{"ready":true,"channels":{"alpha":"connected","beta":"connected"}}'
+            with mock.patch.object(agent, 'required_channels', return_value={'alpha', 'beta'}), \
+                 mock.patch.object(agent, 'build_image', return_value='candidate'), \
+                 mock.patch.object(agent.subprocess, 'check_output', side_effect=['id', mounted, missing, 'id', mounted, both]), \
+                 mock.patch.object(agent.subprocess, 'run') as up:
+                with self.assertRaisesRegex(ValueError, 'beta'):
                     agent.operate(root, 'update')
+                self.assertEqual(up.call_count, 2)
             self.assertEqual(path.read_bytes(), original)
 
     def test_update_keeps_stopped_agent_stopped(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            path = root / 'agents/feishu/compose.yaml'
+            path = root / 'agents/chat/compose.yaml'
             path.parent.mkdir(parents=True)
             path.write_text('{"services":{"agent":{"image":"old-image"}}}')
-            with mock.patch.object(agent.subprocess, 'check_output', return_value='testcommit'), \
+            with mock.patch.object(agent, 'build_image', return_value='new-image'), \
                  mock.patch.object(agent.subprocess, 'run') as run:
                 agent.operate(root, 'update')
-            self.assertEqual([call.args[0][:2] for call in run.call_args_list], [['docker', 'build']])
-            self.assertIn('reliquary-feishu:', path.read_text())
+            run.assert_not_called()
+            self.assertIn('old-image', path.read_text())
+            self.assertEqual((path.parent / 'pending-image').read_text(), 'new-image')
 
     def test_feishu_entry_is_built_on_first_configure_only(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, source = Path(temporary) / 'runtime', Path(temporary) / 'source'
-            (source / 'agents/feishu').mkdir(parents=True)
-            (source / 'agents/feishu/Dockerfile').write_text('FROM scratch\n')
+            (source / 'agents/chat').mkdir(parents=True)
+            (source / 'agents/chat/Dockerfile').write_text('FROM scratch\n')
             (source / 'VERSION').write_text('0.17.0\n')
             agent.write_env(root / 'deploy/.env', {'COMPOSE_PROJECT_NAME': 'customer'})
             (root / 'deploy/docker-compose.yml').write_text('{"networks":{"Reliquary-network":{}}}')
             (root / 'deploy/customer-install.json').write_text('{"status":"base_ready","source":"%s"}' % source)
+            local = root / 'integrations/chat'
+            local.mkdir(parents=True)
+            for name in ['main.ts', 'package.json', 'package-lock.json']:
+                (local / name).touch()
+            (local.parent / 'chat.json').write_text('["alpha"]')
             template = '{"services":{"agent":{"image":"x","volumes":[{"source":"x"}]}}}'
             with mock.patch.object(agent.subprocess, 'check_output', side_effect=['abc123def456', template]), \
                  mock.patch.object(agent.subprocess, 'run') as run:
                 agent.install_agent(root)
-            config = agent.json.loads((root / 'agents/feishu/compose.yaml').read_text())
-            self.assertEqual(config['name'], 'customer-feishu')
+            config = agent.json.loads((root / 'agents/chat/compose.yaml').read_text())
+            self.assertEqual(config['name'], 'customer-chat')
             self.assertEqual(config['networks']['backend']['name'], 'customer_Reliquary-network')
-            self.assertTrue(config['services']['agent']['image'].startswith('reliquary-feishu:0.17.0-abc123def456-'))
+            self.assertTrue(config['services']['agent']['image'].startswith('reliquary-chat:0.17.0-abc123def456-'))
             self.assertEqual(run.call_args_list[0].args[0][:3], ['docker', 'build', '-t'])
-            self.assertTrue((root / 'agents/feishu/agent.env').exists())
+            self.assertTrue((root / 'agents/chat/agent.env').exists())
             with mock.patch.object(agent.subprocess, 'run') as run:
                 agent.install_agent(root)
             run.assert_not_called()
@@ -113,7 +141,7 @@ def pi_runtime(temporary):
     (source / 'skills/reliquary/workflows').mkdir(parents=True)
     (source / 'skills/reliquary/SKILL.md').write_text('---\nname: reliquary\n---\n')
     (source / 'skills/reliquary/workflows/shelf-import.md').write_text('# 导入\n')
-    (source / 'skills/reliquary/embed.go').write_text('package skills\n')
+    (source / 'skills/reliquary/rules.md').write_text('# Reliquary 使用规则\n\n- 闲聊、笑话、通用知识不作答。\n')
     agent.write_env(root / 'deploy/.env', {'COMPOSE_PROJECT_NAME': 'customer', 'APP_PORT': '18080'})
     (root / 'deploy/docker-compose.yml').write_text('{"networks":{"Reliquary-network":{"name":"custom-net"}}}')
     (root / 'deploy/customer-install.json').write_text('{"status":"base_ready","source":"%s"}' % source)
@@ -187,14 +215,18 @@ class LocalPiTests(unittest.TestCase):
             self.assertIn('RELIQUARY_API_KEY=pi-fixture-key\n', (directory / 'pi.env').read_text())
             for secret in [agent_dir / 'auth.json', directory / 'pi.env']:
                 self.assertEqual(secret.stat().st_mode & 0o777, 0o600)
-            self.assertTrue((agent_dir / 'skills/reliquary/workflows/shelf-import.md').is_file())
-            self.assertFalse((agent_dir / 'skills/reliquary/embed.go').exists())
+            # Pi never sends MCP server instructions, so the shared rules ride in the system prompt instead
+            # of a skill copy the model would have to read first.
+            self.assertFalse((agent_dir / 'skills/reliquary').exists())
             system = (agent_dir / 'APPEND_SYSTEM.md').read_text()
+            self.assertTrue(system.endswith('# Reliquary 使用规则\n\n- 闲聊、笑话、通用知识不作答。\n'))
             self.assertIn('只读', system)
             self.assertIn('reliquary_upload_workbook', system)
             self.assertIn('reliquary_stage_attachment', system)
             self.assertIn('add_document_version', system)
             self.assertNotIn('没有上传工作文件夹文件的工具', system)
+            self.assertIn('至少 3 行 3 列时才用 Markdown 表格', system)
+            self.assertNotIn('MCP 握手说明', system)
             api.assert_called_once_with('http://127.0.0.1:18080', '/space/api-keys', {'name': 'Reliquary Pi'})
             self.assertTrue((root / 'workspace').is_dir())
             launcher = root / 'scripts/pi'
@@ -232,6 +264,9 @@ class LocalPiTests(unittest.TestCase):
             self.assertEqual(provider['baseUrl'], 'http://app:8080/api/v1/agent/models/chat%2Fmodel')
             self.assertEqual(provider['api'], 'openai-responses')
             self.assertEqual(provider['models'][0]['contextWindow'], 200000)
+            # The relay accepts developer-role instructions only and no max_output_tokens.
+            self.assertTrue(provider['models'][0]['reasoning'])
+            self.assertEqual(provider['models'][0]['compat'], {'supportsMaxOutputTokens': False})
             self.assertEqual(settings['defaultModel'], 'gpt-test')
             auth = agent.json.loads((agent_dir / 'auth.json').read_text())
             self.assertEqual(auth, {settings['defaultProvider']: {'type': 'api_key', 'key': 'pi-fixture-key'}})
@@ -246,7 +281,7 @@ class LocalPiTests(unittest.TestCase):
     def test_feishu_model_settings_can_be_reused(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pi_runtime(temporary)
-            agent.write_env(root / 'agents/feishu/agent.env', {
+            agent.write_env(root / 'agents/chat/agent.env', {
                 'MODEL_SOURCE': 'api', 'MODEL_API': 'openai-responses', 'MODEL_BASE_URL': 'https://feishu-model.example/v1',
                 'MODEL_NAME': 'shared-model', 'MODEL_API_KEY': 'synthetic-shared', 'MODEL_CONTEXT_WINDOW': '64000',
                 'MODEL_MAX_TOKENS': '4096', 'FEISHU_APP_ID': 'app', 'RELIQUARY_API_KEY': 'feishu-key'})
@@ -263,11 +298,121 @@ class LocalPiTests(unittest.TestCase):
     def test_developer_codex_model_of_feishu_is_not_offered_for_reuse(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pi_runtime(temporary)
-            agent.write_env(root / 'agents/feishu/agent.env', {'MODEL_SOURCE': 'api', 'MODEL_API': 'openai-codex-responses'})
+            agent.write_env(root / 'agents/chat/agent.env', {'MODEL_SOURCE': 'api', 'MODEL_API': 'openai-codex-responses'})
             self.configure(root, ['1', 'openai-completions', 'https://model.example/v1', 'test-model', '', '', '', ''],
                            [{'token': 'pi-fixture-key'}], (0, pi_events('测试库'), ''), secrets=['synthetic-key'])
             models = agent.json.loads((root / 'agents/pi/data/agent/models.json').read_text())
             self.assertEqual(models['providers'][agent.PI_PROVIDER]['baseUrl'], 'https://model.example/v1')
+
+    def configure_without_prompts(self, root, argv, responses, environ=None):
+        """Run pi-configure with command-line options; any prompt fails the test."""
+        options = agent.argparse.Namespace(model_source=None, model=None, model_api=None, model_base_url=None,
+                                           context_window=128000, max_tokens=8192, workspace=None, proxy=None)
+        for key, value in argv.items():
+            setattr(options, key, value)
+
+        def run(command, **_):
+            return agent.subprocess.CompletedProcess(command, 0, pi_events('测试库') if command[0] != 'docker' else '', '')
+
+        with mock.patch('builtins.input', side_effect=AssertionError('prompted')), \
+             mock.patch.object(agent.getpass, 'getpass', side_effect=AssertionError('prompted')), \
+             mock.patch.dict(agent.os.environ, environ or {}, clear=False), \
+             mock.patch.object(agent, 'api', side_effect=responses) if responses is not None else contextlib.nullcontext(), \
+             mock.patch.object(agent.subprocess, 'check_output', return_value='abc123def456'), \
+             mock.patch.object(agent.subprocess, 'run', side_effect=run), \
+             mock.patch('sys.stdout', new_callable=io.StringIO) as output:
+            try:
+                agent.configure_pi(root, options=options)
+            finally:
+                self.output = output.getvalue()
+
+    def test_api_options_configure_pi_without_prompts_and_read_key_from_environment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            folder = Path(temporary).resolve() / 'customer-files'
+            self.configure_without_prompts(
+                root, {'model_source': 'api', 'model_api': 'openai-responses', 'model_base_url': 'https://model.example/v1',
+                       'model': 'test-model', 'max_tokens': 4096, 'workspace': folder, 'proxy': 'http://proxy:7890'},
+                [{'token': 'pi-fixture-key'}], {agent.PI_MODEL_KEY_ENV: 'synthetic-env-key'})
+            agent_dir = root / 'agents/pi/data/agent'
+            settings = agent.json.loads((agent_dir / 'settings.json').read_text())
+            provider = agent.json.loads((agent_dir / 'models.json').read_text())['providers'][settings['defaultProvider']]
+            self.assertEqual((provider['baseUrl'], provider['api']), ('https://model.example/v1', 'openai-responses'))
+            self.assertEqual(provider['models'][0]['maxTokens'], 4096)
+            auth = agent.json.loads((agent_dir / 'auth.json').read_text())
+            self.assertEqual(auth[settings['defaultProvider']], {'type': 'api_key', 'key': 'synthetic-env-key'})
+            self.assertNotIn('synthetic-env-key', (root / 'agents/pi/config.json').read_text())
+            self.assertIn('HTTPS_PROXY=http://proxy:7890\n', (root / 'agents/pi/pi.env').read_text())
+            self.assertIn(f'source={folder},target=/workspace,readonly', (root / 'scripts/pi').read_text())
+            self.assertIn('本地 Pi 已读到资料库', self.output)
+
+    def test_api_options_without_environment_key_stop_before_writing_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            with mock.patch.dict(agent.os.environ):
+                agent.os.environ.pop(agent.PI_MODEL_KEY_ENV, None)
+                with self.assertRaisesRegex(ValueError, agent.PI_MODEL_KEY_ENV):
+                    self.configure_without_prompts(
+                        root, {'model_source': 'api', 'model_api': 'openai-completions',
+                               'model_base_url': 'https://model.example/v1', 'model': 'test-model'}, [])
+            self.assertFalse((root / 'agents/pi/pi.env').exists())
+
+    def test_chatgpt_option_selects_the_only_tested_model_or_requires_a_name(self):
+        chat = {'id': 'chat/model', 'name': 'gpt-test', 'source': 'chatgpt', 'status': 'active', 'parameters': {}}
+        other = {**chat, 'id': 'chat/other', 'name': 'gpt-other'}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            self.configure_without_prompts(root, {'model_source': 'chatgpt'}, [[chat], {'token': 'pi-fixture-key'}])
+            settings = agent.json.loads((root / 'agents/pi/data/agent/settings.json').read_text())
+            self.assertEqual(settings['defaultModel'], 'gpt-test')
+            self.assertEqual(settings['defaultThinkingLevel'], 'high')
+            with self.assertRaisesRegex(ValueError, 'gpt-test、gpt-other'):
+                self.configure_without_prompts(root, {'model_source': 'chatgpt'}, [[chat, other]])
+            self.configure_without_prompts(root, {'model_source': 'chatgpt', 'model': 'gpt-other'}, [[chat, other]])
+            settings = agent.json.loads((root / 'agents/pi/data/agent/settings.json').read_text())
+            self.assertEqual(settings['defaultModel'], 'gpt-other')
+            astra = {**chat, 'id': 'chat/astra', 'name': 'gpt-6.2-astra'}
+            self.configure_without_prompts(root, {'model_source': 'chatgpt'}, [[chat, astra]])
+            settings = agent.json.loads((root / 'agents/pi/data/agent/settings.json').read_text())
+            self.assertEqual(settings['defaultModel'], 'gpt-6.2-astra')
+
+    def test_chatgpt_option_creates_the_default_model_with_the_signed_in_account(self):
+        account = {'id': 'acct-1', 'email': 'customer@example.test', 'status': 'connected'}
+        offered = [{'slug': 'gpt-6.1-sol', 'display_name': 'GPT-6.1 Sol'}, {'slug': 'gpt-6.2-astra', 'display_name': 'GPT-6.2 Astra'}]
+        created = {'id': 'chat/new', 'name': 'gpt-6.2-astra', 'source': 'chatgpt', 'status': 'active', 'parameters': {}}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            with mock.patch.object(agent, 'api', side_effect=[[], {'accounts': [account]}, offered, created,
+                                                              {'token': 'pi-fixture-key'}]) as api:
+                self.configure_without_prompts(root, {'model_source': 'chatgpt'}, None)
+            calls = [call.args for call in api.call_args_list]
+            self.assertEqual([call[1] for call in calls],
+                             ['/models', '/chatgpt/accounts', '/chatgpt/accounts/acct-1/models', '/models', '/space/api-keys'])
+            body = calls[3][2]
+            self.assertEqual((body['name'], body['type'], body['source']), ('gpt-6.2-astra', 'KnowledgeQA', 'chatgpt'))
+            self.assertEqual(body['parameters']['extra_config']['chatgpt_account_id'], 'acct-1')
+            agent_dir = root / 'agents/pi/data/agent'
+            settings = agent.json.loads((agent_dir / 'settings.json').read_text())
+            self.assertEqual((settings['defaultModel'], settings['defaultThinkingLevel']), ('gpt-6.2-astra', 'high'))
+            provider = agent.json.loads((agent_dir / 'models.json').read_text())['providers'][settings['defaultProvider']]
+            self.assertEqual(provider['baseUrl'], 'http://app:8080/api/v1/agent/models/chat%2Fnew')
+            with self.assertRaisesRegex(ValueError, 'gpt-6.1-sol、gpt-6.2-astra'):
+                self.configure_without_prompts(root, {'model_source': 'chatgpt', 'model': 'gpt-missing'},
+                                               [[], {'accounts': [account]}, offered])
+            with self.assertRaisesRegex(ValueError, 'section=models'):
+                self.configure_without_prompts(root, {'model_source': 'chatgpt'}, [[], {'accounts': []}])
+
+    def test_interactive_subscription_creates_the_default_model_after_web_login(self):
+        account = {'id': 'acct-1', 'status': 'connected'}
+        created = {'id': 'chat/new', 'name': 'gpt-6.2-astra', 'source': 'chatgpt', 'status': 'active', 'parameters': {}}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pi_runtime(temporary)
+            api, _ = self.configure(root, ['2', '', ''], [[], {'accounts': [account]}, {'accounts': [account]},
+                                                          [{'slug': 'gpt-6.2-astra'}], created, {'token': 'pi-fixture-key'}],
+                                    (0, pi_events('测试库'), ''))
+            self.assertEqual(api.call_args_list[4].args[1], '/models')
+            settings = agent.json.loads((root / 'agents/pi/data/agent/settings.json').read_text())
+            self.assertEqual((settings['defaultModel'], settings['defaultThinkingLevel']), ('gpt-6.2-astra', 'high'))
 
     def test_failed_check_keeps_configuration_and_reports_reason(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -349,13 +494,28 @@ class LocalPiUpdateTests(unittest.TestCase):
                 self.errors = errors.getvalue()
                 self.commands = commands
 
+    def saved_model(self, root, source):
+        config_path = root / 'agents/pi/config.json'
+        config = json.loads(config_path.read_text())
+        model = {'MODEL_SOURCE': source, 'MODEL_API': 'openai-responses', 'MODEL_NAME': 'saved-model',
+                 'MODEL_CONTEXT_WINDOW': '128000', 'MODEL_MAX_TOKENS': '4096'}
+        if source == 'chatgpt':
+            model['MODEL_ID'] = 'subscription/model'
+        else:
+            model['MODEL_BASE_URL'] = 'https://model.example/v1'
+        config['model'] = model
+        agent.write_json(config_path, config, private=True)
+        auth_path = root / 'agents/pi/data/agent/auth.json'
+        agent.write_json(auth_path, {agent.PI_PROVIDER: {'type': 'api_key', 'key': 'synthetic-model-key'},
+                                     'other-provider': {'type': 'api_key', 'key': 'other-key'}}, private=True)
+
     def test_update_refreshes_image_and_guidance_but_preserves_sessions_and_credentials(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, source, preserved = self.runtime(temporary)
             current = root.parent / 'current-source'
             agent.shutil.copytree(source, current)
             (current / 'VERSION').write_text('0.18.0\n')
-            (current / 'skills/reliquary/workflows/shelf-import.md').write_text('# 新导入流程\n')
+            (current / 'skills/reliquary/rules.md').write_text('# Reliquary 使用规则\n\n- 新规则。\n')
 
             def run(command, **_):
                 return agent.subprocess.CompletedProcess(command, 0, pi_events('测试库'), '')
@@ -368,10 +528,10 @@ class LocalPiUpdateTests(unittest.TestCase):
             self.assertNotIn('reliquary-pi:previous', (root / 'scripts/pi').read_text())
             self.assertTrue((root / 'scripts/pi').stat().st_mode & 0o100)
             guidance = root / 'agents/pi/data/agent'
-            self.assertEqual((guidance / 'skills/reliquary/workflows/shelf-import.md').read_text(), '# 新导入流程\n')
-            self.assertFalse((guidance / 'skills/reliquary/workflows/obsolete.md').exists())
-            self.assertFalse((guidance / 'skills/reliquary/embed.go').exists())
-            self.assertIn('只读', (guidance / 'APPEND_SYSTEM.md').read_text())
+            self.assertFalse((guidance / 'skills/reliquary').exists())
+            system = (guidance / 'APPEND_SYSTEM.md').read_text()
+            self.assertIn('只读', system)
+            self.assertTrue(system.endswith('- 新规则。\n'))
             for name, content in preserved.items():
                 self.assertEqual((root / name).read_bytes(), content)
                 self.assertEqual((root / name).stat().st_mode & 0o777, 0o600)
@@ -380,6 +540,74 @@ class LocalPiUpdateTests(unittest.TestCase):
             self.assertEqual(build[-1], str(current / 'agents/pi'))
             self.assertEqual(check[0], str(root / 'scripts/pi'))
             self.assertIn('--no-session', check)
+            self.assertIn('已保留原模型文件。请执行 pi-configure', self.output)
+
+    def test_update_refreshes_chatgpt_compatibility_and_uses_the_key_from_pi_env(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, _ = self.runtime(temporary)
+            self.saved_model(root, 'chatgpt')
+            agent_dir = root / 'agents/pi/data/agent'
+            self.update(root, source, lambda cmd, **_: agent.subprocess.CompletedProcess(cmd, 0, pi_events('测试库'), ''))
+            provider = json.loads((agent_dir / 'models.json').read_text())['providers'][agent.PI_PROVIDER]
+            self.assertEqual(provider['baseUrl'], 'http://app:8080/api/v1/agent/models/subscription%2Fmodel')
+            self.assertTrue(provider['models'][0]['reasoning'])
+            self.assertFalse(provider['models'][0]['compat']['supportsMaxOutputTokens'])
+            auth = json.loads((agent_dir / 'auth.json').read_text())
+            self.assertEqual(auth[agent.PI_PROVIDER]['key'], 'synthetic-reliquary-key')
+            self.assertEqual(auth['other-provider']['key'], 'other-key')
+            self.assertNotIn('synthetic-reliquary-key', (agent_dir / 'models.json').read_text())
+            self.assertNotIn('synthetic-reliquary-key', self.output + self.errors)
+
+    def test_update_refreshes_api_model_without_rewriting_its_credentials(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, _ = self.runtime(temporary)
+            self.saved_model(root, 'api')
+            agent_dir = root / 'agents/pi/data/agent'
+            models = agent_dir / 'models.json'
+            models.write_text('{"providers":{"other-provider":{"models":[]}}}')
+            auth = agent_dir / 'auth.json'
+            before = auth.read_bytes()
+            self.update(root, source, lambda cmd, **_: agent.subprocess.CompletedProcess(cmd, 0, pi_events('测试库'), ''))
+            providers = json.loads(models.read_text())['providers']
+            self.assertIn('other-provider', providers)
+            provider = providers[agent.PI_PROVIDER]
+            self.assertEqual(provider['baseUrl'], 'https://model.example/v1')
+            self.assertEqual(provider['models'][0]['id'], 'saved-model')
+            self.assertEqual(provider['models'][0]['maxTokens'], 4096)
+            self.assertNotIn('compat', provider['models'][0])
+            self.assertEqual(auth.read_bytes(), before)
+            self.assertNotIn('synthetic-model-key', models.read_text() + self.output + self.errors)
+
+    def test_missing_model_credential_keeps_existing_files_and_suggests_reconfiguration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, preserved = self.runtime(temporary)
+            self.saved_model(root, 'api')
+            auth = root / 'agents/pi/data/agent/auth.json'
+            auth.write_text('{"other-provider":{}}')
+            self.update(root, source, lambda cmd, **_: agent.subprocess.CompletedProcess(cmd, 0, pi_events('测试库'), ''))
+            model_path = 'agents/pi/data/agent/models.json'
+            self.assertEqual((root / model_path).read_bytes(), preserved[model_path])
+            self.assertEqual(auth.read_text(), '{"other-provider":{}}')
+            self.assertIn('请执行 pi-configure 刷新模型配置', self.output)
+
+    def test_failed_check_restores_regenerated_model_and_credentials_and_redacts_keys(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, source, _ = self.runtime(temporary)
+            self.saved_model(root, 'chatgpt')
+            directory = root / 'agents/pi/data/agent'
+            files = [directory / name for name in ('models.json', 'auth.json')]
+            before = [path.read_bytes() for path in files]
+
+            def run(command, **_):
+                if command[:2] == ['docker', 'build']:
+                    return agent.subprocess.CompletedProcess(command, 0)
+                self.assertTrue(all(path.read_bytes() != old for path, old in zip(files, before)))
+                return agent.subprocess.CompletedProcess(command, 1, '', 'bad synthetic-reliquary-key synthetic-model-key')
+
+            with self.assertRaises(SystemExit):
+                self.update(root, source, run)
+            self.assertEqual([path.read_bytes() for path in files], before)
+            self.assertIn('bad [redacted] [redacted]', self.errors)
 
     def test_failed_update_returns_nonzero_and_restores_previous_image(self):
         for stage in ('build', 'check', 'tool'):

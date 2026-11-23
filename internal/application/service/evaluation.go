@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -72,7 +73,7 @@ func (s *EvaluationService) SaveSet(ctx context.Context, id, name, description s
 	}
 	if id == "" {
 		set := &types.EvaluationSet{ID: uuid.NewString(), SpaceID: spaceID, Name: name, Description: description}
-		return set, s.db.WithContext(ctx).Create(set).Error
+		return set, maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error { return tx.Create(set).Error })
 	}
 	set, err := s.GetSet(ctx, id)
 	if err != nil {
@@ -80,14 +81,14 @@ func (s *EvaluationService) SaveSet(ctx context.Context, id, name, description s
 	}
 	set.Name = name
 	set.Description = description
-	return set, s.db.WithContext(ctx).Save(set).Error
+	return set, maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error { return tx.Save(set).Error })
 }
 func (s *EvaluationService) DeleteSet(ctx context.Context, id string) error {
 	set, err := s.GetSet(ctx, id)
 	if err != nil {
 		return err
 	}
-	return s.db.WithContext(ctx).Delete(set).Error
+	return maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error { return tx.Delete(set).Error })
 }
 func (s *EvaluationService) ListQuestions(ctx context.Context, setID, status string, limit, offset int) ([]types.EvaluationQuestion, error) {
 	if _, err := s.GetSet(ctx, setID); err != nil {
@@ -196,7 +197,7 @@ func (s *EvaluationService) SaveQuestion(ctx context.Context, setID, id string, 
 	if id == "" {
 		input.ID = uuid.NewString()
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if id != "" {
 			var old types.EvaluationQuestion
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND set_id=? AND space_id=?", id, setID, set.SpaceID).First(&old).Error; err != nil {
@@ -240,7 +241,9 @@ func (s *EvaluationService) DeleteQuestion(ctx context.Context, setID, id string
 	if err != nil {
 		return err
 	}
-	return s.db.WithContext(ctx).Select(clause.Associations).Delete(q).Error
+	return maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		return tx.Select(clause.Associations).Delete(q).Error
+	})
 }
 func (s *EvaluationService) QuestionFromRecord(ctx context.Context, setID, recordID string, answers []types.EvaluationAnswer) (*types.EvaluationQuestion, error) {
 	set, err := s.GetSet(ctx, setID)
@@ -261,14 +264,14 @@ func (s *EvaluationService) QuestionFromRecord(ctx context.Context, setID, recor
 		request.GraphParameters = append(json.RawMessage{}, record.Request...)
 	}
 	q := types.EvaluationQuestion{ID: uuid.NewString(), SpaceID: set.SpaceID, SetID: setID, Method: record.Method, Request: request, Source: "search_record", Status: "confirmed", SourceRecordID: recordID, SuggestedResults: record.Results, Answers: answers, Revision: 1}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { return saveEvaluationQuestion(ctx, tx, &q, false) })
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error { return saveEvaluationQuestion(ctx, tx, &q, false) })
 	if err != nil {
 		return nil, err
 	}
 	return s.GetQuestion(ctx, setID, q.ID)
 }
 func (s *EvaluationService) ConfirmCandidate(ctx context.Context, setID, id string, answers []types.EvaluationAnswer) (*types.EvaluationQuestion, error) {
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		scope, err := evaluationScope(ctx, tx)
 		if err != nil {
 			return err

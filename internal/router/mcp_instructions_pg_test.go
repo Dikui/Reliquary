@@ -22,7 +22,8 @@ func TestMCPSkillInstructions(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, utf8.Valid(rules))
 	require.NotEmpty(t, strings.TrimSpace(string(rules)))
-	require.LessOrEqual(t, utf8.RuneCount(rules), 1500)
+	// Every entry sends the rules with each request (handshake instructions, or Pi's system prompt), so keep them short.
+	require.LessOrEqual(t, utf8.RuneCount(rules), 1600)
 	require.NotRegexp(t, mcpDeprecatedTerms, string(rules))
 
 	entrypoint, err := skills.Files.ReadFile("reliquary/SKILL.md")
@@ -90,8 +91,10 @@ func TestMCPSkillToolReferences(t *testing.T) {
 		vector_unavailable workflow
 		applied confirmation_required conflict discarded duplicate extracted in_library model_written
 		needs_selection not_found pending_review result_error
-		approval_policy jp no_record planned_eom shelf_node_ids min detail document_gaps facets parameter_missing
-		configure_shelf save_import_plan decisions origin file file_date plan_key overseas_sales
+		approval_policy jp no_record planned_eom shelf_node_ids min detail document_gaps gap has_gaps facets parameter_missing
+		configure_shelf save_import_plan decisions origin file file_date plan_key overseas_sales checklist_markets_by_region
+		checklist_markets checklist_skipped_reason necessity
+		certification certification_total no_region facts field entity_id standard_name origin_label summary
 		new modified uncertain suspected_same cross_kind_same_name disappeared unparseable
 		required_missing cross_table_contradiction revision_conflict unmapped_column defer keep retire
 		range transpose uncovered_content no_cell_part

@@ -65,6 +65,7 @@ type ShelfCertificationFilter struct {
 	Standard string  `json:"standard,omitempty"`
 	Progress *string `json:"progress,omitempty"`
 	Region   *string `json:"region,omitempty"`
+	Status   string  `json:"status,omitempty"`
 }
 
 // Query detail levels. Summary keeps identity, description and the facts hit by
@@ -103,6 +104,8 @@ type ShelfQueryResult struct {
 	AsOf      time.Time         `json:"as_of"`
 	Detail    string            `json:"detail"`
 	Facets    *ShelfQueryFacets `json:"facets,omitempty"`
+	// CertificationTotal counts distinct matching certification entities before pagination.
+	CertificationTotal *int64 `json:"certification_total,omitempty"`
 	// ParameterMissing is present whenever a parameter range filter is used.
 	ParameterMissing []ShelfParameterMissing `json:"parameter_missing,omitempty"`
 }

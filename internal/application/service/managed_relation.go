@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 	"reliquary/internal/application/graph"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -149,7 +150,7 @@ func (s *EntityService) SaveManagedRelation(ctx context.Context, libraryID, id s
 		return nil, apperrors.NewUnauthorizedError("relationship editor required")
 	}
 	var row types.Relation
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
@@ -243,7 +244,7 @@ func (s *EntityService) DeleteManagedRelation(ctx context.Context, id string, ve
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return apperrors.NewUnauthorizedError("relationship editor required")
 	}
-	return managedWriteError(s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return managedWriteError(maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}

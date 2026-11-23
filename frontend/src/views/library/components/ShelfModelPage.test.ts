@@ -4,6 +4,7 @@ import { createI18n } from 'vue-i18n'
 import zh from '../../../i18n/locales/zh-CN'
 import en from '../../../i18n/locales/en-US'
 import * as shelfText from '../../../utils/productShelf'
+import * as shelfCertification from '../../../utils/shelfCertification'
 import * as externalUrl from '../../../utils/externalUrl'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
@@ -22,10 +23,10 @@ const condition = [{ module_type: 'cell', part_ids: ['alpha'] }]
 const library = { id: 'library-a', name: 'Synthetic shelf', shelf_enabled: true, shelf_config: { module_types: [{ key: 'cell', name: '电芯' }], regions: [{ key: 'north', name: '北区' }, { key: 'south', name: '南区' }], stages: [{ key: 'review', name: '评审阶段' }], standards: [{ key: 'configured-standard', name: '自定标准', aliases: [] }] }, entity_schema: { kinds: [], fields: [{ key: 'energy', name: '能量', type: 'number', unit: 'kWh', product_line_ids: ['line'], kinds: ['model'] }] } }
 const doc = { id: 'version', file_id: 'file', owner_id: 'product', cloud_url: 'https://example.invalid/drawing', version_label: 'Customer V2', stage: 'final', parse_status: 'not_parsed', conditions: [] }
 const checklist = [
-  { requirement: { ...entity('drawing', 'document_requirement', '图纸'), attributes: { requirement: { name_en: 'Drawing', draft_due_stage: 'review', final_due_stage: 'review', stage_label: '原表阶段', due_text: '客户交期原文', owner: '负责人原名' } } }, status: 'delivered', has_file: true, document: doc, document_name: '客户图纸.pdf', origin: 'ancestor', owner_id: 'product', conditions: [] },
-  { requirement: entity('manual', 'document_requirement', '手册'), status: 'draft_only', has_file: true, document: { ...doc, id: 'draft', stage: 'draft' }, origin: 'self', owner_id: 'model', conditions: [] },
-  { requirement: entity('missing', 'document_requirement', '缺少的资料'), status: 'missing', has_file: false, conditions: condition },
-  { requirement: entity('later', 'document_requirement', '后续资料'), status: 'not_due', has_file: false, conditions: [] },
+  { requirement: { ...entity('drawing', 'document_requirement', '图纸'), attributes: { requirement: { name_en: 'Drawing', draft_due_stage: 'review', final_due_stage: 'review', stage_label: '原表阶段', due_text: '客户交期原文', owner: '负责人原名' } } }, status: 'delivered', gap: false, has_file: true, document: doc, document_name: '客户图纸.pdf', origin: 'ancestor', owner_id: 'product', conditions: [] },
+  { requirement: entity('manual', 'document_requirement', '手册'), status: 'draft_only', gap: false, has_file: true, document: { ...doc, id: 'draft', stage: 'draft' }, origin: 'self', owner_id: 'model', conditions: [] },
+  { requirement: entity('missing', 'document_requirement', '缺少的资料'), status: 'missing', gap: true, has_file: false, conditions: condition },
+  { requirement: entity('later', 'document_requirement', '后续资料'), status: 'not_due', gap: false, has_file: false, conditions: [] },
 ]
 const certs = [
   { entity: entity('cert-self', 'certification'), standard_name: '整机标准', origin: 'self', certification: { owner_id: 'model', year: 2026, certification_object: '整机', region: '北区', progress: '客户进度原文', agency: '独立机构', validity: '客户有效期原文', number: 'TEST-001', conditions: [] } },
@@ -48,13 +49,14 @@ async function mountPage(t: test.TestContext, options: { api?: Record<string, un
   const parents: Record<string, any> = { product: { entity: entity('product', 'product', '产品原名'), facts: [{ field: 'belongs_to', value: { object_id: 'platform' } }] }, platform: { entity: entity('platform', 'platform', '平台原名'), facts: [{ field: 'belongs_to', value: { object_id: 'line' } }] }, line: { entity: entity('line', 'product_line', '产品线原名'), facts: [] } }
   // Synthetic API responses replace HTTP only; the real page and shared controls render.
   const modules: Record<string, unknown> = {
-    ...entryPresentationTestModules, '@/api/library': {}, '@/utils/request': {}, '@/utils/externalUrl': externalUrl, '@/utils/productShelf': shelfText, '@/utils/dateTime': dates,
+    ...entryPresentationTestModules, '@/api/library': {}, '@/utils/request': {}, '@/utils/externalUrl': externalUrl, '@/utils/productShelf': shelfText, '@/utils/dateTime': dates, '@/utils/shelfCertification': shelfCertification,
     '@/api/shelf-files': { writeShelf: (_: string, ops: any[]) => { writes.push(ops); return success({ status: 'confirmed' }) }, shelfEntities: () => Promise.resolve([...parts, entity('model', 'model'), ...checklist.map(row => row.requirement), entity('existing-file', 'document_file', '已有原件.pdf')]), listShelfVersions: () => success([{ ...doc, owner_id: '', file_id: 'existing-file', is_current: true, stage: 'final' }]), shelfWriteError, ...options.filesApi },
     '@/api/relations': { listEntityRelations: () => success([{ relation_type: 'composed_of', relations: [{ id: 'composition-alpha', relation_type: 'composed_of', version: 4, direction: 'outgoing', attributes: { module_type: 'cell' }, peer: parts[0] }] }]), ...options.relationsApi },
     '@/api/operation-logs': { OPERATION_TYPES: ['update_entity'] },
     '@/api/entities': { uploadEntityAttachment: () => success({ id: 'uploaded-original' }), deleteEntityAttachment: () => success({}), entityHistory: (_: string, page: number) => success({ items: page === 1 ? [{ id: 'log', operation_type: 'update_entity', source: { type: 'agent', agent_name: '合成助手' }, changeset_id: 'change-7', created_at: '2026-11-07T12:00:00Z', actor: 'local', before: {}, after: {} }] : [], total: 21, page, page_size: 20 }), ...options.entityApi },
     '@/api/shelf': { getShelfNode: (_: string, id: string, asOf?: string, combination?: object) => { requests.push({ id, asOf, combination }); return success(parents[id] || options.value || data(!!combination)) }, ...options.api },
   }
+  modules['./ShelfCertificationStatus.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfCertificationStatus.vue', import.meta.url), modules) }
   modules['./ManagedAttributes.vue'] = { __esModule: true, default: loadComponent(new URL('./ManagedAttributes.vue', import.meta.url), modules) }
   modules['./ShelfConditionsEditor.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfConditionsEditor.vue', import.meta.url), modules) }
   modules['./ShelfParametersEditor.vue'] = { __esModule: true, default: loadComponent(new URL('./ShelfParametersEditor.vue', import.meta.url), modules) }
@@ -67,6 +69,61 @@ async function mountPage(t: test.TestContext, options: { api?: Record<string, un
   return { root, requests, writes }
 }
 const section = (root: Element, id: string) => descendants(root).find(node => node.props.id === id)!
+
+// Small spec, shelf-checklist-markets task 03: use configured market names and
+// label optional requirements in each locale, including very long names.
+test('资料清单在中英文显示检查市场和可选标记', async t => {
+  const value = data()
+  value.shelf.checklist_markets = ['domestic', 'overseas']
+  value.shelf.checklist = [{ ...checklist[2], necessity: 'optional', gap: false,
+    requirement: entity('missing', 'document_requirement', '很长的资料名称'.repeat(30)) }]
+  const config = { ...library, shelf_config: { ...library.shelf_config, markets: [{ key: 'domestic', name: '国内原名' }, { key: 'overseas', name: 'Overseas original' }] } }
+  for (const locale of ['zh-CN', 'en-US']) {
+    const { root } = await mountPage(t, { value, config, locale })
+    const docs = section(root, 'docs')
+    assert.match(visibleText(docs), locale === 'zh-CN' ? /检查市场.*国内原名.*Overseas original/ : /Markets checked.*国内原名.*Overseas original/)
+    assert.match(visibleText(section(root, 'requirement-missing')), locale === 'zh-CN' ? /可选/ : /Optional/)
+    // An optional item without a file is neither shown nor counted as missing.
+    assert.match(visibleText(docs), locale === 'zh-CN' ? /1\s*可选未交/ : /1\s*Optional, not delivered/)
+    assert.doesNotMatch(visibleText(docs), locale === 'zh-CN' ? /\d\s*缺/ : /\d\s*Missing/)
+    assert.match(visibleText(docs), new RegExp('很长的资料名称'.repeat(30)))
+  }
+})
+
+// Small spec, shelf-checklist-markets task 03: explain an intentionally skipped
+// checklist and leave the legacy empty state available without a market map.
+test('无在售市场的清单显示跳过原因，未配置市场时保留原空状态', async t => {
+  for (const locale of ['zh-CN', 'en-US']) {
+    const value = data(); value.shelf.checklist = []
+    value.shelf.checklist_markets = []; value.shelf.checklist_skipped_reason = 'no_active_market'
+    const { root } = await mountPage(t, { value, locale })
+    assert.match(visibleText(section(root, 'docs')), locale === 'zh-CN' ? /无在售区域，不检查资料/ : /No active sales regions; document checks skipped/)
+    delete value.shelf.checklist_markets; delete value.shelf.checklist_skipped_reason
+    const legacy = await mountPage(t, { value, locale })
+    const text = visibleText(section(legacy.root, 'docs'))
+    assert.doesNotMatch(text, /检查市场|Markets checked|无在售区域|No active sales regions/)
+    assert.match(text, locale === 'zh-CN' ? /暂无记录/ : /No records/)
+  }
+})
+
+// Small spec, shelf-checklist-markets task 01: unstaged checklist states keep
+// their delivery meaning in both locales, including the summary counts.
+test('未设阶段的清单在中英文中区分终稿初稿和缺失', async t => {
+  const value = data()
+  value.shelf.current_stage = ''; value.shelf.stage_owner_id = ''
+  value.shelf.checklist = structuredClone(checklist.slice(0, 3))
+  value.shelf.checklist[1].gap = true
+  for (const locale of ['zh-CN', 'en-US']) {
+    const { root } = await mountPage(t, { value, locale })
+    const docs = section(root, 'docs')
+    assert.match(visibleText(section(docs, 'requirement-drawing')), locale === 'zh-CN' ? /已交/ : /Delivered/)
+    assert.match(visibleText(section(docs, 'requirement-manual')), locale === 'zh-CN' ? /只有初稿/ : /Draft only/)
+    assert.match(visibleText(section(docs, 'requirement-missing')), locale === 'zh-CN' ? /缺/ : /Missing/)
+    assert.doesNotMatch(visibleText(docs), /有文件|无文件|Has file|No file|shelfModel\./)
+    const tally = descendants(docs).find(node => node.props.class === 'tally')!
+    assert.match(visibleText(tally), locale === 'zh-CN' ? /1 缺.*1 只有初稿.*1 已交/ : /1 Missing.*1 Draft only.*1 Delivered/)
+  }
+})
 
 // Small regression, task 26 / ADR 0023: each region displays its own evidence,
 // so a web edit cannot hide the source workbook of an untouched region.
@@ -102,6 +159,25 @@ test('型号页默认显示适用条件及部件和上层认证来源', async t 
   assert.match(visibleText(section(root, 'cert')), /电芯 ∈ \{Alpha cell\}/)
   assert.match(visibleText(section(root, 'sale')), /状态备注原文.*状态原文.*电芯 ∈ \{Alpha cell\}/)
   assert.match(visibleText(section(root, 'params')), /9 ~ 54 kWh.*电芯 ∈ \{Alpha cell\}/)
+})
+
+test('型号认证配置显示延期项数，认证行显示备注、计划取证日期和日期核对提示', async t => {
+  const value = data()
+  const certList = structuredClone(certs)
+  value.shelf.certifications = [
+    { ...certList[0], status: 'delayed', certification: { ...certList[0]!.certification, cell_part_id: 'alpha', notes: '补送样品', planned_date: '2026-11-01' } },
+    { ...certList[1], status: 'delayed', certification: { ...certList[1]!.certification, cell_part_id: 'alpha', progress: 'Delayed' } },
+    { ...certList[2], status: 'date_conflict', certification: { ...certList[2]!.certification, cell_part_id: 'alpha', obtained_date: '2099-01-01' } },
+  ]
+  const { root } = await mountPage(t, { value })
+  const groups = descendants(section(root, 'cert')).filter(node => node.tag === 'tbody')
+  assert.equal(groups.length, 2)
+  assert.match(visibleText(groups[0]!), /电芯配置 · Alpha cell.*延期（2 项）/)
+  const rows = groups[0]!.children.filter(node => node.tag === 'tr')
+  assert.match(visibleText(rows[1]!), /延期.*客户进度原文.*计划取证 2026-11-01.*备注.*补送样品/)
+  assert.ok(descendants(rows[1]!).some(node => node.props.class?.includes('rq-status__square--warning')))
+  assert.doesNotMatch(visibleText(rows[2]!), /Delayed/)
+  assert.match(visibleText(groups[1]!), /待核对.*日期待核对.*实际取证日期晚于今天，需核对/)
 })
 
 const changeOption = async (root: Element, module: string, id: string) => {
@@ -302,14 +378,60 @@ test('新增认证保留原文、年份、电芯部件和适用条件，成功�
   const config = { ...library, shelf_config: { ...library.shelf_config, standards: [{ key: 'standard', name: '合成标准', aliases: [] }] } }
   const { root, writes } = await mountPage(t, { config, filesApi: { writeShelf: (_: string, ops: any[]) => { writes.push(ops); saved = true; return success({ status: 'confirmed' }) } }, api: { getShelfNode: () => { const result = data(); result.facts = []; if (saved) result.shelf.certifications.push({ ...certs[0], entity: entity('new-cert', 'certification'), standard_name: '新增合成标准' }); return success(result) } } })
   await click(button(root, '新增认证'))
-  for (const [id, value] of [['cert-name', ' 认证原名 '], ['cert-object', ' 整机原文 '], ['cert-year', '2026'], ['cert-number', 'SYN-24']]) await input(root, id, value)
+  assert.equal(control(root, 'cert-notes').tag, 'textarea')
+  for (const [id, value] of [['cert-name', ' 认证原名 '], ['cert-object', ' 整机原文 '], ['cert-year', '2026'], ['cert-number', 'SYN-24'], ['cert-notes', '第一行\n第二行']]) await input(root, id, value)
   await select(root, 'cert-standard', 'standard'); await select(root, 'cert-region', 'north'); await select(root, 'cert-cell', 'alpha')
   await click(button(root, '添加条件')); await select(root, 'condition-module-0', 'cell')
   const checkbox = descendants(root).find(n => n.tag === 'input' && n.props.type === 'checkbox' && n.props['aria-label'] === 'Alpha cell')!
   assert.ok(checkbox); checkbox.props.onChange({ target: { checked: true } }); await settle(); await submit(root)
   assert.equal(writes[0].length, 1); assert.equal(writes[0][0].type, 'create_certification')
-  assert.deepEqual({ ...writes[0][0].certification }, { name: ' 认证原名 ', owner_id: 'model', standard: 'standard', certification_object: ' 整机原文 ', region: 'north', year: 2026, cell_part_id: 'alpha', number: 'SYN-24', conditions: condition })
+  assert.deepEqual({ ...writes[0][0].certification }, { name: ' 认证原名 ', owner_id: 'model', standard: 'standard', certification_object: ' 整机原文 ', region: 'north', year: 2026, cell_part_id: 'alpha', number: 'SYN-24', notes: '第一行\n第二行', conditions: condition })
   assert.match(visibleText(section(root, 'cert')), /新增合成标准/)
+})
+
+test('编辑型号自有认证时保留完整记录和认证修订号', async t => {
+  const value = data()
+  const cert = {
+    ...certs[0],
+    status: 'obtained',
+    certification: { ...certs[0]!.certification, region: 'north', standard: 'configured-standard', notes: '旧备注', planned_date: '2026-06-01', conditions: condition },
+  }
+  value.shelf.certifications = [cert]
+  const { root, writes } = await mountPage(t, { value })
+  await click(button(root, '编辑认证'))
+  assert.equal(control(root, 'cert-notes').props.value, '旧备注')
+  await input(root, 'cert-notes', '新备注')
+  await submit(root)
+  assert.deepEqual(writes[0], [{
+    id: 'certification',
+    type: 'update_certification',
+    entity_id: cert.entity.id,
+    revision: cert.entity.revision,
+    certification: { name: cert.entity.canonical_name, ...cert.certification, notes: '新备注' },
+  }])
+})
+
+test('未来的实际取证日期会阻止提交，清空后仍可保存未来的计划日期', async t => {
+  const { root, writes } = await mountPage(t)
+  await click(button(root, '新增认证'))
+  await input(root, 'cert-name', '计划认证')
+  await input(root, 'cert-object', '整机')
+  await select(root, 'cert-standard', 'configured-standard')
+  await input(root, 'cert-planned_date', '2099-01-01')
+  await input(root, 'cert-obtained_date', '2099-01-01')
+  const obtainedDate = control(root, 'cert-obtained_date') as Element & { focus(): void }
+  let focused = false
+  obtainedDate.focus = () => { focused = true }
+  await submit(root)
+  assert.equal(writes.length, 0)
+  assert.equal(obtainedDate.props['aria-invalid'], true)
+  assert.equal(focused, true)
+  assert.equal(visibleText(control(root, 'cert-obtained_date-hint')), '未取证请填写计划取证日期')
+  assert.equal(visibleText(control(root, 'cert-obtained_date-error')), '实际取证日期晚于今天，需核对')
+  await input(root, 'cert-obtained_date', '')
+  await submit(root)
+  assert.equal(writes[0][0].certification.planned_date, '2099-01-01')
+  assert.equal(writes[0][0].certification.obtained_date, undefined)
 })
 
 // Small regression, task 24: editing a filtered read must not drop facts for other options.

@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
@@ -21,6 +22,60 @@ import (
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
+
+func TestMaintenanceModelsReportsEmbeddingRequirementFromVectorSources(t *testing.T) {
+	db := pgtest.Open(t)
+	ctx := context.Background()
+	require.NoError(t, service.EnsurePersonalSpace(ctx, db))
+	library := types.Library{ID: "catalog", SpaceID: 1, Name: "Catalog", Directory: "catalog", EntityMode: types.EntityModeManaged, IndexingStrategy: types.DefaultIndexingStrategy()}
+	require.NoError(t, db.Create(&library).Error)
+	require.NoError(t, db.Create(&types.Entity{ID: "catalog-product", SpaceID: 1, LibraryID: library.ID, EntityType: "product", Kind: "product",
+		CanonicalName: "Catalog product", NormalizedName: "catalog product", EmbeddingNeedsRebuild: true}).Error)
+	check := func(t *testing.T, want bool) {
+		t.Helper()
+		var output bytes.Buffer
+		require.NoError(t, runMaintenanceDatabase(ctx, db, "", []string{"models"}, bytes.NewReader(nil), &output))
+		var result struct {
+			EmbeddingRequired *bool `json:"embedding_required"`
+		}
+		require.NoError(t, json.Unmarshal(output.Bytes(), &result))
+		require.NotNil(t, result.EmbeddingRequired)
+		require.Equal(t, want, *result.EmbeddingRequired)
+	}
+	check(t, false)
+	t.Run("extracted entity in a keyword-only library", func(t *testing.T) {
+		extracted := types.Library{ID: "extract", SpaceID: 1, Name: "Extracted", Directory: "extract", IndexingStrategy: types.IndexingStrategy{KeywordEnabled: true}}
+		require.NoError(t, db.Create(&extracted).Error)
+		entity := types.Entity{ID: "company", SpaceID: 1, LibraryID: extracted.ID, EntityType: "company", CanonicalName: "Company", NormalizedName: "company"}
+		require.NoError(t, db.Create(&entity).Error)
+		check(t, true)
+		require.NoError(t, db.Delete(&entity).Error)
+	})
+	entry := types.Entry{ID: "catalog-entry", SpaceID: 1, LibraryID: library.ID, Type: types.EntryTypeManual, SourceKind: "article", ParseStatus: types.ParseStatusCompleted}
+	require.NoError(t, db.Create(&entry).Error)
+	check(t, false)
+	t.Run("enabled chunk", func(t *testing.T) {
+		chunk := types.Chunk{ID: "catalog-chunk", SpaceID: 1, LibraryID: library.ID, EntryID: entry.ID, Content: "Specifications", ChunkType: types.ChunkTypeText}
+		require.NoError(t, db.Create(&chunk).Error)
+		check(t, true)
+		require.NoError(t, db.Model(&chunk).Update("is_enabled", false).Error)
+		check(t, false)
+	})
+	t.Run("completed article with a summary", func(t *testing.T) {
+		require.NoError(t, db.Model(&entry).Update("structured_summary", gorm.Expr("'{}'::jsonb")).Error)
+		check(t, true)
+		require.NoError(t, db.Model(&entry).Update("structured_summary", nil).Error)
+	})
+	t.Run("eligible saved image", func(t *testing.T) {
+		require.NoError(t, db.Create(&types.Model{ID: "image-vector", SpaceID: 1, Name: "Image vector", Type: types.ModelTypeEmbedding,
+			Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3, SupportsImages: true}}}).Error)
+		require.NoError(t, db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", "image-vector").Error)
+		require.NoError(t, db.Model(&entry).Updates(map[string]any{"vault_path": "catalog/article.md", "vault_body": "![Product](../attachments/catalog-entry/product.png)"}).Error)
+		check(t, true)
+		require.NoError(t, db.Model(&library).Update("indexing_strategy", types.IndexingStrategy{KeywordEnabled: true}).Error)
+		check(t, false)
+	})
+}
 
 func TestMaintenanceFilesHTTPAndCLIShareResultsAndRejectConcurrentRebuild(t *testing.T) {
 	db := pgtest.Open(t)

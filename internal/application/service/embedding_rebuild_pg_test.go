@@ -209,6 +209,49 @@ func TestMaintenanceEmbeddingRebuildPreservesAllEntityProfileColumns(t *testing.
 	}
 }
 
+func TestFullEmbeddingRebuildSkipsManagedEntityNames(t *testing.T) {
+	for _, candidate := range []bool{false, true} {
+		mode := "current"
+		if candidate {
+			mode = "candidate"
+		}
+		t.Run(mode, func(t *testing.T) {
+			db, ctx, svc := managedHistoryFixture(t)
+			managed, err := svc.CreateManagedEntity(ctx, "entity-library", types.ManagedEntityInput{Name: "Catalog product", Kind: "product"})
+			require.NoError(t, err)
+			require.NoError(t, db.Create(&types.Library{ID: "extracted", SpaceID: 1, Name: "Extracted", Directory: "extracted"}).Error)
+			extracted := entityRecord("extracted-name", "Extracted name", "company")
+			extracted.LibraryID = "extracted"
+			require.NoError(t, db.Create(&extracted).Error)
+			configureNameEmbedding(t, db, "selected-vector", 3)
+			embedder := &allRebuildEmbedder{nameRebuildEmbedder: nameRebuildEmbedder{id: "selected-vector", dimension: 3}}
+			models := &nameRebuildModels{models: map[string]embedding.Embedder{"selected-vector": embedder}}
+			rebuilder := NewEmbeddingRebuilder(db, models, nil, nil)
+			if candidate {
+				configureNameEmbedding(t, db, "candidate-vector", 3)
+				models.models["candidate-vector"] = &allRebuildEmbedder{nameRebuildEmbedder: nameRebuildEmbedder{id: "candidate-vector", dimension: 3}}
+				require.NoError(t, db.Model(&types.Space{}).Where("id=1").Update("embedding_model_id", "selected-vector").Error)
+				rebuilder.targetModelID = "candidate-vector"
+			}
+			run, err := rebuilder.Start(ctx, 1)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, run.TotalCount)
+			// Older runs can already contain a managed item when the worker starts.
+			require.NoError(t, db.Create(&types.EmbeddingRebuildItem{ID: "old-managed-item", RunID: run.ID, Kind: "entity", SourceID: managed.ID, Status: "pending"}).Error)
+			require.NoError(t, db.Model(run).Update("total_count", 2).Error)
+			require.NoError(t, rebuilder.Run(ctx, 1, run.ID, nil))
+			var finished types.EmbeddingRebuildRun
+			require.NoError(t, db.First(&finished, "id=?", run.ID).Error)
+			require.Equal(t, "completed", finished.Status)
+			if candidate {
+				require.NoError(t, rebuilder.SwitchCandidate(ctx, 1, run.ID))
+			}
+			require.Empty(t, readNameEntity(t, db, managed.ID).NameEmbedding)
+			require.NotEmpty(t, readNameEntity(t, db, extracted.ID).NameEmbedding)
+		})
+	}
+}
+
 func TestMaintenanceEmbeddingRebuildRejectsConcurrentEntityTimestampEdit(t *testing.T) {
 	h := newAllRebuildFixture(t, false)
 	h.rebuilder.PreserveEntityProfileTimestamps(true)

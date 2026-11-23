@@ -599,7 +599,12 @@ func resetEntryForReparse(entry *types.Entry, library *types.Library) {
 //   - Completed, or failed without queued work: processing has finished.
 //   - ParseStatusDeleting: a delete is in progress; cancel cannot supersede it.
 func (s *entryService) CancelEntryParse(ctx context.Context, entryID string) (entry *types.Entry, err error) {
-	err = s.withTaskObject(ctx, entryID, func(held context.Context) error { entry, err = s.cancelEntryParse(held, entryID); return err })
+	err = s.withTaskObject(ctx, entryID, func(held context.Context) error {
+		return s.withInteractiveEntryWrite(held, func(ctx context.Context) error {
+			entry, err = s.cancelEntryParse(ctx, entryID)
+			return err
+		})
+	})
 	if err == nil {
 		err = populateEntryLibraryNames(ctx, s.db, []*types.Entry{entry})
 	}

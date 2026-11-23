@@ -51,6 +51,31 @@ func importRow(row int, platform, product, model, status, energy string) string 
 	return fmt.Sprintf(`<row r="%d"><c r="A%d" t="inlineStr"><is><t>%s</t></is></c><c r="B%d" t="inlineStr"><is><t>%s</t></is></c><c r="C%d" t="inlineStr"><is><t>%s</t></is></c><c r="D%d" t="inlineStr"><is><t>%s</t></is></c><c r="E%d"><v>%s</v></c></row>`, row, row, platform, row, product, row, model, row, status, row, energy)
 }
 
+// Skill integration regression: inspection reuses the workbook reader without persisting a draft.
+func TestShelfWorkbookInspectionPreservesCellsWithoutWriting(t *testing.T) {
+	f, library, _ := shelfModelSetup(t)
+	var before int64
+	require.NoError(t, f.db.Model(&types.ShelfChangeset{}).Count(&before).Error)
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	file, err := form.CreateFormFile("file", "map.xlsx")
+	require.NoError(t, err)
+	_, err = file.Write(importWorkbook(t, importRow(3, "Platform", "Product", "Model", "GA", "50"), ""))
+	require.NoError(t, err)
+	require.NoError(t, form.Close())
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/libraries/"+library.ID+"/shelf/imports/inspect", &body)
+	request.Host = "localhost"
+	request.Header.Set("Content-Type", form.FormDataContentType())
+	request.Header.Set("X-API-Key", f.key)
+	response := httptest.NewRecorder()
+	f.router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Contains(t, response.Body.String(), `"Value":"Model"`)
+	var after int64
+	require.NoError(t, f.db.Model(&types.ShelfChangeset{}).Count(&after).Error)
+	require.Equal(t, before, after)
+}
+
 func importUpload(t *testing.T, f *managedNamesFixture, libraryID, filename, date string, data []byte, status int) types.ShelfChangeset {
 	t.Helper()
 	var body bytes.Buffer

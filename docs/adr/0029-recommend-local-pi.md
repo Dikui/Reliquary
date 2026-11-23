@@ -21,4 +21,6 @@ Status: accepted
 
 代价与限制：模型仍能通过 read 读到容器内 Pi 自己的凭据文件；对话上下文进入模型服务商的留存范围。本地 Pi 会话暂未纳入 `reliquary-admin` 备份，与飞书状态备份分开。工具白名单不等于服务端权限隔离：API Key 仍无权限范围，本机调用方仍可沿用 [ADR 0015](0015-no-login-local-only.md) 通过免 Key 的回环 HTTP 接口绕过入口限制。
 
-验证：`pi-configure` 生成受限工具配置、技能包副本和 `scripts/pi`，实际要求模型成功调用 `list_libraries`；`pi-update` 重建镜像、刷新规则与技能并做同样检查。启动器只读挂载工作文件夹，`scripts/pi -c` 继续上次会话。上传扩展只接收工作文件夹内的普通文件，不确认货架变更。
+Pi 以 direct 方式声明 MCP 工具时不会把握手 `instructions` 发给模型，因此 `APPEND_SYSTEM.md` 由入口约束与 `rules.md` 全文拼成，不再复制技能包：技能描述会让模型每次先读 `SKILL.md`，其中多为安装说明和重复规则；流程仍由 `reliquary_guide` 按需读取（2026-11-22 补充）。
+
+验证：`pi-configure` 生成受限工具配置、系统提示和 `scripts/pi`，实际要求模型成功调用 `list_libraries`；`pi-update` 重建镜像、刷新规则并做同样检查。启动器只读挂载工作文件夹，`scripts/pi -c` 继续上次会话。上传扩展只接收工作文件夹内的普通文件，不确认货架变更。

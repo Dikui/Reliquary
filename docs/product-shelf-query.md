@@ -22,8 +22,8 @@ MCP 分别提供 `shelf_find`、`shelf_get`、`shelf_query`，均为只读工具
 
 `gaps` 的节点必须是本库产品线、平台、产品名称、型号或部件。型号及上层节点返回 model_count，以及四个独立的 `{items,total,truncated}` 列表：
 
-- documents：现有清单中的 missing 和 draft_only 行，保留 model_id、model_name、current_stage，以及原 requirement（含 ID、所属清单、初稿及终稿应交阶段）、条件、部分选配、所选版本和状态。未到期项不列入。
-- no_file_documents：现有清单中的 no_file（无文件）行，保留与 documents 相同的型号、要求、条件和状态字段，独立计数，不推断已经到期。每行 current_stage_unset=true 表示型号和产品名称均未设置当前阶段；未设阶段时清单状态只有 has_file 与 no_file，documents 不会出现 draft_only，初稿与终稿须按清单行 document.stage 区分；型号节点的 gaps 也会返回 current_stage_unset=true，提醒先补阶段。型号设置或从产品名称沿用阶段时不提示未设置。
+- documents：现有清单中 `gap=true` 的行，保留 model_id、model_name、current_stage、current_stage_unset，以及原 requirement（含 ID、所属清单、初稿及终稿应交阶段）、条件、部分选配、所选版本、状态和 gap。包括 missing，以及未设阶段时的 draft_only；设了阶段且终稿未到期的初稿不列入。
+- no_file_documents：为接口兼容保留，当前始终为空（items=[]、total=0、truncated=false）。未设阶段的缺和只有初稿均进入 documents，不再返回 no_file 或 has_file 状态。型号节点的 gaps 和各资料缺口行保留 current_stage_unset，表示型号和产品名称均未设置当前阶段；这不影响按缺口检查资料，无须先补阶段。
 - sale_statuses：本库 regions 中该型号完全没有记录的区域，包含型号和区域的键及原名；已有条件记录的区域不算整区无记录。
 - pending_changesets：涉及节点、下属型号或其共用上层、组成部件、当前要求、认证、文件的待确认变更集摘要（id、revision、source、updated_at），按变更集去重。明确的关系两端、候选、决定和适用条件引用也参与判断；库设置提议影响整个库。原操作和冲突可用变更集 HTTP GET 读取。
 
@@ -94,7 +94,8 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
   "certification": {
     "standard": "已配置的标准键、规范名或明确别名",
     "progress": "提交方填写的进度",
-    "region": "region_key"
+    "region": "region_key",
+    "status": "delayed"
   },
   "composition": [{"module_type": "module_key", "part_ids": ["part-id"]}],
   "as_of": "2026-11-07T00:00:00Z",
@@ -105,7 +106,7 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
 }
 ```
 
-`detail` 控制每项详略，默认 `summary`，响应顶层 `detail` 回显本次取值。`summary` 每项只含 `entity`（保留名称、类别、代码、别名与 `description`，`attributes` 置空）、`current_stage`、`recorded`、`as_of`、`matching_conditions`、`partial_options`，以及本次筛选检查过的 `facts`：所筛区域的可售状态（未给区域时为全部区域）、所筛参数字段的取值、满足认证条件的认证；每条事实保留条件、来自部件或上层标记与来源证据。不返回 `shelf`，即资料清单、其他文件、组成、完整认证与参数表。`full` 每项返回与 `GET /shelf/nodes/:node_id` 相同的完整详情，体积随型号和资料数线性增长，只在确需逐项资料清单时少量使用。只要数量时传 `limit=1` 读 `total`。货架导出与节点缺口在服务内部读取完整详情，不受此参数影响。
+`detail` 控制每项详略，默认 `summary`，响应顶层 `detail` 回显本次取值。`summary` 每项只含 `entity`（保留名称、类别、代码、别名与 `description`，`attributes` 置空）、`current_stage`、`recorded`、`as_of`、`matching_conditions`、`partial_options`，以及本次筛选检查过的 `facts`：所筛区域的可售状态（未给区域时为全部区域）、所筛参数字段的取值、能与其他筛选在同一可行组合下命中的认证；每条事实保留条件、来自部件或上层标记与来源证据。不返回 `shelf`，即资料清单、其他文件、组成、完整认证与参数表。`full` 每项返回与 `GET /shelf/nodes/:node_id` 相同的完整详情，体积随型号和资料数线性增长，只在确需逐项资料清单时少量使用。货架导出与节点缺口在服务内部读取完整详情，不受此参数影响。
 
 `facets=true` 时响应另含 `facets`，在全部命中型号上统计，不受分页影响，用于追问模糊目标时给出选项与型号数：
 
@@ -116,31 +117,54 @@ Excel 工作表名称的非法字符、长度、保留名称及重名按格式�
 
 各计数只说明命中型号中有该记录，不保证它与其他筛选在同一选配组合下同时成立；选定后按条件重新筛选，以新的 `total` 为准。不传或为 `false` 时不计算，响应不含该字段。货架导出不使用此参数。
 
-所有筛选项均可省略，默认返回当前活动型号。`ancestor_id` 限定所属层级范围，也允许直接指定型号本身。多个区域、参数和组成条件为合取，必须存在同一个部件组合同时满足全部条件。认证的标准、进度和地区必须由同一条适用认证记录满足，包含来自部件和来自上层的认证。查询按业务时间使用属性快照与关系有效区间，不展开或持久化完整组合实体。
+所有筛选项均可省略，默认返回当前活动型号。`ancestor_id` 限定所属层级范围，也允许直接指定型号本身。多个区域、参数和组成条件为合取，必须存在同一个部件组合同时满足全部条件。认证的标准、进度、地区和派生状态必须由同一条适用认证记录满足，包含来自部件和来自上层的认证。查询按业务时间使用属性快照与关系有效区间，不展开或持久化完整组合实体。
 
 数值筛选至少提供 `min` 或 `max`，采用闭区间相交语义；或只传 `missing: true`，筛选该字段所属产品线内没有结构化取值的型号。单值等同于上下界相同的区间。例如参数为 `[9,54]` 时会命中 `min=50`，响应保留原范围，调用方不能把它说成保证达到 50。参数必须是已配置的产品线数值字段。
 
 每个按 `min`、`max` 筛选的参数，响应都带 `parameter_missing` 一项：`{"field","name","models"}`，`models` 是满足其他全部筛选、但该字段没有结构化取值的型号数，为 0 时也返回。这些型号不在 `items` 和 `total` 中，数值可能写在描述或正文里；把该参数换成 `missing: true` 重新筛选即可列出。同时缺少多个被筛选字段的型号不计入任何一项。只用 `missing: true` 筛选时不返回此项。
 
-标准按规范名、明确别名或键匹配；未知标准返回零条。进度按原写法精确匹配。认证地区 `certification.region` 按本库配置区域键精确筛选，非空名称、别名或未知键会被拒绝；显式空字符串只匹配不分地区的认证，省略地区则不限。认证地区与可售状态使用同一套区域键，认证不推导可售状态。
+标准按规范名、明确别名或键匹配；未知标准返回零条。进度按原写法精确匹配。认证地区 `certification.region` 按本库配置区域键精确筛选，非空名称、别名或未知键会被拒绝。认证地区与可售状态使用同一套区域键，认证不推导可售状态。可用 `{"certification":{"status":"delayed"}}` 查询有延期认证的型号，或用 `date_conflict` 查询实际取证日期待核对的型号。
 
-状态表也可省略状态筛选项的 `region` 表示任一区域，或只给 `region` 表示该区域的任意已记录状态。`planned_eom:true/false` 筛选计划退市标记，仍与其他条件在同一选配组合上求交。`no_record:true` 表示指定区域完全没有记录；省略区域时表示没有任何区域记录，不表示任意一格为空，也不把部分选配无记录推断为整格无记录。`no_record` 不能与 `status` 或 `planned_eom` 同时指定，空筛选项会被拒绝。
+- HTTP `POST /libraries/:id/shelf/query`：省略 `certification.region` 表示不限地区，显式传 `""` 只匹配不分地区的认证。省略 `certification.progress` 表示不限进度，显式传 `""` 只匹配无进度的认证。`as_of` 省略时用当前时间，传入空字符串会报错。
+- MCP `shelf_query`：可选字符串去首尾空白后为空等同省略；空的 `as_of` 用当前时间，空的 `certification.region` 或 `certification.progress` 不筛该字段。只查不分地区的认证时传 `{"certification":{"no_region":true}}`，不能与非空 `region` 同用。`shelf_get` 的空 `as_of` 同样用当前时间，`shelf_guide` 的空 `node_id` 读取库级指南。认证写入时空 `region` 仍表示不分地区。
+
+状态表也可省略状态筛选项的 `region` 表示任一区域，或只给 `region` 表示该区域的任意已记录状态。`planned_eom:true/false` 筛选计划退市标记，仍与其他条件在同一选配组合上求交。`no_record:true` 表示指定区域完全没有记录；省略区域时表示没有任何区域记录，不表示任意一格为空，也不把部分选配无记录推断为整格无记录。`no_record` 不能与 `status` 或 `planned_eom` 同时指定。HTTP 拒绝空筛选项；MCP 跳过归一化后全空的区域状态、参数或组成项，有部分值的项仍按原规则校验。
 
 反查复用同一接口：`{"part_id":"part-id"}` 返回使用该部件的型号；`{"certification":{"standard":"标准写法"}}` 返回具有适用认证的型号。`composition` 可按部件类型指定多个可接受部件。部件归档不会删除已有组成关系，反查与型号详情仍保留这些已记录的使用关系；活动型号与认证清单默认隐藏自身已归档的条目。
 
 响应包含 `items`、`total`、`truncated`、`as_of`。`total` 为分页前的型号数，不因同型号多条匹配认证而重复计数。每页默认 50 条，上限 100；`offset` 为非负数。只要本次返回的条目没有覆盖全部结果，`truncated` 就为 `true`，包括非第一页和越界空页。结果按当前型号名称与 ID 稳定排序。
 
+传入 `certification` 时，响应另含 `certification_total`，统计分页前能与其他筛选在同一可行组合下命中的认证记录数，按认证实体 ID 去重。多个型号共用的上层或部件认证只计一次。没有命中时返回 `0`，省略认证条件时省略该字段。只查数量可传 `limit=1`，型号数读 `total`，认证条数读 `certification_total`。逐条列出命中认证时，用 `summary` 按 `total` 翻页，读取 `facts` 中 `field=certification` 的记录，按 `entity_id` 去重并保留来源标记。
+
 每个结果按 `detail` 返回摘要或 get 的完整节点详情，两种都增加 `matching_conditions` 和型号级 `partial_options`。`matching_conditions` 的外层为“或”，每组内部为“且”，同一部件类型重复条件取交集。只有全部选配均能满足筛选时，型号级 `partial_options` 才为 `false`；多条认证分别覆盖不同选配，也可以合起来覆盖全部选配。`full` 仍保留其他事实及其条件，`summary` 只保留命中事实；引用命中原因时使用 `matching_conditions`。
 
 这三个接口只提供货架中已记录的事实。GA 不代表认证齐全或可直接销售。没有记录时应明确说明“货架中没有记录”。资料清单和汇总见下文；节点范围全文检索由对应检索接口提供。
 
+## 认证状态
+
+认证视图的 `status` 使用进程本地时区。日期冲突以当天为准，其余状态按 `as_of` 的本地日期判断。查询和节点详情的认证事实在 `value.status` 返回同一状态，在 `value.standard` 和 `value.standard_name` 分别返回标准键及认证视图使用的规范名。备注分别在视图的 `certification.notes` 和事实的 `value.notes` 返回。状态按顺序取首个命中：
+
+| status | 条件 |
+| --- | --- |
+| `date_conflict` | 实际取证日期晚于当天，需核对 |
+| `obtained` | 实际取证日期不晚于 `as_of` 的本地日期，或未填实际取证日期且进度为「已取证」「已完成」 |
+| `paused` | 进度含「暂停」 |
+| `delayed` | 计划取证日期早于 `as_of` 的本地日期 |
+| `not_started` | 进度为「待启动」「未启动」 |
+| `in_progress` | 已填进度、启动日期或计划取证日期 |
+| `unknown` | 其余 |
+
 ## 资料清单与汇总
 
-get 与 query 返回的 `shelf` 包含型号的 `current_stage`、`stage_owner_id` 与 `checklist`。产品名称、平台和产品线返回 `checklist_summary`。普通实体详情也复用同一计算。
+get 与完整详情 query 返回的 `shelf` 包含型号的 `current_stage`、`stage_owner_id`、`checklist` 与 `has_gaps`。产品名称、平台和产品线返回 `checklist_summary`。普通实体详情也复用同一计算。
 
-型号应有项只取所属产品线的资料要求。部件类型不带出要求，部件没有自身应交资料清单，但部件上的文件仍可按原规则供型号共用。始终使用当前活动资料要求的最新有效字段与适用关系，不按型号创建日期固定旧清单。上层与组成关系、型号和产品名称阶段按 `as_of` 读取；资料版本按 `occurred_at <= as_of` 中最大的文件内顺序号读取。云盘链接与本机原件均能满足要求，解析状态不影响交付状态。
+型号应有项先取所属产品线与所属平台上活动资料要求的并集，再按下述市场规则筛选。部件类型不带出要求，部件没有自身应交资料清单，但部件上的文件仍可按原规则供型号共用。始终使用当前活动资料要求的最新有效字段与适用关系，不按型号创建日期固定旧清单。上层与组成关系、型号和产品名称阶段按 `as_of` 读取；资料版本按 `occurred_at <= as_of` 中最大的文件内顺序号读取。云盘链接与本机原件均能满足要求，解析状态不影响交付状态。
 
-每条清单项包含 `requirement`（身份、完整字段及来源清单版本）、`document`（选中的版本及来源与时间）、`document_name`（文件原名）、`has_file`、`owner_id`、`origin`、`origin_label`、`conditions`、`partial_options`、`status`、`status_label`。查找优先级为型号、部件、产品名称、平台。挂在认证记录上的文件按认证所属节点的层级计入，`owner_id` 仍为认证记录，并沿用认证的条件；认证带电芯部件时只对含该部件的型号生效，并作为部件条件参与清单。较近的初稿会遮住较远的终稿，旧版本不会代替当前初稿。部件文件隐含所属部件的组合条件。
+货架配置 `checklist_markets_by_region` 非空时，按 `as_of` 的型号可售状态快照，将 GA、DEV、Planning 的区域映射为去重且按键排序的 `checklist_markets`；EOM、待定及未配置对应的区域不计入。指定部件组合时只计入条件被组合满足的状态，未指定时任一条件下在售即可计入。对应表为空时不按市场筛选，省略 `checklist_markets`、`checklist_skipped_reason` 与每项 `necessity`，保持原清单行为。
+
+要求在任一检查市场上为 `required` 或 `optional` 才列入；`not_needed` 或未写不列入。同一要求在多个市场必需性不同时取最强者（必需 > 可选），每项以 `necessity` 返回。完全没有市场信息（`markets` 为空）的要求照常列入并省略 `necessity`。不自动按市场拆分同一要求。没有任何检查市场时，即使存在无市场信息的要求，`checklist` 与 `checklist_markets` 均返回空列表，`checklist_skipped_reason` 为 `no_active_market`，`has_gaps` 为 false；型号页说明“无在售区域，不检查资料”。
+
+每条清单项包含 `requirement`（身份、完整字段及来源清单版本）、`document`（选中的版本及来源与时间）、`document_name`（文件原名）、`has_file`、`owner_id`、`origin`、`origin_label`、`conditions`、`partial_options`、`status`、`status_label` 和布尔 `gap`。查找优先级为型号、部件、产品名称、平台。挂在认证记录上的文件按认证所属节点的层级计入，`owner_id` 仍为认证记录，并沿用认证的条件；认证带电芯部件时只对含该部件的型号生效，并作为部件条件参与清单。较近的初稿会遮住较远的终稿，旧版本不会代替当前初稿。部件文件隐含所属部件的组合条件。
 
 型号的 `shelf.other_documents` 返回未对应资料要求的其他文件，范围为型号、组成部件、产品名称和平台，不包含其他型号或认证记录上的文件。每项含 `entity`（文件身份）、`document`（版本）、`owner`（所属节点身份）、`origin` 和 `conditions`。复用清单的同一业务时点版本选择，默认每个文件只返回当前版本；不同文件不互相遮盖。部件文件附加所属部件条件，按组合读取时只保留满足条件的文件。原件或云盘链接、客户版本号、文件类别与解析状态均来自版本记录。
 
@@ -156,11 +180,11 @@ get 与 query 返回的 `shelf` 包含型号的 `current_stage`、`stage_owner_i
 | 已到初稿应交阶段 | `missing` | 缺 |
 | 其余 | `not_due` | 未到期 |
 
-未填当前阶段时只返回 `has_file`（有文件）或 `no_file`（无文件），不判断到期。阶段名和顺序均取自库配置。未指定组合时，同一要求可以按不同组合分为多行，每行保留适用条件；选择组合后只保留适用行。多个同层部件文件同时适用时保留全部候选，并用 `ambiguous=true` 标识存在重叠，由提交方确认归属或条件，不按内部 ID 猜选一份。
+型号和产品名称均未填当前阶段时，所有资料均视为到期：有当前终稿返回 `delivered`（已交），只有初稿返回 `draft_only`（只有初稿），没有文件返回 `missing`（缺）。不再返回 `has_file` 或 `no_file` 状态，布尔 `has_file` 字段仍表示是否选中了文件。`gap` 是唯一的缺口判断：`necessity=optional` 的项始终为 false；其他项的 `missing` 为 true，未设阶段的 `draft_only` 为 true；设了阶段的 `draft_only`、`delivered` 和 `not_due` 为 false。阶段名和顺序均取自库配置。未指定组合时，同一要求可以按不同组合分为多行，每行保留适用条件；选择组合后只保留适用行。多个同层部件文件同时适用时保留全部候选，并用 `ambiguous=true` 标识存在重叠，由提交方确认归属或条件，不按内部 ID 猜选一份。
 
-`checklist_summary` 包含 `model_count`、`models_with_gaps`、按状态汇总的 `counts`，以及每个型号的 ID、当前阶段、状态计数与 `has_gaps`。仅汇总该业务时间已有记录的当前活动下属型号。计数以“型号、要求、状态”为单位，同状态的多组选配条件不重复计数；不同状态分别保留，避免隐去部分选配缺失。
+`checklist_summary` 包含 `model_count`、`models_with_gaps`、按状态汇总的 `counts`，以及每个型号的 ID、当前阶段、状态计数与 `has_gaps`。型号 `has_gaps` 与汇总中每个型号的 `has_gaps` 均由清单是否存在 `gap=true` 决定，`models_with_gaps` 统计这些型号。仅汇总该业务时间已有记录的当前活动下属型号；因无在售市场而跳过检查的型号仍计入 `model_count`，不计入 `models_with_gaps`。计数以“型号、要求、状态”为单位，同状态的多组选配条件不重复计数；不同状态分别保留，避免隐去部分选配缺失。
 
-query 可加 `{"document_gaps":true}` 筛选有 `missing` 项的型号。缺口条件与区域、参数、认证及组成筛选在数据库中求同一可行组合，保留分页前总数和部分选配标记。只有初稿、未到期与未填阶段的无文件不直接判作到期缺口；省略或传 `false` 不启用该筛选。
+query 可加 `{"document_gaps":true}` 筛选有 `gap=true` 清单项的型号。缺口条件与区域、参数、认证及组成筛选在数据库中求同一可行组合，保留分页前总数和部分选配标记。可选项和无在售市场而跳过的型号不计入缺口；其余未设阶段的缺和只有初稿计入缺口；设了阶段且终稿未到期的初稿以及未到期项不计入；省略或传 `false` 不启用该筛选。
 
 ## 上层节点与部件详情
 

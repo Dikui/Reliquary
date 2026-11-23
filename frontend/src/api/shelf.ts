@@ -5,12 +5,14 @@ import type { OperationSource } from './operation-logs'
 export const SALE_STATUSES = ['GA', 'DEV', 'Planning', 'EOM', '待定'] as const
 export interface ShelfCondition { module_type: string; part_ids: string[] }
 export interface ShelfSaleStatus { region: string; status: string; planned_eom: boolean; notes: string; raw: string; conditions: ShelfCondition[] | null }
+export type ShelfCertificationStatus = 'date_conflict' | 'obtained' | 'paused' | 'delayed' | 'not_started' | 'in_progress' | 'unknown'
 export interface ShelfCertification {
   entity: Entity
   standard_name: string
   region_name?: string
   origin: 'self' | 'component' | 'ancestor'
-  certification: { owner_id: string; standard: string; year?: number; certification_object: string; cell_part_id?: string; region: string; agency?: string; progress?: string; start_date?: string; obtained_date?: string; issued_date?: string; validity?: string; number?: string; cloud_url?: string; conditions: ShelfCondition[] | null }
+  readonly status?: ShelfCertificationStatus
+  certification: { owner_id: string; standard: string; year?: number; certification_object: string; cell_part_id?: string; region: string; agency?: string; progress?: string; start_date?: string; planned_date?: string; obtained_date?: string; issued_date?: string; validity?: string; number?: string; cloud_url?: string; notes?: string; conditions: ShelfCondition[] | null }
 }
 export interface ShelfDocumentVersion {
   id: string; file_id: string; owner_id?: string; is_current?: boolean; parser_key?: string; certificate_number?: string; origin?: string; created_at?: string; requirement_id?: string; requirement_ids?: string[]; attachment_id?: string; cloud_url?: string; entry_id?: string
@@ -19,7 +21,7 @@ export interface ShelfDocumentVersion {
 }
 export interface ShelfRequirement { list_name?: string; name_zh?: string; name_en?: string; file_category?: string; stage_label?: string; due_text?: string; draft_due_stage?: string; final_due_stage?: string; owner?: string; priority?: string; source_list?: string; source_version?: string; markets?: Record<string, string> }
 export interface ShelfChecklistItem {
-  requirement: Entity; status: string; has_file: boolean; document?: ShelfDocumentVersion; document_name?: string; owner_id?: string
+  requirement: Entity; status: string; gap: boolean; necessity?: 'required' | 'optional'; has_file: boolean; document?: ShelfDocumentVersion; document_name?: string; owner_id?: string
   origin?: string; conditions: ShelfCondition[] | null; ambiguous?: boolean
 }
 export interface ShelfNodeDocument { entity: Entity; document: ShelfDocumentVersion; requirements?: Entity[]; requirement?: Entity }
@@ -38,6 +40,9 @@ export interface ShelfNode {
     stage_owner_id?: string
     certifications?: ShelfCertification[]
     checklist?: ShelfChecklistItem[]
+    checklist_markets?: string[]
+    checklist_skipped_reason?: 'no_active_market'
+    has_gaps?: boolean
     parameters?: Record<string, { value: unknown; conditions: ShelfCondition[] | null }[]>
     other_documents?: ShelfOtherDocument[]
     documents?: ShelfNodeDocument[]

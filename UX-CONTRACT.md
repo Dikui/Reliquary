@@ -466,7 +466,10 @@ are preserved and cause the update to fail.
 
 Shelf settings append, rename and reorder module types, regions and stages. Names
 retain their submitted spelling. Keys stay stable and list order defines stage
-progression. Existing values cannot be removed through these operations. Up and
+progression. Existing module types, regions and stages cannot be removed. Each
+configured region has a shared native Select for a configured
+market or No market. Mapping-referenced markets cannot be removed; failed saves
+retain the draft and show the server's validation reason. Up and
 Down buttons provide keyboard-accessible ordering. All changes share the parent
 settings Save and discard behavior.
 

@@ -63,6 +63,12 @@ onBeforeRouteLeave(allowLeave)
 onBeforeRouteUpdate(async (to, from) => to.query.tab === from.query.tab && to.query.libraries === from.query.libraries || await allowLeave())
 function addOption() { if (!newName.value.trim()) return; options.value.push({ key: key('option'), name: newName.value }); newName.value = '' }
 function move(list: ShelfOption[] | unknown[], index: number, step: number) { const target = index + step; if (target < 0 || target >= list.length) return; [list[index], list[target]] = [list[target]!, list[index]!] }
+function setRegionMarket(region: string, market: string) {
+  if (!config.value) return
+  config.value.checklist_markets_by_region ||= {}
+  if (market) config.value.checklist_markets_by_region[region] = market
+  else delete config.value.checklist_markets_by_region[region]
+}
 async function save() {
   if (!library.value || busy.value) return
   if (regionConflict.value) {
@@ -102,6 +108,18 @@ onBeforeUnmount(() => { generation++ })
           <p v-if="section === 'stages'" class="rq-shelf-statuses"><b>{{ t('shelfSettings.fixedStatuses') }}</b> GA · DEV · Planning · EOM · {{ t('shelfSettings.pendingStatus') }}</p>
           <div class="rq-shelf-table"><table><thead><tr><th>{{ t('shelfSettings.name') }}</th><th v-if="section === 'regions'">{{ t('shelfSettings.regionAliases') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.partCount') }}</th><th v-if="section === 'modules'">{{ t('shelfSettings.extraFields') }}</th><th>{{ t('shelfImport.actions') }}</th></tr></thead><tbody><tr v-for="(option, index) in options" :key="option.key"><td><Input v-if="editingOptions.has(option.key)" v-model="option.name" :aria-label="t('shelfSettings.name')" :disabled="busy" /><b v-else>{{ option.name }}</b></td><td v-if="section === 'regions'"><Field v-if="editingOptions.has(option.key)" :id="`region-aliases-${option.key}`" :label="t('shelfSettings.regionAliases')" :error="saveError && regionConflict === option.key ? t('shelfSettings.regionAliasConflict') : ''"><Textarea :id="`region-aliases-${option.key}`" :model-value="(option.aliases || []).join('\n')" :rows="3" :disabled="busy" @update:model-value="option.aliases = $event.split('\n')" /></Field><span v-else>{{ option.aliases?.join(' · ') || t('shelfFiles.none') }}</span></td><td v-if="section === 'modules'">{{ nodes.filter(n => n.kind === 'part' && n.attributes?.module_type === option.key).length }}</td><td v-if="section === 'modules'">{{ library.entity_schema?.fields.filter(f => f.kinds.includes('part') && f.key !== 'module_type' && !f.archived).map(f => f.name).join(' · ') }}</td><td><Button :disabled="busy || editingOptions.has(option.key)" @click="editingOptions.add(option.key)">{{ t('shelfSettings.edit') }}</Button><Button :disabled="busy || index === 0" @click="move(options, index, -1)">{{ t('shelfSettings.up') }}</Button><Button :disabled="busy || index + 1 === options.length" @click="move(options, index, 1)">{{ t('shelfSettings.down') }}</Button><Button v-if="section === 'markets'" :disabled="busy" @click="options.splice(index, 1)">{{ t('shelfFiles.remove') }}</Button></td></tr></tbody></table></div>
           <form novalidate class="rq-shelf-row rq-shelf-add" @submit.prevent="addOption"><Input v-model="newName" :aria-label="t('shelfSettings.newName')" :placeholder="t('shelfSettings.newName')" :disabled="busy" /><Button type="submit" :disabled="busy || !newName.trim()">{{ t('shelfSettings.add') }}</Button></form>
+          <section v-if="section === 'regions'" :aria-label="t('shelfSettings.regionMarkets')">
+            <h2>{{ t('shelfSettings.regionMarkets') }}</h2>
+            <div class="rq-shelf-region-markets">
+              <Field v-for="region in config.regions" :id="`checklist-market-${region.key}`" :key="region.key" :label="region.name">
+                <Select :id="`checklist-market-${region.key}`" :model-value="config.checklist_markets_by_region?.[region.key] || ''" :disabled="busy" @update:model-value="setRegionMarket(region.key, $event)">
+                  <option value="">{{ t('shelfSettings.noMarket') }}</option>
+                  <option v-for="market in config.markets" :key="market.key" :value="market.key">{{ market.name }}</option>
+                </Select>
+              </Field>
+            </div>
+            <EmptyState v-if="!config.regions?.length" :title="t('shelfSettings.empty')" />
+          </section>
         </template>
         <template #requirements>
           <div class="rq-shelf-row"><Select v-model="sourceList" :aria-label="t('shelfSettings.sourceList')"><option value="">{{ t('shelfSettings.allLists') }}</option><option v-for="source in sources" :key="source" :value="source">{{ source }}</option></Select><Button :disabled="dirty || busy" @click="requirement = null">{{ t('shelfSettings.newRequirement') }}</Button></div>
@@ -129,10 +147,14 @@ onBeforeUnmount(() => { generation++ })
   </div>
 </template>
 <style scoped>
-.rq-shelf-settings { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5) var(--space-6); min-width: 900px; }
+.rq-shelf-settings { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5) var(--space-6); min-width: 0; }
 h1 { font-size: var(--text-3xl); font-weight: 800; } h2 { font-size: var(--text-xl); margin-top: var(--space-4); }
 .rq-shelf-row { display: flex; justify-content: space-between; gap: var(--space-3); align-items: center; } .rq-shelf-add { max-width: 480px; margin-top: var(--space-4); }
 .rq-shelf-table { overflow: auto; border-top: 2px solid var(--rule); margin: var(--space-4) 0; } table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); } th, td { text-align: left; padding: var(--space-3); border-bottom: 1px solid var(--border); } th { font-size: var(--text-xs); } td input { min-width: 160px; }
 .rq-shelf-statuses { padding: var(--space-4) 0; } .rq-shelf-parser-head, .rq-shelf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); } .rq-shelf-parser { padding: var(--space-4); margin: var(--space-4) 0; border: 1px solid var(--border); } .rq-shelf-parser > button { margin-top: var(--space-4); }
 .rq-shelf-error { color: var(--danger); }
+.rq-shelf-region-markets { display: grid; gap: var(--space-4); max-width: 720px; margin-top: var(--space-4); }
+.rq-shelf-region-markets :deep(.rq-field) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; min-width: 0; overflow-wrap: anywhere; }
+.rq-shelf-region-markets :deep(select) { width: 100%; min-width: 0; }
+@media (max-width: 640px) { .rq-shelf-settings { padding: var(--space-4); } }
 </style>

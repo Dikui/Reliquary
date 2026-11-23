@@ -38,15 +38,16 @@ func (c ShelfConfig) RegionName(key string) string {
 }
 
 type ShelfConfig struct {
-	Parsers       []ShelfParser     `json:"parsers,omitempty"`
-	DefaultParser string            `json:"default_parser,omitempty"`
-	ParserRules   []ShelfParserRule `json:"parser_rules,omitempty"`
-	MaxFileBytes  int64             `json:"max_file_bytes,omitempty"`
-	Standards     []ShelfStandard   `json:"standards,omitempty"`
-	ModuleTypes   []ShelfOption     `json:"module_types,omitempty"`
-	Markets       []ShelfOption     `json:"markets,omitempty"`
-	Regions       []ShelfOption     `json:"regions,omitempty"`
-	Stages        []ShelfOption     `json:"stages,omitempty"`
+	Parsers                  []ShelfParser     `json:"parsers,omitempty"`
+	DefaultParser            string            `json:"default_parser,omitempty"`
+	ParserRules              []ShelfParserRule `json:"parser_rules,omitempty"`
+	MaxFileBytes             int64             `json:"max_file_bytes,omitempty"`
+	Standards                []ShelfStandard   `json:"standards,omitempty"`
+	ModuleTypes              []ShelfOption     `json:"module_types,omitempty"`
+	Markets                  []ShelfOption     `json:"markets,omitempty"`
+	Regions                  []ShelfOption     `json:"regions,omitempty"`
+	ChecklistMarketsByRegion map[string]string `json:"checklist_markets_by_region,omitempty"`
+	Stages                   []ShelfOption     `json:"stages,omitempty"`
 }
 
 func ProductShelfSchema() EntitySchema {
@@ -99,7 +100,7 @@ func ValidateProductShelf(l *Library) error {
 	}
 
 	if !l.ShelfEnabled {
-		if len(l.ShelfConfig.ModuleTypes)+len(l.ShelfConfig.Markets)+len(l.ShelfConfig.Regions)+len(l.ShelfConfig.Stages)+len(l.ShelfConfig.Standards)+len(l.ShelfConfig.Parsers) != 0 {
+		if len(l.ShelfConfig.ModuleTypes)+len(l.ShelfConfig.Markets)+len(l.ShelfConfig.Regions)+len(l.ShelfConfig.ChecklistMarketsByRegion)+len(l.ShelfConfig.Stages)+len(l.ShelfConfig.Standards)+len(l.ShelfConfig.Parsers) != 0 {
 			return fmt.Errorf("shelf configuration requires an enabled shelf")
 		}
 		return nil
@@ -172,6 +173,14 @@ func ValidateProductShelf(l *Library) error {
 				return fmt.Errorf("shelf list values require unique keys and nonblank unique names of at most 100 characters")
 			}
 			keys[item.Key], names[name] = true, true
+		}
+	}
+	for region, market := range l.ShelfConfig.ChecklistMarketsByRegion {
+		if !slices.ContainsFunc(l.ShelfConfig.Regions, func(option ShelfOption) bool { return option.Key == region }) {
+			return fmt.Errorf("checklist_markets_by_region references unknown region %q", region)
+		}
+		if !slices.ContainsFunc(l.ShelfConfig.Markets, func(option ShelfOption) bool { return option.Key == market }) {
+			return fmt.Errorf("checklist_markets_by_region references unknown market %q for region %q", market, region)
 		}
 	}
 	spellings := map[string]string{}

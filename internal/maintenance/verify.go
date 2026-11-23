@@ -34,6 +34,7 @@ type Retrieval struct {
 }
 type Manifest struct {
 	DatabaseOnly       bool              `json:"database_only,omitempty"`
+	Delivery           bool              `json:"delivery,omitempty"`
 	BodyHashes         map[string]string `json:"body_hashes,omitempty"`
 	SchemaVersion      int64             `json:"schema_version,omitempty"`
 	collectionMigrated bool
@@ -45,6 +46,8 @@ type Manifest struct {
 	Vectors            []VectorProfile          `json:"vectors"`
 	Required           []Requirement            `json:"required_credentials"`
 	CollectionExports  []CollectionExportProof  `json:"collection_exports,omitempty"`
+
+	ExtractedEntityVectorsOnly bool `json:"extracted_entity_vectors_only,omitempty"`
 }
 type Verification struct {
 	OK             bool             `json:"ok"`
@@ -175,7 +178,8 @@ func buildManifest(ctx context.Context, db *gorm.DB, root, uploads string, datab
 	if err != nil {
 		return nil, err
 	}
-	manifest.Vectors, err = VectorProfiles(ctx, db)
+	manifest.ExtractedEntityVectorsOnly = db.Migrator().HasColumn("libraries", "entity_mode")
+	manifest.Vectors, err = vectorProfiles(ctx, db, manifest.ExtractedEntityVectorsOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -531,6 +535,7 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	expected, actual = projectManagedEntitiesManifest(expected, actual)
 	allowModelChange := options.AllowModelChange
 	allowLogAppend := options.AllowOperationLogAppend || options.AllowReconfigurationAppend
+	allowDeliverySetup := expected.Delivery && options.AllowReconfigurationAppend
 	diffs := []string{}
 	if expected.DatabaseOnly != actual.DatabaseOnly {
 		diffs = append(diffs, "database storage layout")
@@ -633,6 +638,21 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 					right = keepExpectedRows(left, right)
 				}
 				rowsMatch = len(left) == len(right)
+			}
+			if allowDeliverySetup {
+				switch table {
+				case "api_keys", "chatgpt_accounts", "chatgpt_hosts":
+					right = keepExpectedRows(left, right)
+					rowsMatch = len(left) == len(right)
+				case "models":
+					right = reconfiguredDeliveryModels(left, right, actual.Tables["chatgpt_accounts"].Data)
+					rowsMatch = len(left) == len(right)
+				case "users":
+					if len(left) == 0 && len(right) == 1 && defaultDeliveryUser(right[0]) {
+						right = left
+						rowsMatch = true
+					}
+				}
 			}
 			if options.AllowReconfigurationAppend && table == "chatgpt_policy" && policyAuditValid {
 				right = left
@@ -740,6 +760,54 @@ func CompareManifestWithSettings(expected, actual *Manifest, options CompareOpti
 	}
 	sort.Strings(diffs)
 	return diffs
+}
+
+func reconfiguredDeliveryModels(expected, actual, accounts []map[string]any) []map[string]any {
+	connected := map[string]bool{}
+	for _, account := range accounts {
+		if account["status"] == "connected" {
+			connected[fmt.Sprint(account["id"])] = true
+		}
+	}
+	byID := map[string]map[string]any{}
+	for _, model := range expected {
+		byID[fmt.Sprint(model["id"])] = model
+	}
+	result := []map[string]any{}
+	for _, model := range actual {
+		original := byID[fmt.Sprint(model["id"])]
+		if model["source"] == "chatgpt" && model["type"] == "KnowledgeQA" && model["deleted_at"] == nil && connected[modelAccountID(model)] {
+			if original == nil && model["status"] == "active" {
+				continue // Newly created ChatGPT model for the customer's account.
+			}
+			if original != nil && original["source"] == "chatgpt" && original["type"] == "KnowledgeQA" && original["deleted_at"] == nil && modelAccountID(original) == "" {
+				// The editor saves the provider parameters along with the new
+				// account and can select a slug from that account's catalogue.
+				// Identity, ownership, type, status and library selections still compare exactly.
+				for _, field := range []string{"name", "display_name", "description", "parameters"} {
+					model[field] = original[field]
+				}
+			}
+		}
+		result = append(result, model)
+	}
+	sortRows(result)
+	return result
+}
+
+func modelAccountID(model map[string]any) string {
+	parameters, _ := model["parameters"].(map[string]any)
+	extra, _ := parameters["extra_config"].(map[string]any)
+	id, _ := extra["chatgpt_account_id"].(string)
+	return id
+}
+
+// An unvisited source can have no owner. The first customer request then
+// creates the default user through EnsureSoleUser before recovery resumes.
+func defaultDeliveryUser(user map[string]any) bool {
+	return user["username"] == "me" && user["email"] == "me@localhost" &&
+		fmt.Sprint(user["space_id"]) == "1" && user["is_active"] == true &&
+		user["deleted_at"] == nil && user["password_hash"] == "" && user["avatar"] == ""
 }
 
 // Bind each task replica file to the exact raw rows saved by its own manifest.

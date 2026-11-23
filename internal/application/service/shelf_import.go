@@ -16,10 +16,26 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
 var importDatePattern = regexp.MustCompile(`([12][0-9]{3})[-._年]?([0-9]{2})[-._月]?([0-9]{2})日?`)
+
+// InspectShelfWorkbook reuses the import reader without creating a changeset.
+func (s *EntityService) InspectShelfWorkbook(ctx context.Context, libraryID string, data []byte) (any, error) {
+	if _, err := s.shelfLibrary(ctx, s.db, libraryID); err != nil {
+		return nil, err
+	}
+	if len(data) == 0 || len(data) > shelfImportMaxBytes {
+		return nil, apperrors.NewBadRequestError("provide an xlsx file up to 32 MiB")
+	}
+	workbook, err := readImportWorkbook(data)
+	if err != nil {
+		return nil, apperrors.NewBadRequestError(err.Error())
+	}
+	return workbook, nil
+}
 
 // ImportShelfWorkbook persists only a reviewable changeset, never the upload.
 func (s *EntityService) ImportShelfWorkbook(ctx context.Context, libraryID, planKey, filename string, fileDate *time.Time, data []byte) (*types.ShelfChangeset, error) {
@@ -48,7 +64,7 @@ func (s *EntityService) ImportShelfWorkbook(ctx context.Context, libraryID, plan
 		return nil, apperrors.NewBadRequestError(err.Error())
 	}
 	var result *types.ShelfChangeset
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, types.MustSpaceIDFromContext(ctx)); err != nil {
 			return err
 		}

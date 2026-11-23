@@ -21,7 +21,8 @@ type guideGapResult struct {
 		}] `json:"no_file_documents"`
 		Documents struct {
 			Items []struct {
-				ModelID string `json:"model_id"`
+				ModelID           string `json:"model_id"`
+				CurrentStageUnset bool   `json:"current_stage_unset"`
 				types.ShelfChecklistItem
 				Requirement types.ShelfGuideRequirement `json:"requirement"`
 			} `json:"items"`
@@ -59,7 +60,7 @@ func TestShelfGuideScopesReadsToEnabledLibrary(t *testing.T) {
 			ProductLines []types.Entity `json:"product_lines"`
 		} `json:"values"`
 	}
-	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": other.ID}, &empty)
+	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": other.ID, "node_id": " \t "}, &empty)
 	require.EqualValues(t, 32<<20, empty.MaxFileBytes)
 	require.Empty(t, empty.Values.ProductLines)
 	for _, input := range []map[string]any{
@@ -224,8 +225,8 @@ func TestShelfGuideUsesCurrentLibraryValues(t *testing.T) {
 	require.Equal(t, "Renamed market", guide.Values.Markets[0].Name)
 }
 
-// Medium spec, task 31 / ADR 0024: the guide keeps the existing checklist's
-// conditional gaps and draft states, and does not infer an empty region status.
+// Medium spec, task 31 and shelf-checklist-markets task 01 / ADR 0024: the guide
+// keeps conditional gaps, excludes drafts not yet due and preserves empty regions.
 func TestShelfGuideModelGapsReuseChecklist(t *testing.T) {
 	f, l, n := checklistSetup(t)
 	model := shelfNode(n, "model")
@@ -247,7 +248,7 @@ func TestShelfGuideModelGapsReuseChecklist(t *testing.T) {
 	var result guideGapResult
 	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": model}, &result)
 	require.EqualValues(t, 1, result.Gaps.ModelCount)
-	require.EqualValues(t, 2, result.Gaps.Documents.Total)
+	require.EqualValues(t, 1, result.Gaps.Documents.Total)
 	require.False(t, result.Gaps.Documents.Truncated)
 	states := map[string]string{}
 	for _, item := range result.Gaps.Documents.Items {
@@ -258,7 +259,7 @@ func TestShelfGuideModelGapsReuseChecklist(t *testing.T) {
 			require.Equal(t, []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(n, "b")}}}, item.Conditions)
 		}
 	}
-	require.Equal(t, map[string]string{missing.ID: "missing", draft.ID: "draft_only"}, states)
+	require.Equal(t, map[string]string{missing.ID: "missing"}, states)
 	require.EqualValues(t, 1, result.Gaps.SaleStatuses.Total)
 	require.Equal(t, "region_b", result.Gaps.SaleStatuses.Items[0].Region)
 	require.Equal(t, model, result.Gaps.SaleStatuses.Items[0].ModelID)
@@ -267,7 +268,7 @@ func TestShelfGuideModelGapsReuseChecklist(t *testing.T) {
 	for _, kind := range []string{"line", "platform", "product"} {
 		mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, kind)}, &result)
 		require.EqualValues(t, 2, result.Gaps.ModelCount, kind)
-		require.EqualValues(t, 4, result.Gaps.Documents.Total, kind)
+		require.EqualValues(t, 2, result.Gaps.Documents.Total, kind)
 		require.EqualValues(t, 3, result.Gaps.SaleStatuses.Total, kind)
 		require.EqualValues(t, 1, result.Gaps.PendingChangesets.Total, kind)
 	}
@@ -377,9 +378,9 @@ func TestShelfGuideRequirementsFollowNodeChecklists(t *testing.T) {
 	require.Zero(t, result.Values.Requirements.Total, "a line with no models has no model requirements")
 }
 
-// Medium regression, task 32: absent stages produce a separate no-file gap,
-// preserving checklist states and option conditions at every hierarchy level.
-func TestShelfGuideReportsNoFileWithoutInferringDueStatus(t *testing.T) {
+// Medium spec, shelf-checklist-markets task 01: unstaged missing and draft
+// rows enter document gaps with their option conditions at every hierarchy level.
+func TestShelfGuideUnstagedGapsUseDocumentList(t *testing.T) {
 	f, l, n := checklistSetup(t)
 	missing := checklistRequirement(t, f, l, "No file", "", "final_due")
 	conditional := checklistRequirement(t, f, l, "Partial file", "", "final_due")
@@ -393,23 +394,28 @@ func TestShelfGuideReportsNoFileWithoutInferringDueStatus(t *testing.T) {
 	for _, key := range []string{"model", "line", "platform", "product", "a"} {
 		var result guideGapResult
 		mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, key)}, &result)
-		require.Zero(t, result.Gaps.Documents.Total, key)
+		require.Zero(t, result.Gaps.NoFileDocuments.Total, key)
 		require.Equal(t, key == "model", result.Gaps.CurrentStageUnset, key)
-		want := int64(4)
+		want := int64(6)
 		if key == "model" {
-			want = 2
+			want = 3
 		}
 		if key == "a" {
 			want = 0
 		}
-		require.Equal(t, want, result.Gaps.NoFileDocuments.Total, key)
-		require.Len(t, result.Gaps.NoFileDocuments.Items, int(want))
-		require.False(t, result.Gaps.NoFileDocuments.Truncated)
-		for _, item := range result.Gaps.NoFileDocuments.Items {
-			require.Equal(t, "no_file", item.Status)
-			require.Equal(t, "无文件", item.StatusLabel)
+		require.Equal(t, want, result.Gaps.Documents.Total, key)
+		require.Len(t, result.Gaps.Documents.Items, int(want))
+		require.False(t, result.Gaps.Documents.Truncated)
+		for _, item := range result.Gaps.Documents.Items {
 			require.True(t, item.CurrentStageUnset)
-			require.False(t, item.HasFile)
+			require.True(t, item.Gap)
+			if item.Requirement.ID == supplied.ID {
+				require.Equal(t, "draft_only", item.Status)
+				require.True(t, item.HasFile)
+			} else {
+				require.Equal(t, "missing", item.Status)
+				require.False(t, item.HasFile)
+			}
 			if item.ModelID == shelfNode(n, "model") && item.Requirement.ID == conditional.ID {
 				require.Equal(t, []types.ShelfCondition{{ModuleType: "module_a", PartIDs: []string{shelfNode(n, "b")}}}, item.Conditions)
 				require.True(t, item.PartialOptions)
@@ -422,7 +428,7 @@ func TestShelfGuideReportsNoFileWithoutInferringDueStatus(t *testing.T) {
 	mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, "model")}, &result)
 	require.False(t, result.Gaps.CurrentStageUnset)
 	require.Zero(t, result.Gaps.NoFileDocuments.Total)
-	require.EqualValues(t, 1, result.Gaps.Documents.Total, "the supplied draft remains a draft-only gap")
+	require.Zero(t, result.Gaps.Documents.Total, "the draft final deadline has not been reached")
 	// Clear the override and inherit the product stage instead.
 	f.request(http.MethodPatch, "/entities/"+shelfNode(n, "model"), map[string]any{"revision": 2, "attributes": map[string]any{}}, http.StatusOK, nil)
 	f.request(http.MethodPatch, "/entities/"+shelfNode(n, "product"), map[string]any{"revision": 1, "attributes": map[string]any{"current_stage": "final_due"}}, http.StatusOK, nil)
@@ -432,9 +438,9 @@ func TestShelfGuideReportsNoFileWithoutInferringDueStatus(t *testing.T) {
 	require.EqualValues(t, 3, result.Gaps.Documents.Total)
 }
 
-// Medium regression, task 32: no-file gaps count model/option rows while
-// requirement totals count unique checklist requirements before truncation.
-func TestShelfGuideCountsAllNoFileGapsAndRequirements(t *testing.T) {
+// Medium spec, shelf-checklist-markets task 01: unstaged gaps count model/option
+// rows while requirement totals count unique requirements before truncation.
+func TestShelfGuideCountsAllUnstagedGapsAndRequirements(t *testing.T) {
 	f, l, n := checklistSetup(t)
 	ops := []types.ShelfOperation{}
 	for i := 0; i < 101; i++ {
@@ -452,10 +458,10 @@ func TestShelfGuideCountsAllNoFileGapsAndRequirements(t *testing.T) {
 			Values types.ShelfGuideValues `json:"values"`
 		}
 		mcpCall(t, client, "shelf_guide", map[string]any{"library_id": l.ID, "node_id": shelfNode(n, test.node)}, &result)
-		require.Equal(t, test.total, result.Gaps.NoFileDocuments.Total, test.node)
-		require.Len(t, result.Gaps.NoFileDocuments.Items, 100)
-		require.True(t, result.Gaps.NoFileDocuments.Truncated)
-		require.Zero(t, result.Gaps.Documents.Total)
+		require.Equal(t, test.total, result.Gaps.Documents.Total, test.node)
+		require.Len(t, result.Gaps.Documents.Items, 100)
+		require.True(t, result.Gaps.Documents.Truncated)
+		require.Zero(t, result.Gaps.NoFileDocuments.Total)
 		require.EqualValues(t, 101, result.Values.Requirements.Total)
 		require.Len(t, result.Values.Requirements.Items, 100)
 		require.True(t, result.Values.Requirements.Truncated)

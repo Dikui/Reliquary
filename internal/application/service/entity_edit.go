@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/graph"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -26,7 +27,7 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 	if keepEntityID == "" || mergeEntityID == "" || keepEntityID == mergeEntityID {
 		return werrors.NewBadRequestError("two distinct entity IDs are required")
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
@@ -170,7 +171,7 @@ func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string)
 		return nil, werrors.NewBadRequestError("entity name must contain 1 to 512 characters")
 	}
 	var entity types.Entity
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}
@@ -239,7 +240,7 @@ func (s *EntityService) UpdateEntityDescription(ctx context.Context, entityID, d
 		return nil, werrors.NewBadRequestError("entity description exceeds 20000 characters")
 	}
 	var entity types.Entity
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := lockEntitySpace(tx, spaceID); err != nil {
 			return err
 		}

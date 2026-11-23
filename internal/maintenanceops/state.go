@@ -21,9 +21,17 @@ import (
 
 const collectionLock int64 = 714150015
 
+type pauseDetails struct {
+	Reason string `json:"pause_reason"`
+}
+
 func IsPausedError(err error) bool {
 	var app *apperrors.AppError
-	return errors.As(err, &app) && app.Code == apperrors.ErrServiceUnavailable
+	if !errors.As(err, &app) {
+		return false
+	}
+	_, paused := app.Details.(pauseDetails)
+	return paused
 }
 
 type State struct {
@@ -81,28 +89,91 @@ func SnapshotPaused(ctx context.Context, db *gorm.DB) (bool, error) {
 	return state.Paused && state.PauseMode == "snapshot", err
 }
 
-// CheckCollectionTx must run in the same transaction as collection and enqueue.
-// A previously accepted article task may finish during a drain.
-// New intake requests stay paused.
-func CheckCollectionTx(ctx context.Context, tx *gorm.DB) error {
-	if err := tx.Exec("SELECT pg_advisory_xact_lock_shared(?)", collectionLock).Error; err != nil {
-		return err
-	}
-	state, err := Status(ctx, tx)
-	if err != nil {
-		return err
-	}
+func readWriteState(ctx context.Context, db *gorm.DB) (State, error) {
+	var state State
+	err := db.WithContext(ctx).Select("paused", "pause_reason").Where("id = true").Take(&state).Error
+	return state, err
+}
+
+// BusinessWriteError returns the HTTP and MCP error for a paused write.
+func (state State) BusinessWriteError() *apperrors.AppError {
 	if !state.Paused {
 		return nil
 	}
-	if _, running := taskqueue.GetTaskID(ctx); running {
-		return nil
+	reason := strings.TrimSpace(state.PauseReason)
+	if reason == "" {
+		reason = "未注明"
 	}
-	return apperrors.NewServiceUnavailableError("Collection is paused for maintenance. Retry after maintenance completes.")
+	return apperrors.NewServiceUnavailableError(fmt.Sprintf("资料库处于维护暂停（原因：%s），暂不能修改数据；完成恢复/维护后重试", reason)).WithDetails(pauseDetails{Reason: reason})
 }
 
-// Pause waits for collection transactions that crossed the gate, then prevents
-// any new collection. The host stops the application before snapshotting files.
+// CheckBusinessWrite rejects a paused write before the caller parses or processes it.
+func CheckBusinessWrite(ctx context.Context, db *gorm.DB) error {
+	state, err := readWriteState(ctx, db)
+	if err != nil || !state.Paused {
+		return err
+	}
+	return state.BusinessWriteError()
+}
+
+type businessWriteLockKey struct{}
+
+func checkBusinessWriteTx(ctx context.Context, tx *gorm.DB, acceptedTask bool) error {
+	state, err := WriteStateTx(ctx, tx)
+	if err != nil || acceptedTask || !state.Paused {
+		return err
+	}
+	return state.BusinessWriteError()
+}
+
+// WriteStateTx locks write admission while a transaction decides whether its
+// requested fields may be configured during maintenance.
+func WriteStateTx(ctx context.Context, tx *gorm.DB) (State, error) {
+	if ctx.Value(businessWriteLockKey{}) == nil {
+		if err := tx.WithContext(ctx).Exec("SELECT pg_advisory_xact_lock_shared(?)", collectionLock).Error; err != nil {
+			return State{}, err
+		}
+	}
+	return readWriteState(ctx, tx)
+}
+
+// BusinessWriteTransaction holds the same lock Pause takes until the write commits.
+func BusinessWriteTransaction(ctx context.Context, db *gorm.DB, write func(*gorm.DB) error) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := checkBusinessWriteTx(ctx, tx, false); err != nil {
+			return err
+		}
+		return write(tx)
+	})
+}
+
+// WithBusinessWrite keeps a multi-step operation protected across database
+// commits and filesystem changes. Nested writes share the outer admission lock.
+func WithBusinessWrite(ctx context.Context, db *gorm.DB, write func(context.Context) error) error {
+	if ctx.Value(businessWriteLockKey{}) != nil {
+		return write(ctx)
+	}
+	// A request cancellation can still leave cleanup to finish before Pause.
+	tx := db.WithContext(context.WithoutCancel(ctx)).Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer tx.Rollback()
+	if err := checkBusinessWriteTx(ctx, tx, false); err != nil {
+		return err
+	}
+	return write(context.WithValue(ctx, businessWriteLockKey{}, true))
+}
+
+// CheckCollectionTx preserves the existing allowance for previously accepted
+// queue operations while holding the same lock as interactive writes.
+func CheckCollectionTx(ctx context.Context, tx *gorm.DB) error {
+	_, running := taskqueue.GetTaskID(ctx)
+	return checkBusinessWriteTx(ctx, tx, running)
+}
+
+// Pause waits for admitted write transactions, then prevents new business writes.
+// The host stops the application before snapshotting files.
 func Pause(ctx context.Context, db *gorm.DB, mode, reason string, flush func(context.Context) error) error {
 	if mode != "drain" && mode != "snapshot" {
 		return fmt.Errorf("pause mode must be drain or snapshot")

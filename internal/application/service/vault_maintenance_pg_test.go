@@ -94,6 +94,22 @@ func TestVaultVerifyMarksSameDimensionOldEntityModelPendingAndExcludesMergedEnti
 	checkPending(2)
 }
 
+func TestVaultVerifyExcludesManagedEntityVectorGaps(t *testing.T) {
+	h, v := newVaultArticleHarness(t)
+	library := types.Library{ID: "managed-catalog", SpaceID: 1, Name: "Managed catalog", Directory: "catalog", EntityMode: types.EntityModeManaged, IndexingStrategy: types.DefaultIndexingStrategy()}
+	require.NoError(t, h.db.Create(&library).Error)
+	require.NoError(t, h.db.Create(&types.Entity{ID: "catalog-product", SpaceID: 1, LibraryID: library.ID, EntityType: "product", Kind: "product",
+		CanonicalName: "Catalog product", NormalizedName: "catalog product", EmbeddingNeedsRebuild: true}).Error)
+	result, err := v.VerifyRuntime(h.ctx)
+	require.NoError(t, err)
+	require.Zero(t, result.PendingVectors["entities"])
+	require.NoError(t, h.db.Create(&types.Entity{ID: "extracted-company", SpaceID: 1, LibraryID: h.library.ID, EntityType: "company",
+		CanonicalName: "Extracted company", NormalizedName: "extracted company", EmbeddingNeedsRebuild: true}).Error)
+	result, err = v.VerifyRuntime(h.ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.PendingVectors["entities"])
+}
+
 func mustVaultRead(t *testing.T, path string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(path)

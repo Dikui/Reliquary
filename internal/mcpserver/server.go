@@ -27,6 +27,7 @@ const completeMaterialNotice = "送入可读 Markdown 正文与可选图片；�
 type EntryService interface {
 	interfaces.IngestService
 	AuthorizeIngestRequest(context.Context) (context.Context, error)
+	CheckBusinessWrite(context.Context) error
 	GetEntryByID(context.Context, string) (*types.Entry, error)
 	ReadEntry(context.Context, string, int, int) (*service.EntryReadResult, error)
 	ListPending(context.Context, int, int, ...string) (*types.PageResult, error)
@@ -60,6 +61,7 @@ func New(services Services) *Handler {
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "reliquary", Version: "1.0.0"}, &mcp.ServerOptions{Instructions: string(rules)})
 	registerTools(server, services)
+	server.AddReceivingMiddleware(maintenanceWriteGate(services.Entries.CheckBusinessWrite))
 	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: types.MaxIngestMCPBytes})
 	return &Handler{transport: transport, authorize: services.Entries.AuthorizeIngestRequest}

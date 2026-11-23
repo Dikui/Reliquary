@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	werrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -117,7 +118,7 @@ func (s *TopicService) CreateTopic(ctx context.Context, topic *types.Topic) (*ty
 	if copy.ID == "" {
 		copy.ID = uuid.NewString()
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := tx.Create(&copy).Error; err != nil {
 			return err
 		}
@@ -151,7 +152,7 @@ func (s *TopicService) UpdateTopic(ctx context.Context, id string, name, descrip
 	var result types.Topic
 	var affected []string
 	changed := false
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, id).First(&result).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return werrors.NewNotFoundError("topic not found")
@@ -202,7 +203,7 @@ func (s *TopicService) DeleteTopic(ctx context.Context, id string) error {
 		return err
 	}
 	var affected []string
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = maintenanceops.BusinessWriteTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		var topic types.Topic
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("space_id=? AND id=?", spaceID, id).First(&topic).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -251,6 +252,11 @@ func (s *TopicService) replaceEntryTopics(ctx context.Context, entryID string, i
 	}
 	ids = uniqueTopicIDs(ids)
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if source == types.TopicSourceUser {
+			if err := maintenanceops.CheckCollectionTx(ctx, tx); err != nil {
+				return err
+			}
+		}
 		var article types.Entry
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id,source_kind,library_id").Where("space_id=? AND id=?", spaceID, entryID).First(&article).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {

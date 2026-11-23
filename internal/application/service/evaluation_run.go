@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm/clause"
 	"reliquary/internal/application/service/metric"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/maintenanceops"
 	"reliquary/internal/types"
 )
 
@@ -40,6 +41,16 @@ func validateRunOptions(options *types.EvaluationRunOptions) error {
 // initial transaction freezes questions and answers, so edits cannot rewrite
 // historical results. Execution is synchronous and obeys request cancellation.
 func (s *EvaluationService) Run(ctx context.Context, setID string, options types.EvaluationRunOptions) (*types.EvaluationRun, error) {
+	var run *types.EvaluationRun
+	err := maintenanceops.WithBusinessWrite(ctx, s.db, func(ctx context.Context) error {
+		var err error
+		run, err = s.run(ctx, setID, options)
+		return err
+	})
+	return run, err
+}
+
+func (s *EvaluationService) run(ctx context.Context, setID string, options types.EvaluationRunOptions) (*types.EvaluationRun, error) {
 	if err := validateRunOptions(&options); err != nil {
 		return nil, err
 	}

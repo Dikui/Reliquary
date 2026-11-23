@@ -41,16 +41,36 @@ class AdminError(RuntimeError):
     pass
 
 
+LOCAL_IMAGES = ".maintenance-schedule/local-deploy.images.json"
+PENDING_UPGRADE = ".maintenance-schedule/local-upgrade.pending.json"
+
+
+@contextlib.contextmanager
+def startup_lock(directory, *, wait=False):
+    import fcntl
+    with (directory.parent / "logs/startup.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise AdminError("Startup, backup or another deployment is active; retry after it finishes") from error
+        yield
+
+
 # The optional Feishu entry (ADR 0028) lives beside deploy/ in the runtime root.
 # Its state shares the backup's stopped window; credentials never enter packages.
 AGENT_PACKAGE_DIRECTORY = "agent"
 AGENT_EXCLUDED = {"auth.json", "runtime-lock.sqlite", "runtime-lock.sqlite-wal", "runtime-lock.sqlite-shm", "runtime-lock.sqlite-journal"}
-AGENT_REQUIRED = {"kind": "agent", "name": "feishu", "fields": ["MODEL_API_KEY or ChatGPT model", "FEISHU_APP_SECRET", "RELIQUARY_API_KEY"]}
+AGENT_REQUIRED = {"kind": "agent", "name": "chat", "fields": ["MODEL_API_KEY or ChatGPT model", "channel credentials", "RELIQUARY_API_KEY"]}
+
+
+def chat_state_directory(root):
+    legacy = root / "agents/feishu"
+    return legacy if legacy.is_dir() else root / "agents/chat"
 
 
 def agent_directory(deploy):
     """Return the installed agent directory, or None when the entry was never enabled."""
-    directory = Path(deploy).parent / "agents/feishu"
+    directory = chat_state_directory(Path(deploy).parent)
     return directory if Path(deploy).name == "deploy" and (directory / "compose.yaml").is_file() else None
 
 
@@ -83,7 +103,7 @@ def extract_agent_archive(data, target):
             name = Path(member.name)
             if name.is_absolute() or ".." in name.parts:
                 raise AdminError(f"Unsafe agent state path: {member.name}")
-            if name.parts and name.parts[0] in AGENT_EXCLUDED and len(name.parts) == 1:
+            if name.name in AGENT_EXCLUDED:
                 continue
             destination = target / name
             if member.isdir():
@@ -99,7 +119,7 @@ def extract_agent_archive(data, target):
 
 def copy_agent_state(directory, target):
     # Read through the agent image as root: on Linux the state belongs to the container's node user.
-    excludes = [f"--exclude=./{name}" for name in sorted(AGENT_EXCLUDED)]
+    excludes = [f"--exclude={name}" for name in sorted(AGENT_EXCLUDED)]
     data = run(["docker", "run", "--rm", "--user", "0:0", "-v", f"{directory / 'data'}:/data:ro", "--entrypoint", "tar",
                 agent_image(directory), "-C", "/data", *excludes, "-cf", "-", "."])
     extract_agent_archive(data, target)
@@ -113,7 +133,7 @@ def agent_restore_target(ctx, package):
     if root.name != "deploy":
         print(f"Feishu agent state stays in {Path(package) / AGENT_PACKAGE_DIRECTORY}; this target is not a runtime deploy/ directory.")
         return None
-    directory = root.parent / "agents/feishu"
+    directory = chat_state_directory(root.parent)
     if (directory / "enabled").exists():
         raise AdminError("Stop the Feishu agent (agent-local.py stop) before restore")
     state = directory / "data"
@@ -124,9 +144,15 @@ def agent_restore_target(ctx, package):
 
 def verify_agent_state(source, scratch):
     """Open a disposable copy so WAL replay never touches the package."""
-    import sqlite3
     snapshot_tree(source, scratch)
-    database = scratch / "feishu.sqlite"
+    result = verify_agent_database(scratch / "feishu.sqlite")
+    for channel_db in scratch.glob("*/feishu.sqlite"):
+        result[channel_db.parent.name] = verify_agent_database(channel_db)
+    return result
+
+
+def verify_agent_database(database):
+    import sqlite3
     if not database.is_file():
         raise AdminError("Agent state in the package has no feishu.sqlite")
     connection = sqlite3.connect(database)
@@ -224,12 +250,33 @@ def hashes(root):
 
 
 def check_files(package):
-    expected = {name: value for name, value in json.loads((package / "checksums.json").read_text()).items()
-                if not package_user_path(name)}
+    recorded = json.loads((package / "checksums.json").read_text())
+    if not isinstance(recorded, dict):
+        raise AdminError("Invalid package checksums.json")
+    expected = {name: value for name, value in recorded.items() if not package_user_path(name)}
     actual = hashes(package)
     if actual != expected:
         bad = sorted(k for k in actual.keys() | expected.keys() if actual.get(k) != expected.get(k))
         raise AdminError("Package checksum mismatch; stopped: " + ", ".join(bad[:30]))
+
+
+def check_install_backup(package):
+    for name in ("manifest.json", "checksums.json", "snapshot.json", "models.json", "database.dump"):
+        if not (package / name).is_file():
+            raise AdminError(f"Backup is missing {name}: {package}")
+    for name in ("vault", "resources"):
+        if not (package / name).is_dir():
+            raise AdminError(f"Backup is missing {name}/: {package}")
+    metadata = json.loads((package / "manifest.json").read_text())
+    if not isinstance(metadata, dict) or metadata.get("format") != FORMAT or metadata.get("kind") != "backup":
+        raise AdminError("Data installation requires a reliquary-admin backup")
+    if not isinstance(metadata.get("required_credentials"), list) or not isinstance(metadata.get("code"), dict) or \
+            not isinstance(metadata.get("versions"), dict):
+        raise AdminError("Backup manifest is missing recovery metadata")
+    if not isinstance(metadata.get("delivery", False), bool):
+        raise AdminError("Backup manifest delivery marker must be a boolean")
+    check_files(package)
+    return metadata
 
 
 def empty_directory(path):
@@ -311,31 +358,34 @@ def deduplicate_tree(target, previous):
 
 
 def read_env(path):
+    return parse_env(Path(path).read_text()) if Path(path).is_file() else {}
+
+
+def parse_env(text):
     values = {}
-    if Path(path).is_file():
-        for line in Path(path).read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.removeprefix("export ").split("=", 1)
-            key = key.strip()
-            if re.match(r"^\s+#", value):
-                value = ""
-            value = value.strip()
-            quoted = re.fullmatch(r'''("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*(?:#.*)?''', value)
-            if quoted:
-                value = quoted.group(1)
-            elif value[:1] not in {"'", '"'}:
-                value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
-            if quoted and value[:1] == '"':
-                try:
-                    value = json.loads(value)
-                except json.JSONDecodeError:
-                    value = value[1:-1]
-            elif quoted and value[:1] == "'":
-                value = value[1:-1].replace("\\'", "'")
-            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
-                values[key] = value
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.removeprefix("export ").split("=", 1)
+        key = key.strip()
+        if re.match(r"^\s+#", value):
+            value = ""
+        value = value.strip()
+        quoted = re.fullmatch(r'''("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*(?:#.*)?''', value)
+        if quoted:
+            value = quoted.group(1)
+        elif value[:1] not in {"'", '"'}:
+            value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+        if quoted and value[:1] == '"':
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                value = value[1:-1]
+        elif quoted and value[:1] == "'":
+            value = value[1:-1].replace("\\'", "'")
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            values[key] = value
     return values
 
 
@@ -382,6 +432,29 @@ def write_env(path, values):
     path = Path(path)
     path.write_text("".join(f"{key}={json.dumps(str(value), ensure_ascii=False)}\n" for key, value in sorted(values.items())))
     path.chmod(0o600)
+
+
+def set_compose_files(path, files, *, drop_helper=False):
+    """Keep customer dotenv expressions and quoting intact when switching images."""
+    replaced = {"COMPOSE_FILE"}
+    if drop_helper:
+        replaced.add("RELIQUARY_ADMIN_HELPER_IMAGE")
+    text = "".join(line for line in path.read_text().splitlines(keepends=True)
+                   if line.strip().removeprefix("export ").partition("=")[0].strip() not in replaced)
+    write_runtime_file(path, (text.rstrip("\n") + "\nCOMPOSE_FILE=" + json.dumps(files) + "\n").encode(), 0o600)
+
+
+def write_runtime_file(path, contents, mode):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(contents)
+            stream.flush()
+            temporary.chmod(mode)
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 def host_path(value, env, root=ROOT):
@@ -471,6 +544,8 @@ def sanitize_env_example(source, destination):
 
 
 class Context:
+    startup_locked = False
+
     def __init__(self, root=ROOT, overrides=None):
         self.root = Path(root)
         self.database_only = True
@@ -683,13 +758,11 @@ class Context:
                  "-ec", 'if id appuser >/dev/null 2>&1; then chown -R appuser:appuser "$1"; fi', "sh", path])
 
     @contextlib.contextmanager
-    def stopped(self, mode, timeout, keep_paused=False, automatic=False, destination=None):
+    def stopped(self, mode, timeout, keep_paused=False, automatic=False, destination=None, *, reuse_pause=False):
         with contextlib.ExitStack() as guards:
-            if (self.root.parent / "scripts/startup.py").is_file():
-                import fcntl
+            if not self.startup_locked and (self.root.parent / "scripts/startup.py").is_file():
                 # Share the installed recovery task's lock until writers are restored.
-                lock = guards.enter_context((self.root.parent / "logs/startup.lock").open("a"))
-                fcntl.flock(lock, fcntl.LOCK_EX)
+                guards.enter_context(startup_lock(self.root, wait=True))
             legacy = self.ensure_legacy_helper()
             if self.direct or self.local_server:
                 hooks = (self.env.get("RELIQUARY_ADMIN_STOP_COMMAND"), self.env.get("RELIQUARY_ADMIN_START_COMMAND"))
@@ -706,7 +779,7 @@ class Context:
             try:
                 if legacy:
                     print("Baseline maintenance: stopping the legacy application before flushing and exporting; in-flight tasks remain in PostgreSQL.")
-                else:
+                elif not reuse_pause or not self.cli_json("status").get("paused"):
                     self.cli_json("pause", "--mode", mode, "--timeout", f"{timeout}s", "--reason", "automatic:backup" if automatic else "manual:" + mode)
                 paused = True
                 if was_running:
@@ -1004,6 +1077,7 @@ def check_context_directories(ctx, backup_directory=None, **options):
 
 
 def create_package(ctx, destination, args, kind="pack", previous=None):
+    delivery = kind == "backup" and getattr(args, "delivery", False)
     check_context_directories(ctx, Path(destination).resolve() if kind == "pack" else Path(destination).resolve().parent)
     destination = empty_directory(destination)
     result = {"status": "failed", "started_at": dt.datetime.now(dt.timezone.utc).isoformat(), "path": str(destination)}
@@ -1030,7 +1104,7 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                         raise AdminError("Runtime source materials are missing; run record-runtime --source <source-checkout> before backing up")
             # Export and validate code and image availability while writers are still running.
             code = source_copy(ctx, stage, args.include_worktree, runtime_commit, runtime_source, runtime_code)
-            agent = agent_directory(getattr(ctx, "root", ROOT))
+            agent = None if delivery else agent_directory(getattr(ctx, "root", ROOT))
             with (agent_stopped(agent, args.timeout) if agent else contextlib.nullcontext()), \
                     ctx.stopped("drain" if kind == "pack" else "snapshot", args.timeout, args.keep_paused,
                                 getattr(args, "automatic", False), destination):
@@ -1066,18 +1140,41 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                         expected = "/maintenance-package/" + original_manifest.name
                     ctx.cli_json("verify", "--manifest", expected, "--vectors", overrides=clone_check)
                     original_manifest.unlink()
-                    required += scrubbed.get("required", [])
-                    if agent:
-                        required.append(AGENT_REQUIRED)
-                    json_write(stage / "required-credentials.json", {"required": required, "paused_models": scrubbed.get("paused_models", []), "paused_sources": scrubbed.get("paused_sources", [])})
-                    with (stage / "database.dump").open("wb") as stream:
-                        ctx.pg("pg_dump", database, "-Fc", "--no-owner", "--no-acl", output=stream)
+                    if delivery:
+                        ctx.cli_json("prepare-delivery", overrides=side)
+                        if not getattr(ctx, "database_only", False):
+                            replica = stage / "vault" / ".reliquary"
+                            # The historical replica's append-only file may
+                            # only be replaced in this disposable staged copy.
+                            (replica / "operation_logs.jsonl").unlink(missing_ok=True)
+                            if (replica / "quarantine").is_dir():
+                                shutil.rmtree(replica / "quarantine")
+                        ctx.cli_json("flush", overrides=side)
                     snapshot = ctx.cli_json("manifest", overrides=side)
                     # A scrubbed space no longer contains the parser keys.
                     # Keep their original field names for reconfiguration and
                     # narrow credential-related comparison exceptions.
-                    snapshot["required_credentials"] = before.get("required_credentials", [])
+                    original_required = before.get("required_credentials", [])
+                    if delivery:
+                        delivery_required = snapshot["required_credentials"]
+                        delivery_required += [
+                            item for item in original_required if item.get("kind") == "spaces"
+                            and item not in delivery_required
+                        ]
+                        snapshot["delivery"] = True
+                        required += delivery_required
+                    else:
+                        snapshot["required_credentials"] = original_required
+                        required += scrubbed.get("required", [])
+                    if agent:
+                        required.append(AGENT_REQUIRED)
+                    json_write(stage / "required-credentials.json", {"required": required, "paused_models": scrubbed.get("paused_models", []), "paused_sources": scrubbed.get("paused_sources", [])})
                     json_write(stage / "snapshot.json", snapshot)
+                    if delivery:
+                        expected = str(Path(expected).with_name("snapshot.json"))
+                        ctx.cli_json("verify", "--manifest", expected, "--vectors", overrides=clone_check)
+                    with (stage / "database.dump").open("wb") as stream:
+                        ctx.pg("pg_dump", database, "-Fc", "--no-owner", "--no-acl", output=stream)
                     json_write(stage / "models.json", ctx.cli_json("models", overrides=side))
                 deduplicate_tree(stage / "vault", previous / "vault" if previous else None)
                 deduplicate_tree(stage / "resources", previous / "resources" if previous else None)
@@ -1095,6 +1192,8 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
                 metadata = {"format": FORMAT, "kind": kind, "storage": "database" if getattr(ctx, "database_only", False) else "vault", "created_at": result["started_at"], "code": code, "images": packed_images,
                             "versions": versions, "required_credentials": required,
                             "comparison": "Exact preserved data and file hashes; vectors, runtime state and search scores are regenerated. Retrieval compares article IDs."}
+                if delivery:
+                    metadata["delivery"] = True
                 json_write(stage / "manifest.json", metadata)
                 agent_secrets = read_env(agent / "agent.env") if agent and (agent / "agent.env").is_file() else {}
                 scan_secrets(stage, {**effective, **{k: v for k, v in ctx.env.items() if SECRET.search(k)}, **agent_secrets})
@@ -1121,7 +1220,7 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
         raise
     finally:
         result["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
-        if kind == "backup":
+        if kind == "backup" and not delivery:
             confirmed = record(ctx, "backup", result)
             if getattr(args, "upgrade", False) and result["status"] == "success":
                 capture_upgrade_backup_record(ctx, destination, result, before, confirmed)
@@ -1129,16 +1228,20 @@ def create_package(ctx, destination, args, kind="pack", previous=None):
 
 def backup(ctx, args):
     directory = host_path(args.directory or default_backup_directory(ctx.env), ctx.env, getattr(ctx, "root", ROOT))
+    delivery = getattr(args, "delivery", False)
+    prefix = "delivery" if delivery else "backup"
     try:
         check_context_directories(ctx, directory)
         directory.mkdir(parents=True, exist_ok=True)
-        existing = sorted(p for p in directory.glob("backup-*") if (p / "manifest.json").is_file())
-        destination = directory / ("backup-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + secrets.token_hex(3))
+        existing = sorted(p for p in directory.glob(prefix + "-*") if (p / "manifest.json").is_file())
+        destination = directory / (prefix + "-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + secrets.token_hex(3))
         path = create_package(ctx, destination, args, "backup", existing[-1] if existing else None)
-        rotate(directory, 4)
+        if not delivery:
+            rotate(directory, 4)
         return path
     except OSError as error:
-        record(ctx, "backup", {"status": "failed", "path": str(directory), "error": str(error)})
+        if not delivery:
+            record(ctx, "backup", {"status": "failed", "path": str(directory), "error": str(error)})
         raise AdminError("Backup filesystem failure: " + str(error)) from error
 
 
@@ -1173,6 +1276,12 @@ def freeze_restored_queue(ctx):
                 "paused_at=COALESCE(paused_at,NOW()),updated_at=NOW() WHERE id=true")
 
 
+def require_empty_restore_database(ctx):
+    application_tables = ctx.sql("SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename NOT IN (SELECT c.relname FROM pg_class c JOIN pg_depend d ON d.objid=c.oid WHERE d.deptype='e')")
+    if int(application_tables or "0"):
+        raise AdminError("Restore requires a new empty database; the existing environment stays untouched")
+
+
 def restore(ctx, package, args):
     package = Path(package).resolve()
     ctx.database_only = json.loads((package / "manifest.json").read_text()).get("storage") == "database"
@@ -1182,9 +1291,7 @@ def restore(ctx, package, args):
         raise AdminError("Unsupported maintenance package format")
     check_context_directories(ctx, require_empty=True)
     # Existing DB credentials stay in the destination; they are never imported.
-    application_tables = ctx.sql("SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename NOT IN (SELECT c.relname FROM pg_class c JOIN pg_depend d ON d.objid=c.oid WHERE d.deptype='e')")
-    if int(application_tables or "0"):
-        raise AdminError("Restore requires a new empty database; the existing environment stays untouched")
+    require_empty_restore_database(ctx)
     for name in ("vault", "resources"):
         mode, target = ctx.storage(name)
         if mode == "host":
@@ -1198,6 +1305,9 @@ def restore(ctx, package, args):
                               cwd=ctx.root, env={**ctx.env, "PGPASSWORD": ctx.env.get("DB_PASSWORD", "")}, stdin=stream, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if proc.returncode:
             raise AdminError("Database restore failed; destination remains paused: " + proc.stderr.decode()[-2000:])
+    expected_migration = getattr(args, "expected_migration", None)
+    if expected_migration and ctx.sql("SELECT version::text||':'||dirty::text FROM schema_migrations") != expected_migration:
+        raise AdminError("Restored database migration does not match the backup manifest")
     for name in ("vault", "resources"):
         ctx.restore_storage(name, package / name)
     if agent:
@@ -1227,16 +1337,12 @@ def restore(ctx, package, args):
         # Refresh current-schema copies, then compare against that same baseline.
         ctx.cli_json("flush")
     verification = ctx.cli_json("verify", "--manifest", expected, "--vectors", overrides=verification_overrides)
-    json_write(ctx.root / ".maintenance-restore.json", {"state": "waiting_models", "package": str(package), "verification": verification,
-                                                        "scheduler_required": getattr(ctx, "scheduler_required", False),
-                                                        "required_credentials": required, "preserve_version": preserve_version})
+    state = {"state": "waiting_models", "package": str(package), "verification": verification,
+             "scheduler_required": getattr(ctx, "scheduler_required", False),
+             "required_credentials": required, "preserve_version": preserve_version, "startup_pending": True}
+    json_write(ctx.root / ".maintenance-restore.json", state)
     print_credentials(required, preserve_version)
-    if not legacy and ctx.sql("SELECT to_regclass('public.task_pending_ops') IS NOT NULL") == "t":
-        if not ctx.direct and not ctx.local_server:
-            ctx.compose("up", "-d", "--no-build", "--pull", "never", "--wait", "redis")
-        ctx.cli_json("queue-replay")
-        ctx.cli_json("flush")
-    start_paused_environment(ctx)
+    finish_restore_startup(ctx, state)
     if getattr(args, "skip_models", False):
         print("Restored and verified. State: waiting_models. Run setup-models, then unpack --resume. Host scheduler installation is checked before resuming task execution.")
         return
@@ -1247,6 +1353,18 @@ def restore(ctx, package, args):
         access = "The legacy application stays offline; use maintenance credentials --kind model --id ID --input FILE" if legacy else "The settings page is available; task execution stays paused"
         raise AdminError(f"State: {state}. {access}. Run setup-models or enter credentials, then unpack --resume")
     finalize_restore(ctx, package)
+
+
+def finish_restore_startup(ctx, state):
+    ctx.preserve_version = state.get("preserve_version", False)
+    if not ctx.legacy_schema() and ctx.sql("SELECT to_regclass('public.task_pending_ops') IS NOT NULL") == "t":
+        if not ctx.direct and not ctx.local_server:
+            ctx.compose("up", "-d", "--no-build", "--pull", "never", "--wait", "redis")
+        ctx.cli_json("queue-replay")
+        ctx.cli_json("flush")
+    start_paused_environment(ctx)
+    state.pop("startup_pending", None)
+    json_write(ctx.root / ".maintenance-restore.json", state)
 
 
 def print_credentials(required, preserve_version=False):
@@ -1356,6 +1474,9 @@ def require_parser_credentials(ctx, package, state_name=".maintenance-restore.js
         state.update({"state": "waiting_credentials", "package": str(package), "missing_parser_credentials": missing})
         json_write(state_path, state)
         print_credentials(missing)
+        if getattr(ctx, "customer_data_install", False):
+            for item in missing:
+                print(f"缺少必需的云解析器凭据 {item['name']}（{', '.join(item['fields'])}）", file=sys.stderr)
         raise AdminError("State: waiting_credentials. Collection and task execution remain paused. Fill every listed cloud parser credential in space/parser settings, then run " + resume_command + ".")
 
 
@@ -1364,6 +1485,11 @@ def embedding_identity(value):
         return value["selected_embedding"]
     rows = value.get("models", []) if isinstance(value, dict) else value
     return sorted((str(m.get("id")), m.get("name"), m.get("source"), json.dumps({k: v for k, v in m.get("parameters", {}).items() if k in {"base_url", "interface_type", "provider", "embedding_parameters"}}, sort_keys=True)) for m in rows if str(m.get("type")).lower() == "embedding")
+
+
+def embedding_required(value):
+    # Older maintenance binaries do not report which content needs vectors.
+    return not isinstance(value, dict) or value.get("embedding_required", True)
 
 
 def library_configuration_tables(tables):
@@ -1455,7 +1581,8 @@ def rebuild(ctx, args):
     if not ctx.local_server and not ctx.direct:
         expected_path = "/maintenance-package/snapshot.json"
         checks["RELIQUARY_ADMIN_CLI_PACKAGE_HOST"] = str(package)
-    changed = embedding_identity(json.loads((package / "models.json").read_text())) != embedding_identity(ctx.cli_json("models"))
+    current_models = ctx.cli_json("models")
+    changed = embedding_identity(json.loads((package / "models.json").read_text())) != embedding_identity(current_models)
     allow_rebuild = changed or state.get("vector_rebuild_started", False)
     flags = ["--manifest", expected_path] + (["--allow-model-change"] if allow_rebuild else [])
     verify_reconfigured_data(ctx, *flags, overrides=checks)
@@ -1468,7 +1595,7 @@ def rebuild(ctx, args):
         raise AdminError(f"State: {state['state']}. Complete selected models and credentials, then run rebuild VAULT --resume")
     require_parser_credentials(ctx, package, ".maintenance-rebuild.json", "rebuild VAULT --resume", side)
     verification = ctx.cli_json("verify", overrides=side)
-    if changed or any(count > 0 for count in verification.get("pending_vectors", {}).values()):
+    if (changed and embedding_required(current_models)) or any(count > 0 for count in verification.get("pending_vectors", {}).values()):
         before = ctx.cli_json("manifest", overrides=side)
         # The existing compare flag permits new rebuild audit rows. Protect
         # selected model configuration separately across this maintenance call.
@@ -1524,21 +1651,17 @@ def finalize_restore(ctx, package):
     original_models = json.loads((package / "models.json").read_text()) if (package / "models.json").exists() else None
     current = ctx.cli_json("models")
     # Compare embedding identity, not regenerated vector values.
-    rebuilt = False
-    if original_models is not None and embedding_identity(original_models) != embedding_identity(current):
+    changed = original_models is not None and embedding_identity(original_models) != embedding_identity(current)
+    if changed and embedding_required(current):
         print("Embedding model identity changed; rebuilding all vectors before resuming.")
         ctx.server("reembed", "--preserve-entity-timestamps", capture=False)
-        rebuilt = True
     expected = str(package / "snapshot.json")
     verification_overrides = {}
     if not ctx.direct and not ctx.local_server:
         expected = "/maintenance-package/snapshot.json"
         verification_overrides["RELIQUARY_ADMIN_CLI_PACKAGE_HOST"] = str(package)
-    if rebuilt:
-        verification = verify_reconfigured_data(ctx, "--manifest", expected, "--allow-model-change", overrides=verification_overrides)
-        ctx.cli_json("verify", "--vectors")
-    else:
-        verification = verify_reconfigured_data(ctx, "--manifest", expected, "--vectors", overrides=verification_overrides)
+    checks = ["--manifest", expected, "--vectors"] + (["--allow-model-change"] if changed else [])
+    verification = verify_reconfigured_data(ctx, *checks, overrides=verification_overrides)
     legacy = ctx.legacy_schema()
     if not legacy and getattr(ctx, "scheduler_required", False) and not getattr(ctx, "no_scheduler", False):
         try:
@@ -1554,10 +1677,11 @@ def finalize_restore(ctx, package):
             ctx.cli_json("graph-rebuild")
             ctx.cli_json("graph-verify")
             ctx.cli_json("flush")
-            verification = verify_reconfigured_data(ctx, "--manifest", expected, "--vectors", *(["--allow-model-change"] if rebuilt else []), overrides=verification_overrides)
-        ctx.cli_json("resume")
+            verification = verify_reconfigured_data(ctx, *checks, overrides=verification_overrides)
     if not ctx.direct and not ctx.local_server:
         ctx.compose("up", "-d", "--no-build", "--pull", "never")
+    if not legacy:
+        ctx.cli_json("resume")
     json_write(ctx.root / ".maintenance-restore.json", {"state": "ready", "package": str(package), "verification": verification})
     print("Restore verification passed. State: ready. Remaining credential-dependent functions stay paused.")
 
@@ -1583,6 +1707,8 @@ def unpack(ctx, args):
         ctx.scheduler_required = state.get("scheduler_required", False)
         ctx.preserve_version = state.get("preserve_version", False)
         ctx.no_scheduler = args.no_scheduler or ctx.env.get("RELIQUARY_ADMIN_NO_SCHEDULER") == "1"
+        if state.get("startup_pending"):
+            finish_restore_startup(ctx, state)
         if not setup_models(ctx, argparse.Namespace(install=False, download=False, start=False)):
             start_paused_environment(ctx)
             raise AdminError(f"State: {getattr(ctx, 'waiting_state', 'waiting_models')}. Complete model setup and credentials before resuming")
@@ -1715,6 +1841,214 @@ def verify_upgrade(ctx, package):
         ctx.cli_json("verify", "--manifest", argument, "--vectors", "--allow-operation-log-append", overrides=overrides)
 
 
+def clean_revision(source):
+    if run(["git", "status", "--porcelain"], cwd=source).strip():
+        raise AdminError("Commit source changes before deploying; images must match their Git revision")
+    return run(["git", "rev-parse", "HEAD"], cwd=source).decode().strip()
+
+
+def customer_source(directory, source=None):
+    marker = directory / "customer-install.json"
+    if not marker.is_file():
+        raise AdminError(f"Customer installation record is missing: {marker}")
+    record = json.loads(marker.read_text())
+    if record.get("status") != "base_ready" or not record.get("source"):
+        raise AdminError(f"Customer installation is incomplete or has no registered source: {marker}")
+    registered = Path(record["source"]).expanduser().resolve()
+    if source is not None and registered != source.resolve():
+        raise AdminError(f"Source checkout differs from {marker}; run the update from {registered} "
+                         f"(current checkout: {source})")
+    if not registered.is_dir():
+        raise AdminError(f"Registered source checkout does not exist: {registered}; check {marker}")
+    return registered
+
+
+def validate_installed_directory(source, directory):
+    if not (directory / ".env").is_file() or not (directory / "docker-compose.yml").is_file():
+        raise AdminError("An installed deployment with .env and docker-compose.yml is required")
+    if directory.resolve().is_relative_to(source.resolve()):
+        raise AdminError("The deployment directory must be outside the source checkout")
+
+
+def installed_context(directory):
+    runtime_env = read_env(directory / ".env")
+    ctx = Context(directory, runtime_env)
+    for key in tuple(ctx.env):
+        if key.startswith("COMPOSE_") and key not in runtime_env:
+            del ctx.env[key]
+    ctx.env["COMPOSE_FILE"] = runtime_env.get("COMPOSE_FILE") or str(directory / "docker-compose.yml")
+    return ctx
+
+
+def build_service_images(ctx, source, revision, services, *, container_frontend):
+    version = (source / "VERSION").read_text().strip()
+    tag = f"{version}-{revision[:12]}-{secrets.token_hex(3)}"
+    builds = {name: {"image": ("reliquary-ui:" if name == "frontend" else "reliquary-app:") + tag,
+                     "build": {"args": {"VERSION_ARG": version, "COMMIT_ID_ARG": revision}}} for name in services}
+    if container_frontend and "frontend" in builds:
+        builds["frontend"]["build"]["dockerfile"] = "Dockerfile.build"
+    with tempfile.TemporaryDirectory(prefix="reliquary-build-") as temp:
+        build = Path(temp) / "images.json"
+        json_write(build, {"services": builds})
+        subprocess.run(["docker", "compose", "--env-file", str(ctx.root / ".env"),
+                        "-f", str(source / "docker-compose.yml"), "-f", str(build), "build",
+                        *build_proxy_args({**read_env(ctx.root / ".env"), **os.environ}), *services],
+                       cwd=source, env=ctx.env, check=True)
+    return {name: spec["image"] for name, spec in builds.items()}
+
+
+def image_override(references, revisions, *, require_app_label=False):
+    override = {"services": {name: {"image": ref, "pull_policy": "never"} for name, ref in references.items()},
+                "x-reliquary-revisions": {}}
+    override["services"]["app"]["environment"] = {"AUTO_MIGRATE": "false"}
+    for name, ref in references.items():
+        info = json.loads(run(["docker", "image", "inspect", ref]))[0]
+        if name == "app" and require_app_label:
+            labels = info.get("Config", {}).get("Labels") or {}
+            if labels.get("org.opencontainers.image.revision") != revisions[name]:
+                raise AdminError("Built app image does not identify the selected source commit")
+        override["x-reliquary-revisions"][name] = {"commit": revisions[name], "id": info["Id"]}
+    return override
+
+
+def compose_with_images(ctx, override):
+    generated = {(ctx.root / path).resolve() for path in (LOCAL_IMAGES, ".maintenance-schedule/upgrade.images.json")}
+    files = ctx.env["COMPOSE_FILE"].split(os.pathsep)
+    return os.pathsep.join([*(name for name in files if name and (ctx.root / name).resolve() not in generated),
+                            str(override)])
+
+
+def start_application_services(ctx, services):
+    subprocess.run(["docker", "compose", "up", "-d", "--no-deps", "--no-build", "--pull", "never",
+                    "--wait", "--wait-timeout", "120", *services], cwd=ctx.root, env=ctx.env, check=True)
+    if "app" in services and "frontend" not in services:
+        # Nginx resolves the app hostname at startup; replacement may change its IP.
+        ctx.compose("exec", "-T", "frontend", "nginx", "-s", "reload")
+    ctx.compose("exec", "-T", "frontend", "sh", "-ec",
+                "for attempt in 1 2 3 4 5; do wget -q -T 5 -O /dev/null http://127.0.0.1/health "
+                "&& exit 0; sleep 1; done; exit 1")
+
+
+def refresh_maintenance_tools(ctx, source):
+    for name in ("reliquary-admin", "VERSION", "scripts/reliquary_admin.py"):
+        shutil.copy2(source / name, ctx.root / name)
+
+
+def upgrade(ctx, args, *, switch_image=None, activate=None, retry=False):
+    path = None
+    if args.backup:
+        options = argparse.Namespace(directory=None, timeout=args.timeout, keep_paused=True, include_worktree=args.include_worktree, with_images=True, upgrade=True)
+        path = backup(ctx, options)
+    guard = contextlib.ExitStack()
+    try:
+        if switch_image is None and not ctx.direct and not ctx.local_server:
+            revision = run(["git", "rev-parse", "--short=12", "HEAD"], cwd=ctx.root).decode().strip()
+            tag = revision + "-upgrade-" + secrets.token_hex(6)
+            new_override = ctx.root / ".maintenance-schedule/upgrade.images.json"
+            json_write(new_override, {"services": {ctx.app: {"image": "reliquary-app:" + tag}, "frontend": {"image": "reliquary-frontend:" + tag}}})
+            ctx.env["COMPOSE_FILE"] = ctx.env.get("COMPOSE_FILE", str(ctx.root / "docker-compose.yml")) + os.pathsep + str(new_override)
+            ctx.env["RELIQUARY_COMMIT"] = revision
+            ctx.compose("build", *build_proxy_args(ctx.env), ctx.app, "frontend")
+        if switch_image is None:
+            ctx.env.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
+        if path is None:
+            options = {"reuse_pause": True} if retry else {}
+            guard.enter_context(ctx.stopped("snapshot", args.timeout, keep_paused=True, **options))
+        if switch_image is not None:
+            switch_image()
+            ctx.env.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
+        ctx.cli_json("export-sources")
+        ctx.cli_json("migrate")
+        if not ctx.cli_json("status").get("paused"):
+            ctx.cli_json("pause", "--mode", "snapshot", "--timeout", str(args.timeout) + "s", "--reason", "manual:upgrade")
+        ctx.cli_json("flush")
+        if path is None:
+            ctx.cli_json("verify")
+        else:
+            verify_upgrade(ctx, path)
+        if activate is not None:
+            activate()
+        elif not ctx.direct and not ctx.local_server:
+            config = json.loads(ctx.compose("config", "--format", "json"))
+            new_images = {}
+            for service, spec in config["services"].items():
+                info = json.loads(run(["docker", "image", "inspect", spec["image"]]))[0]
+                new_images[service] = {"reference": spec["image"], "id": info["Id"]}
+            with tempfile.TemporaryDirectory(prefix=".capture-", dir=ctx.root / ".maintenance-schedule") as temp:
+                code = source_copy(ctx, Path(temp), True)
+                remember_runtime(ctx, Path(temp) / "source", code, new_images)
+            persisted = read_env(ctx.root / ".env")
+            persisted.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
+            persisted.update(COMPOSE_FILE=ctx.env["COMPOSE_FILE"], RELIQUARY_COMMIT=revision)
+            write_env(ctx.root / ".env", persisted)
+            ctx.compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "120")
+        ctx.cli_json("resume")
+        if path is None:
+            print("Upgrade verified. No pre-upgrade backup was created.")
+        else:
+            print(f"Upgrade verified. Rollback uses the complete pre-upgrade backup: {path}; restore into an empty environment. Database down migration is not a rollback.")
+    except BaseException:
+        if path is None:
+            print("Upgrade failed without a pre-upgrade backup; inspect the migration state before resuming. Data recovery requires a separately retained backup.", file=sys.stderr)
+        else:
+            print(f"Upgrade failed; environment remains paused. Restore pre-upgrade backup into a fresh environment: {path}", file=sys.stderr)
+        raise
+    finally:
+        guard.close()
+
+
+def upgrade_installed(ctx, args, source, revision):
+    """Build from the registered checkout and migrate using the new app image."""
+    if ctx.direct or ctx.local_server or ctx.app != "app":
+        raise AdminError("Customer upgrades require a Compose deployment with the app service")
+    if args.include_worktree:
+        raise AdminError("Customer upgrades require committed source; omit --include-worktree")
+    pending = ctx.root / PENDING_UPGRADE
+    retry = pending.is_file()
+    if retry and args.backup:
+        raise AdminError("An upgrade is pending; inspect the database before retrying without --backup. "
+                         "A new backup would not capture the pre-upgrade state.")
+    services = ["app", "frontend"]
+    refs = build_service_images(ctx, source, revision, services, container_frontend=True)
+    override = image_override(refs, dict.fromkeys(services, revision), require_app_label=True)
+    canonical = ctx.root / LOCAL_IMAGES
+    final_compose = compose_with_images(ctx, canonical)
+    startup = ctx.root.parent / "scripts/startup.py"
+    if startup.is_file():
+        shutil.copy2(source / "scripts/startup-local.py", startup)
+
+    with tempfile.TemporaryDirectory(prefix="reliquary-upgrade-") as temp:
+        staged = Path(temp) / "images.json"
+        json_write(staged, override)
+        staged_compose = compose_with_images(ctx, staged)
+        if retry:
+            # The old maintenance binary may no longer understand the database.
+            ctx.env["COMPOSE_FILE"] = staged_compose
+
+        def switch_image():
+            json_write(pending, {"commit": revision})
+            ctx.env["COMPOSE_FILE"] = staged_compose
+
+        def activate():
+            start_application_services(ctx, services)
+            images = runtime_images(ctx)
+            for service in services:
+                container = ctx.compose("ps", "--quiet", service).decode().strip()
+                expected_id = override["x-reliquary-revisions"][service]["id"]
+                if not container or images[service]["id"] != expected_id or \
+                        json.loads(run(["docker", "inspect", container]))[0]["Image"] != expected_id:
+                    raise AdminError(f"{service} did not start the built image")
+            record_runtime(ctx, source)
+            refresh_maintenance_tools(ctx, source)
+            json_write(canonical, override)
+            set_compose_files(ctx.root / ".env", final_compose, drop_helper=True)
+            ctx.env["COMPOSE_FILE"] = final_compose
+
+        upgrade(ctx, args, switch_image=switch_image, activate=activate, retry=retry)
+    pending.unlink()
+    return services
+
+
 def request_json(url, body=None, timeout=30):
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
@@ -1726,72 +2060,90 @@ def local_url(value):
     return value.replace("host.docker.internal", "127.0.0.1")
 
 
+def prepare_ollama_cli(install):
+    if shutil.which("ollama"):
+        return
+    if not install:
+        print("Ollama CLI missing. Run setup-models --install --download. Official instructions: https://docs.ollama.com/macos or https://docs.ollama.com/linux")
+        return
+    print("Installing Ollama using the official installer. An administrator password may be requested.")
+    if platform.system() == "Darwin":
+        # Official macOS distribution; osascript performs the privileged copy.
+        with tempfile.TemporaryDirectory(prefix="reliquary-ollama-") as temp:
+            dmg = Path(temp) / "Ollama.dmg"
+            run(["curl", "-fL", "https://ollama.com/download/Ollama.dmg", "-o", dmg], capture=False)
+            mount = Path(temp) / "mount"
+            run(["hdiutil", "attach", dmg, "-mountpoint", mount, "-nobrowse"])
+            try:
+                source = str(mount / "Ollama.app").replace('"', '\\"')
+                run(["osascript", "-e", f'do shell script "ditto \\"{source}\\" /Applications/Ollama.app" with administrator privileges'], capture=False)
+            finally:
+                run(["hdiutil", "detach", mount])
+            run(["open", "-a", "/Applications/Ollama.app"], capture=False)
+        print("Complete Ollama's CLI permission prompt, then run setup-models again.")
+    elif platform.system() == "Linux":
+        with tempfile.TemporaryDirectory(prefix="reliquary-ollama-") as temp:
+            installer = Path(temp) / "install.sh"
+            run(["curl", "-fL", "https://ollama.com/install.sh", "-o", installer], capture=False)
+            run(["sh", installer], capture=False)
+    else:
+        raise AdminError("Install Ollama from https://ollama.com/download for this platform")
+
+
 def setup_models(ctx, args):
     data = ctx.cli_json("models")
     models = data.get("models", []) if isinstance(data, dict) else data
     if isinstance(models, dict):
         models = list(models.values())
-    missing = []
     missing_models = False
     missing_credentials = False
     ctx.waiting_state = "waiting_models"
     selected = data.get("selected_embedding", {}) if isinstance(data, dict) else {}
     selected_embedding = selected.get("id", selected.get("model_id")) if isinstance(selected, dict) else selected
     selected_ids = set(data.get("selected_model_ids", data.get("selected_models", []))) if isinstance(data, dict) else set()
-    if selected_embedding:
-        selected_ids.add(selected_embedding)
-    ollama_models = [m for m in models if str(m.get("source", "")).lower() in {"ollama", "local"} and str((m.get("parameters") or {}).get("interface_type", "ollama")).lower() == "ollama"]
-    if ollama_models and not shutil.which("ollama"):
-        if args.install:
-            print("Installing Ollama using the official installer. An administrator password may be requested.")
-            if platform.system() == "Darwin":
-                # Official macOS distribution; osascript performs the privileged copy.
-                with tempfile.TemporaryDirectory(prefix="reliquary-ollama-") as temp:
-                    dmg = Path(temp) / "Ollama.dmg"
-                    run(["curl", "-fL", "https://ollama.com/download/Ollama.dmg", "-o", dmg], capture=False)
-                    mount = Path(temp) / "mount"
-                    run(["hdiutil", "attach", dmg, "-mountpoint", mount, "-nobrowse"])
-                    try:
-                        source = str(mount / "Ollama.app").replace('"', '\\"')
-                        run(["osascript", "-e", f'do shell script "ditto \\"{source}\\" /Applications/Ollama.app" with administrator privileges'], capture=False)
-                    finally:
-                        run(["hdiutil", "detach", mount])
-                    run(["open", "-a", "/Applications/Ollama.app"], capture=False)
-                print("Complete Ollama's CLI permission prompt, then run setup-models again.")
-            elif platform.system() == "Linux":
-                with tempfile.TemporaryDirectory(prefix="reliquary-ollama-") as temp:
-                    installer = Path(temp) / "install.sh"
-                    run(["curl", "-fL", "https://ollama.com/install.sh", "-o", installer], capture=False)
-                    run(["sh", installer], capture=False)
-            else:
-                raise AdminError("Install Ollama from https://ollama.com/download for this platform")
-        else:
-            print("Ollama CLI missing. Run setup-models --install --download. Official instructions: https://docs.ollama.com/macos or https://docs.ollama.com/linux")
+    vectors_required = embedding_required(data)
+    ollama_cli_checked = False
     for model in models:
         params = model.get("parameters") or {}
         if isinstance(params, str):
             params = json.loads(params)
         source = str(model.get("source", "")).lower()
         model_type = str(model.get("type", "")).lower()
+        model_id = model.get("id")
+        if model_type == "embedding":
+            required = vectors_required and model_id == selected_embedding
+            feature = "vector indexing and search, plus extracted entity matching"
+        elif model_type == "knowledgeqa":
+            required = model_id in selected_ids
+            feature = "model-based document processing or generation"
+        elif model_type == "rerank":
+            required = False
+            feature = "search result reranking"
+        else:
+            required = False
+            feature = model.get("type") or "the configured model feature"
         if source == "local" and str(params.get("interface_type", "ollama")).lower() == "ollama":
             source = "ollama"
         name = model.get("model_name") or params.get("model_name") or model.get("name")
         base = local_url(model.get("base_url") or params.get("base_url") or ctx.env.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")).rstrip("/")
+        needs_credentials = model.get("status") in {"paused", "disabled", "needs_credentials", "needs_configuration", "needs_login"}
         try:
-            if model.get("status") in {"paused", "disabled", "needs_credentials", "needs_configuration", "needs_login"}:
-                if source == "chatgpt" and model.get("id") in selected_ids:
+            if needs_credentials:
+                if source == "chatgpt" and required:
                     # The production manager can activate a freshly completed
                     # login whose model row has not yet been refreshed.
-                    refreshed = ctx.cli_json("model-test", "--id", model["id"])
+                    refreshed = ctx.cli_json("model-test", "--id", model_id)
                     if refreshed.get("ready"):
                         print(f"Model ready after login: {name}")
                         continue
-                print(f"Paused until credentials are entered: {name}")
-                if model.get("id") in selected_ids:
-                    missing_credentials = True
-                    raise AdminError("Selected model needs credentials; resume after entering and testing them")
-                continue
+                raise AdminError("Model needs credentials or sign-in")
             if source == "ollama":
+                if not ollama_cli_checked:
+                    ollama_cli_checked = True
+                    try:
+                        prepare_ollama_cli(args.install)
+                    except (OSError, AdminError) as error:
+                        print(f"Ollama CLI setup failed: {error}", file=sys.stderr)
                 tags = request_json(base + "/api/tags")
                 available = {m.get("name") for m in tags.get("models", [])}
                 if name not in available and name + ":latest" not in available:
@@ -1807,35 +2159,28 @@ def setup_models(ctx, args):
             elif model_type == "embedding" and (params.get("embedding_parameters", {}).get("supports_images") or params.get("supports_images") or model.get("supports_images")):
                 if args.install or args.download:
                     prepare_multimodal(ctx, name, args)
-                # The production adapter checks both text and a one-pixel image.
-                result = ctx.cli_json("model-test", "--id", model["id"])
-                if not result.get("ready", False):
-                    raise AdminError(result.get("error", "Multimodal model adapter test failed"))
-            elif source in {"local", "remote", "openai", "openai_compatible"}:
-                # The server performs the adapter-specific test using live credentials.
-                # Scrubbed remote credentials intentionally leave those features paused.
-                result = ctx.cli_json("model-test", "--id", model["id"])
-                if not result.get("ready", False):
-                    raise AdminError(result.get("error", "Model adapter test failed"))
-            else:
-                result = ctx.cli_json("model-test", "--id", model["id"])
-                if not result.get("ready", False):
-                    raise AdminError(result.get("error", "Model adapter test failed"))
-            if source == "ollama":
-                result = ctx.cli_json("model-test", "--id", model["id"])
-                if not result.get("ready", False):
-                    raise AdminError(result.get("error", "Model adapter test failed"))
+            # The production adapter checks live credentials and configured capabilities.
+            result = ctx.cli_json("model-test", "--id", model_id)
+            if not result.get("ready", False):
+                raise AdminError(result.get("error", "Model adapter test failed"))
             print(f"Model ready: {name}")
         except (OSError, ValueError, AdminError, urllib.error.URLError) as error:
-            if model.get("status") not in {"paused", "disabled", "needs_credentials", "needs_configuration", "needs_login"}:
-                missing_models = True
-            missing.append({"model": name, "error": str(error)})
-            print(f"Waiting for model: {name}: {error}", file=sys.stderr)
-    if missing:
-        ctx.waiting_state = "waiting_models" if missing_models else "waiting_credentials" if missing_credentials else "waiting_models"
+            if required:
+                needs_credentials |= source == "chatgpt" and "chatgpt: sign in again" in str(error).lower()
+                missing_credentials |= needs_credentials
+                missing_models |= not needs_credentials
+            impact = "blocks recovery" if required else "recovery can continue"
+            output = sys.stdout if not required and getattr(ctx, "customer_data_install", False) else sys.stderr
+            print(f"Model unavailable: {name} ({model_id}). Affects {feature}; {impact}. {error}", file=output)
+    if isinstance(data, dict) and data.get("embedding_required") is True and not any(
+            str(model.get("type", "")).lower() == "embedding" and model.get("id") == selected_embedding for model in models):
+        missing_models = True
+        print("Selected embedding model is missing. Vector indexing and extracted entity matching require a configured model; recovery is paused.", file=sys.stderr)
+    if missing_models or missing_credentials:
+        ctx.waiting_state = "waiting_models" if missing_models else "waiting_credentials"
         print(f"State: {ctx.waiting_state}. No vectors were rebuilt.")
         return False
-    print("All available configured model checks passed; credential-dependent features remain paused.")
+    print("All required model checks passed. Configure unavailable models before using their features.")
     return True
 
 
@@ -2132,6 +2477,8 @@ def parser():
         p.add_argument("--include-worktree", action="store_true")
         p.add_argument("--automatic", action="store_true")
         p.add_argument("--with-images", action="store_true")
+        if name == "backup":
+            p.add_argument("--delivery", action="store_true", help="Remove installation identity and logs from the backup clone")
     p = sub.add_parser("restore")
     p.add_argument("package")
     p.add_argument("--skip-models", action="store_true")
@@ -2182,6 +2529,15 @@ def parser():
 
 def main(argv=None):
     args = parser().parse_args(argv)
+    if args.command == "upgrade" and (ROOT / "customer-install.json").is_file():
+        source = customer_source(ROOT)
+        validate_installed_directory(source, ROOT)
+        revision = clean_revision(source)
+        with startup_lock(ROOT):
+            ctx = installed_context(ROOT)
+            ctx.startup_locked = True
+            upgrade_installed(ctx, args, source, revision)
+        return 0
     ctx = Context()
     if args.command == "check-deployment":
         checked = ctx.check_host_directories(args.backup_directory)
@@ -2219,59 +2575,7 @@ def main(argv=None):
     elif args.command == "rebuild":
         rebuild(ctx, args)
     elif args.command == "upgrade":
-        path = None
-        if args.backup:
-            options = argparse.Namespace(directory=None, timeout=args.timeout, keep_paused=True, include_worktree=args.include_worktree, with_images=True, upgrade=True)
-            path = backup(ctx, options)
-        guard = contextlib.ExitStack()
-        try:
-            if not ctx.direct and not ctx.local_server:
-                revision = run(["git", "rev-parse", "--short=12", "HEAD"], cwd=ctx.root).decode().strip()
-                tag = revision + "-upgrade-" + secrets.token_hex(6)
-                new_override = ctx.root / ".maintenance-schedule/upgrade.images.json"
-                json_write(new_override, {"services": {ctx.app: {"image": "reliquary-app:" + tag}, "frontend": {"image": "reliquary-frontend:" + tag}}})
-                ctx.env["COMPOSE_FILE"] = ctx.env.get("COMPOSE_FILE", str(ctx.root / "docker-compose.yml")) + os.pathsep + str(new_override)
-                ctx.env["RELIQUARY_COMMIT"] = revision
-                ctx.compose("build", *build_proxy_args(ctx.env), ctx.app, "frontend")
-            ctx.env.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
-            if path is None:
-                guard.enter_context(ctx.stopped("snapshot", args.timeout, keep_paused=True))
-            ctx.cli_json("export-sources")
-            ctx.cli_json("migrate")
-            if not ctx.cli_json("status").get("paused"):
-                ctx.cli_json("pause", "--mode", "snapshot", "--timeout", str(args.timeout) + "s", "--reason", "manual:upgrade")
-            ctx.cli_json("flush")
-            if path is None:
-                ctx.cli_json("verify")
-            else:
-                verify_upgrade(ctx, path)
-            if not ctx.direct and not ctx.local_server:
-                config = json.loads(ctx.compose("config", "--format", "json"))
-                new_images = {}
-                for service, spec in config["services"].items():
-                    info = json.loads(run(["docker", "image", "inspect", spec["image"]]))[0]
-                    new_images[service] = {"reference": spec["image"], "id": info["Id"]}
-                with tempfile.TemporaryDirectory(prefix=".capture-", dir=ctx.root / ".maintenance-schedule") as temp:
-                    code = source_copy(ctx, Path(temp), True)
-                    remember_runtime(ctx, Path(temp) / "source", code, new_images)
-                persisted = read_env(ctx.root / ".env")
-                persisted.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
-                persisted.update(COMPOSE_FILE=ctx.env["COMPOSE_FILE"], RELIQUARY_COMMIT=revision)
-                write_env(ctx.root / ".env", persisted)
-                ctx.compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "120")
-            ctx.cli_json("resume")
-            if path is None:
-                print("Upgrade verified. No pre-upgrade backup was created.")
-            else:
-                print(f"Upgrade verified. Rollback uses the complete pre-upgrade backup: {path}; restore into an empty environment. Database down migration is not a rollback.")
-        except BaseException:
-            if path is None:
-                print("Upgrade failed without a pre-upgrade backup; inspect the migration state before resuming. Data recovery requires a separately retained backup.", file=sys.stderr)
-            else:
-                print(f"Upgrade failed; environment remains paused. Restore pre-upgrade backup into a fresh environment: {path}", file=sys.stderr)
-            raise
-        finally:
-            guard.close()
+        upgrade(ctx, args)
     elif args.command == "setup-models":
         if not setup_models(ctx, args):
             return 3

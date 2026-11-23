@@ -86,11 +86,8 @@ func (s *EntityService) shelfGuideGaps(ctx context.Context, library *types.Libra
 				return err
 			}
 			gap := ShelfGuideDocumentGap{ModelID: model.Entity.ID, ModelName: model.Entity.CanonicalName, CurrentStage: model.Shelf.CurrentStage, CurrentStageUnset: model.Shelf.CurrentStage == "", ShelfChecklistItem: row, Requirement: requirement}
-			switch row.Status {
-			case "missing", "draft_only":
+			if row.Gap {
 				result.Documents.Add(gap)
-			case "no_file":
-				result.NoFileDocuments.Add(gap)
 			}
 		}
 		for _, region := range library.ShelfConfig.Regions {
