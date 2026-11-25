@@ -1,0 +1,29 @@
+{
+  "name": "reliquary-showcase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "d3-geo": "3.1.1",
+    "topojson-client": "3.1.0",
+    "vue": "3.5.42",
+    "world-atlas": "2.0.2"
+  },
+  "devDependencies": {
+    "@types/d3-geo": "3.1.0",
+    "@types/node": "22.14.0",
+    "@types/topojson-client": "3.1.5",
+    "@types/topojson-specification": "1.0.5",
+    "@vitejs/plugin-vue": "6.0.6",
+    "tsx": "4.23.1",
+    "typescript": "6.0.3",
+    "vite": "7.3.8",
+    "vue-tsc": "3.2.8"
+  }
+}

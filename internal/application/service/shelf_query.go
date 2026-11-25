@@ -48,6 +48,23 @@ func shelfPage(limit, offset int) (int, error) {
 	return limit, nil
 }
 
+// shelfQueryAll reads full pages within the caller's shelf snapshot.
+func (s *EntityService) shelfQueryAll(ctx context.Context, libraryID string, query types.ShelfQueryRequest) ([]types.ShelfQueryItem, error) {
+	query.Limit, query.Offset, query.Detail, query.Facets = 100, 0, types.ShelfQueryDetailFull, false
+	rows := []types.ShelfQueryItem{}
+	for {
+		page, err := s.shelfQuery(ctx, libraryID, query)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, page.Items...)
+		if int64(len(rows)) >= page.Total {
+			return rows, nil
+		}
+		query.Offset = len(rows)
+	}
+}
+
 // ShelfFind returns every matching identity, including cross-category ambiguity.
 func (s *EntityService) ShelfFind(ctx context.Context, libraryID string, input types.ShelfFindRequest) (*types.ShelfFindResult, error) {
 	var result *types.ShelfFindResult

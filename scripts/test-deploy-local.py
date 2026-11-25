@@ -27,7 +27,7 @@ class DeploymentTests(unittest.TestCase):
         (directory / 'docker-compose.yml').write_text('services: {}\n')
         return temp, source, directory
 
-    def test_frontend_then_app_then_all_uses_one_overlay_and_keeps_baselines(self):
+    def test_each_application_uses_one_overlay_and_keeps_the_other_baselines(self):
         temp, source, directory = self.fixture()
         self.addCleanup(temp.cleanup)
         for name in ('VERSION', 'reliquary-admin', 'scripts/reliquary_admin.py', 'docker-compose.yml'):
@@ -39,8 +39,8 @@ class DeploymentTests(unittest.TestCase):
             template = base / 'config/prompt_templates/processing.yaml'
             template.parent.mkdir(parents=True)
             template.write_text(content)
-        heads = iter(('head1', 'head2', 'head3'))
-        base = {'app': 'app-base', 'frontend': 'ui-base'}
+        heads = iter(('head1', 'head2', 'head3', 'head4'))
+        base = {'app': 'app-base', 'frontend': 'ui-base', 'showcase': 'showcase-base'}
         current = {name: {'id': name + '0', 'reference': name + '0', 'commit': base[name]} for name in deployer.SERVICES}
         built, image_ids, commands, build_inputs, frontend_builds = {}, {}, [], [], []
         ctx = mock.Mock(root=directory, env={'COMPOSE_FILE': 'docker-compose.yml'})
@@ -67,8 +67,12 @@ class DeploymentTests(unittest.TestCase):
         def paths(_source, revision, head):
             return {('app-base', 'head1'): {'frontend/src/main.ts'},
                     ('ui-base', 'head1'): {'frontend/src/main.ts'},
-                    ('app-base', 'head2'): {'frontend/src/main.ts', 'cmd/service/main.go'},
-                    ('head1', 'head2'): {'cmd/service/main.go'}}.get((revision, head), {'docs/update.md'})
+                    ('app-base', 'head2'): {'frontend/src/main.ts', 'showcase/src/App.vue'},
+                    ('head1', 'head2'): {'showcase/src/App.vue'},
+                    ('showcase-base', 'head2'): {'frontend/src/main.ts', 'showcase/src/App.vue'},
+                    ('app-base', 'head3'): {'frontend/src/main.ts', 'showcase/src/App.vue', 'cmd/service/main.go'},
+                    ('head1', 'head3'): {'showcase/src/App.vue', 'cmd/service/main.go'},
+                    ('head2', 'head3'): {'cmd/service/main.go'}}.get((revision, head), {'docs/update.md'})
         def runtime(_ctx):
             return {name: {'id': info['id'], 'reference': info['reference'],
                            'labels': {'org.opencontainers.image.revision': info['commit']}}
@@ -94,24 +98,36 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(state['app']['id'], 'app0')
             self.assertEqual(state['frontend']['commit'], 'head1')
             first_frontend_id = state['frontend']['id']
-            self.assertNotEqual(first_frontend_id, 'ui0')
+            self.assertNotEqual(first_frontend_id, 'frontend0')
+            self.assertEqual(state['showcase'], {'commit': 'showcase-base', 'id': 'showcase0'})
+            self.assertEqual(deployer.update(source, directory, all_services=False, dry_run=False), ['showcase'])
+            state = json.loads(override.read_text())['x-reliquary-revisions']
+            self.assertEqual(state['app'], {'commit': 'app-base', 'id': 'app0'})
+            self.assertEqual(state['frontend'], {'commit': 'head1', 'id': first_frontend_id})
+            self.assertEqual(state['showcase']['commit'], 'head2')
+            self.assertNotEqual(state['showcase']['id'], 'showcase0')
+            showcase_id = state['showcase']['id']
             self.assertEqual(deployer.update(source, directory, all_services=False, dry_run=False), ['app'])
             state = json.loads(override.read_text())['x-reliquary-revisions']
-            self.assertEqual(state['app']['commit'], 'head2')
+            self.assertEqual(state['app']['commit'], 'head3')
             self.assertNotEqual(state['app']['id'], 'app0')
             self.assertEqual(state['frontend']['commit'], 'head1')
             self.assertEqual(state['frontend']['id'], first_frontend_id)
-            self.assertEqual(deployer.update(source, directory, all_services=True, dry_run=False), ['app', 'frontend'])
+            self.assertEqual(state['showcase'], {'commit': 'head2', 'id': showcase_id})
+            self.assertEqual(deployer.update(source, directory, all_services=True, dry_run=False), list(deployer.SERVICES))
             state = json.loads(override.read_text())['x-reliquary-revisions']
-            self.assertEqual([state[name]['commit'] for name in deployer.SERVICES], ['head3', 'head3'])
+            self.assertEqual([state[name]['commit'] for name in deployer.SERVICES], ['head4'] * 3)
         self.assertEqual((directory / 'config/prompt_templates/processing.yaml').read_text(),
                          'custom runtime template')
         env = deployer.admin.read_env(directory / '.env')
         self.assertEqual(env['COMPOSE_FILE'].split(os.pathsep).count(str(override)), 1)
-        self.assertEqual(len(build_inputs), 3)
-        self.assertEqual([list(c['services']) for c in build_inputs], [['frontend'], ['app'], ['app', 'frontend']])
+        self.assertEqual([list(c['services']) for c in build_inputs], [['frontend'], ['showcase'], ['app'], list(deployer.SERVICES)])
+        self.assertTrue(build_inputs[1]['services']['showcase']['image'].startswith('reliquary-showcase:'))
         self.assertEqual([args[1:] for args in frontend_builds], [['--reuse-deps'], []])
-        source_check.assert_called_once_with(directory / '.maintenance-runtime', 'app0', ctx.app)
+        self.assertEqual(source_check.call_args_list, [
+            mock.call(directory / '.maintenance-runtime', 'app0', ctx.app),
+            mock.call(directory / '.maintenance-runtime', 'app0', ctx.app),
+        ])
         self.assertEqual(record_runtime.call_count, 2)
         ctx.compose.assert_any_call('exec', '-T', 'frontend', 'nginx', '-s', 'reload')
 
@@ -134,6 +150,12 @@ class DeploymentTests(unittest.TestCase):
         changed = {'agents/pi/Dockerfile', 'agents/pi/package-lock.json', 'agents/chat/service.ts', 'scripts/agent-local.py'}
         self.assertEqual(deployer.affected(changed), set())
         self.assertEqual(deployer.affected(changed | {'internal/handler/mcp.go'}), set(deployer.SERVICES))
+
+    def test_showcase_paths_only_select_the_showcase(self):
+        self.assertEqual(deployer.affected({'showcase/src/App.vue', 'showcase/nginx.conf', '.claude/launch.json'}),
+                         {'showcase'})
+        self.assertEqual(deployer.affected({'showcase/tests/shelf.test.ts'}), set())
+        self.assertEqual(deployer.affected({'frontend/src/api/shelf.ts'}), {'app', 'frontend'})
 
     @contextmanager
     def deployed_changes(self, paths):
@@ -180,7 +202,7 @@ class DeploymentTests(unittest.TestCase):
         with self.deployed_changes({'.env.example'}), \
              mock.patch.object(deployer, 'apply_update', side_effect=apply), \
              redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(deployer.deploy(source, directory), ['app', 'frontend'])
+            self.assertEqual(deployer.deploy(source, directory), list(deployer.SERVICES))
         self.assertEqual(deployer.admin.read_env(env)['FEATURE'], 'on')
         self.assertIn('FEATURE 将补入模板默认值', output.getvalue())
 
@@ -193,7 +215,7 @@ class DeploymentTests(unittest.TestCase):
         with self.deployed_changes({'.env.example'}), \
              mock.patch.object(deployer.subprocess, 'run') as run, \
              redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(deployer.deploy(source, directory, dry_run=True), ['app', 'frontend'])
+            self.assertEqual(deployer.deploy(source, directory, dry_run=True), list(deployer.SERVICES))
         self.assertEqual(env.read_bytes(), before)
         self.assertFalse((directory / '.maintenance-schedule').exists())
         self.assertIn('FEATURE 将补入模板默认值', output.getvalue())
@@ -327,6 +349,32 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual((directory / 'config/prompt_templates/processing.yaml').read_text(), 'custom prompt')
         plan.ctx.compose.assert_called_once_with('config', '--quiet')
 
+    def test_generated_compose_adds_showcase_to_an_existing_customer_installation(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        baselines = self.compose_fixture(source, directory)
+        path = source / 'docker-compose.yml'
+        compose = json.loads(path.read_text())
+        showcase = {'image': 'reliquary-showcase:template', 'pull_policy': 'never',
+                    'ports': [{'published': '8081', 'target': 80}], 'depends_on': {'app': {'condition': 'service_healthy'}}}
+        compose['services']['showcase'] = showcase
+        path.write_text(json.dumps(compose))
+        (source / 'showcase').mkdir()
+        (source / 'showcase/Dockerfile').touch()
+        ctx = mock.Mock(env={'COMPOSE_FILE': 'docker-compose.yml'})
+        images = {name: {'id': 'installed-' + name, 'reference': 'installed-' + name,
+                         'labels': {'org.opencontainers.image.revision': 'base'}}
+                  for name in deployer.BASE_APPLICATION_SERVICES}
+        with mock.patch.object(deployer, 'changed_paths', return_value={'docker-compose.yml', 'showcase/Dockerfile'}), \
+             mock.patch.object(deployer, 'checked_containers'), \
+             mock.patch.object(deployer, 'revision_file', side_effect=lambda _s, _r, name: baselines[name]):
+            plan = deployer.plan_update(source, directory, 'new', customer=True, ctx=ctx, images=images)
+            self.assertEqual(plan.services, list(deployer.SERVICES))
+            with deployer.runtime_update(source, directory, plan, lambda path, *_: json.loads(path.read_text()), []):
+                services = json.loads((directory / 'docker-compose.yml').read_text())['services']
+                self.assertEqual(services['showcase'], showcase)
+                self.assertEqual(services['app']['image'], 'installed-app')
+
     def test_custom_config_and_infrastructure_changes_require_manual_sync(self):
         for changed in ('compose', 'config', 'infra'):
             with self.subTest(changed=changed):
@@ -349,7 +397,7 @@ class DeploymentTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         baselines = self.compose_fixture(source, directory)
         plan = self.config_plan(directory, *baselines)._replace(images={
-            name: {'reference': 'old-' + name, 'id': 'old-' + name} for name in deployer.SERVICES})
+            name: {'reference': 'old-' + name, 'id': 'old-' + name} for name in deployer.BASE_APPLICATION_SERVICES})
         before = {name: (directory / name).read_bytes() for name in baselines}
         env = (directory / '.env').read_bytes()
         starts = []
@@ -414,6 +462,37 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(run.call_count, 3)
         self.assertIn('up', run.call_args.args[0])
 
+    def test_failed_first_showcase_start_removes_it_before_restoring_previous_services(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        ctx = mock.Mock(root=directory, env={'COMPOSE_FILE': 'docker-compose.yml'})
+        images = {name: {'reference': 'old-' + name, 'id': 'old-' + name}
+                  for name in deployer.BASE_APPLICATION_SERVICES}
+        plan = deployer.DeploymentPlan(ctx, 'head', images, dict.fromkeys(images, 'base'),
+                                       list(deployer.SERVICES), False, {'docker-compose.yml'})
+        rollback = mock.Mock()
+        calls = mock.Mock()
+        calls.attach_mock(ctx.compose, 'compose')
+        calls.attach_mock(rollback, 'config_rollback')
+
+        def start(_ctx, services):
+            calls.start(services)
+            if 'showcase' in services:
+                raise deployer.admin.AdminError('showcase failed')
+
+        with mock.patch.object(deployer.admin, 'build_service_images', return_value={'showcase': 'new-showcase'}), \
+             mock.patch.object(deployer.admin, 'image_override', return_value={}), \
+             mock.patch.object(deployer.admin, 'start_application_services', side_effect=start), \
+             mock.patch.object(deployer.admin, 'record_runtime'), \
+             self.assertRaisesRegex(deployer.admin.AdminError, 'showcase failed'):
+            deployer.apply_update(source, directory, plan, container_frontend=True, rollback_runtime=rollback)
+        self.assertEqual(calls.mock_calls, [
+            mock.call.start(list(deployer.SERVICES)),
+            mock.call.compose('rm', '--force', '--stop', 'showcase'),
+            mock.call.config_rollback(),
+            mock.call.start(list(deployer.BASE_APPLICATION_SERVICES)),
+        ])
+
 
     def test_build_proxy_comes_from_runtime_env_only_when_set(self):
         for env_line, expected in (('', False), ('RELIQUARY_BUILD_PROXY=http://proxy.internal:3128\n', True)):
@@ -457,7 +536,8 @@ class DeploymentTests(unittest.TestCase):
             path.write_text('source')
         (directory / 'scripts').mkdir()
         runtime_compose = directory / 'docker-compose.yml'
-        runtime_compose.write_text('{"services":{"app":{"image":"old-app"},"frontend":{"image":"old-frontend"}}}')
+        runtime_compose.write_text(json.dumps({'services': {
+            name: {'image': 'old-' + name} for name in deployer.SERVICES}}))
         runtime_before = runtime_compose.read_bytes()
         (directory / 'customer-install.json').write_text(json.dumps({'status': 'base_ready', 'source': str(source)}))
         extra = 'custom.images.json'
@@ -468,7 +548,11 @@ class DeploymentTests(unittest.TestCase):
         admin.json_write(canonical, previous)
         ctx = mock.Mock(root=directory, env={}, app='app', direct=False, local_server=None,
                         stopped=mock.Mock(return_value=nullcontext()))
-        ctx.compose.side_effect = lambda *args: args[-1].encode() if args[0] == 'ps' else b''
+        def compose(*args):
+            if args == ('config', '--services'):
+                return '\n'.join(deployer.SERVICES).encode()
+            return args[-1].encode() if args[0] == 'ps' else b''
+        ctx.compose.side_effect = compose
         built = {}
         current = {}
 

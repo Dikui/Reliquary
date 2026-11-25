@@ -5,6 +5,7 @@
 !.gitignore
 !.github/
 !.githooks/
+!/showcase/.dockerignore
 
 # 敏感文件
 *.pem
@@ -21,6 +22,7 @@
 node_modules/
 /dist/
 /agents/chat/dist/
+/showcase/dist/
 /build/
 *.log
 

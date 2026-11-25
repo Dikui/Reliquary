@@ -16,6 +16,7 @@ help:
 	@echo "Docker 命令:"
 	@echo "  docker-build-app       构建应用 Docker 镜像 (reliquary-app)"
 	@echo "  docker-build-frontend  构建前端镜像 (reliquary-ui)"
+	@echo "  docker-build-showcase  构建货架展示镜像 (reliquary-showcase)"
 	@echo "  docker-build-all       构建所有 Docker 镜像"
 	@echo "  docker-run            运行 Docker 容器"
 	@echo "  docker-stop           停止 Docker 容器"
@@ -125,8 +126,12 @@ docker-build-frontend:
 	./scripts/build-frontend-dist.sh
 	docker build --platform $(PLATFORM) -f frontend/Dockerfile -t reliquary-ui:latest frontend/
 
+.PHONY: docker-build-showcase
+docker-build-showcase:
+	docker build --platform $(PLATFORM) --build-arg COMMIT_ID_ARG="$$(git rev-parse HEAD)" -t reliquary-showcase:latest showcase/
+
 # Build all Docker images
-docker-build-all: docker-build-app docker-build-frontend
+docker-build-all: docker-build-app docker-build-frontend docker-build-showcase
 
 # Run Docker container (传统方式)
 # Touch .env if missing — docker-compose.yml's `env_file: [.env]` is required

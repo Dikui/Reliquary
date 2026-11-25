@@ -73,7 +73,7 @@ python3 "$HOME/Reliquary/scripts/agent-local.py" pi-configure
 
 按[接入与构建](../agents/chat/README.md#接入与构建)准备仓库外的接入组件、平台凭据与预期入口名单，再执行 `python3 "$HOME/Reliquary/scripts/agent-local.py" configure`。向导配置资料库和模型，检查工具调用，启动后验证各入口的连接。在每个目标群中实际提问和引用答复。
 
-默认占用本机 80、8080 和 6379 端口。网页和后端可用 `--frontend-port`、`--app-port` 修改。需要并行安装时，给 `--project-name` 指定新名字，并通过 `--env-file` 提供不同的 `REDIS_PORT`。命令因下载或构建失败中断时，修正原因后重跑同一安装命令。基础服务已经就绪时，重跑仍会引导配置本地 Pi，并提示可选的群聊 `configure`。
+默认占用本机 80、8080、8081 和 6379 端口。管理端和后端可用 `--frontend-port`、`--app-port` 修改。需要并行安装时，给 `--project-name` 指定新名字，并通过 `--env-file` 提供不同的 `REDIS_PORT` 和 `SHOWCASE_PORT`。命令因下载或构建失败中断时，修正原因后重跑同一安装命令。基础服务已经就绪时，重跑仍会引导配置本地 Pi，并提示可选的群聊 `configure`。
 
 ### 构建代理
 
@@ -137,7 +137,7 @@ macOS 登录后自动恢复可按下节注册，已启用的 Agent 会随基础�
    cd ~/Project/Reliquary
    ./scripts/build-frontend-dist.sh
    RELIQUARY_COMMIT="$(git rev-parse HEAD)" \
-     docker compose --env-file "$HOME/Reliquary/deploy/.env" build app frontend
+     docker compose --env-file "$HOME/Reliquary/deploy/.env" build app frontend showcase
    cd "$HOME/Reliquary/deploy"
    ./reliquary-admin check-deployment
    docker compose up -d --wait postgres redis neo4j
@@ -182,11 +182,21 @@ python3 scripts/install-local.py --update --root "$HOME/Reliquary"
 
 更新汇总会列出运行配置变化。新增环境变量有可用的非机密默认值时补入 `deploy/.env`。已知可在本机生成的机密变量使用随机值，其他凭据需按升级说明填写。客户已有值保留，模板删除的键和变更的默认值只在汇总中列出。
 
-运行 Compose 与已部署版本的生成结果一致时，脚本会从新模板生成配置并保留现有镜像引用。基础服务、网络、端口、应用挂载或依赖发生变化时需人工核对。源码 `config/` 中发生变化的文件按旧版本内容核对后更新，运行提示词目录由客户管理。遇到自定义 Compose 覆盖、同一文件的客户改动或无法自动生成的机密变量，脚本会在切换服务前停止。需人工合并时，先核对升级说明及生效配置，再按下文的手动发布流程应用与验证。自动变更前的旧文件保存在运行目录 `.maintenance-schedule/runtime-config-*`，基础服务更新失败时恢复旧文件。
+运行 Compose 与已部署版本的生成结果一致时，脚本会从新模板生成配置并保留现有镜像引用。新增货架展示服务可随运行配置一并应用。其他基础服务、网络、端口、应用挂载或依赖发生变化时需人工核对。源码 `config/` 中发生变化的文件按旧版本内容核对后更新，运行提示词目录由客户管理。遇到自定义 Compose 覆盖、同一文件的客户改动或无法自动生成的机密变量，脚本会在切换服务前停止。需人工合并时，先核对升级说明及生效配置，再按下文的手动发布流程应用与验证。自动变更前的旧文件保存在运行目录 `.maintenance-schedule/runtime-config-*`，基础服务更新失败时恢复旧文件。
 
 有版本说明时，命令打印当前运行版本之后、目标版本及之前的对应章节，停止时也会显示。根据说明完成所需人工操作和验证。源码有未提交改动、登记路径不符或后端基准不可确认时先修正基准。[升级说明](upgrade-notes.md)
 
 普通部署或入口检查失败时，按输出确认回退结果，修正原因后可重跑更新。迁移、验证或切换中断并提示有待完成的升级时，保持现场，先检查容器日志和数据库迁移状态。确认可继续后，从源码执行 `RELIQUARY_ADMIN_ROOT="$HOME/Reliquary/deploy" ./reliquary-admin upgrade`，成功后再执行一键更新以补齐入口。需要退回时按[升级与失败退回](personal-use.md#升级与失败退回)从已有备份恢复到空环境。未做本次备份时，最近恢复点之后的数据可能丢失。
+
+## 货架展示页
+
+货架展示页随基础服务一起部署。默认访问 `http://127.0.0.1:8081`，管理端仍使用 80 端口。需要改展示页端口时，在运行目录的 `deploy/.env` 设置 `SHOWCASE_PORT`。首次安装可通过 `--env-file` 提供该值。Compose 将展示页端口绑定在 `127.0.0.1`。
+
+在同一份 `deploy/.env` 设置 `RELIQUARY_SHOWCASE_LIBRARY` 可指定展示库，值为开启货架的库 ID 或目录名。已有部署修改该值后，按手动发布流程重建 app 使其生效。留空时，后端自动选择唯一开启货架的库。没有符合条件的库或存在多个候选库时，页面会提示配置问题。
+
+展示页的 nginx 只向 app 转发 `GET /api/v1/showcase/shelf`。`POST /api/v1/showcase/shelf` 返回 405，其他 `/api/`、`/mcp` 和 `/files` 路径返回 404。诊断启动问题可在运行目录执行 `docker compose ps showcase` 和 `docker compose logs --tail 100 showcase`。
+
+由安装脚本生成且未自定义的运行 Compose 可通过一键更新加入展示页。手工维护的部署先用 `./scripts/build-images.sh --showcase` 构建展示镜像，再把源码 Compose 中的 `showcase` 服务合并到运行 Compose，引用已构建的本地镜像并移除 `build` 配置，设置 `pull_policy: never`。按手动发布流程核对后，在运行目录执行 `docker compose up -d --no-build --wait showcase`。
 
 ## 日常维护与升级
 
@@ -220,18 +230,18 @@ docker compose stop
 ```sh
 python3 scripts/deploy-local.py --dry-run  # 只读查看本次更新范围
 python3 scripts/deploy-local.py            # 按改动范围更新
-python3 scripts/deploy-local.py --all      # 手动全量构建、更新前后端
+python3 scripts/deploy-local.py --all      # 手动全量构建、更新后端、管理端和展示页
 ```
 
 入口从源码根目录的 `.deploy.env` 读取 `RELIQUARY_DEPLOY_DIR`；在新 worktree 中需创建该本机文件，也可传 `--deploy-dir /实际运行目录/deploy`。源码有未提交改动时拒绝部署，确保镜像与登记的提交一致。
 
-脚本分别比较前端、后端已部署的提交与当前提交：普通前端文件只更新前端，普通 Go 文件只更新后端；接口目录（`frontend/src/api/`、`internal/handler/`、`internal/router/`）和未知路径保守选择前后端。仅提示词模板（`config/prompt_templates/`）、文档、测试、CI 或代理规则变化时跳过构建。前后端基准各自保存并绑定镜像 ID，前端单独更新不会推进后端基准；前端缺少有效基准时选择全量，后端基准无法确认时拒绝更新，避免漏过数据库迁移检查。
+脚本分别比较 app、frontend、showcase 已部署的提交与当前提交。普通 Go 文件只更新后端，普通 `frontend/` 文件只更新管理端，`showcase/` 下的业务代码、资源和容器配置只更新展示页。`frontend/src/api/` 变化更新后端和管理端，`internal/handler/`、`internal/router/` 和未知路径保守选择所有应用服务。仅提示词模板（`config/prompt_templates/`）、文档、测试、CI 或代理规则变化时跳过构建。三个服务的部署基准各自保存并绑定镜像 ID。管理端缺少有效基准时选择全量，展示页缺少有效基准时重建展示镜像，后端基准无法确认时拒绝更新，避免漏过数据库迁移检查。
 
 普通更新复用前端依赖；`package.json`、锁文件、`.npmrc` 或 Node 版本、平台变化时重新执行 `npm ci`。首次启用复用时也会执行一次干净安装，指纹保存在 `node_modules/.reliquary-deps`。单独调用 `./scripts/build-frontend-dist.sh` 以及手动 `--all` 仍执行干净安装。Go 镜像构建保留模块下载与编译缓存，全量构建也可复用有效的 Docker 缓存。
 
-所有选定镜像构建成功后才切换运行镜像。运行目录只维护一个 `.maintenance-schedule/local-deploy.images.json` 入口，并保留原有 Compose 覆盖配置；重复更新不会追加同名入口。只重建选定容器，等待健康检查、验证前端代理链路并核对实际镜像，不重启 PostgreSQL、Redis 和 Neo4j。后端单独更新时重载 Nginx，刷新后端地址。后端更新后登记源码；前端单独更新先核对已有源码材料，保留材料并跳过重复归档。部署与已安装的启动恢复、备份共用锁。更新失败时恢复原配置、维护工具和原容器；若恢复也失败，命令返回错误，须修复后再使用。
+所有选定镜像构建成功后才切换运行镜像。运行目录只维护一个 `.maintenance-schedule/local-deploy.images.json` 入口，并保留原有 Compose 覆盖配置；重复更新不会追加同名入口。只重建选定容器，等待健康检查、验证前端代理链路并核对实际镜像，不重启 PostgreSQL、Redis 和 Neo4j。后端单独更新时重载 Nginx，刷新后端地址。后端更新后登记源码；管理端或展示页单独更新先核对已有源码材料，保留材料并跳过重复归档。部署与已安装的启动恢复、备份共用锁。更新失败时恢复原配置、维护工具和原容器；若恢复也失败，命令返回错误，须修复后再使用。
 
-`--all` 表示全量更新两个应用服务，不负责首次安装、数据库迁移或覆盖机器配置。快速部署的运行覆盖配置将 `AUTO_MIGRATE` 设为 `false`，避免启动时执行迁移。发现 `migrations/` 变化时，任何模式均停止并提示执行显式升级流程。升级默认不备份，只有明确选择 `upgrade --backup` 才创建升级前备份。发现 `config/`（不含 `prompt_templates/`）或 `docker-compose.yml` 变化时，停止并提示按本节原有手动发布流程核对、同步运行配置。首次安装仍按前文执行。脚本不清理历史镜像和备份。
+`--all` 表示全量更新三个应用服务，不负责首次安装、数据库迁移或覆盖机器配置。快速部署的运行覆盖配置将 `AUTO_MIGRATE` 设为 `false`，避免启动时执行迁移。发现 `migrations/` 变化时，任何模式均停止并提示执行显式升级流程。升级默认不备份，只有明确选择 `upgrade --backup` 才创建升级前备份。发现 `config/`（不含 `prompt_templates/`）或 `docker-compose.yml` 变化时，停止并提示按本节原有手动发布流程核对、同步运行配置。首次安装仍按前文执行。脚本不清理历史镜像和备份。
 
 运行配置的变化仅涉及 `.env.example` 时，脚本在构建前为新增且尚未配置的键补入非空的非机密默认值，或生成可由本机创建的随机密钥。脚本列出补入的键名，保留已有值，并报告模板中的键删除和默认值变更。缺少外部凭据时停止，提示先在 `deploy/.env` 中填写对应的键。`--dry-run` 只预览配置变更。写入时在运行目录的 `.maintenance-schedule/runtime-config-*` 中保留原 `.env`，更新失败时恢复原文件。
 

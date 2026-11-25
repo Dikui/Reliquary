@@ -39,6 +39,27 @@ services:
       - Reliquary-network
     restart: unless-stopped
 
+  showcase:
+    image: reliquary-showcase:${RELIQUARY_VERSION:-0.8.1}
+    pull_policy: build
+    build:
+      context: ./showcase
+      args:
+        COMMIT_ID_ARG: ${RELIQUARY_COMMIT:-}
+    ports:
+      - "127.0.0.1:${SHOWCASE_PORT:-8081}:80"
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - Reliquary-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     image: reliquary-app:${RELIQUARY_VERSION:-0.8.1}
     pull_policy: build
@@ -117,6 +138,7 @@ services:
       # 文档解析语言。优先级：此环境变量（部署级覆盖，非空即生效）
       # > Accept-Language 请求头 > 内置默认值 (zh-CN)。留空则跟随请求方 Accept-Language。
       - RELIQUARY_LANGUAGE=${RELIQUARY_LANGUAGE:-}
+      - RELIQUARY_SHOWCASE_LIBRARY=${RELIQUARY_SHOWCASE_LIBRARY:-}
       # 系统管理员也可在「设置 → 系统设置」打开（立即生效）。未落库时读本变量。
       # gin 信任的代理 CIDR（逗号分隔）；显式设为空字符串则禁用代理信任。
       # 默认信任 loopback + 私网段（容器网络内 nginx 已覆盖）

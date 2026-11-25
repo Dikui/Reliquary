@@ -43,6 +43,7 @@ class AdminError(RuntimeError):
 
 LOCAL_IMAGES = ".maintenance-schedule/local-deploy.images.json"
 PENDING_UPGRADE = ".maintenance-schedule/local-upgrade.pending.json"
+APPLICATION_IMAGES = {"app": "reliquary-app", "frontend": "reliquary-ui", "showcase": "reliquary-showcase"}
 
 
 @contextlib.contextmanager
@@ -995,7 +996,7 @@ def images_save(ctx, target, code):
                 raise AdminError(f"Image {image} contains a credential in Config.Env ({key}); rebuild it without credentials")
         reference = image
         tag_created = False
-        is_application = bool(spec.get("build")) or service in {ctx.app, "frontend"}
+        is_application = bool(spec.get("build")) or service == ctx.app or service in APPLICATION_IMAGES
         if is_application:
             tag = code["commit"][:12] + ("-dirty-" + info["Id"].split(":")[-1][:12] if code["dirty"] else "")
             reference = f"reliquary-{service}:{tag}"
@@ -1883,7 +1884,7 @@ def installed_context(directory):
 def build_service_images(ctx, source, revision, services, *, container_frontend):
     version = (source / "VERSION").read_text().strip()
     tag = f"{version}-{revision[:12]}-{secrets.token_hex(3)}"
-    builds = {name: {"image": ("reliquary-ui:" if name == "frontend" else "reliquary-app:") + tag,
+    builds = {name: {"image": f"{APPLICATION_IMAGES[name]}:{tag}",
                      "build": {"args": {"VERSION_ARG": version, "COMMIT_ID_ARG": revision}}} for name in services}
     if container_frontend and "frontend" in builds:
         builds["frontend"]["build"]["dockerfile"] = "Dockerfile.build"
@@ -1921,6 +1922,8 @@ def compose_with_images(ctx, override):
 def start_application_services(ctx, services):
     subprocess.run(["docker", "compose", "up", "-d", "--no-deps", "--no-build", "--pull", "never",
                     "--wait", "--wait-timeout", "120", *services], cwd=ctx.root, env=ctx.env, check=True)
+    if "app" not in services and "frontend" not in services:
+        return
     if "app" in services and "frontend" not in services:
         # Nginx resolves the app hostname at startup; replacement may change its IP.
         ctx.compose("exec", "-T", "frontend", "nginx", "-s", "reload")
@@ -1945,10 +1948,13 @@ def upgrade(ctx, args, *, switch_image=None, activate=None, retry=False):
             revision = run(["git", "rev-parse", "--short=12", "HEAD"], cwd=ctx.root).decode().strip()
             tag = revision + "-upgrade-" + secrets.token_hex(6)
             new_override = ctx.root / ".maintenance-schedule/upgrade.images.json"
-            json_write(new_override, {"services": {ctx.app: {"image": "reliquary-app:" + tag}, "frontend": {"image": "reliquary-frontend:" + tag}}})
+            services = {ctx.app: {"image": "reliquary-app:" + tag}, "frontend": {"image": "reliquary-frontend:" + tag}}
+            if "showcase" in ctx.compose("config", "--services").decode().splitlines():
+                services["showcase"] = {"image": f"{APPLICATION_IMAGES['showcase']}:{tag}"}
+            json_write(new_override, {"services": services})
             ctx.env["COMPOSE_FILE"] = ctx.env.get("COMPOSE_FILE", str(ctx.root / "docker-compose.yml")) + os.pathsep + str(new_override)
             ctx.env["RELIQUARY_COMMIT"] = revision
-            ctx.compose("build", *build_proxy_args(ctx.env), ctx.app, "frontend")
+            ctx.compose("build", *build_proxy_args(ctx.env), *services)
         if switch_image is None:
             ctx.env.pop("RELIQUARY_ADMIN_HELPER_IMAGE", None)
         if path is None:
@@ -2009,6 +2015,8 @@ def upgrade_installed(ctx, args, source, revision):
         raise AdminError("An upgrade is pending; inspect the database before retrying without --backup. "
                          "A new backup would not capture the pre-upgrade state.")
     services = ["app", "frontend"]
+    if "showcase" in ctx.compose("config", "--services").decode().splitlines():
+        services.append("showcase")
     refs = build_service_images(ctx, source, revision, services, container_frontend=True)
     override = image_override(refs, dict.fromkeys(services, revision), require_app_label=True)
     canonical = ctx.root / LOCAL_IMAGES

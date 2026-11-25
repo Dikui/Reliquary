@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shutil
 import subprocess
 import tempfile
 from typing import NamedTuple
@@ -14,7 +15,8 @@ from typing import NamedTuple
 import reliquary_admin as admin
 
 SOURCE = Path(__file__).resolve().parent.parent
-SERVICES = ("app", "frontend")
+BASE_APPLICATION_SERVICES = ("app", "frontend")
+SERVICES = (*BASE_APPLICATION_SERVICES, "showcase")
 
 
 def git(source, *args):
@@ -36,14 +38,18 @@ def affected(paths):
     for name in paths:
         if name.startswith(('agents/chat/', 'agents/feishu/', 'agents/pi/')) or name == 'scripts/agent-local.py':
             continue  # Optional agent entries have their own images and state-preserving updates.
-        if name.startswith(("docs/", ".scratch/", ".github/", "config/prompt_templates/")) or name.startswith(("README", "AGENTS.md", "CLAUDE.md")):
+        if name.startswith(("docs/", ".scratch/", ".github/", "config/prompt_templates/")) or name.startswith(("README", "AGENTS.md", "CLAUDE.md")) or name == ".claude/launch.json":
             continue
         if name.endswith(("_test.go", ".test.ts")) or name.startswith("scripts/test-"):
             continue
-        if name.startswith(("frontend/src/api/", "internal/handler/", "internal/router/")):
+        if name.startswith(("internal/handler/", "internal/router/")):
             selected.update(SERVICES)
+        elif name.startswith("frontend/src/api/"):
+            selected.update(BASE_APPLICATION_SERVICES)
         elif name.startswith("frontend/"):
             selected.add("frontend")
+        elif name.startswith("showcase/"):
+            selected.add("showcase")
         elif name.startswith(("cmd/", "internal/")) or name in {"go.mod", "go.sum"}:
             selected.add("app")
         else:
@@ -53,6 +59,10 @@ def affected(paths):
 
 def checked_containers(ctx, images):
     for service in SERVICES:
+        if service not in images:
+            if service in BASE_APPLICATION_SERVICES:
+                raise admin.AdminError(f"{service} image is missing; repair the existing deployment first")
+            continue
         container = ctx.compose("ps", "--all", "--quiet", service).decode().strip()
         if not container:
             raise admin.AdminError(f"{service} container is missing; repair the existing deployment first")
@@ -105,6 +115,8 @@ def plan_update(source, directory, head, *, all_services=False, dry_run=False, c
     previous = json.loads(override.read_text()) if override.is_file() else {}
     revisions, differences = {}, {}
     for service in SERVICES:
+        if service not in images:
+            continue
         stored = previous.get("x-reliquary-revisions", {}).get(service, {})
         revision = stored.get("commit") if stored.get("id") == images[service]["id"] else None
         revision = revision or images[service]["labels"].get("org.opencontainers.image.revision")
@@ -118,10 +130,13 @@ def plan_update(source, directory, head, *, all_services=False, dry_run=False, c
                        or name in {"docker-compose.yml", ".env.example"}}
     if not customer and runtime_changes - {".env.example"}:
         raise admin.AdminError("Runtime configuration changed; review and sync it using docs/local-deployment.md before a manual release")
-    selected = set(SERVICES) if all_services or differences["frontend"] is None else {
-        service for service in SERVICES if service in affected(differences[service])}
+    candidates = set(differences)
+    if customer and "docker-compose.yml" in runtime_changes and (source / "showcase/Dockerfile").is_file():
+        candidates.add("showcase")
+    selected = candidates if all_services or differences["frontend"] is None else {
+        service for service in candidates if service in affected(differences.get(service))}
     if runtime_changes:
-        selected.update(SERVICES)
+        selected.update(candidates)
     services = [name for name in SERVICES if name in selected]
     return DeploymentPlan(ctx, head, images, revisions, services,
                           any(name.startswith("migrations/") for name in app_changes), runtime_changes)
@@ -216,7 +231,9 @@ def regenerate_compose(live, desired, previous, env, render):
     try:
         current = json.loads(live.read_text())
         project = current["name"]
-        current_images = {service: current["services"][service]["image"] for service in SERVICES}
+        current_images = {service: current["services"][service]["image"] for service in BASE_APPLICATION_SERVICES}
+        if "showcase" in current["services"]:
+            current_images["showcase"] = current["services"]["showcase"]["image"]
     except (ValueError, KeyError, TypeError) as error:
         raise config_conflict(live.name) from error
     if previous is None or not desired.is_file():
@@ -233,6 +250,8 @@ def regenerate_compose(live, desired, previous, env, render):
     for config in (old, new):
         for service, image in current_images.items():
             spec = config.get("services", {}).get(service)
+            if service == "showcase" and config is old and spec is None:
+                continue
             if not spec or spec.get("pull_policy") != "never":
                 raise config_conflict(live.name)
             spec["image"] = image
@@ -240,13 +259,14 @@ def regenerate_compose(live, desired, previous, env, render):
         return None
     if current != old:
         raise config_conflict(live.name)
-    # Application updates recreate only app/frontend. Require manual review for
-    # infrastructure changes or changes to app mounts, network access and dependencies.
+    # The showcase is the only application service that can be added automatically.
+    added_showcase = "showcase" not in old["services"] and "showcase" in new["services"]
+
     def infrastructure(config):
         return {**config, "services": {name: spec if name not in SERVICES else {
             key: spec.get(key) for key in ("volumes", "networks", "network_mode", "ports",
                                           "depends_on", "container_name", "env_file")
-        } for name, spec in config["services"].items()}}
+        } for name, spec in config["services"].items() if not (added_showcase and name == "showcase")}}
     if infrastructure(old) != infrastructure(new):
         raise config_conflict(live.name + "（基础服务或应用挂载、网络、端口、依赖已变更）")
     return (json.dumps(new, indent=2) + "\n").encode()
@@ -351,21 +371,28 @@ def apply_update(source, directory, plan, *, all_services=False, dry_run=False, 
         if not all_services:
             command.append("--reuse-deps")
         subprocess.run(command, cwd=source, env={**os.environ, "VITE_FRONTEND_COMMIT": head}, check=True)
-    references = {name: images[name]["reference"] for name in SERVICES}
+    references = {name: images[name]["reference"] for name in SERVICES if name in images}
     references.update(admin.build_service_images(ctx, source, head, services, container_frontend=container_frontend))
-    updated = admin.image_override(references, {name: head if name in services else revisions[name] for name in SERVICES})
+    updated = admin.image_override(references, {name: head if name in services else revisions[name] for name in references})
 
     override = directory / admin.LOCAL_IMAGES
     files = [directory / ".env", override]
+    startup = directory.parent / "scripts/startup.py"
+    startup_source = source / "scripts/startup-local.py"
+    update_startup = "app" in services and startup.is_file() and startup_source.is_file()
     if "app" in services:
         files += [directory / name for name in ("reliquary-admin", "VERSION", "scripts/reliquary_admin.py")]
+    if update_startup:
+        files.append(startup)
     saved = {path: path.read_bytes() if path.exists() else None for path in files}
     old_compose = ctx.env["COMPOSE_FILE"]
     new_compose = admin.compose_with_images(ctx, override)
+    started = False
     try:
         admin.json_write(override, updated)
         ctx.env["COMPOSE_FILE"] = new_compose
         admin.set_compose_files(directory / ".env", new_compose)
+        started = True
         admin.start_application_services(ctx, services)
         current = admin.runtime_images(ctx)
         checked_containers(ctx, current)
@@ -374,20 +401,28 @@ def apply_update(source, directory, plan, *, all_services=False, dry_run=False, 
                 raise admin.AdminError(f"{name} did not start the built image")
         if "app" in services:
             admin.refresh_maintenance_tools(ctx, source)
+            if update_startup:
+                shutil.copy2(startup_source, startup)
             admin.record_runtime(ctx, source)
     except BaseException:
-        for path, contents in saved.items():
-            if contents is None:
-                path.unlink(missing_ok=True)
-            else:
-                path.write_bytes(contents)
-        ctx.env["COMPOSE_FILE"] = old_compose
-        if rollback_runtime is not None:
-            rollback_runtime()
-        print("Deployment failed; restoring the previous containers", flush=True)
-        admin.start_application_services(ctx, services)
-        if "app" in services:
-            admin.record_runtime(ctx, source)
+        try:
+            if started and "showcase" in services and "showcase" not in images:
+                ctx.compose("rm", "--force", "--stop", "showcase")
+        finally:
+            for path, contents in saved.items():
+                if contents is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    path.write_bytes(contents)
+            ctx.env["COMPOSE_FILE"] = old_compose
+            if rollback_runtime is not None:
+                rollback_runtime()
+            print("Deployment failed; restoring the previous containers", flush=True)
+            previous_services = [name for name in services if name in images]
+            if previous_services:
+                admin.start_application_services(ctx, previous_services)
+            if "app" in previous_services:
+                admin.record_runtime(ctx, source)
         raise
     print("Deployment complete: " + ", ".join(services), flush=True)
     return services
@@ -395,7 +430,7 @@ def apply_update(source, directory, plan, *, all_services=False, dry_run=False, 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--all", action="store_true", help="Build and update both app and frontend, with a clean frontend dependency install")
+    parser.add_argument("--all", action="store_true", help="Build and update all application services, with a clean frontend dependency install")
     parser.add_argument("--dry-run", action="store_true", help="Read deployed revisions and show selected services without changing anything")
     parser.add_argument("--deploy-dir", type=Path, help="Override RELIQUARY_DEPLOY_DIR in the source .deploy.env")
     args = parser.parse_args()

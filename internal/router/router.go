@@ -188,6 +188,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 		}
 		v1.GET("/search/options", params.SearchHandler.Options)
 		RegisterEntityRoutes(v1, params.EntityHandler)
+		if params.EntityHandler != nil {
+			v1.GET("/showcase/shelf", params.EntityHandler.ShowcaseShelf(config.ShowcaseLibrary()))
+		}
 		RegisterEmbeddingRebuildRoutes(v1, params.EmbeddingRebuildHandler)
 		if params.TopicHandler != nil {
 			RegisterTopicRoutes(v1, params.TopicHandler, accessGuards)

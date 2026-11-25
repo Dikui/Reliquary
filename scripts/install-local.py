@@ -220,20 +220,32 @@ def install_images(deploy, values, app_port, frontend_port, source, revision, ag
             values[key] = str(port)
     version = (source / 'VERSION').read_text().strip()
     tag = f'{version}-{revision[:12]}-{secrets.token_hex(3)}'
+    config_path = deploy / 'docker-compose.yml'
+    config = json.loads(config_path.read_text())
+    builds = {
+        'app': {'image': f'reliquary-app:{tag}', 'build': {'args': {'VERSION_ARG': version, 'COMMIT_ID_ARG': revision}}},
+        'frontend': {'image': f'reliquary-ui:{tag}', 'build': {'dockerfile': 'Dockerfile.build', 'args': {'COMMIT_ID_ARG': revision}}},
+    }
+    if 'showcase' in config['services']:
+        showcase_source = source
+        showcase_revision = revision
+        # A historical application may be needed temporarily to restore an older schema.
+        if not (source / 'showcase/Dockerfile').is_file():
+            showcase_source = SOURCE
+            showcase_revision = run('git', '-C', str(SOURCE), 'rev-parse', 'HEAD').strip()
+        builds['showcase'] = {
+            'image': f"{admin.APPLICATION_IMAGES['showcase']}:{tag}",
+            'build': {'context': str(showcase_source / 'showcase'), 'args': {'COMMIT_ID_ARG': showcase_revision}},
+        }
     print('构建后端及网页镜像，自动下载 Go、Node 和前端依赖…', flush=True)
     with tempfile.TemporaryDirectory(prefix='reliquary-install-') as temporary:
         override = Path(temporary) / 'build.json'
-        override.write_text(json.dumps({'services': {
-            'app': {'image': f'reliquary-app:{tag}', 'build': {'args': {'VERSION_ARG': version, 'COMMIT_ID_ARG': revision}}},
-            'frontend': {'image': f'reliquary-ui:{tag}', 'build': {'dockerfile': 'Dockerfile.build', 'args': {'COMMIT_ID_ARG': revision}}},
-        }}))
+        override.write_text(json.dumps({'services': builds}))
         subprocess.run(['docker', 'compose', '--env-file', str(deploy / '.env'), '-f', str(source / 'docker-compose.yml'),
-                        '-f', str(override), 'build', *build_proxy_args({**values, **os.environ}), 'app', 'frontend'],
+                        '-f', str(override), 'build', *build_proxy_args({**values, **os.environ}), *builds],
                        cwd=source, check=True)
-    config_path = deploy / 'docker-compose.yml'
-    config = json.loads(config_path.read_text())
-    config['services']['app']['image'] = f'reliquary-app:{tag}'
-    config['services']['frontend']['image'] = f'reliquary-ui:{tag}'
+    for name, spec in builds.items():
+        config['services'][name]['image'] = spec['image']
     admin.json_write(config_path, config)
     values['RELIQUARY_VERSION'] = tag
     # Keep the generated callbacks aligned with the customer-selected ports.

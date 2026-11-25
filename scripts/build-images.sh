@@ -28,6 +28,7 @@ show_help() {
     echo "  -a, --all      构建所有镜像（默认）"
     echo "  -p, --app      仅构建应用镜像"
     echo "  -f, --frontend 仅构建前端镜像"
+    echo "  --showcase     仅构建货架展示镜像"
     echo "  -c, --clean    清理所有本地镜像"
     echo "  -v, --version  显示版本信息"
     exit 0
@@ -185,12 +186,25 @@ build_frontend_image() {
     fi
 }
 
+build_showcase_image() {
+    log_info "构建货架展示镜像 (reliquary-showcase)..."
+    cd "$PROJECT_ROOT"
+    get_version_info
+    docker build \
+        --platform "$PLATFORM" \
+        --build-arg COMMIT_ID_ARG="$COMMIT_ID" \
+        -t "reliquary-showcase:$VERSION" \
+        -t "reliquary-showcase:$COMMIT_ID" \
+        showcase/
+}
+
 # 构建所有镜像
 build_all_images() {
     log_info "开始构建所有镜像..."
 
     local app_result=0
     local frontend_result=0
+    local showcase_result=0
 
     # 构建应用镜像
     build_app_image
@@ -200,6 +214,9 @@ build_all_images() {
     # 构建前端镜像
     build_frontend_image
     frontend_result=$?
+
+    build_showcase_image
+    showcase_result=$?
 
     # 显示构建结果
     echo ""
@@ -216,7 +233,13 @@ build_all_images() {
         log_error "✗ 前端镜像构建失败"
     fi
 
-    if [ $app_result -eq 0 ] && [ $frontend_result -eq 0 ]; then
+    if [ $showcase_result -eq 0 ]; then
+        log_success "✓ 货架展示镜像构建成功"
+    else
+        log_error "✗ 货架展示镜像构建失败"
+    fi
+
+    if [ $app_result -eq 0 ] && [ $frontend_result -eq 0 ] && [ $showcase_result -eq 0 ]; then
         log_success "所有镜像构建完成！"
         return 0
     else
@@ -233,16 +256,19 @@ clean_images() {
     log_info "停止相关容器..."
     docker stop $(docker ps -q --filter "ancestor=reliquary-app:latest" 2>/dev/null) 2>/dev/null || true
     docker stop $(docker ps -q --filter "ancestor=reliquary-ui:latest" 2>/dev/null) 2>/dev/null || true
+    docker stop $(docker ps -q --filter "ancestor=reliquary-showcase:latest" 2>/dev/null) 2>/dev/null || true
 
     # 删除相关容器
     log_info "删除相关容器..."
     docker rm $(docker ps -aq --filter "ancestor=reliquary-app:latest" 2>/dev/null) 2>/dev/null || true
     docker rm $(docker ps -aq --filter "ancestor=reliquary-ui:latest" 2>/dev/null) 2>/dev/null || true
+    docker rm $(docker ps -aq --filter "ancestor=reliquary-showcase:latest" 2>/dev/null) 2>/dev/null || true
 
     # 删除镜像
     log_info "删除本地镜像..."
     docker rmi reliquary-app:latest 2>/dev/null || true
     docker rmi reliquary-ui:latest 2>/dev/null || true
+    docker rmi reliquary-showcase:latest 2>/dev/null || true
 
     docker image prune -f
 
@@ -254,6 +280,7 @@ clean_images() {
 BUILD_ALL=false
 BUILD_APP=false
 BUILD_FRONTEND=false
+BUILD_SHOWCASE=false
 CLEAN_IMAGES=false
 
 # 没有参数时默认构建所有镜像
@@ -270,6 +297,8 @@ while [ "$1" != "" ]; do
         -p | --app )        BUILD_APP=true
                             ;;
         -f | --frontend )   BUILD_FRONTEND=true
+                            ;;
+        --showcase )        BUILD_SHOWCASE=true
                             ;;
         -c | --clean )      CLEAN_IMAGES=true
                             ;;
@@ -313,6 +342,9 @@ if [ "$BUILD_FRONTEND" = true ]; then
     exit $?
 fi
 
-
+if [ "$BUILD_SHOWCASE" = true ]; then
+    build_showcase_image
+    exit $?
+fi
 
 exit 0

@@ -66,6 +66,11 @@ func DocumentProcessTimeout(cfg *Config) time.Duration {
 	return DefaultDocumentProcessTimeout
 }
 
+// ShowcaseLibrary returns the deployment's optional shelf library ID or directory.
+func ShowcaseLibrary() string {
+	return strings.TrimSpace(os.Getenv("RELIQUARY_SHOWCASE_LIBRARY"))
+}
+
 type ModelConfig struct {
 	Type       string                 `yaml:"type"       json:"type"`
 	Source     string                 `yaml:"source"     json:"source"`

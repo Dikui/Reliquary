@@ -49,16 +49,20 @@ def main(ollama):
         application = 'OrbStack' if context == 'orbstack' else 'Docker'
         run(['orb', 'start'] if context == 'orbstack' else ['/usr/bin/open', '-gj', '-a', 'Docker'])
         raise RuntimeError(f'{application} is starting; retrying next minute')
+    config = json.loads(run(COMPOSE + ['config', '--format', 'json']))
+    expected = SERVICES | ({'showcase'} & config['services'].keys())
     raw = run(COMPOSE + ['ps', '--format', 'json'])
     rows = json.loads(raw) if raw.lstrip().startswith('[') else [json.loads(line) for line in raw.splitlines() if line.strip()]
-    ready = {row.get('Service') for row in rows} == SERVICES and all(
+    ready = {row.get('Service') for row in rows} == expected and all(
         row.get('State') == 'running' and row.get('Health', '') in ('', 'healthy') for row in rows)
     if not ready:
         print('Restoring project services', flush=True)
         for services in (['postgres', 'redis', 'neo4j'], []):
             run(COMPOSE + ['up', '-d', '--no-build', '--pull', 'never', '--wait', '--wait-timeout', '120'] + services, timeout=180)
-    config = json.loads(run(COMPOSE + ['config', '--format', 'json']))
-    for name, target, path in [('app', 8080, '/health'), ('frontend', 80, '/')]:
+    endpoints = [('app', 8080, '/health'), ('frontend', 80, '/')]
+    if 'showcase' in expected:
+        endpoints.append(('showcase', 80, '/'))
+    for name, target, path in endpoints:
         port = next(p['published'] for p in config['services'][name]['ports'] if int(p['target']) == target)
         if not reachable(f'http://127.0.0.1:{port}{path}'):
             raise RuntimeError(f'{name} is not ready; retrying next minute')

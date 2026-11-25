@@ -35,7 +35,7 @@ func (s *EntityService) ExportShelf(ctx context.Context, libraryID string, input
 			at = *input.Query.AsOf
 		}
 		for _, line := range lines {
-			all, err := reader.shelfExportModels(ctx, libraryID, types.ShelfQueryRequest{AncestorID: line.ID, AsOf: &at})
+			all, err := reader.shelfQueryAll(ctx, libraryID, types.ShelfQueryRequest{AncestorID: line.ID, AsOf: &at})
 			if err != nil {
 				return err
 			}
@@ -43,7 +43,7 @@ func (s *EntityService) ExportShelf(ctx context.Context, libraryID string, input
 			filter.AncestorID, filter.AsOf = line.ID, &at
 			rows := all
 			if len(filter.SaleStatuses)+len(filter.Parameters)+len(filter.Composition) > 0 || filter.Certification != nil || filter.DocumentGaps || filter.PartID != "" {
-				rows, err = reader.shelfExportModels(ctx, libraryID, filter)
+				rows, err = reader.shelfQueryAll(ctx, libraryID, filter)
 				if err != nil {
 					return err
 				}
@@ -60,22 +60,6 @@ func (s *EntityService) ExportShelf(ctx context.Context, libraryID string, input
 		return nil, err
 	}
 	return writeShelfWorkbook(sheets)
-}
-
-func (s *EntityService) shelfExportModels(ctx context.Context, libraryID string, query types.ShelfQueryRequest) ([]types.ShelfQueryItem, error) {
-	query.Limit, query.Offset, query.Detail, query.Facets = 100, 0, types.ShelfQueryDetailFull, false
-	rows := []types.ShelfQueryItem{}
-	for {
-		page, err := s.shelfQuery(ctx, libraryID, query)
-		if err != nil {
-			return nil, err
-		}
-		rows = append(rows, page.Items...)
-		if int64(len(rows)) >= page.Total {
-			return rows, nil
-		}
-		query.Offset = len(rows)
-	}
 }
 
 func (s *EntityService) shelfExportLine(ctx context.Context, library *types.Library, line types.Entity, all, rows []types.ShelfQueryItem, at time.Time) (shelfExportSheet, error) {
