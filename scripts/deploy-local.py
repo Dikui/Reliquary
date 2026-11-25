@@ -95,7 +95,7 @@ def update(source, directory, *, all_services, dry_run):
     summary = []
     config_update = nullcontext()
     if plan.runtime_changes and not plan.migrations:
-        config_update = runtime_update(source, directory, plan, None, summary, dry_run=dry_run)
+        config_update = runtime_update(source, directory, plan, admin.render_runtime_compose, summary, dry_run=dry_run)
     with config_update as rollback:
         for result in summary:
             print(f"- 运行配置：{result}", flush=True)
@@ -103,7 +103,7 @@ def update(source, directory, *, all_services, dry_run):
                             rollback_runtime=rollback)
 
 
-def plan_update(source, directory, head, *, all_services=False, dry_run=False, customer=False, ctx=None, images=None):
+def plan_update(source, directory, head, *, all_services=False, dry_run=False, ctx=None, images=None):
     if (directory / admin.PENDING_UPGRADE).is_file():
         raise admin.AdminError("A database upgrade is pending; inspect and finish it with reliquary-admin upgrade")
     if dry_run and (directory / ".maintenance-runtime.previous").exists() and not (directory / ".maintenance-runtime").exists():
@@ -128,10 +128,8 @@ def plan_update(source, directory, head, *, all_services=False, dry_run=False, c
     runtime_changes = {name for name in app_changes if
                        (name.startswith("config/") and not name.startswith("config/prompt_templates/"))
                        or name in {"docker-compose.yml", ".env.example"}}
-    if not customer and runtime_changes - {".env.example"}:
-        raise admin.AdminError("Runtime configuration changed; review and sync it using docs/local-deployment.md before a manual release")
     candidates = set(differences)
-    if customer and "docker-compose.yml" in runtime_changes and (source / "showcase/Dockerfile").is_file():
+    if "docker-compose.yml" in runtime_changes and (source / "showcase/Dockerfile").is_file():
         candidates.add("showcase")
     selected = candidates if all_services or differences["frontend"] is None else {
         service for service in candidates if service in affected(differences.get(service))}
@@ -431,7 +429,7 @@ def apply_update(source, directory, plan, *, all_services=False, dry_run=False, 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--all", action="store_true", help="Build and update all application services, with a clean frontend dependency install")
-    parser.add_argument("--dry-run", action="store_true", help="Read deployed revisions and show selected services without changing anything")
+    parser.add_argument("--dry-run", action="store_true", help="Preview selected services and runtime configuration changes")
     parser.add_argument("--deploy-dir", type=Path, help="Override RELIQUARY_DEPLOY_DIR in the source .deploy.env")
     args = parser.parse_args()
     try:

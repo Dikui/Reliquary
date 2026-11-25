@@ -25,15 +25,6 @@ RESTORE_STATE = '.maintenance-restore.json'
 DATA_INSTALL_LOG = 'logs/data-install.log'
 
 
-def runtime_compose(config, project):
-    config['name'] = project
-    for service in config['services'].values():
-        if 'build' in service:
-            del service['build']
-            service['pull_policy'] = 'never'
-    return config
-
-
 def deployment_env(text, root, project):
     updates = {
         'RELIQUARY_VAULT_DIR': str(root / 'data/vault'),
@@ -54,13 +45,6 @@ def deployment_env(text, root, project):
 
 def run(*args, **kwargs):
     return subprocess.check_output(args, text=True, **kwargs)
-
-
-def render_runtime_compose(template, env_path, project):
-    config = json.loads(run('docker', 'compose', '--project-name', project, '--env-file', str(env_path),
-                            '--file', str(template), 'config', '--no-interpolate',
-                            '--no-env-resolution', '--no-path-resolution', '--format', 'json'))
-    return runtime_compose(config, project)
 
 
 def prepare(root, env_file, project, *, record=None):
@@ -86,7 +70,7 @@ def prepare(root, env_file, project, *, record=None):
         env_path = stage / '.env'
         env_path.touch(mode=0o600)
         env_path.write_text(deployment_env(text, root, project))
-        config = render_runtime_compose(SOURCE / 'docker-compose.yml', env_path, project)
+        config = admin.render_runtime_compose(SOURCE / 'docker-compose.yml', env_path, project)
         (stage / 'docker-compose.yml').write_text(json.dumps(config, indent=2) + '\n')
         shutil.copytree(SOURCE / 'config', stage / 'config')
         for name in ('reliquary-admin', 'VERSION'):
@@ -437,8 +421,8 @@ def update(root, *, backup=False):
                 image_version = images['app']['labels'].get('org.opencontainers.image.version')
                 if deployer.semver(image_version):
                     current = image_version
-            plan = deployer.plan_update(SOURCE, directory, head, customer=True, ctx=ctx, images=images)
-            with deployer.runtime_update(SOURCE, directory, plan, render_runtime_compose, config_summary) as rollback:
+            plan = deployer.plan_update(SOURCE, directory, head, ctx=ctx, images=images)
+            with deployer.runtime_update(SOURCE, directory, plan, admin.render_runtime_compose, config_summary) as rollback:
                 if plan.migrations:
                     results['数据库迁移'] = '升级未完成，请检查升级日志'
                     if backup:

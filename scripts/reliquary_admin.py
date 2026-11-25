@@ -1871,6 +1871,20 @@ def validate_installed_directory(source, directory):
         raise AdminError("The deployment directory must be outside the source checkout")
 
 
+def render_runtime_compose(template, env_path, project):
+    config = json.loads(subprocess.check_output([
+        "docker", "compose", "--project-name", project, "--env-file", str(env_path),
+        "--file", str(template), "config", "--no-interpolate", "--no-env-resolution",
+        "--no-path-resolution", "--format", "json",
+    ], text=True))
+    config["name"] = project
+    for service in config["services"].values():
+        if "build" in service:
+            del service["build"]
+            service["pull_policy"] = "never"
+    return config
+
+
 def installed_context(directory):
     runtime_env = read_env(directory / ".env")
     ctx = Context(directory, runtime_env)

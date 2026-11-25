@@ -158,34 +158,32 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(deployer.affected({'frontend/src/api/shelf.ts'}), {'app', 'frontend'})
 
     @contextmanager
-    def deployed_changes(self, paths):
+    def deployed_changes(self, paths, *, baselines=None, services=deployer.SERVICES):
         # Simulate the deployed images and their source diffs without Docker or Git.
+        baselines = baselines or {}
         with mock.patch.object(deployer.admin, 'clean_revision', return_value='head'), \
              mock.patch.object(deployer.admin.Context, 'compose'), \
              mock.patch.object(deployer.admin, 'runtime_images', return_value={
                  name: {'id': name, 'reference': name, 'labels': {'org.opencontainers.image.revision': 'base'}}
-                 for name in deployer.SERVICES}), \
+                 for name in services}), \
              mock.patch.object(deployer, 'checked_containers'), \
-             mock.patch.object(deployer, 'changed_paths', return_value=paths), \
-             mock.patch.object(deployer, 'revision_file', return_value=b''):
+             mock.patch.object(deployer, 'changed_paths', return_value=set(paths)), \
+             mock.patch.object(deployer, 'revision_file', side_effect=lambda _s, _r, name: baselines.get(name)):
             yield
 
-    def test_migration_or_other_config_blocks_even_manual_full_build(self):
+    def test_migrations_block_even_manual_full_build_with_runtime_changes(self):
         temp, source, directory = self.fixture()
         self.addCleanup(temp.cleanup)
         (source / '.env.example').write_text('FEATURE=on\n')
-        before = (directory / '.env').read_bytes()
-        for changed, error in [({'migrations/001.sql'}, 'Database migrations changed'),
-                               ({'.env.example', 'migrations/001.sql'}, 'Database migrations changed'),
-                               ({'.env.example', 'config/config.yaml'}, 'Runtime configuration changed'),
-                               ({'migrations/001.sql', 'docker-compose.yml'}, 'Runtime configuration changed'),
-                               ({'.env.example', 'docker-compose.yml'}, 'Runtime configuration changed')]:
+        before = {path.name: path.read_bytes() for path in directory.iterdir()}
+        for changed in ({'migrations/001.sql'}, {'.env.example', 'migrations/001.sql'},
+                        {'migrations/001.sql', 'docker-compose.yml'}):
             with self.subTest(changed=changed), \
                  self.deployed_changes(changed | {'config/prompt_templates/processing.yaml'}), \
                  mock.patch.object(deployer.subprocess, 'run') as run, \
-                 self.assertRaisesRegex(deployer.admin.AdminError, error):
+                 self.assertRaisesRegex(deployer.admin.AdminError, 'Database migrations changed'):
                 deployer.deploy(source, directory, all_services=True)
-            self.assertEqual((directory / '.env').read_bytes(), before)
+            self.assertEqual({path.name: path.read_bytes() for path in directory.iterdir()}, before)
             run.assert_not_called()
 
     def test_env_template_default_is_reported_and_added_before_deploying(self):
@@ -349,31 +347,73 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual((directory / 'config/prompt_templates/processing.yaml').read_text(), 'custom prompt')
         plan.ctx.compose.assert_called_once_with('config', '--quiet')
 
-    def test_generated_compose_adds_showcase_to_an_existing_customer_installation(self):
+    def compose_config_output(self, command, *, text):
+        # Stand in for `docker compose config --format json` using the synthetic template.
+        return Path(command[command.index('--file') + 1]).read_text()
+
+    def test_local_deploy_syncs_showcase_compose_before_deploying_selected_services(self):
         temp, source, directory = self.fixture()
         self.addCleanup(temp.cleanup)
         baselines = self.compose_fixture(source, directory)
         path = source / 'docker-compose.yml'
         compose = json.loads(path.read_text())
         showcase = {'image': 'reliquary-showcase:template', 'pull_policy': 'never',
-                    'ports': [{'published': '8081', 'target': 80}], 'depends_on': {'app': {'condition': 'service_healthy'}}}
-        compose['services']['showcase'] = showcase
+                    'ports': [{'published': '8081', 'target': 80}],
+                    'depends_on': {'app': {'condition': 'service_healthy'}}}
+        compose['services']['showcase'] = {**showcase, 'build': {'context': './showcase'}}
         path.write_text(json.dumps(compose))
         (source / 'showcase').mkdir()
         (source / 'showcase/Dockerfile').touch()
-        ctx = mock.Mock(env={'COMPOSE_FILE': 'docker-compose.yml'})
-        images = {name: {'id': 'installed-' + name, 'reference': 'installed-' + name,
-                         'labels': {'org.opencontainers.image.revision': 'base'}}
-                  for name in deployer.BASE_APPLICATION_SERVICES}
-        with mock.patch.object(deployer, 'changed_paths', return_value={'docker-compose.yml', 'showcase/Dockerfile'}), \
-             mock.patch.object(deployer, 'checked_containers'), \
-             mock.patch.object(deployer, 'revision_file', side_effect=lambda _s, _r, name: baselines[name]):
-            plan = deployer.plan_update(source, directory, 'new', customer=True, ctx=ctx, images=images)
-            self.assertEqual(plan.services, list(deployer.SERVICES))
-            with deployer.runtime_update(source, directory, plan, lambda path, *_: json.loads(path.read_text()), []):
-                services = json.loads((directory / 'docker-compose.yml').read_text())['services']
-                self.assertEqual(services['showcase'], showcase)
-                self.assertEqual(services['app']['image'], 'installed-app')
+
+        def apply(_source, _directory, plan, **_kwargs):
+            services = json.loads((directory / 'docker-compose.yml').read_text())['services']
+            self.assertEqual(services['showcase'], showcase)
+            self.assertEqual(services['app']['image'], 'installed-app')
+            self.assertEqual((directory / 'config/config.yaml').read_text(), 'new config')
+            return plan.services
+
+        with self.deployed_changes(baselines.keys() | {'showcase/Dockerfile'},
+                                   baselines=baselines, services=deployer.BASE_APPLICATION_SERVICES), \
+             mock.patch.object(deployer.subprocess, 'check_output', side_effect=self.compose_config_output), \
+             mock.patch.object(deployer, 'apply_update', side_effect=apply), \
+             redirect_stdout(io.StringIO()):
+            self.assertEqual(deployer.deploy(source, directory), list(deployer.SERVICES))
+
+    def test_local_deploy_requires_manual_merge_for_edited_compose_or_custom_override(self):
+        for conflict in ('docker-compose.yml', 'COMPOSE_FILE'):
+            with self.subTest(conflict=conflict):
+                temp, source, directory = self.fixture()
+                self.addCleanup(temp.cleanup)
+                baselines = self.compose_fixture(source, directory, custom=conflict == 'docker-compose.yml')
+                if conflict == 'COMPOSE_FILE':
+                    (directory / 'custom.yml').write_text('services: {}\n')
+                    (directory / '.env').write_text(f'COMPOSE_FILE=docker-compose.yml{os.pathsep}custom.yml\n')
+                before = {name: (directory / name).read_bytes() for name in [*baselines, '.env']}
+                with self.deployed_changes(baselines, baselines=baselines), \
+                     mock.patch.object(deployer.subprocess, 'check_output', side_effect=self.compose_config_output), \
+                     mock.patch.object(deployer, 'apply_update') as apply, \
+                     self.assertRaisesRegex(deployer.admin.AdminError, f'{conflict}.*需要人工合并'):
+                    deployer.deploy(source, directory)
+                self.assertEqual({name: (directory / name).read_bytes() for name in before}, before)
+                self.assertFalse((directory / '.maintenance-schedule').exists())
+                apply.assert_not_called()
+
+    def test_local_dry_run_previews_runtime_compose_and_config_without_writing(self):
+        temp, source, directory = self.fixture()
+        self.addCleanup(temp.cleanup)
+        baselines = self.compose_fixture(source, directory)
+        (source / '.env.example').write_text('FEATURE=on\n')
+        before = {name: (directory / name).read_bytes() for name in [*baselines, '.env']}
+        with self.deployed_changes(baselines.keys() | {'.env.example'}, baselines=baselines), \
+             mock.patch.object(deployer.subprocess, 'check_output', side_effect=self.compose_config_output), \
+             mock.patch.object(deployer.subprocess, 'run') as run, \
+             redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(deployer.deploy(source, directory, dry_run=True), list(deployer.SERVICES))
+        self.assertEqual({name: (directory / name).read_bytes() for name in before}, before)
+        self.assertFalse((directory / '.maintenance-schedule').exists())
+        for expected in ('docker-compose.yml 将更新', 'config/config.yaml 将更新', 'FEATURE 将补入模板默认值'):
+            self.assertIn(expected, output.getvalue())
+        run.assert_not_called()
 
     def test_custom_config_and_infrastructure_changes_require_manual_sync(self):
         for changed in ('compose', 'config', 'infra'):

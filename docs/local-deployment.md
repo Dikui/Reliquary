@@ -176,7 +176,7 @@ git pull
 python3 scripts/install-local.py --update --root "$HOME/Reliquary"
 ```
 
-更新命令非交互，使用当前分支已提交的源码，输出分支、提交和版本。无迁移时按改动范围更新前后端。有迁移时先从源码构建两者，再暂停写入、导出旧采集记录、执行并验证迁移，检查新容器并登记镜像对应的提交和源码，然后恢复写入。两条路径都在 Docker 内构建网页。基础服务完成后更新已配置的 Pi 和群聊。Pi 会试调用模型，启用中的群聊会等容器就绪，已停用的群聊会在下次启动时应用新镜像。
+更新命令非交互，使用当前分支已提交的源码，输出分支、提交和版本。无迁移时按改动范围更新应用服务。有迁移时先从源码构建应用镜像，再暂停写入、导出旧采集记录、执行并验证迁移，检查新容器并登记镜像对应的提交和源码，然后恢复写入。两条路径都在 Docker 内构建网页。基础服务完成后更新已配置的 Pi 和群聊。Pi 会试调用模型，启用中的群聊会等容器就绪，已停用的群聊会在下次启动时应用新镜像。
 
 默认不备份，必要迁移照常执行。明确需要本次升级前恢复点时，在命令末尾加 `--backup`，只在走数据库升级时创建并校验完整备份。月度计划独立执行。
 
@@ -196,7 +196,7 @@ python3 scripts/install-local.py --update --root "$HOME/Reliquary"
 
 展示页的 nginx 只向 app 转发 `GET /api/v1/showcase/shelf`。`POST /api/v1/showcase/shelf` 返回 405，其他 `/api/`、`/mcp` 和 `/files` 路径返回 404。诊断启动问题可在运行目录执行 `docker compose ps showcase` 和 `docker compose logs --tail 100 showcase`。
 
-由安装脚本生成且未自定义的运行 Compose 可通过一键更新加入展示页。手工维护的部署先用 `./scripts/build-images.sh --showcase` 构建展示镜像，再把源码 Compose 中的 `showcase` 服务合并到运行 Compose，引用已构建的本地镜像并移除 `build` 配置，设置 `pull_policy: never`。按手动发布流程核对后，在运行目录执行 `docker compose up -d --no-build --wait showcase`。
+由安装脚本生成且未自定义的运行 Compose 可通过客户一键更新或 `deploy-local.py` 加入展示页。需要人工合并时，先用 `./scripts/build-images.sh --showcase` 构建展示镜像，再把源码 Compose 中的 `showcase` 服务合并到运行 Compose，引用已构建的本地镜像并移除 `build` 配置，设置 `pull_policy: never`。按手动发布流程核对后，在运行目录执行 `docker compose up -d --no-build --wait showcase`。
 
 ## 日常维护与升级
 
@@ -228,7 +228,7 @@ docker compose stop
 完成上述安装并提交源码后，在源码仓库运行：
 
 ```sh
-python3 scripts/deploy-local.py --dry-run  # 只读查看本次更新范围
+python3 scripts/deploy-local.py --dry-run  # 只读查看选定服务和运行配置变更
 python3 scripts/deploy-local.py            # 按改动范围更新
 python3 scripts/deploy-local.py --all      # 手动全量构建、更新后端、管理端和展示页
 ```
@@ -241,9 +241,9 @@ python3 scripts/deploy-local.py --all      # 手动全量构建、更新后端�
 
 所有选定镜像构建成功后才切换运行镜像。运行目录只维护一个 `.maintenance-schedule/local-deploy.images.json` 入口，并保留原有 Compose 覆盖配置；重复更新不会追加同名入口。只重建选定容器，等待健康检查、验证前端代理链路并核对实际镜像，不重启 PostgreSQL、Redis 和 Neo4j。后端单独更新时重载 Nginx，刷新后端地址。后端更新后登记源码；管理端或展示页单独更新先核对已有源码材料，保留材料并跳过重复归档。部署与已安装的启动恢复、备份共用锁。更新失败时恢复原配置、维护工具和原容器；若恢复也失败，命令返回错误，须修复后再使用。
 
-`--all` 表示全量更新三个应用服务，不负责首次安装、数据库迁移或覆盖机器配置。快速部署的运行覆盖配置将 `AUTO_MIGRATE` 设为 `false`，避免启动时执行迁移。发现 `migrations/` 变化时，任何模式均停止并提示执行显式升级流程。升级默认不备份，只有明确选择 `upgrade --backup` 才创建升级前备份。发现 `config/`（不含 `prompt_templates/`）或 `docker-compose.yml` 变化时，停止并提示按本节原有手动发布流程核对、同步运行配置。首次安装仍按前文执行。脚本不清理历史镜像和备份。
+`--all` 表示全量更新三个应用服务，不负责首次安装或数据库迁移。快速部署的运行覆盖配置将 `AUTO_MIGRATE` 设为 `false`，避免启动时执行迁移。发现 `migrations/` 变化时，任何模式均停止并提示执行显式升级流程。升级默认不备份，只有明确选择 `upgrade --backup` 才创建升级前备份。首次安装仍按前文执行。脚本不清理历史镜像和备份。
 
-运行配置的变化仅涉及 `.env.example` 时，脚本在构建前为新增且尚未配置的键补入非空的非机密默认值，或生成可由本机创建的随机密钥。脚本列出补入的键名，保留已有值，并报告模板中的键删除和默认值变更。缺少外部凭据时停止，提示先在 `deploy/.env` 中填写对应的键。`--dry-run` 只预览配置变更。写入时在运行目录的 `.maintenance-schedule/runtime-config-*` 中保留原 `.env`，更新失败时恢复原文件。
+`deploy-local.py` 按[已有安装更新](#已有安装更新)的规则，在构建前同步 `.env.example`、`docker-compose.yml` 和 `config/`（不含 `prompt_templates/`）的变更。运行 Compose 与已部署版本的渲染结果一致时，脚本可重新生成 Compose，并把新增的货架展示服务纳入部署计划。待同步的运行文件与基准不一致、自定义 `COMPOSE_FILE` 覆盖或不支持自动同步的基础服务及挂载等变更会提示人工合并。写入前在 `.maintenance-schedule/runtime-config-*` 保存原配置，更新失败时恢复原文件。`--dry-run` 执行相同的配置核对，预览待更新的服务、文件和环境变量变更，运行目录保持只读。
 
 ### 提示词配置
 

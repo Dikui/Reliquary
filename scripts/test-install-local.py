@@ -67,7 +67,7 @@ class InstallationTests(unittest.TestCase):
                                    'postgres': {'image': 'postgres', 'volumes': [{'source': 'postgres-data', 'target': '/data'}]}},
                       'volumes': {'postgres-data': {'name': 'reliquary_postgres-data'}}}
             with mock.patch.object(installer.shutil, 'which', return_value='/usr/bin/docker'), \
-                 mock.patch.object(installer, 'run', side_effect=[json.dumps(config), '']) as command:
+                 mock.patch.object(subprocess, 'check_output', side_effect=[json.dumps(config), '']) as command:
                 installer.prepare(root, env, 'reliquary')
             text = (root / 'deploy/.env').read_text()
             self.assertIn('DB_PASSWORD="keep # password"', text)
@@ -81,7 +81,7 @@ class InstallationTests(unittest.TestCase):
             self.assertEqual(runtime['services']['app']['pull_policy'], 'never')
             self.assertEqual(runtime['volumes'], config['volumes'])
             self.assertNotIn('password', (root / 'deploy/docker-compose.yml').read_text())
-            self.assertIn('--no-env-resolution', command.call_args_list[0].args)
+            self.assertIn('--no-env-resolution', command.call_args_list[0].args[0])
             self.assertTrue((root / 'scripts/startup.py').is_file())
             self.assertTrue((root / 'deploy/scripts/reliquary_admin.py').is_file())
             templates = list((installer.SOURCE / 'config/prompt_templates').glob('*.yaml'))
@@ -94,13 +94,13 @@ class InstallationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             with mock.patch.object(installer.shutil, 'which', return_value='/usr/bin/docker'), \
-                 mock.patch.object(installer, 'run', side_effect=subprocess.CalledProcessError(1, ['docker'])):
+                 mock.patch.object(subprocess, 'check_output', side_effect=subprocess.CalledProcessError(1, ['docker'])):
                 with self.assertRaises(subprocess.CalledProcessError):
                     installer.prepare(root, None, 'reliquary')
             self.assertFalse((root / 'deploy').exists())
             self.assertEqual(list(root.glob('.deploy-*')), [])
             with mock.patch.object(installer.shutil, 'which', return_value='/usr/bin/docker'), \
-                 mock.patch.object(installer, 'run', side_effect=[json.dumps({'services': {}}), '']):
+                 mock.patch.object(subprocess, 'check_output', side_effect=[json.dumps({'services': {}}), '']):
                 installer.prepare(root, None, 'reliquary')
             preserved = (root / 'deploy/.env').read_bytes()
             with self.assertRaisesRegex(ValueError, 'already exists'):
@@ -255,7 +255,7 @@ class CustomerDataInstallationTests(unittest.TestCase):
         self.add_mocks()
 
     def add_mocks(self):
-        def command(*args, **_):
+        def command(args, **_):
             if '--is-ancestor' in args:
                 self.assertEqual(args[-2:], (self.old, self.head))
                 if self.ancestry_error:
@@ -323,7 +323,7 @@ class CustomerDataInstallationTests(unittest.TestCase):
             setattr(self, name, patcher.start())
         for patcher in (
             mock.patch.object(installer.shutil, 'which', return_value='/usr/bin/docker'),
-            mock.patch.object(installer, 'run', side_effect=command),
+            mock.patch.object(subprocess, 'check_output', side_effect=command),
             mock.patch.object(installer.subprocess, 'run', side_effect=docker),
             mock.patch.object(installer.admin.Context, 'compose', side_effect=compose),
             mock.patch.object(installer.admin.Context, 'sql', side_effect=sql),
