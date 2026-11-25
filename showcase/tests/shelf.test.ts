@@ -81,6 +81,15 @@ test('country lookup also matches region keys, standard names and IEC name prefi
   assert.equal(findCountryRegion(regions, 'AU'), undefined)
 })
 
+test('an exact IEC region wins over IEC sub-regions listed before it', () => {
+  const regions = [
+    { key: 'iec_latam', name: 'IEC-拉美' },
+    { key: 'iec_europe', name: 'IEC-欧洲' },
+    { key: 'iec', name: 'IEC' },
+  ]
+  assert.equal(findCountryRegion(regions, 'DE'), regions[2])
+})
+
 test('catalog filters combine region, product line, canonical status and name search', () => {
   const rows = expandShelf(snapshot(
     model({ sale_statuses: [sale(), sale({ region: japan.key })] }),

@@ -99,14 +99,17 @@ export function findCountryRegion(regions: Region[], code: string): Region | und
   // Region keys and names may differ in case, width or spaces from the configured candidates.
   const key = (name: string) => name.normalize('NFKC').replace(/\s+/g, '').toLowerCase()
   const { names, prefix } = countryRegionCandidates(code)
-  for (const candidate of names.map(key)) {
-    const match = regions.find((region) => [region.key, region.name].some((value) => {
-      const own = key(value)
-      return own === candidate || (prefix && own.startsWith(candidate))
-    }))
-    if (match) return match
+  const candidates = names.map(key)
+  const matches = (test: (own: string, candidate: string) => boolean) => {
+    for (const candidate of candidates) {
+      const match = regions.find((region) => [region.key, region.name].some((value) => test(key(value), candidate)))
+      if (match) return match
+    }
+    return undefined
   }
-  return undefined
+  // An exact key or name wins over a prefix, so a plain "IEC" region beats "IEC-拉美".
+  return matches((own, candidate) => own === candidate) ??
+    (prefix ? matches((own, candidate) => own.startsWith(candidate)) : undefined)
 }
 
 export interface ShelfFilters {
