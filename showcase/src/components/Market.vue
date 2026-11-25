@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { globeCountries, mountAtlas } from '../atlas'
 import { countryStandard, marketShortcuts } from '../config/countryRegions'
-import { findCountryRegion, searchKey, type Region, type ShelfRow } from '../data/shelf'
+import { findCountryRegion, findCountryRegions, searchKey, type Region, type ShelfRow } from '../data/shelf'
 
 const props = defineProps<{
   rows: ShelfRow[]
@@ -36,10 +36,12 @@ const active = ref(-1)
 let atlas: ReturnType<typeof mountAtlas>
 
 const country = computed(() => countriesByCode.get(selected.value))
-const region = computed(() => country.value ? findCountryRegion(props.regions, selected.value) : undefined)
+const countryRegions = computed(() => country.value ? findCountryRegions(props.regions, selected.value) : [])
+const region = computed(() => countryRegions.value[0])
+const regionNames = computed(() => countryRegions.value.map(({ name }) => name).join(' / '))
 const regionalRows = computed(() => {
-  const key = region.value?.key
-  return key ? props.rows.filter((row) => row.regionKey === key) : []
+  const keys = new Set(countryRegions.value.map(({ key }) => key))
+  return props.rows.filter((row) => keys.has(row.regionKey))
 })
 const produced = computed(() => regionalRows.value.filter((row) => row.status.key === 'GA'))
 const visible = computed(() => production.value ? produced.value : regionalRows.value)
@@ -161,7 +163,7 @@ onBeforeUnmount(() => atlas?.dispose())
           <p class="market-selection" role="status">
             <template v-if="!country">选择国家或地区，查看适用货架</template>
             <template v-else-if="!regionalRows.length">暂无该地区货架</template>
-            <template v-else>{{ region?.name }} · 共 {{ regionalRows.length }} 条记录</template>
+            <template v-else>{{ regionNames }} · 共 {{ regionalRows.length }} 条记录</template>
           </p>
           <div v-if="regionalRows.length" class="market-stat">
             <div><strong>{{ regionalRows.length }}</strong><span>条记录</span></div>
@@ -181,7 +183,7 @@ onBeforeUnmount(() => atlas?.dispose())
         <ul v-if="visible.length" ref="products" class="market-products" aria-label="适用产品">
           <li v-for="row in visible" :key="row.id">
             <a class="market-product" href="#detail-title" @click.prevent="emit('open', row, country?.label ?? '')">
-              <span class="market-product-body"><strong>{{ row.model.name }}</strong><small>{{ row.model.product_name }}</small></span>
+              <span class="market-product-body"><strong>{{ row.model.name }}</strong><small>{{ row.model.product_name }}<template v-if="countryRegions.length > 1"> · {{ row.regionLabel }}</template></small></span>
               <span class="badge" :class="row.status.tone">{{ row.statusLabel }}</span>
             </a>
           </li>

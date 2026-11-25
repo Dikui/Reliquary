@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { certificationStatus, checklistTone, expandShelf, filterShelf, findCountryRegion, snapshotDate, summarizeShelf } from '../src/data/shelf'
+import { certificationStatus, checklistTone, expandShelf, filterShelf, findCountryRegion, findCountryRegions, snapshotDate, summarizeShelf } from '../src/data/shelf'
 import type { SaleStatus, ShelfModel, ShelfSnapshot } from '../src/data/shelf'
 
 const mainland = { key: 'cn', name: '中国大陆' }
@@ -81,13 +81,22 @@ test('country lookup also matches region keys, standard names and IEC name prefi
   assert.equal(findCountryRegion(regions, 'AU'), undefined)
 })
 
-test('an exact IEC region wins over IEC sub-regions listed before it', () => {
-  const regions = [
+test('IEC countries show their sub-region first, then the generic IEC region', () => {
+  const [latam, europe, africa, iec] = [
     { key: 'iec_latam', name: 'IEC-拉美' },
     { key: 'iec_europe', name: 'IEC-欧洲' },
+    { key: 'iec_africa', name: 'IEC-非洲' },
     { key: 'iec', name: 'IEC' },
   ]
-  assert.equal(findCountryRegion(regions, 'DE'), regions[2])
+  const regions = [latam, europe, africa, iec]
+  assert.deepEqual(findCountryRegions(regions, 'DE'), [europe, iec])
+  assert.deepEqual(findCountryRegions(regions, 'BR'), [latam, iec])
+  assert.deepEqual(findCountryRegions(regions, 'EG'), [africa, iec])
+  // A country outside every sub-region gets the generic IEC region only, never a sub-region by prefix.
+  assert.deepEqual(findCountryRegions(regions, 'IN'), [iec])
+  assert.deepEqual(findCountryRegions([latam, europe], 'IN'), [])
+  // Listed countries keep their own region and never add IEC.
+  assert.deepEqual(findCountryRegions([...regions, { key: 'jp', name: 'JP' }], 'JP'), [{ key: 'jp', name: 'JP' }])
 })
 
 test('catalog filters combine region, product line, canonical status and name search', () => {

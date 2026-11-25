@@ -1,4 +1,4 @@
-import { countryRegionCandidates } from '../config/countryRegions'
+import { countryRegionGroups, type RegionGroup } from '../config/countryRegions'
 
 export interface Region {
   key: string
@@ -95,21 +95,30 @@ export function expandShelf(snapshot: ShelfSnapshot): ShelfRow[] {
   })
 }
 
-export function findCountryRegion(regions: Region[], code: string): Region | undefined {
-  // Region keys and names may differ in case, width or spaces from the configured candidates.
-  const key = (name: string) => name.normalize('NFKC').replace(/\s+/g, '').toLowerCase()
-  const { names, prefix } = countryRegionCandidates(code)
-  const candidates = names.map(key)
+// Region keys and names may differ in case, width or spaces from the configured candidates.
+const regionKey = (name: string) => name.normalize('NFKC').replace(/\s+/g, '').toLowerCase()
+
+function resolveGroup(regions: Region[], { names, prefix }: RegionGroup): Region | undefined {
+  const candidates = names.map(regionKey)
   const matches = (test: (own: string, candidate: string) => boolean) => {
     for (const candidate of candidates) {
-      const match = regions.find((region) => [region.key, region.name].some((value) => test(key(value), candidate)))
+      const match = regions.find((region) => [region.key, region.name].some((value) => test(regionKey(value), candidate)))
       if (match) return match
     }
     return undefined
   }
-  // An exact key or name wins over a prefix, so a plain "IEC" region beats "IEC-拉美".
   return matches((own, candidate) => own === candidate) ??
     (prefix ? matches((own, candidate) => own.startsWith(candidate)) : undefined)
+}
+
+// Every configured region a country's records may sit under, most specific first.
+export function findCountryRegions(regions: Region[], code: string): Region[] {
+  const found = countryRegionGroups(code).map((group) => resolveGroup(regions, group))
+  return [...new Set(found.filter((region): region is Region => region !== undefined))]
+}
+
+export function findCountryRegion(regions: Region[], code: string): Region | undefined {
+  return findCountryRegions(regions, code)[0]
 }
 
 export interface ShelfFilters {
