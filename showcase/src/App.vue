@@ -4,9 +4,8 @@ import Catalog from './components/Catalog.vue'
 import Market from './components/Market.vue'
 import ShelfDetail from './components/ShelfDetail.vue'
 import ShelfOverview from './components/ShelfOverview.vue'
+import HeroMedia from './components/HeroMedia.vue'
 import clouLogo from './assets/clou.png'
-import coverMotion from './assets/cover-motion.webp'
-import coverStill from './assets/cover-still.webp'
 import { expandShelf, snapshotDate, type ShelfFilters, type ShelfRow, type ShelfSnapshot } from './data/shelf'
 
 const navLinks = [
@@ -27,7 +26,9 @@ const compared = shallowRef<ShelfRow[]>([])
 const menuOpen = ref(false)
 const scrolled = ref(false)
 const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
-const paused = ref(motion.matches)
+const paused = ref(false)
+const reduced = ref(motion.matches)
+const mediaReady = ref(false)
 const hero = ref<HTMLElement | null>(null)
 const bridge = ref<HTMLCanvasElement | null>(null)
 const abort = new AbortController()
@@ -103,7 +104,7 @@ function trackScroll() {
 }
 
 function updateMotion(event: MediaQueryListEvent) {
-  paused.value = event.matches
+  reduced.value = event.matches
 }
 
 onMounted(() => {
@@ -143,8 +144,8 @@ onBeforeUnmount(() => {
     </header>
 
     <section id="home" ref="hero" class="hero" :hidden="Boolean(detail)" aria-labelledby="hero-title">
-      <div class="bg media-ready" aria-hidden="true">
-        <img class="bg-video is-active" :src="paused ? coverStill : coverMotion" alt="">
+      <div class="bg media-ready" :class="{ 'video-ready': mediaReady }" aria-hidden="true">
+        <HeroMedia :paused="paused || reduced" :hidden="Boolean(detail)" @ready="mediaReady = $event" />
       </div>
       <div class="hero-inner">
         <div class="hero-copy">
@@ -161,7 +162,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="hero-foot"><a href="#market-title" @click.prevent="navigate('market-title')">向下浏览<span class="chevron" aria-hidden="true"></span></a></div>
-      <button class="motion-toggle" type="button" @click="paused = !paused">{{ paused ? '播放动画' : '暂停动画' }}</button>
+      <button class="motion-toggle" type="button" :hidden="reduced || !mediaReady" @click="paused = !paused">{{ paused ? '播放动画' : '暂停动画' }}</button>
     </section>
     <canvas ref="bridge" class="globe-bridge" aria-hidden="true" hidden></canvas>
 

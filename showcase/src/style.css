@@ -38,7 +38,8 @@ a, button, select { touch-action: manipulation; }
 }
 .skip:focus { transform: none; }
 .topbar { position: fixed; inset: 0 0 auto; z-index: 3; }
-.topbar.is-scrolled { background: #04111ef2; box-shadow: 0 1px 0 var(--line); backdrop-filter: blur(14px); }
+/* The bar is near-opaque; a backdrop blur would re-blur the moving cover on every scroll frame. */
+.topbar.is-scrolled { background: #04111ef2; box-shadow: 0 1px 0 var(--line); }
 .nav {
   height: calc(67 * var(--u)); padding-inline: calc(32 * var(--u)) calc(43 * var(--u));
   display: flex; align-items: center; justify-content: space-between; position: relative;
@@ -92,9 +93,11 @@ a, button, select { touch-action: manipulation; }
   width: max(100vw, calc(100dvh * 1.6)); height: max(62.5vw, 100dvh);
   background: radial-gradient(ellipse at 50% 55%, #073a60, #05172b 46%, #020c16 73%);
 }
-.bg-video, .fallback-globe { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
-.bg-video { object-fit: cover; object-position: 51% 8%; opacity: 0; transition: opacity .9s linear; }
-.bg.media-ready .bg-video.is-active { opacity: 1; }
+.bg-video, .bg-still, .fallback-globe { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+/* Assets carry the customer's hue-rotate(-45deg) saturate(1.12) shift baked in, so no per-frame filter runs. */
+.bg-video, .bg-still { object-fit: cover; object-position: 51% 8%; }
+.bg-video { opacity: 0; transition: opacity .9s linear; }
+.bg.video-ready .bg-video.is-active { opacity: 1; }
 .bg-video.is-instant { transition: none; }
 .motion-toggle {
   position: absolute; right: max(18px, calc(32 * var(--u))); bottom: max(18px, env(safe-area-inset-bottom));

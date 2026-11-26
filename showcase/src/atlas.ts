@@ -37,13 +37,12 @@ interface Country extends CountryName {
 type CountryShape = Feature<Polygon | MultiPolygon, Country>;
 type LandShape = Feature<Polygon | MultiPolygon, CountryName>;
 type Camera = { yaw: number; pitch: number; zoom: number };
-type View = Pick<Camera, 'yaw' | 'pitch'>;
 type Size = {width: number; height: number; pixelRatio: number};
 type DrawOptions = Size & {
   x: number;
   y: number;
   radius: number;
-  camera: View;
+  camera: Camera;
   selectedCountry?: CountryShape;
   hoveredCountry?: CountryShape;
   detail?: number;
@@ -96,30 +95,84 @@ const countriesByCode = new Map(countries.map((country) => [country.properties.c
 const countryBounds = countries.map((feature) => ({feature, bounds: d3.geoBounds(feature)}));
 const globeLand = topojson.feature(topology, topology.objects.land);
 const countryBorders = topojson.mesh(topology, topology.objects.countries, (a, b) => a !== b);
-// Use fewer vertices while the globe is moving, keeping each arc's endpoints shared.
-const [longitudeStep, latitudeStep] = topology.transform.scale;
-const bridgeTopology = {...topology, arcs: topology.arcs.map((arc) => {
-  if (arc.length < 5) return arc;
+// Simplify in unit-sphere coordinates so the tolerance also bounds projected error near the poles.
+function simplifyArc(arc: number[][], tolerance: number) {
+  if (arc.length < 3) return arc;
+  const radians = Math.PI / 180;
+  const points = arc.map(([longitude, latitude]) => {
+    const lon = longitude * radians, lat = latitude * radians;
+    const cosLat = Math.cos(lat);
+    return [cosLat * Math.cos(lon), cosLat * Math.sin(lon), Math.sin(lat)];
+  });
   const simplified = [arc[0]];
-  let dx = 0;
-  let dy = 0;
-  for (let i = 1; i < arc.length; i++) {
-    dx += arc[i][0];
-    dy += arc[i][1];
-    if (i === arc.length - 1 || Math.hypot(dx * longitudeStep, dy * latitudeStep) >= .30) {
-      simplified.push([dx, dy]);
-      dx = 0;
-      dy = 0;
+  const toleranceSquared = (tolerance * radians) ** 2;
+  function furthestPoint(start: number, end: number) {
+    const [x, y, z] = points[start];
+    const [endX, endY, endZ] = points[end];
+    const dx = endX - x, dy = endY - y, dz = endZ - z;
+    const lengthSquared = dx * dx + dy * dy + dz * dz;
+    let furthest = start;
+    let maxError = 0;
+    for (let i = start + 1; i < end; i++) {
+      const [px, py, pz] = points[i];
+      const ax = px - x, ay = py - y, az = pz - z;
+      const t = lengthSquared ? Math.max(0, Math.min(1, (ax * dx + ay * dy + az * dz) / lengthSquared)) : 0;
+      const error = (ax - t * dx) ** 2 + (ay - t * dy) ** 2 + (az - t * dz) ** 2;
+      if (error > maxError) {
+        maxError = error;
+        furthest = i;
+      }
+    }
+    return {index: furthest, error: maxError};
+  }
+  function appendSegment(start: number, end: number) {
+    const {index, error} = furthestPoint(start, end);
+    if (error <= toleranceSquared) simplified.push(arc[end]);
+    else {
+      appendSegment(start, index);
+      appendSegment(index, end);
     }
   }
-  return simplified.length < 4 ? arc : simplified;
-})};
-const bridgeLand = topojson.feature(bridgeTopology, bridgeTopology.objects.land);
-const bridgeBorders = topojson.mesh(bridgeTopology, bridgeTopology.objects.countries, (a, b) => a !== b);
+  const last = arc.length - 1;
+  appendSegment(0, last);
+  const closed = arc[0][0] === arc[last][0] && arc[0][1] === arc[last][1];
+  if (!closed) return simplified;
+  if (simplified.length < 4) {
+    // Keep a closed ring for islands and holes smaller than the tolerance.
+    const {index: opposite} = furthestPoint(0, last);
+    const before = furthestPoint(0, opposite), after = furthestPoint(opposite, last);
+    if (!before.error && !after.error) return arc;
+    simplified.splice(1, simplified.length - 2, ...(before.error > after.error
+      ? [arc[before.index], arc[opposite]]
+      : [arc[opposite], arc[after.index]]));
+  }
+  const isClockwise = (ring: number[][]) => d3.geoArea({type: 'Polygon', coordinates: [ring]}) < 2 * Math.PI;
+  return isClockwise(simplified) === isClockwise(arc) ? simplified : arc;
+}
+
+function simplifiedGeography(tolerance: number) {
+  // Simplify each shared arc once and keep both endpoints, including on the land/country seam.
+  const decode = topojson.transform(topology.transform);
+  const arcs = topology.arcs.map((arc) => simplifyArc(arc.map((point, index) => decode(point, index !== 0)), tolerance));
+  const simplified = {...topology, transform: undefined, arcs};
+  const areas = smallAreas.map((area): LandShape => ({
+    ...area,
+    geometry: {type: 'MultiPolygon', coordinates: polygonParts(area.geometry).map((polygon) =>
+      polygon.map((ring) => simplifyArc(ring, tolerance / 20)))},
+  }));
+  return {
+    land: topojson.feature(simplified, simplified.objects.land),
+    borders: topojson.mesh(simplified, simplified.objects.countries, (a, b) => a !== b),
+    areas,
+  };
+}
+const fullGeography = {land: globeLand, borders: countryBorders, areas: smallAreas};
+const worldMotionGeography = simplifiedGeography(.36);
+const zoomedMotionGeography = simplifiedGeography(.08);
 const globeRadius = (width: number, height: number) => Math.min(width, height) * .437;
 
-function createGlobePainter(context: CanvasRenderingContext2D) {
-  const projection = d3.geoOrthographic().clipAngle(90).precision(.65);
+export function createGlobePainter(context: CanvasRenderingContext2D) {
+  const projection = d3.geoOrthographic().clipAngle(90);
   const path = d3.geoPath(projection, context);
   const grid = d3.geoGraticule().step([20, 20])();
   function paint(shape: d3.GeoPermissibleObjects, fill: string | CanvasGradient | null, stroke?: string, lineWidth = 1) {
@@ -136,7 +189,9 @@ function createGlobePainter(context: CanvasRenderingContext2D) {
     }
   }
   function draw({width, height, pixelRatio, x, y, radius, camera, selectedCountry, hoveredCountry, detail = 1, clip, moving = false}: DrawOptions) {
-    projection.translate([x, y]).scale(radius).rotate([camera.yaw, camera.pitch, 0]);
+    const zoomedMotion = moving && camera.zoom >= 2;
+    const geography = moving ? (zoomedMotion ? zoomedMotionGeography : worldMotionGeography) : fullGeography;
+    projection.translate([x, y]).scale(radius).rotate([camera.yaw, camera.pitch, 0]).precision(moving ? 1.6 : .65);
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     context.clearRect(0, 0, width, height);
     context.save();
@@ -167,13 +222,14 @@ function createGlobePainter(context: CanvasRenderingContext2D) {
     land.addColorStop(.57, "#497cd0");
     land.addColorStop(1, "#284b91");
     context.globalAlpha = .48 + .52 * detail;
-    paint(moving ? bridgeLand : globeLand, land, "#85b4ffb0", .65);
-    for (const area of smallAreas) paint(area, land, "#85b4ffb0", .65);
+    paint(geography.land, land, "#85b4ffb0", .65);
+    for (const area of geography.areas) paint(area, land, "#85b4ffb0", .65);
     if (detail > 0) {
       context.globalAlpha = detail;
-      paint(moving ? bridgeBorders : countryBorders, null, "#97bfff8c", .65);
+      paint(geography.borders, null, "#97bfff8c", .65);
     }
     context.globalAlpha = 1;
+    if (moving && (hoveredCountry || selectedCountry)) projection.precision(.65);
     if (hoveredCountry) paint(hoveredCountry, "#498aff", "#9acaff", 1.15);
     if (selectedCountry) {
       paint(selectedCountry, "#60b5ff", "#e9f4ff", 1.25);
@@ -209,6 +265,7 @@ function mountGlobe(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D
   let hoveredCountry: CountryShape | undefined;
   let frame = 0;
   let hoverFrame = 0;
+  let settleTimer = 0;
   let labelTimer = 0;
   let labelSize = {width: 0, height: 0};
   let gestureStartZoom: number | undefined;
@@ -221,10 +278,19 @@ function mountGlobe(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D
     frame = 0;
     const {width, height} = size;
     if (!width || !height) return;
-    painter.draw({...size, x: width / 2, y: height / 2, radius: radius(), camera, selectedCountry, hoveredCountry});
+    painter.draw({...size, x: width / 2, y: height / 2, radius: radius(), camera, selectedCountry, hoveredCountry,
+      moving: settleTimer !== 0});
   }
   function schedule() {
     if (!frame) frame = requestAnimationFrame(draw);
+  }
+  function scheduleMotion() {
+    clearTimeout(settleTimer);
+    settleTimer = window.setTimeout(() => {
+      settleTimer = 0;
+      schedule();
+    }, 160);
+    schedule();
   }
   function setHoveredCountry(country?: CountryShape) {
     const hover = country === selectedCountry ? undefined : country;
@@ -291,17 +357,15 @@ function mountGlobe(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D
     buttons.in.disabled = camera.zoom >= 7;
     buttons.out.disabled = camera.zoom <= 1;
     resizeHitArea();
-    schedule();
   }
   function rotate(yaw: number, pitch: number) {
     clearHover();
     camera.yaw = ((yaw % 360) + 540) % 360 - 180;
     camera.pitch = Math.min(90, Math.max(-90, pitch));
-    schedule();
   }
-  function restore(view: Camera) {
-    rotate(view.yaw, view.pitch);
-    setZoom(view.zoom);
+  function resetView() {
+    rotate(initial.yaw, initial.pitch);
+    setZoom(initial.zoom);
   }
   function finishDraw() {
     if (frame) {
@@ -369,6 +433,7 @@ function mountGlobe(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D
       rotate(camera.yaw + (point.x - previous.x) * delta, camera.pitch - (point.y - previous.y) * delta);
     }
     pointers.set(event.pointerId, {...point, origin: previous.origin});
+    scheduleMotion();
   });
   function endPointer(event: PointerEvent) {
     if (!pointers.delete(event.pointerId)) return;
@@ -395,6 +460,7 @@ function mountGlobe(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D
     if (gestureStartZoom !== undefined) return;
     const factor = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? size.height : 1;
     setZoom(camera.zoom * Math.exp(-event.deltaY * factor * .0015));
+    scheduleMotion();
   }, {passive: false});
   // Safari delivers trackpad pinches as gesture events.
   hit.addEventListener("gesturestart", (event) => {
@@ -407,6 +473,7 @@ function mountGlobe(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D
     if (gestureStartZoom === undefined) return;
     event.preventDefault();
     setZoom(gestureStartZoom * (event as Event & {scale: number}).scale);
+    scheduleMotion();
   }, {passive: false});
   hit.addEventListener("gestureend", () => { gestureStartZoom = undefined; });
   const keyboardRotation: Record<string, [number, number]> = {
@@ -417,16 +484,18 @@ function mountGlobe(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D
     if (delta) rotate(camera.yaw + delta[0], camera.pitch + delta[1]);
     else if (event.key === "+" || event.key === "=") setZoom(camera.zoom * 1.32);
     else if (event.key === "-") setZoom(camera.zoom / 1.32);
-    else if (event.key === "Home") restore(initial);
+    else if (event.key === "Home") resetView();
     else return;
     event.preventDefault();
+    scheduleMotion();
   });
   controls.addEventListener("click", (event) => {
     const button = (event.target as Element).closest<HTMLButtonElement>("[data-globe-action]");
     if (!button) return;
     const action = button.dataset.globeAction;
-    if (action === "reset") restore(initial);
+    if (action === "reset") resetView();
     else setZoom(camera.zoom * (action === "in" ? 1.32 : 1 / 1.32));
+    scheduleMotion();
   });
   const observer = new ResizeObserver(resize);
   observer.observe(canvas);
@@ -452,13 +521,13 @@ function mountGlobe(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D
     },
     snapshot: () => ({...camera}),
     selected: () => selectedCountry,
-    restore,
     dispose() {
       observer.disconnect();
       window.removeEventListener("scroll", clearHover);
       window.removeEventListener("blur", clearHover);
       window.removeEventListener("pagehide", clearHover);
       clearHover();
+      clearTimeout(settleTimer);
       cancelAnimationFrame(frame);
     }
   };
@@ -550,7 +619,8 @@ function mountGlobeBridge(stage: HTMLElement, globe: ReturnType<typeof mountGlob
     const y = mix(fromY, toY, travel);
     const baseRadius = globeRadius(stageRect.width, stageRect.height);
     const travelRadius = mix(fromRadius, baseRadius * Math.min(camera.zoom, 1.12), travel);
-    const radius = mix(travelRadius, baseRadius * camera.zoom, ease(.80, .91, progress));
+    const zoomIn = ease(.80, .91, progress);
+    const radius = mix(travelRadius, baseRadius * camera.zoom, zoomIn);
     const dock = ease(.91, .98, progress);
     const reveal = ease(.68, .95, progress);
     const frameReveal = ease(.79, .97, progress);
@@ -566,13 +636,14 @@ function mountGlobeBridge(stage: HTMLElement, globe: ReturnType<typeof mountGlob
     canvas.hidden = false;
     canvas.style.opacity = String(dissolve * (1 - ease(.96, 1, progress)));
 
-    const pixelRatio = Math.min(devicePixelRatio, 1.25);
+    const pixelRatio = Math.min(devicePixelRatio, 2);
     const pixelWidth = Math.round(width * pixelRatio), pixelHeight = Math.round(height * pixelRatio);
     if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
     if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     const turn = ease(.10, .87, progress);
     const yawDelta = (camera.yaw - cover.yaw + 540) % 360 - 180;
-    const orbit = {yaw: cover.yaw + yawDelta * turn, pitch: mix(cover.pitch, camera.pitch, turn)};
+    const orbit = {yaw: cover.yaw + yawDelta * turn, pitch: mix(cover.pitch, camera.pitch, turn),
+      zoom: mix(1, camera.zoom, zoomIn)};
     const crop = ease(.79, .91, progress);
     const clip = crop > 0 ? {
       x: mix(-14, stageRect.left, crop),
@@ -580,9 +651,9 @@ function mountGlobeBridge(stage: HTMLElement, globe: ReturnType<typeof mountGlob
       width: mix(width + 28, stageRect.width, crop),
       height: mix(height + 28, stageRect.height, crop)
     } : undefined;
-    // Use the same projection and lighting as the docked canvas for the final frames.
+    // The docked globe takes over the full-detail rendering as the bridge fades out.
     if (dissolve > 0) painter.draw({width, height, pixelRatio, x, y, radius, camera: orbit, clip,
-      detail: ease(.24, .85, progress), moving: progress < .86,
+      detail: ease(.24, .85, progress), moving: true,
       selectedCountry: progress >= .85 ? globe.selected() : undefined});
   }
   function schedule() {
